@@ -20,27 +20,15 @@ table{border-collapse:collapse;width:100%}td,th{text-align:left;padding:.3rem .5
 form{display:inline}button{font:inherit;padding:.25rem .7rem;border:1px solid #c9c3b6;border-radius:.4rem;background:#fff;cursor:pointer}
 nav a{margin-right:1rem}</style>`
 
-// Box is the admins' page: readiness, inbox with verdicts, services, journal.
-func Box(c *laib.Client, human *laib.Client) http.HandlerFunc {
+// Box is the admins' page: readiness, the inbox (read-only — deciding
+// happens on Laib's own page, the one approval surface, ADR 0012), what
+// runs, the journal. laibURL is where Freigeben lives.
+func Box(c *laib.Client, laibURL string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		user := r.Header.Get("Remote-User")
 		ctx := r.Context()
 		if r.Method == http.MethodPost {
-			// POST /box/inbox/{id}/{decision}
-			parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
-			if len(parts) == 4 && parts[1] == "inbox" && human != nil && human.Token != "" {
-				var err error
-				if parts[3] == "approve" {
-					_, err = human.Call(ctx, "approve", parts[2])
-				} else {
-					_, err = human.Call(ctx, "reject", parts[2])
-				}
-				if err != nil {
-					http.Error(w, err.Error(), http.StatusBadGateway)
-					return
-				}
-			}
-			http.Redirect(w, r, "/box", http.StatusSeeOther)
+			http.Error(w, "Haus entscheidet nichts: Freigeben und Ablehnen gibt es nur auf der Laib-Seite", http.StatusForbidden)
 			return
 		}
 		ready, rows, err := c.Status(ctx)
@@ -70,15 +58,14 @@ func Box(c *laib.Client, human *laib.Client) http.HandlerFunc {
 		} else {
 			b.WriteString("<table>")
 			for _, p := range ps {
-				fmt.Fprintf(&b, "<tr><td class=k>#%d</td><td>%s<br><span class=k>%s · %s · %s · %s</span></td><td>", p.ID, html.EscapeString(p.Reason), html.EscapeString(p.Actor), p.Tier, p.Class, p.Created.Format("02.01. 15:04"))
-				if human != nil && human.Token != "" {
-					fmt.Fprintf(&b, "<form method=post action=/box/inbox/%d/approve><button>Freigeben</button></form> <form method=post action=/box/inbox/%d/reject><button>Ablehnen</button></form>", p.ID, p.ID)
-				} else {
-					b.WriteString("<span class=k>entscheiden auf der Laib-Seite</span>")
+				fmt.Fprintf(&b, "<tr><td class=k>#%d</td><td>%s<br><span class=k>%s · %s · %s · %s</span>", p.ID, html.EscapeString(p.Reason), html.EscapeString(p.Actor), p.Tier, p.Class, p.Created.Format("02.01. 15:04"))
+				for _, why := range p.Reasons {
+					fmt.Fprintf(&b, "<br><span class=gelb>%s</span>", html.EscapeString(why))
 				}
 				b.WriteString("</td></tr>")
 			}
 			b.WriteString("</table>")
+			fmt.Fprintf(&b, "<p><a href=\"%s/inbox\">Entscheiden auf der Laib-Seite</a> <span class=k>— die eine Stelle, an der freigegeben wird</span></p>", html.EscapeString(strings.TrimRight(laibURL, "/")))
 		}
 		b.WriteString("<h2>Was läuft</h2><table>")
 		for _, s := range rows {

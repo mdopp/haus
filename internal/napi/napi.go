@@ -24,8 +24,7 @@ type Validator func(ctx context.Context, bearer string) bool
 
 // Config wires the handler.
 type Config struct {
-	Laib     *laib.Client // the ops hand: status, inbox, restart
-	Human    *laib.Client // the admin's token for approve/deny; nil = verdicts refused
+	Laib     *laib.Client // the haus hand: status, inbox, journal, restart — nothing else
 	Validate Validator
 	Upstream *url.URL                           // Solaris, for every other /napi path; nil = 404
 	Whoami   func(bearer string) (string, bool) // Haus's own devices: uid behind a bearer; others fall through to Solaris
@@ -125,32 +124,14 @@ func Handler(c Config) http.Handler {
 		}
 		writeJSON(w, map[string]any{"ok": true, "name": name, "action": "restart"})
 	}))
-	verdict := func(approve bool) http.HandlerFunc {
-		return auth(func(w http.ResponseWriter, r *http.Request) {
-			if c.Human == nil || c.Human.Token == "" {
-				http.Error(w, `{"error":"no human token configured: decide on the box page"}`, http.StatusForbidden)
-				return
-			}
-			id, err := strconv.Atoi(r.PathValue("id"))
-			if err != nil {
-				http.Error(w, `{"error":"bad id"}`, http.StatusBadRequest)
-				return
-			}
-			var out string
-			if approve {
-				out, err = c.Human.Approve(r.Context(), id)
-			} else {
-				out, err = c.Human.Reject(r.Context(), id)
-			}
-			if err != nil {
-				fail(w, err)
-				return
-			}
-			writeJSON(w, map[string]any{"ok": true, "id": r.PathValue("id"), "detail": strings.TrimSpace(out)})
-		})
-	}
-	mux.HandleFunc("POST /napi/servicebay/approvals/{id}/approve", verdict(true))
-	mux.HandleFunc("POST /napi/servicebay/approvals/{id}/deny", verdict(false))
+	// Verdicts are not Haus's (haus#1, ADR 0012): the one approval surface is
+	// Laib's own page behind Authelia; phones decide, if ever, through the
+	// relay. The app's buttons get a plain answer.
+	verdict := auth(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, `{"error":"Haus entscheidet nichts: Freigeben und Ablehnen gibt es nur auf der Laib-Seite (laib.<domain>/inbox)"}`, http.StatusForbidden)
+	})
+	mux.HandleFunc("POST /napi/servicebay/approvals/{id}/approve", verdict)
+	mux.HandleFunc("POST /napi/servicebay/approvals/{id}/deny", verdict)
 	mux.HandleFunc("GET /napi/whoami", func(w http.ResponseWriter, r *http.Request) {
 		bearer := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 		if c.Whoami != nil {
