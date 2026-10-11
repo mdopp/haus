@@ -27,7 +27,8 @@ type Config struct {
 	Laib     *laib.Client // the ops hand: status, inbox, restart
 	Human    *laib.Client // the admin's token for approve/deny; nil = verdicts refused
 	Validate Validator
-	Upstream *url.URL // Solaris, for every other /napi path; nil = 404
+	Upstream *url.URL                           // Solaris, for every other /napi path; nil = 404
+	Whoami   func(bearer string) (string, bool) // Haus's own devices: uid behind a bearer; others fall through to Solaris
 }
 
 // Handler serves /napi/*.
@@ -150,6 +151,21 @@ func Handler(c Config) http.Handler {
 	}
 	mux.HandleFunc("POST /napi/servicebay/approvals/{id}/approve", verdict(true))
 	mux.HandleFunc("POST /napi/servicebay/approvals/{id}/deny", verdict(false))
+	mux.HandleFunc("GET /napi/whoami", func(w http.ResponseWriter, r *http.Request) {
+		bearer := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		if c.Whoami != nil {
+			if uid, ok := c.Whoami(bearer); ok {
+				writeJSON(w, map[string]any{"uid": uid, "via": "haus"})
+				return
+			}
+		}
+		if c.Upstream != nil {
+			httputil.NewSingleHostReverseProxy(c.Upstream).ServeHTTP(w, r)
+			return
+		}
+		w.Header().Set("WWW-Authenticate", "Bearer")
+		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+	})
 	if c.Upstream != nil {
 		proxy := httputil.NewSingleHostReverseProxy(c.Upstream)
 		proxy.FlushInterval = 100 * time.Millisecond // /napi/portal/events streams
@@ -212,6 +228,18 @@ func SolarisValidator(upstream *url.URL, h *http.Client) Validator {
 		cache[bearer] = hit{ok: ok, exp: time.Now().Add(5 * time.Minute)}
 		mu.Unlock()
 		return ok
+	}
+}
+
+// Chain accepts a bearer when any validator does.
+func Chain(vs ...Validator) Validator {
+	return func(ctx context.Context, bearer string) bool {
+		for _, v := range vs {
+			if v != nil && v(ctx, bearer) {
+				return true
+			}
+		}
+		return false
 	}
 }
 

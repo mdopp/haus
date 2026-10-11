@@ -161,3 +161,27 @@ func TestSolarisValidatorAndProxy(t *testing.T) {
 	}
 	_ = context.Background()
 }
+
+func TestWhoamiFromHausDevices(t *testing.T) {
+	var calls []string
+	lb := fakeLaib(t, &calls)
+	defer lb.Close()
+	h := Handler(Config{Laib: &laib.Client{URL: lb.URL, Token: "ops"},
+		Validate: Chain(StaticValidator([]string{"sol_device_haus"})),
+		Whoami: func(b string) (string, bool) {
+			if b == "sol_device_haus" {
+				return "mdopp", true
+			}
+			return "", false
+		}})
+	code, who := get(t, h, "GET", "/napi/whoami", "sol_device_haus", "")
+	if code != 200 || who["uid"] != "mdopp" {
+		t.Fatalf("whoami: %d %v", code, who)
+	}
+	if code, _ := get(t, h, "GET", "/napi/whoami", "sol_device_other", ""); code != 401 {
+		t.Fatalf("unknown device without Solaris → %d, want 401", code)
+	}
+	if code, _ := get(t, h, "GET", "/napi/portal/energy", "sol_device_haus", ""); code != 404 {
+		t.Fatalf("portal without Solaris → %d, want 404", code)
+	}
+}

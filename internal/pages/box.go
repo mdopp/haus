@@ -46,7 +46,7 @@ func Box(c *laib.Client, human *laib.Client) http.HandlerFunc {
 		ready, rows, err := c.Status(ctx)
 		var b strings.Builder
 		b.WriteString("<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><title>Box · Haus</title>" + style)
-		b.WriteString("<nav><a href=/box>Box</a></nav>")
+		b.WriteString("<nav><a href=/box>Box</a><a href=/box/geraete>Geräte</a></nav>")
 		if err != nil {
 			fmt.Fprintf(&b, "<h1>Box</h1><p class=rot>Laib antwortet nicht: %s</p>", html.EscapeString(err.Error()))
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")

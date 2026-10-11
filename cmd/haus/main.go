@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mdopp/haus/internal/devices"
 	"github.com/mdopp/haus/internal/laib"
 	"github.com/mdopp/haus/internal/napi"
 	"github.com/mdopp/haus/internal/pages"
@@ -36,27 +37,34 @@ func main() {
 	if t := os.Getenv("LAIB_HUMAN_TOKEN"); t != "" {
 		human = &laib.Client{URL: ops.URL, Token: t}
 	}
+	store, err := devices.Open(env("HAUS_DATA", "/data"))
+	if err != nil {
+		log.Fatalf("haus: devices: %v", err)
+	}
 	cfg := napi.Config{Laib: ops, Human: human}
+	own := func(ctx context.Context, b string) bool { _, ok := store.Lookup(b); return ok }
+	cfg.Whoami = func(b string) (string, bool) {
+		d, ok := store.Lookup(b)
+		return d.UID, ok
+	}
+	var validators []napi.Validator
+	validators = append(validators, own)
+	if t := os.Getenv("HAUS_DEVICE_TOKENS"); t != "" {
+		validators = append(validators, napi.StaticValidator(strings.Split(t, ","))) // fixed tokens for a trial
+	}
 	if s := os.Getenv("SOLARIS_URL"); s != "" {
 		u, err := url.Parse(s)
 		if err != nil {
 			log.Fatalf("haus: SOLARIS_URL: %v", err)
 		}
 		cfg.Upstream = u
-		cfg.Validate = napi.SolarisValidator(u, nil)
+		validators = append(validators, napi.SolarisValidator(u, nil)) // phones paired with Solaris keep working
 	}
-	if t := os.Getenv("HAUS_DEVICE_TOKENS"); t != "" {
-		// a trial box without Solaris: fixed device tokens from the environment
-		static := napi.StaticValidator(strings.Split(t, ","))
-		if prev := cfg.Validate; prev != nil {
-			cfg.Validate = func(ctx context.Context, b string) bool { return static(ctx, b) || prev(ctx, b) }
-		} else {
-			cfg.Validate = static
-		}
-	}
+	cfg.Validate = napi.Chain(validators...)
 	mux := http.NewServeMux()
 	mux.Handle("/napi/", napi.Handler(cfg))
 	mux.HandleFunc("/box", pages.Box(ops, human))
+	mux.HandleFunc("/box/geraete", pages.Geraete(store, os.Getenv("HAUS_PUBLIC_URL")))
 	mux.HandleFunc("/box/", pages.Box(ops, human))
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, "/box", http.StatusFound) })

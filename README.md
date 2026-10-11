@@ -17,8 +17,14 @@ Haus renders, Laib acts, Solaris listens.
   and a device token is valid when Solaris says so (`GET /napi/whoami`).
   So the phone changes one hostname and keeps its pairing.
 
-Not yet: Start, Räume, Energie, Medien, Notizen, Kalender; pairing of its
-own; the `Sprechen` field to the Bote. Those come with the Home Assistant
+- `GET /box/geraete` — pairing of its own: a name in, the app's setup link
+  (`cloud.dopp.solaris://setup?server=…&token=sol_device_…`) out, shown once;
+  devices listed and revocable. Tokens live hashed in `HAUS_DATA/devices.json`;
+  `/napi/whoami` answers for them. Phones paired with Solaris keep working
+  through the Solaris validator.
+
+Not yet: Start, Räume, Energie, Medien, Notizen, Kalender; the `Sprechen`
+field to the Bote. Those come with the Home Assistant
 and Solaris deconstruction (laib#21).
 
 ## Run
@@ -29,7 +35,8 @@ LAIB_HUMAN_TOKEN=<laib token mint human --note haus-admin> SOLARIS_URL=http://ho
 HAUS_LISTEN=127.0.0.1:8650 ./haus
 ```
 
-`HAUS_DEVICE_TOKENS=a,b` accepts fixed device tokens (a trial box without
+`HAUS_DATA` (default `/data`) holds `devices.json`; `HAUS_PUBLIC_URL` is the
+origin the setup link carries (default `https://<Host>`). `HAUS_DEVICE_TOKENS=a,b` accepts fixed device tokens (a trial box without
 Solaris). Image: `ghcr.io/mdopp/haus`. Laib template: `haus` (route `haus.<domain>`,
 `bypass: [/napi/]`).
 
