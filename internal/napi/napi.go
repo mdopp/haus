@@ -66,7 +66,7 @@ func Handler(c Config) http.Handler {
 		writeJSON(w, map[string]any{
 			"servicesUp": up, "servicesFailed": failed, "servicesDown": down,
 			"pendingApprovals": len(open), "pendingUpdates": 0,
-			"state": ready.State, "drift": ready.Drift, "lastHeard": ready.LastHeard,
+			"state": ready.State, "drift": ready.Drift, "lastHeard": ready.LastHeard, "operator": ready.Operator,
 		})
 	}))
 	mux.HandleFunc("GET /napi/servicebay/services", auth(func(w http.ResponseWriter, r *http.Request) {

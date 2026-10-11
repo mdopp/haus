@@ -55,6 +55,7 @@ func Box(c *laib.Client, human *laib.Client) http.HandlerFunc {
 		}
 		fmt.Fprintf(&b, "<h1>Box · <span class=%s>%s</span> <span class=k>· %d Dienste · %d grün · %d gelb · %d rot · Drift %d</span></h1>",
 			readyClass(ready), html.EscapeString(ready.State), ready.Services, ready.Green, ready.Yellow, ready.Red, ready.Drift)
+		fmt.Fprintf(&b, "<p>Operator: <span class=%s>%s</span></p>", operatorClass(ready.Operator), html.EscapeString(ready.Operator))
 		if ready.Lock != "" {
 			fmt.Fprintf(&b, "<p class=gelb>gesperrt: %s</p>", html.EscapeString(ready.Lock))
 		}
@@ -95,6 +96,18 @@ func Box(c *laib.Client, human *laib.Client) http.HandlerFunc {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Write([]byte(b.String()))
 	}
+}
+
+func operatorClass(s string) string {
+	switch s {
+	case "läuft":
+		return "gruen"
+	case "fehlt", "antwortet nicht":
+		return "rot"
+	case "aus":
+		return "k"
+	}
+	return "gelb"
 }
 
 func readyClass(r laib.Readiness) string {

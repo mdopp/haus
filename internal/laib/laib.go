@@ -33,6 +33,7 @@ type Readiness struct {
 	LastHeard string `json:"lastHeard"`
 	Lock      string `json:"lock,omitempty"`
 	Drift     int    `json:"drift"`
+	Operator  string `json:"operator"` // aus | startet | läuft | stumm | antwortet nicht | fehlt
 }
 
 // Service is one row of `laib status --json`.services.

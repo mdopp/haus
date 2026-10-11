@@ -33,7 +33,7 @@ func fakeLaib(t *testing.T, calls *[]string) *httptest.Server {
 		switch req.Params.Name {
 		case "laib_status":
 			text = `laib: a note line first
-{"ready":{"state":"bereit","services":2,"green":1,"yellow":0,"red":1,"lastHeard":"2026-10-10T20:00:00Z","drift":0},"services":[{"name":"caddy","state":"grün","units":{"caddy.service":"active"}},{"name":"media","state":"rot","units":{"media.service":"failed"},"detail":"health 502"}]}`
+{"ready":{"state":"bereit","services":2,"green":1,"yellow":0,"red":1,"lastHeard":"2026-10-10T20:00:00Z","drift":0,"operator":"stumm"},"services":[{"name":"caddy","state":"grün","units":{"caddy.service":"active"}},{"name":"media","state":"rot","units":{"media.service":"failed"},"detail":"health 502"}]}`
 		case "laib_inbox":
 			text = `[{"id":7,"actor":"pi","reason":"immich: neue Version","tier":"apply","status":"open","created":"2026-10-10T19:00:00Z","files":["services/immich/values.yml"],"class":"values"}]`
 		case "laib_approve":
@@ -79,7 +79,7 @@ func TestCompanionKeysFromLaib(t *testing.T) {
 		t.Fatalf("wrong token → %d", code)
 	}
 	code, home := get(t, h, "GET", "/napi/servicebay/home", "dev1", "")
-	if code != 200 || home["servicesUp"] != 1.0 || home["servicesFailed"] != 1.0 || home["pendingApprovals"] != 1.0 {
+	if code != 200 || home["servicesUp"] != 1.0 || home["servicesFailed"] != 1.0 || home["pendingApprovals"] != 1.0 || home["operator"] != "stumm" {
 		t.Fatalf("home: %d %v", code, home)
 	}
 	_, svcs := get(t, h, "GET", "/napi/servicebay/services", "dev1", "")
