@@ -7,12 +7,16 @@ Haus renders, Laib acts, Solaris listens.
 
 ## This cut (laib#28)
 
-- `GET /box` — the admins' page behind Authelia: readiness, the inbox with
-  Freigeben/Ablehnen (delivered to Laib with the admin's token), what runs,
-  the journal. Haus listens on loopback; only Caddy reaches it.
+- `GET /box` — the page behind Authelia: readiness, the inbox read-only
+  with its reasons and a link to Laib's own inbox (the one approval
+  surface, laib ADR 0012), what runs, the journal. Every page request must
+  carry `X-Haus-Proxy: <HAUS_PROXY_SECRET>`, which only Caddy adds; the
+  loopback port is shared with every host-network container, so without
+  the secret nobody is anybody.
 - `/napi/servicebay/{home,services,approvals,upgrades}` — the four keys the
   widgets read, from `laib status`, `laib inbox`. `POST …/services/{name}/operate`
-  (restart) and `POST …/approvals/{id}/approve|deny`.
+  (restart). `POST …/approvals/{id}/approve|deny` answers 403: Haus decides
+  nothing (haus#1); phones decide, if ever, through the Signal relay.
 - Every other `/napi/*` path is passed through to Solaris (`SOLARIS_URL`),
   and a device token is valid when Solaris says so (`GET /napi/whoami`).
   So the phone changes one hostname and keeps its pairing.
@@ -30,14 +34,14 @@ and Solaris deconstruction (laib#21).
 ## Run
 
 ```
-LAIB_URL=http://host.containers.internal:5900 LAIB_TOKEN=<laib token mint ops --note haus> \
-LAIB_HUMAN_TOKEN=<laib token mint human --note haus-admin> SOLARIS_URL=http://host.containers.internal:8787 \
-HAUS_LISTEN=127.0.0.1:8650 ./haus
+LAIB_URL=http://host.containers.internal:5900 LAIB_TOKEN=<the haus hand's token, minted on laib add haus> \
+HAUS_PROXY_SECRET=<what Caddy sends as X-Haus-Proxy> LAIB_PUBLIC_URL=https://laib.<domain> \
+SOLARIS_URL=http://host.containers.internal:8787 HAUS_LISTEN=0.0.0.0:8650 ./haus
 ```
 
 `HAUS_DATA` (default `/data`) holds `devices.json`; `HAUS_PUBLIC_URL` is the
-origin the setup link carries (default `https://<Host>`). `HAUS_DEVICE_TOKENS=a,b` accepts fixed device tokens (a trial box without
-Solaris). Image: `ghcr.io/mdopp/haus`. Laib template: `haus` (route `haus.<domain>`,
+origin the setup link carries (default `https://<Host>`). Haus's Laib token is the `haus` hand: status, inbox, journal, restart —
+nothing else (no exec, no write). There are no static device tokens. Image: `ghcr.io/mdopp/haus`. Laib template: `haus` (route `haus.<domain>`,
 `bypass: [/napi/]`).
 
 ## Tests

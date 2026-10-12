@@ -54,6 +54,7 @@ type Proposal struct {
 	Created time.Time `json:"created"`
 	Files   []string  `json:"files"`
 	Class   string    `json:"class"`
+	Reasons []string  `json:"reasons,omitempty"` // why only a human may allow it (laib#34)
 }
 
 // Entry is one journal line.

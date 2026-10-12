@@ -69,8 +69,7 @@ func TestCompanionKeysFromLaib(t *testing.T) {
 	srv := fakeLaib(t, &calls)
 	defer srv.Close()
 	ops := &laib.Client{URL: srv.URL, Token: "ops"}
-	human := &laib.Client{URL: srv.URL, Token: "human"}
-	h := Handler(Config{Laib: ops, Human: human, Validate: StaticValidator([]string{"dev1"})})
+	h := Handler(Config{Laib: ops, Validate: StaticValidator([]string{"dev1"})})
 
 	if code, _ := get(t, h, "GET", "/napi/servicebay/home", "", ""); code != 401 {
 		t.Fatalf("no token → %d", code)
@@ -96,9 +95,9 @@ func TestCompanionKeysFromLaib(t *testing.T) {
 	if len(ups["upgrades"].([]any)) != 0 {
 		t.Fatalf("upgrades: %v", ups)
 	}
-	code, res := get(t, h, "POST", "/napi/servicebay/approvals/7/approve", "dev1", "")
-	if code != 200 || res["ok"] != true {
-		t.Fatalf("approve: %d %v", code, res)
+	// haus#1: a phone cannot approve, whoever it belongs to — Laib's page is the one place
+	if code, _ := get(t, h, "POST", "/napi/servicebay/approvals/7/approve", "dev1", ""); code != 403 {
+		t.Fatalf("approve from a phone → %d, want 403", code)
 	}
 	if code, _ := get(t, h, "POST", "/napi/servicebay/services/media/operate", "dev1", `{"action":"start"}`); code != 400 {
 		t.Fatalf("start must be refused, got %d", code)
@@ -107,18 +106,18 @@ func TestCompanionKeysFromLaib(t *testing.T) {
 		t.Fatalf("restart → %d", code)
 	}
 	joined := strings.Join(calls, "\n")
-	if !strings.Contains(joined, "laib_approve 7 as human") || !strings.Contains(joined, "laib_restart media as ops") {
+	if strings.Contains(joined, "laib_approve") || !strings.Contains(joined, "laib_restart media as ops") {
 		t.Fatalf("calls:\n%s", joined)
 	}
 }
 
-func TestVerdictWithoutHumanToken(t *testing.T) {
+func TestDenyIsNotHausEither(t *testing.T) {
 	var calls []string
 	srv := fakeLaib(t, &calls)
 	defer srv.Close()
 	h := Handler(Config{Laib: &laib.Client{URL: srv.URL, Token: "ops"}, Validate: StaticValidator([]string{"dev1"})})
 	if code, _ := get(t, h, "POST", "/napi/servicebay/approvals/7/deny", "dev1", ""); code != 403 {
-		t.Fatalf("deny without a human token → %d, want 403", code)
+		t.Fatalf("deny from a phone → %d, want 403", code)
 	}
 }
 

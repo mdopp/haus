@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/mdopp/haus/internal/devices"
@@ -31,27 +30,23 @@ func env(k, def string) string {
 func main() {
 	ops := &laib.Client{URL: env("LAIB_URL", "http://host.containers.internal:5900"), Token: os.Getenv("LAIB_TOKEN")}
 	if ops.Token == "" {
-		log.Fatal("haus: LAIB_TOKEN is required (laib token mint ops --note haus)")
+		log.Fatal("haus: LAIB_TOKEN is required (minted on laib add haus as the haus hand)")
 	}
-	var human *laib.Client
-	if t := os.Getenv("LAIB_HUMAN_TOKEN"); t != "" {
-		human = &laib.Client{URL: ops.URL, Token: t}
+	proxySecret := os.Getenv("HAUS_PROXY_SECRET")
+	if proxySecret == "" {
+		log.Fatal("haus: HAUS_PROXY_SECRET is required — Caddy sends it as X-Haus-Proxy, nothing else may reach the pages (ADR 0012 §3)")
 	}
 	store, err := devices.Open(env("HAUS_DATA", "/data"))
 	if err != nil {
 		log.Fatalf("haus: devices: %v", err)
 	}
-	cfg := napi.Config{Laib: ops, Human: human}
+	cfg := napi.Config{Laib: ops}
 	own := func(ctx context.Context, b string) bool { _, ok := store.Lookup(b); return ok }
 	cfg.Whoami = func(b string) (string, bool) {
 		d, ok := store.Lookup(b)
 		return d.UID, ok
 	}
-	var validators []napi.Validator
-	validators = append(validators, own)
-	if t := os.Getenv("HAUS_DEVICE_TOKENS"); t != "" {
-		validators = append(validators, napi.StaticValidator(strings.Split(t, ","))) // fixed tokens for a trial
-	}
+	validators := []napi.Validator{own}
 	if s := os.Getenv("SOLARIS_URL"); s != "" {
 		u, err := url.Parse(s)
 		if err != nil {
@@ -63,12 +58,14 @@ func main() {
 	cfg.Validate = napi.Chain(validators...)
 	mux := http.NewServeMux()
 	mux.Handle("/napi/", napi.Handler(cfg))
-	mux.HandleFunc("/box", pages.Box(ops, human))
-	mux.HandleFunc("/box/geraete", pages.Geraete(store, os.Getenv("HAUS_PUBLIC_URL")))
-	mux.HandleFunc("/box/", pages.Box(ops, human))
-	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, "/box", http.StatusFound) })
+	pagesMux := http.NewServeMux()
+	pagesMux.HandleFunc("/box", pages.Box(ops, env("LAIB_PUBLIC_URL", "https://laib."+env("LAIB_DOMAIN", "example"))))
+	pagesMux.HandleFunc("/box/geraete", pages.Geraete(store, os.Getenv("HAUS_PUBLIC_URL")))
+	pagesMux.HandleFunc("/box/", pages.Box(ops, env("LAIB_PUBLIC_URL", "https://laib."+env("LAIB_DOMAIN", "example"))))
+	pagesMux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
+	pagesMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, "/box", http.StatusFound) })
+	mux.Handle("/", pages.RequireProxy(proxySecret, pagesMux))
 	addr := env("HAUS_LISTEN", "127.0.0.1:8650")
-	log.Printf("haus %s: listening on %s, laib %s, solaris %s", Version, addr, ops.URL, os.Getenv("SOLARIS_URL"))
+	log.Printf("haus %s: listening on %s, laib %s, solaris %q, pages only behind the proxy secret", Version, addr, ops.URL, os.Getenv("SOLARIS_URL"))
 	log.Fatal((&http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}).ListenAndServe())
 }
