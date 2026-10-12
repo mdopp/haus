@@ -41,6 +41,8 @@ func Box(c *laib.Client, laibURL string) http.HandlerFunc {
 			w.Write([]byte(b.String()))
 			return
 		}
+		// the three guarantees, for everyone in the family (haus#2)
+		b.WriteString(guarantees(ready, rows, strings.Contains(","+r.Header.Get("Remote-Groups")+",", ",admins,"), laibURL))
 		fmt.Fprintf(&b, "<h1>Box · <span class=%s>%s</span> <span class=k>· %d Dienste · %d grün · %d gelb · %d rot · Drift %d</span></h1>",
 			readyClass(ready), html.EscapeString(ready.State), ready.Services, ready.Green, ready.Yellow, ready.Red, ready.Drift)
 		fmt.Fprintf(&b, "<p>Operator: <span class=%s>%s</span></p>", operatorClass(ready.Operator), html.EscapeString(ready.Operator))

@@ -34,6 +34,18 @@ type Readiness struct {
 	Lock      string `json:"lock,omitempty"`
 	Drift     int    `json:"drift"`
 	Operator  string `json:"operator"` // aus | startet | läuft | stumm | antwortet nicht | fehlt
+	// the three guarantees (haus#2)
+	LastBackup struct {
+		At    string `json:"at"`
+		Repos int    `json:"repos"`
+		OK    bool   `json:"ok"`
+	} `json:"lastBackup"`
+	LastChange struct {
+		Proposal   int    `json:"proposal"`
+		Summary    string `json:"summary"`
+		At         string `json:"at"`
+		Reversible bool   `json:"reversible"`
+	} `json:"lastChange"`
 }
 
 // Service is one row of `laib status --json`.services.
