@@ -11,8 +11,10 @@ import (
 	"github.com/mdopp/haus/internal/legacy"
 )
 
-// Geraete pairs phones: a name in, the app's setup link out (shown once),
-// the list with Entfernen. The public origin is what the phone will call.
+// Geraete lists the paired phones with Entfernen and says how to pair one:
+// type the address into the app (it pairs itself through /pair-device), or
+// mint a token here and put the setup URI into a QR code the app scans. The
+// public origin is what the phone will call.
 func Geraete(store *devices.Store, publicURL string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		user := r.Header.Get("Remote-User")
@@ -39,11 +41,12 @@ func Geraete(store *devices.Store, publicURL string) http.HandlerFunc {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			link := legacy.AppScheme + "://setup?server=" + url.QueryEscape(origin) + "&token=" + url.QueryEscape(tok)
-			fmt.Fprintf(&b, "<h2>%s verbunden</h2><p>Auf dem Telefon diesen Link öffnen (einmalig sichtbar):</p><p><a href=\"%s\">App verbinden</a></p><p class=k>Server %s · Token beginnt mit %s…</p>",
-				html.EscapeString(d.Name), html.EscapeString(link), html.EscapeString(origin), html.EscapeString(tok[:16]))
+			qr := legacy.AppScheme + "://setup?server=" + url.QueryEscape(origin) + "&token=" + url.QueryEscape(tok)
+			fmt.Fprintf(&b, "<h2>%s angelegt</h2><p>Inhalt für einen QR-Code, den die App scannt (einmalig sichtbar):</p><p class=k><code>%s</code></p>",
+				html.EscapeString(d.Name), html.EscapeString(qr))
 		}
-		b.WriteString("<h2>Neues Gerät</h2><form method=post><input name=name placeholder='Name, z.B. Pixel von Martin'> <button>Verbinden</button></form>")
+		fmt.Fprintf(&b, "<h2>Neues Telefon</h2><p>In der App die Adresse <b>%s</b> eingeben. Die App öffnet die Anmeldung und koppelt sich selbst.</p>", html.EscapeString(origin))
+		b.WriteString("<p class=k>Oder hier einen Zugang für einen QR-Code anlegen:</p><form method=post><input name=name placeholder='Name, z.B. Pixel von Martin'> <button>Anlegen</button></form>")
 		b.WriteString("<h2>Verbunden</h2><table>")
 		for _, d := range store.List() {
 			last := "nie"
