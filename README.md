@@ -25,9 +25,13 @@ the house persona, and the old Solaris and ServiceBay names live only in
   so a phone paired there keeps working. It ends when every phone is paired
   through Haus and Haus serves every path the app uses (haus#5).
 
-- `GET /box/geraete` — pairing of its own: a name in, the app's setup link
-  (`cloud.dopp.solaris://setup?server=…&token=sol_device_…`) out, shown once;
-  devices listed and revocable. Tokens live hashed in `HAUS_DATA/devices.json`;
+- Pairing: in the app, enter `https://haus.<domain>`. The app opens
+  `/pair-device` in a Custom Tab, Authelia logs the person in, they confirm,
+  and Haus redirects to `<scheme>://pair#token=…&id=…`, the token in the
+  fragment (haus#6). `GET /box/geraete` lists the devices, revocable, and can
+  mint a token whose setup URI (`<scheme>://setup?server=…&token=…`) goes into
+  a QR code the app scans. That URI is QR content, not a link: the app only
+  opens `…://pair`. Tokens live hashed in `HAUS_DATA/devices.json`;
   `/napi/whoami` answers for them. The scheme, the token prefix and the
   `/napi/servicebay` paths are the app's names (`internal/legacy`).
 

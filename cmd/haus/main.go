@@ -56,6 +56,7 @@ func main() {
 	pagesMux := http.NewServeMux()
 	pagesMux.HandleFunc("/box", pages.Box(ops, env("LAIB_PUBLIC_URL", "https://laib."+env("LAIB_DOMAIN", "example"))))
 	pagesMux.HandleFunc("/box/geraete", pages.Geraete(store, os.Getenv("HAUS_PUBLIC_URL")))
+	pagesMux.HandleFunc("/pair-device", pages.PairDevice(store)) // the app's own pairing path (haus#6)
 	pagesMux.HandleFunc("/box/", pages.Box(ops, env("LAIB_PUBLIC_URL", "https://laib."+env("LAIB_DOMAIN", "example"))))
 	pagesMux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
 	pagesMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, "/box", http.StatusFound) })
