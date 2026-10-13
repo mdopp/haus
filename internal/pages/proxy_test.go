@@ -3,7 +3,10 @@ package pages
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+
+	"github.com/mdopp/haus/internal/devices"
 )
 
 // haus#1: without Caddy's secret nobody reaches a page, however the
@@ -50,5 +53,21 @@ func TestBoxDecidesNothing(t *testing.T) {
 	h.ServeHTTP(rec, httptest.NewRequest("POST", "/box/inbox/7/approve", nil))
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("a verdict through Haus → %d, want 403", rec.Code)
+	}
+}
+
+// haus#5: the family pairs "the app", never "Solaris".
+func TestPairingPageSaysApp(t *testing.T) {
+	store, err := devices.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest("POST", "/box/geraete", strings.NewReader("name=Pixel"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Remote-User", "anna")
+	rec := httptest.NewRecorder()
+	Geraete(store, "https://haus.example").ServeHTTP(rec, req)
+	if body := rec.Body.String(); strings.Contains(strings.ToLower(body), "solaris-app") || !strings.Contains(body, "App verbinden") {
+		t.Fatalf("the pairing page names Solaris:\n%s", body)
 	}
 }
