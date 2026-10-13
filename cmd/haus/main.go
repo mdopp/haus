@@ -1,14 +1,13 @@
 // Command haus is the family's surface for the Laib box (laib ADR 0014):
-// pages for people, the companion API for the Android widgets. First cut
-// (laib#28): the Box page and /napi/servicebay/* from Laib; every other
-// /napi path still comes from Solaris, which also validates device tokens.
+// pages for people, the companion API for the Android widgets. The box keys
+// come from Laib; every other /napi path, and phones paired before Haus, go
+// through the migration bridge (internal/napi/bridge.go) while it is set.
 package main
 
 import (
 	"context"
 	"log"
 	"net/http"
-	"net/url"
 	"os"
 	"time"
 
@@ -46,16 +45,12 @@ func main() {
 		d, ok := store.Lookup(b)
 		return d.UID, ok
 	}
-	validators := []napi.Validator{own}
-	if s := os.Getenv("SOLARIS_URL"); s != "" {
-		u, err := url.Parse(s)
-		if err != nil {
-			log.Fatalf("haus: SOLARIS_URL: %v", err)
-		}
-		cfg.Upstream = u
-		validators = append(validators, napi.SolarisValidator(u, nil)) // phones paired with Solaris keep working
+	bridge, paired, err := napi.BridgeFromEnv()
+	if err != nil {
+		log.Fatalf("haus: %v", err)
 	}
-	cfg.Validate = napi.Chain(validators...)
+	cfg.Bridge = bridge
+	cfg.Validate = napi.Chain(own, paired) // phones paired before Haus keep working through the bridge
 	mux := http.NewServeMux()
 	mux.Handle("/napi/", napi.Handler(cfg))
 	pagesMux := http.NewServeMux()
@@ -66,6 +61,6 @@ func main() {
 	pagesMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, "/box", http.StatusFound) })
 	mux.Handle("/", pages.RequireProxy(proxySecret, pagesMux))
 	addr := env("HAUS_LISTEN", "127.0.0.1:8650")
-	log.Printf("haus %s: listening on %s, laib %s, solaris %q, pages only behind the proxy secret", Version, addr, ops.URL, os.Getenv("SOLARIS_URL"))
+	log.Printf("haus %s: listening on %s, laib %s, migration bridge %v, pages only behind the proxy secret", Version, addr, ops.URL, bridge)
 	log.Fatal((&http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}).ListenAndServe())
 }

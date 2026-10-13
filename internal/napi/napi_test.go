@@ -143,7 +143,7 @@ func TestSolarisValidatorAndProxy(t *testing.T) {
 	}))
 	defer solaris.Close()
 	u, _ := url.Parse(solaris.URL)
-	h := Handler(Config{Laib: &laib.Client{URL: lb.URL, Token: "ops"}, Validate: SolarisValidator(u, nil), Upstream: u})
+	h := Handler(Config{Laib: &laib.Client{URL: lb.URL, Token: "ops"}, Validate: SolarisValidator(u, nil), Bridge: u})
 	if code, _ := get(t, h, "GET", "/napi/servicebay/home", "sol_device_ok", ""); code != 200 {
 		t.Fatalf("solaris-paired device → %d", code)
 	}

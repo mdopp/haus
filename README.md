@@ -2,8 +2,10 @@
 
 **Haus** is the family's surface for the box that [Laib](https://github.com/mdopp/laib)
 runs: pages for people, cards, and the companion API the Android widgets
-speak. Laib ADR 0014: the Operator, Solaris and Haus are three programs;
-Haus renders, Laib acts, Solaris listens.
+speak. Haus renders and decides nothing; Laib acts; the Bote is who you
+talk to (laib ADR 0014, 0016). Names follow laib ADR 0021: the family sees
+the house persona, and the old Solaris and ServiceBay names live only in
+`internal/legacy` (the installed app's contract) and the migration bridge.
 
 ## This cut (laib#28)
 
@@ -17,15 +19,17 @@ Haus renders, Laib acts, Solaris listens.
   widgets read, from `laib status`, `laib inbox`. `POST …/services/{name}/operate`
   (restart). `POST …/approvals/{id}/approve|deny` answers 403: Haus decides
   nothing (haus#1); phones decide, if ever, through the Signal relay.
-- Every other `/napi/*` path is passed through to Solaris (`SOLARIS_URL`),
-  and a device token is valid when Solaris says so (`GET /napi/whoami`).
-  So the phone changes one hostname and keeps its pairing.
+- The migration bridge (`internal/napi/bridge.go`, set by `SOLARIS_URL`):
+  every other `/napi/*` path is passed through to the retired Solaris, and
+  a device token is also valid when Solaris says so (`GET /napi/whoami`),
+  so a phone paired there keeps working. It ends when every phone is paired
+  through Haus and Haus serves every path the app uses (haus#5).
 
 - `GET /box/geraete` — pairing of its own: a name in, the app's setup link
   (`cloud.dopp.solaris://setup?server=…&token=sol_device_…`) out, shown once;
   devices listed and revocable. Tokens live hashed in `HAUS_DATA/devices.json`;
-  `/napi/whoami` answers for them. Phones paired with Solaris keep working
-  through the Solaris validator.
+  `/napi/whoami` answers for them. The scheme, the token prefix and the
+  `/napi/servicebay` paths are the app's names (`internal/legacy`).
 
 Not yet: Start, Räume, Energie, Medien, Notizen, Kalender; the `Sprechen`
 field to the Bote. Those come with the Home Assistant

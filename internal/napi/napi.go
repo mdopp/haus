@@ -1,8 +1,8 @@
-// Package napi is the companion API the Android widgets speak
-// (servicebay docs/COMPANION_APP.md, solaris-android SbApiClient.kt): the
-// four ServiceBay keys served from Laib, operate and verdicts behind the
-// right token, and every other /napi path passed through to Solaris until
-// its portal moves here (laib#28).
+// Package napi is the companion API the Android widgets speak (the app's
+// SbApiClient.kt): the four box keys under legacy.NapiPrefix served from
+// Laib, operate and verdicts behind the right token, and every other /napi
+// path passed through the migration bridge (bridge.go) until Haus serves it
+// (laib#28).
 package napi
 
 import (
@@ -13,10 +13,10 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/mdopp/haus/internal/laib"
+	"github.com/mdopp/haus/internal/legacy"
 )
 
 // Validator says whether a bearer is a paired device.
@@ -26,8 +26,8 @@ type Validator func(ctx context.Context, bearer string) bool
 type Config struct {
 	Laib     *laib.Client // the haus hand: status, inbox, journal, restart — nothing else
 	Validate Validator
-	Upstream *url.URL                           // Solaris, for every other /napi path; nil = 404
-	Whoami   func(bearer string) (string, bool) // Haus's own devices: uid behind a bearer; others fall through to Solaris
+	Bridge   *url.URL                           // the migration bridge (bridge.go), for every other /napi path; nil = 404
+	Whoami   func(bearer string) (string, bool) // Haus's own devices: uid behind a bearer; others go through the bridge
 }
 
 // Handler serves /napi/*.
@@ -44,7 +44,7 @@ func Handler(c Config) http.Handler {
 			next(w, r)
 		}
 	}
-	mux.HandleFunc("GET /napi/servicebay/home", auth(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET "+legacy.NapiPrefix+"/home", auth(func(w http.ResponseWriter, r *http.Request) {
 		ready, rows, err := c.Laib.Status(r.Context())
 		if err != nil {
 			fail(w, err)
@@ -68,7 +68,7 @@ func Handler(c Config) http.Handler {
 			"state": ready.State, "drift": ready.Drift, "lastHeard": ready.LastHeard, "operator": ready.Operator,
 		})
 	}))
-	mux.HandleFunc("GET /napi/servicebay/services", auth(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET "+legacy.NapiPrefix+"/services", auth(func(w http.ResponseWriter, r *http.Request) {
 		_, rows, err := c.Laib.Status(r.Context())
 		if err != nil {
 			fail(w, err)
@@ -87,7 +87,7 @@ func Handler(c Config) http.Handler {
 		}
 		writeJSON(w, map[string]any{"services": out})
 	}))
-	mux.HandleFunc("GET /napi/servicebay/approvals", auth(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET "+legacy.NapiPrefix+"/approvals", auth(func(w http.ResponseWriter, r *http.Request) {
 		ps, err := c.Laib.Inbox(r.Context())
 		if err != nil {
 			fail(w, err)
@@ -103,12 +103,12 @@ func Handler(c Config) http.Handler {
 		}
 		writeJSON(w, map[string]any{"approvals": out})
 	}))
-	mux.HandleFunc("GET /napi/servicebay/upgrades", auth(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET "+legacy.NapiPrefix+"/upgrades", auth(func(w http.ResponseWriter, r *http.Request) {
 		// Laib's images update themselves (podman auto-update) and templates
 		// sync by timer; there is no pending-upgrade list to show yet.
 		writeJSON(w, map[string]any{"upgrades": []any{}})
 	}))
-	mux.HandleFunc("POST /napi/servicebay/services/{name}/operate", auth(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST "+legacy.NapiPrefix+"/services/{name}/operate", auth(func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			Action string `json:"action"`
 		}
@@ -130,8 +130,8 @@ func Handler(c Config) http.Handler {
 	verdict := auth(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"Haus entscheidet nichts: Freigeben und Ablehnen gibt es nur auf der Laib-Seite (laib.<domain>/inbox)"}`, http.StatusForbidden)
 	})
-	mux.HandleFunc("POST /napi/servicebay/approvals/{id}/approve", verdict)
-	mux.HandleFunc("POST /napi/servicebay/approvals/{id}/deny", verdict)
+	mux.HandleFunc("POST "+legacy.NapiPrefix+"/approvals/{id}/approve", verdict)
+	mux.HandleFunc("POST "+legacy.NapiPrefix+"/approvals/{id}/deny", verdict)
 	mux.HandleFunc("GET /napi/whoami", func(w http.ResponseWriter, r *http.Request) {
 		bearer := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 		if c.Whoami != nil {
@@ -140,15 +140,15 @@ func Handler(c Config) http.Handler {
 				return
 			}
 		}
-		if c.Upstream != nil {
-			httputil.NewSingleHostReverseProxy(c.Upstream).ServeHTTP(w, r)
+		if c.Bridge != nil {
+			httputil.NewSingleHostReverseProxy(c.Bridge).ServeHTTP(w, r)
 			return
 		}
 		w.Header().Set("WWW-Authenticate", "Bearer")
 		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 	})
-	if c.Upstream != nil {
-		proxy := httputil.NewSingleHostReverseProxy(c.Upstream)
+	if c.Bridge != nil {
+		proxy := httputil.NewSingleHostReverseProxy(c.Bridge)
 		proxy.FlushInterval = 100 * time.Millisecond // /napi/portal/events streams
 		mux.Handle("/napi/", proxy)
 	}
@@ -178,40 +178,6 @@ func fail(w http.ResponseWriter, err error) {
 	json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 }
 
-// SolarisValidator asks Solaris whether the bearer is one of its paired
-// devices (GET /napi/whoami), cached briefly. Pairing stays in Solaris
-// until Haus owns it; the app changes a hostname and nothing else.
-func SolarisValidator(upstream *url.URL, h *http.Client) Validator {
-	type hit struct {
-		ok  bool
-		exp time.Time
-	}
-	var mu sync.Mutex
-	cache := map[string]hit{}
-	if h == nil {
-		h = &http.Client{Timeout: 10 * time.Second}
-	}
-	return func(ctx context.Context, bearer string) bool {
-		mu.Lock()
-		if c, ok := cache[bearer]; ok && time.Now().Before(c.exp) {
-			mu.Unlock()
-			return c.ok
-		}
-		mu.Unlock()
-		req, _ := http.NewRequestWithContext(ctx, "GET", upstream.ResolveReference(&url.URL{Path: "/napi/whoami"}).String(), nil)
-		req.Header.Set("Authorization", "Bearer "+bearer)
-		resp, err := h.Do(req)
-		ok := err == nil && resp.StatusCode == 200
-		if resp != nil {
-			resp.Body.Close()
-		}
-		mu.Lock()
-		cache[bearer] = hit{ok: ok, exp: time.Now().Add(5 * time.Minute)}
-		mu.Unlock()
-		return ok
-	}
-}
-
 // Chain accepts a bearer when any validator does.
 func Chain(vs ...Validator) Validator {
 	return func(ctx context.Context, bearer string) bool {
@@ -222,15 +188,4 @@ func Chain(vs ...Validator) Validator {
 		}
 		return false
 	}
-}
-
-// StaticValidator accepts a fixed set of tokens (a trial box without Solaris).
-func StaticValidator(tokens []string) Validator {
-	set := map[string]bool{}
-	for _, t := range tokens {
-		if t = strings.TrimSpace(t); t != "" {
-			set[t] = true
-		}
-	}
-	return func(_ context.Context, bearer string) bool { return set[bearer] }
 }
