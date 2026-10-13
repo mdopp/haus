@@ -13,8 +13,8 @@ import (
 // need them — this package and the Solaris bridge — and nowhere else.
 func TestLegacyNamesOnlyInTheirPlace(t *testing.T) {
 	allowed := map[string]bool{
-		"internal/legacy/legacy.go":       true, // the app's contract
-		"internal/napi/solaris_bridge.go": true, // the migration bridge
+		"internal/legacy/legacy.go": true, // the app's contract
+		"internal/napi/bridge.go":   true, // the Solaris migration bridge
 	}
 	root := filepath.Join("..", "..")
 	filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {

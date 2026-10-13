@@ -3,6 +3,8 @@ package devices
 import (
 	"strings"
 	"testing"
+
+	"github.com/mdopp/haus/internal/legacy"
 )
 
 func TestMintLookupRevoke(t *testing.T) {
@@ -11,7 +13,7 @@ func TestMintLookupRevoke(t *testing.T) {
 		t.Fatal(err)
 	}
 	d, tok, err := s.Mint("Pixel", "mdopp")
-	if err != nil || !strings.HasPrefix(tok, "sol_device_") || d.UID != "mdopp" {
+	if err != nil || !strings.HasPrefix(tok, legacy.TokenPrefix) || d.UID != "mdopp" {
 		t.Fatalf("mint: %v %q %+v", err, tok, d)
 	}
 	if got, ok := s.Lookup(tok); !ok || got.ID != d.ID || got.LastSeen.IsZero() {

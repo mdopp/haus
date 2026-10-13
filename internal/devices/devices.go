@@ -1,5 +1,5 @@
-// Package devices is Haus's own pairing: a phone gets a `sol_device_` bearer
-// (the prefix the app expects), stored hashed in one JSON file. Pairing is a
+// Package devices is Haus's own pairing: a phone gets a bearer with the prefix
+// the app expects (legacy.TokenPrefix), stored hashed in one JSON file. Pairing is a
 // page behind Authelia; the person who pairs is the device's uid.
 package devices
 
@@ -16,6 +16,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/mdopp/haus/internal/legacy"
 )
 
 // Device is one paired phone.
@@ -72,7 +74,7 @@ func (s *Store) Mint(name, uid string) (Device, string, error) {
 	if _, err := rand.Read(raw); err != nil {
 		return Device{}, "", err
 	}
-	token := "sol_device_" + base64.RawURLEncoding.EncodeToString(raw)
+	token := legacy.TokenPrefix + base64.RawURLEncoding.EncodeToString(raw)
 	id := make([]byte, 6)
 	rand.Read(id)
 	d := Device{ID: hex.EncodeToString(id), Name: strings.TrimSpace(name), UID: uid, Hash: hash(token), Created: time.Now().UTC()}

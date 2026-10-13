@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/mdopp/haus/internal/devices"
+	"github.com/mdopp/haus/internal/legacy"
 )
 
 // Geraete pairs phones: a name in, the app's setup link out (shown once),
@@ -38,8 +39,8 @@ func Geraete(store *devices.Store, publicURL string) http.HandlerFunc {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			link := "cloud.dopp.solaris://setup?server=" + url.QueryEscape(origin) + "&token=" + url.QueryEscape(tok)
-			fmt.Fprintf(&b, "<h2>%s verbunden</h2><p>Auf dem Telefon diesen Link öffnen (einmalig sichtbar):</p><p><a href=\"%s\">Solaris-App verbinden</a></p><p class=k>Server %s · Token beginnt mit %s…</p>",
+			link := legacy.AppScheme + "://setup?server=" + url.QueryEscape(origin) + "&token=" + url.QueryEscape(tok)
+			fmt.Fprintf(&b, "<h2>%s verbunden</h2><p>Auf dem Telefon diesen Link öffnen (einmalig sichtbar):</p><p><a href=\"%s\">App verbinden</a></p><p class=k>Server %s · Token beginnt mit %s…</p>",
 				html.EscapeString(d.Name), html.EscapeString(link), html.EscapeString(origin), html.EscapeString(tok[:16]))
 		}
 		b.WriteString("<h2>Neues Gerät</h2><form method=post><input name=name placeholder='Name, z.B. Pixel von Martin'> <button>Verbinden</button></form>")
