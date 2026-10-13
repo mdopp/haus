@@ -35,6 +35,13 @@ the house persona, and the old Solaris and ServiceBay names live only in
   `/napi/whoami` answers for them. The scheme, the token prefix and the
   `/napi/servicebay` paths are the app's names (`internal/legacy`).
 
+- The house persona (laib ADR 0020): Laib mounts `render/persona` at
+  `/persona` and sets `HAUS_PERSONA`. Pages carry its name in the title,
+  a header with its icon, name and greeting in its colours, and
+  `/persona/icon.svg`. The app reads `GET /napi/persona` (display, greeting,
+  accent, ground, icon) and `/napi/persona/icon.svg` with its device token.
+  Without a persona Haus is plain Haus; internally it is always `haus`.
+
 Not yet: Start, Räume, Energie, Medien, Notizen, Kalender; the `Sprechen`
 field to the Bote. Those come with the Home Assistant
 and Solaris deconstruction (laib#21).

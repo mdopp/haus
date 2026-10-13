@@ -23,7 +23,7 @@ func PairDevice(store *devices.Store) http.HandlerFunc {
 		w.Header().Set("Cache-Control", "no-store")
 		if r.Method != http.MethodPost {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			w.Write([]byte("<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><title>Telefon koppeln · Haus</title>" + style +
+			w.Write([]byte(head("Telefon koppeln") +
 				"<h1>Dieses Telefon koppeln</h1><p>Die App bekommt einen eigenen Zugang, der " + html.EscapeString(user) + " gehört. Entfernen geht jederzeit unter Box → Geräte.</p>" +
 				"<form method=post><input name=name placeholder='Name, z.B. Pixel von Anna'> <button>Koppeln</button></form>"))
 			return

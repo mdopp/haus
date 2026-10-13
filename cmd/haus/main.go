@@ -15,6 +15,7 @@ import (
 	"github.com/mdopp/haus/internal/laib"
 	"github.com/mdopp/haus/internal/napi"
 	"github.com/mdopp/haus/internal/pages"
+	"github.com/mdopp/haus/internal/persona"
 )
 
 var Version = "dev"
@@ -39,7 +40,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("haus: devices: %v", err)
 	}
-	cfg := napi.Config{Laib: ops}
+	pages.House = persona.Load(env("HAUS_PERSONA_DIR", "/persona"), os.Getenv("HAUS_PERSONA")) // laib ADR 0020; plain Haus without it
+	cfg := napi.Config{Laib: ops, House: pages.House}
 	own := func(ctx context.Context, b string) bool { _, ok := store.Lookup(b); return ok }
 	cfg.Whoami = func(b string) (string, bool) {
 		d, ok := store.Lookup(b)
@@ -58,10 +60,11 @@ func main() {
 	pagesMux.HandleFunc("/box/geraete", pages.Geraete(store, os.Getenv("HAUS_PUBLIC_URL")))
 	pagesMux.HandleFunc("/pair-device", pages.PairDevice(store)) // the app's own pairing path (haus#6)
 	pagesMux.HandleFunc("/box/", pages.Box(ops, env("LAIB_PUBLIC_URL", "https://laib."+env("LAIB_DOMAIN", "example"))))
+	pagesMux.HandleFunc("/persona/icon.svg", pages.Icon())
 	pagesMux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
 	pagesMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, "/box", http.StatusFound) })
 	mux.Handle("/", pages.RequireProxy(proxySecret, pagesMux))
 	addr := env("HAUS_LISTEN", "127.0.0.1:8650")
-	log.Printf("haus %s: listening on %s, laib %s, migration bridge %v, pages only behind the proxy secret", Version, addr, ops.URL, bridge)
+	log.Printf("haus %s: listening on %s as %s, laib %s, migration bridge %v, pages only behind the proxy secret", Version, addr, pages.House.Display, ops.URL, bridge)
 	log.Fatal((&http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}).ListenAndServe())
 }

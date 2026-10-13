@@ -17,6 +17,7 @@ import (
 
 	"github.com/mdopp/haus/internal/laib"
 	"github.com/mdopp/haus/internal/legacy"
+	"github.com/mdopp/haus/internal/persona"
 )
 
 // Validator says whether a bearer is a paired device.
@@ -28,6 +29,7 @@ type Config struct {
 	Validate Validator
 	Bridge   *url.URL                           // the migration bridge (bridge.go), for every other /napi path; nil = 404
 	Whoami   func(bearer string) (string, bool) // Haus's own devices: uid behind a bearer; others go through the bridge
+	House    persona.Persona                    // the house persona the app shows (laib#129, #130)
 }
 
 // Handler serves /napi/*.
@@ -44,6 +46,27 @@ func Handler(c Config) http.Handler {
 			next(w, r)
 		}
 	}
+	// the house persona for the app: name, greeting, colours, icon (laib#130)
+	mux.HandleFunc("GET /napi/persona", auth(func(w http.ResponseWriter, r *http.Request) {
+		p := c.House
+		if p.Display == "" {
+			p = persona.Default()
+		}
+		icon := ""
+		if len(p.Icon) > 0 {
+			icon = "/napi/persona/icon.svg"
+		}
+		writeJSON(w, map[string]any{"name": p.Name, "display": p.Display, "greeting": p.Greet(r.URL.Query().Get("lang")),
+			"accent": p.Accent(), "ground": p.Ground(), "icon": icon})
+	}))
+	mux.HandleFunc("GET /napi/persona/icon.svg", auth(func(w http.ResponseWriter, r *http.Request) {
+		if len(c.House.Icon) == 0 {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "image/svg+xml")
+		w.Write(c.House.Icon)
+	}))
 	mux.HandleFunc("GET "+legacy.NapiPrefix+"/home", auth(func(w http.ResponseWriter, r *http.Request) {
 		ready, rows, err := c.Laib.Status(r.Context())
 		if err != nil {
