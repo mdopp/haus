@@ -11,7 +11,41 @@ import (
 	"time"
 
 	"github.com/mdopp/haus/internal/laib"
+	"github.com/mdopp/haus/internal/persona"
 )
+
+// House is the house persona the family sees (laib ADR 0020), set once at
+// start; plain Haus without one.
+var House = persona.Default()
+
+// head opens a page: the title in the persona's name, a header with its
+// icon, name and greeting in its colours.
+func head(title string) string {
+	icon := ""
+	if len(House.Icon) > 0 {
+		icon = `<img src="/persona/icon.svg" alt="" width=28 height=28>`
+	}
+	greet := ""
+	if g := House.Greet("de"); g != "" {
+		greet = "<span class=gruss>" + html.EscapeString(g) + "</span>"
+	}
+	return "<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><title>" + html.EscapeString(title) + " · " + html.EscapeString(House.Display) + "</title>" + style +
+		"<style>header{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin:-1.2rem -1.2rem 1rem;padding:.6rem 1.2rem;background:" + House.Ground() + ";color:" + House.Accent() + "}header b{font-size:1.05rem}header .gruss{opacity:.85}</style>" +
+		"<header>" + icon + "<b>" + html.EscapeString(House.Display) + "</b>" + greet + "</header>"
+}
+
+// Icon serves the persona's icon.svg.
+func Icon() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if len(House.Icon) == 0 {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "image/svg+xml")
+		w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'")
+		w.Write(House.Icon)
+	}
+}
 
 const style = `<style>body{font:15px/1.45 system-ui,sans-serif;margin:0;padding:1.2rem;max-width:56rem;color:#1d1d1b;background:#faf9f6}
 h1{font-size:1.3rem;margin:.2rem 0 1rem}h2{font-size:1rem;margin:1.4rem 0 .4rem;letter-spacing:.02em;text-transform:uppercase;color:#6b665c}
@@ -33,7 +67,7 @@ func Box(c *laib.Client, laibURL string) http.HandlerFunc {
 		}
 		ready, rows, err := c.Status(ctx)
 		var b strings.Builder
-		b.WriteString("<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><title>Box · Haus</title>" + style)
+		b.WriteString(head("Box"))
 		b.WriteString("<nav><a href=/box>Box</a><a href=/box/geraete>Geräte</a></nav>")
 		if err != nil {
 			fmt.Fprintf(&b, "<h1>Box</h1><p class=rot>Laib antwortet nicht: %s</p>", html.EscapeString(err.Error()))

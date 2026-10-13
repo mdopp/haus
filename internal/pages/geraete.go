@@ -23,7 +23,7 @@ func Geraete(store *devices.Store, publicURL string) http.HandlerFunc {
 			origin = "https://" + r.Host
 		}
 		var b strings.Builder
-		b.WriteString("<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><title>Geräte · Haus</title>" + style)
+		b.WriteString(head("Geräte"))
 		b.WriteString("<nav><a href=/box>Box</a><a href=/box/geraete>Geräte</a></nav><h1>Geräte</h1>")
 		if r.Method == http.MethodPost {
 			r.ParseForm()

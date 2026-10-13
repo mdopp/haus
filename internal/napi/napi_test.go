@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/mdopp/haus/internal/laib"
+	"github.com/mdopp/haus/internal/persona"
 )
 
 // fakeLaib answers tools/call per verb with canned text and records calls.
@@ -182,5 +183,22 @@ func TestWhoamiFromHausDevices(t *testing.T) {
 	}
 	if code, _ := get(t, h, "GET", "/napi/portal/energy", "sol_device_haus", ""); code != 404 {
 		t.Fatalf("portal without Solaris → %d, want 404", code)
+	}
+}
+
+// laib#129, laib#130: the app takes the house persona's name, greeting,
+// colours and icon from Haus, behind a paired device's token.
+func TestTheAppReadsTheHousePersona(t *testing.T) {
+	var calls []string
+	lb := fakeLaib(t, &calls)
+	defer lb.Close()
+	h := Handler(Config{Laib: &laib.Client{URL: lb.URL, Token: "ops"}, Validate: StaticValidator([]string{"dev1"}),
+		House: persona.Persona{Display: "Joshua", Greeting: map[string]string{"de": "Hallo."}, Colors: map[string]string{"accent": "#3ddc84"}, Icon: []byte("<svg/>")}})
+	code, p := get(t, h, "GET", "/napi/persona", "dev1", "")
+	if code != 200 || p["display"] != "Joshua" || p["icon"] != "/napi/persona/icon.svg" {
+		t.Fatalf("persona: %d %v", code, p)
+	}
+	if code, _ := get(t, h, "GET", "/napi/persona", "", ""); code != 401 {
+		t.Fatalf("without a token: %d", code)
 	}
 }
