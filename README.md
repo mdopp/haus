@@ -101,7 +101,10 @@ the house persona, and the old Solaris and ServiceBay names live only in
   name, the room-less last.
 - The tool widgets, from the Haushalt source's backends (haus#10, the
   same variables as below; none set, they stay on the bridge):
-  `GET /napi/defs/tool` lists a tool per backend that is set, under the
+  `GET /napi/defs/tool` is Haus's **only when no bridge is set** (with
+  one, Haus's catalog would hide the tools only the bridge has: photo,
+  model, home, energy; the bridge's catalog names the same row paths, so
+  its widgets read Haus's rows). Haus's lists a tool per backend that is set, under the
   ids widgets placed through the bridge already carry: `task`
   (*Erinnerungen*, `HAUS_RADICALE_*`), `contacts`, `doc` (`HAUS_PAPERLESS_*`),
   `note` (`HAUS_NOTES_DIR`). Each def names its row path
@@ -111,8 +114,8 @@ the house persona, and the old Solaris and ServiceBay names live only in
   at most 40 rows, no JSON `null`, a backend in trouble 502). No def names
   a create or item page: Haus has none, and a guessed route lands on
   Start. A path whose backend is not set stays on the bridge.
-  `POST /napi/action-callback` is Haus's once the catalog is, and knows
-  one action: `task.set_status` with `{entity_id: <the reminder's UID>,
+  `POST /napi/action-callback` knows one action of Haus's (any other id
+  goes to the bridge while one is set, else 404 `unknown_action`): `task.set_status` with `{entity_id: <the reminder's UID>,
   status: "done"}` ticks the reminder off in Radicale (`haushalt.ReminderDone`:
   found by its whole UID in every calendar, written back as it was plus
   `STATUS:COMPLETED`, `COMPLETED`, `PERCENT-COMPLETE:100`, only if its
@@ -120,9 +123,8 @@ the house persona, and the old Solaris and ServiceBay names live only in
   `RDATE`, an override) is 409 `recurring`, since ticking off its master
   ends it — the phone does that; a phone's edit in between 409 `changed`;
   unknown 404 `not_found`; bad params 400 `bad_params`). It is not
-  destructive (the phone unticks it), so it asks no `confirmed`; every
-  other action id is 404 `unknown_action`, so Haus adds, files or
-  changes nothing else from a row.
+  destructive (the phone unticks it), so it asks no `confirmed`; Haus
+  adds, files or changes nothing else from a row.
 - The camera capture: `POST /napi/upload` (multipart, `file` parts, an
   optional `filename`) stores into `HAUS_UPLOAD_DIR`, the share's folder
   Paperless consumes; unset, the bridge's. JPEG, PNG, GIF, WebP and PDF
