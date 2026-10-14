@@ -10,9 +10,11 @@ import (
 	"net/http"
 	"os"
 	"time"
+	_ "time/tzdata" // the image is scratch: TZ needs the zone database inside the binary
 
 	"github.com/mdopp/haus/internal/devices"
 	"github.com/mdopp/haus/internal/ha"
+	"github.com/mdopp/haus/internal/haushalt"
 	"github.com/mdopp/haus/internal/laib"
 	"github.com/mdopp/haus/internal/napi"
 	"github.com/mdopp/haus/internal/pages"
@@ -60,8 +62,16 @@ func main() {
 		log.Fatalf("haus: %v", err)
 	}
 	cfg.Validate = napi.Chain(own, paired) // phones paired before Haus keep working through the bridge
+	// laib ADR 0017: the Haushalt MCP source; a tool only when its backend is set
+	hh, err := haushalt.FromEnv()
+	if err != nil {
+		log.Fatalf("haus: %v", err)
+	}
+	hh.Version = Version
 	mux := http.NewServeMux()
 	mux.Handle("/napi/", napi.Handler(cfg))
+	// the Bote's bearer, not the proxy secret: Hermes calls it directly (the route bypasses Authelia for /mcp/)
+	mux.Handle("/mcp/haushalt", haushalt.Handler(hh))
 	// public, like /napi: the app's verifier fetches it without a login (the route bypasses Authelia for /.well-known/)
 	mux.Handle("GET /.well-known/assetlinks.json", napi.AssetLinks(os.Getenv("HAUS_ANDROID_FINGERPRINTS")))
 	pagesMux := http.NewServeMux()
@@ -74,6 +84,6 @@ func main() {
 	pagesMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, "/box", http.StatusFound) })
 	mux.Handle("/", pages.RequireProxy(proxySecret, pagesMux))
 	addr := env("HAUS_LISTEN", "127.0.0.1:8650")
-	log.Printf("haus %s: listening on %s as %s, laib %s, migration bridge %v, home assistant %v, pages only behind the proxy secret", Version, addr, pages.House.Display, ops.URL, bridge, cfg.HA != nil)
+	log.Printf("haus %s: listening on %s as %s, laib %s, migration bridge %v, home assistant %v, haushalt %d tools, pages only behind the proxy secret", Version, addr, pages.House.Display, ops.URL, bridge, cfg.HA != nil, len(haushalt.Tools(hh)))
 	log.Fatal((&http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}).ListenAndServe())
 }
