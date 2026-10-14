@@ -69,6 +69,13 @@ func main() {
 		log.Fatalf("haus: %v", err)
 	}
 	hh.Version = Version
+	cfg.Haushalt = hh // haus#10: the tool widgets from the same backends; none set, they stay on the bridge
+	// haus#10: the camera capture into the share's Paperless consume folder; unset, the bridge's
+	if cfg.UploadDir = os.Getenv("HAUS_UPLOAD_DIR"); cfg.UploadDir != "" {
+		if fi, err := os.Stat(cfg.UploadDir); err != nil || !fi.IsDir() {
+			log.Printf("haus: HAUS_UPLOAD_DIR %s is not a folder (yet): uploads answer 503 until it is", cfg.UploadDir)
+		}
+	}
 	mux := http.NewServeMux()
 	mux.Handle("/napi/", napi.Handler(cfg))
 	// the Bote's bearer, not the proxy secret: Hermes calls the host port from its pod
@@ -91,6 +98,6 @@ func main() {
 	pagesMux.HandleFunc("/", pages.ToStart()) // "/", the app's /#/p/… routes and every path not served land on Start
 	mux.Handle("/", pages.RequireProxy(proxySecret, pagesMux))
 	addr := env("HAUS_LISTEN", "127.0.0.1:8650")
-	log.Printf("haus %s: listening on %s as %s, laib %s, migration bridge %v, home assistant %v, haushalt %d tools, pages only behind the proxy secret", Version, addr, pages.House.Display, ops.URL, bridge, cfg.HA != nil, len(haushalt.Tools(hh)))
+	log.Printf("haus %s: listening on %s as %s, laib %s, migration bridge %v, home assistant %v, haushalt %d tools, uploads %q, pages only behind the proxy secret", Version, addr, pages.House.Display, ops.URL, bridge, cfg.HA != nil, len(haushalt.Tools(hh)), cfg.UploadDir)
 	log.Fatal((&http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}).ListenAndServe())
 }

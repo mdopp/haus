@@ -183,6 +183,7 @@ type multistatus struct {
 					} `xml:"urn:ietf:params:xml:ns:caldav comp"`
 				} `xml:"urn:ietf:params:xml:ns:caldav supported-calendar-component-set"`
 				CalendarData string `xml:"urn:ietf:params:xml:ns:caldav calendar-data"`
+				ETag         string `xml:"DAV: getetag"`
 			} `xml:"DAV: prop"`
 		} `xml:"DAV: propstat"`
 	} `xml:"DAV: response"`
@@ -401,7 +402,13 @@ func (c *Client) forget(k kind) {
 	c.mu.Unlock()
 }
 
-func (c *Client) report(ctx context.Context, col Collection, body string) ([]*Component, error) {
+// object is one calendar object a REPORT returned: where it is, its ETag
+// and its text.
+type object struct {
+	href, etag, data string
+}
+
+func (c *Client) objects(ctx context.Context, col Collection, body string) ([]object, error) {
 	code, raw, err := c.do(ctx, "REPORT", col.URL, "1", body, nil)
 	if err != nil {
 		return nil, err
@@ -413,15 +420,26 @@ func (c *Client) report(ctx context.Context, col Collection, body string) ([]*Co
 	if err := xml.Unmarshal(raw, &ms); err != nil {
 		return nil, fmt.Errorf("Radicale: REPORT unlesbar: %w", err)
 	}
-	var out []*Component
+	var out []object
 	for _, r := range ms.Responses {
 		for _, ps := range r.Propstat {
-			if ps.Prop.CalendarData == "" {
-				continue
+			if ps.Prop.CalendarData != "" {
+				out = append(out, object{href: r.Href, etag: ps.Prop.ETag, data: ps.Prop.CalendarData})
 			}
-			if root, err := Parse(ps.Prop.CalendarData); err == nil {
-				out = append(out, root)
-			}
+		}
+	}
+	return out, nil
+}
+
+func (c *Client) report(ctx context.Context, col Collection, body string) ([]*Component, error) {
+	objs, err := c.objects(ctx, col, body)
+	if err != nil {
+		return nil, err
+	}
+	var out []*Component
+	for _, o := range objs {
+		if root, err := Parse(o.data); err == nil {
+			out = append(out, root)
 		}
 	}
 	return out, nil
@@ -508,6 +526,171 @@ func (c *Client) OpenTodos(ctx context.Context) ([]Todo, error) {
 		return a.Before(b)
 	})
 	return out, nil
+}
+
+// What CompleteTodo can answer besides a transport or status error.
+var (
+	ErrNoTodo    = errors.New("Kalender: keine solche Erinnerung")
+	ErrRecurring = errors.New("Kalender: eine wiederkehrende Erinnerung hakt Haus nicht ab, das Telefon schon")
+	ErrChanged   = errors.New("Kalender: die Erinnerung hat sich inzwischen geändert")
+)
+
+// CompleteTodo ticks off the reminder whose UID is exactly uid, in whichever
+// calendar holds it. The object is written back as it was plus STATUS,
+// COMPLETED, PERCENT-COMPLETE (and a fresh DTSTAMP, LAST-MODIFIED), only if
+// its ETag is still the one read (If-Match), so a phone's edit in between is
+// never overwritten. A reminder ticked off already is no error. A series
+// (RRULE, RDATE or an override) is refused: completing its master would end
+// every later occurrence.
+func (c *Client) CompleteTodo(ctx context.Context, uid string) error {
+	cols, err := c.readable(ctx, c.calendars(), "VTODO")
+	if err != nil {
+		return err
+	}
+	var esc strings.Builder
+	xml.EscapeText(&esc, []byte(uid))
+	body := `<?xml version="1.0" encoding="utf-8"?>
+<C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+  <D:prop><D:getetag/><C:calendar-data/></D:prop>
+  <C:filter><C:comp-filter name="VCALENDAR"><C:comp-filter name="VTODO"><C:prop-filter name="UID"><C:text-match collation="i;octet">` + esc.String() + `</C:text-match></C:prop-filter></C:comp-filter></C:comp-filter></C:filter>
+</C:calendar-query>`
+	for _, col := range cols {
+		objs, err := c.objects(ctx, col, body)
+		var st *ErrStatus
+		if errors.As(err, &st) && st.Code == http.StatusNotFound {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		for _, o := range objs {
+			root, err := Parse(o.data)
+			if err != nil {
+				continue
+			}
+			var mine []*Component
+			root.Walk(func(t *Component) {
+				if t.Name == "VTODO" && t.Text("UID") == uid { // the server matches in part; the UID is whole
+					mine = append(mine, t)
+				}
+			})
+			if len(mine) == 0 {
+				continue
+			}
+			if len(mine) > 1 || recurring(mine[0]) {
+				return ErrRecurring
+			}
+			if !(Todo{Status: mine[0].Text("STATUS")}).Open() {
+				return nil
+			}
+			if _, done := mine[0].Get("COMPLETED"); done {
+				return nil
+			}
+			if o.etag == "" {
+				return errors.New("Kalender: Radicale nennt kein ETag; ohne schreibt Haus nicht zurück")
+			}
+			u, err := c.resolve(o.href)
+			if err != nil {
+				return err
+			}
+			code, _, err := c.do(ctx, http.MethodPut, u, "", completed(o.data, uid, c.now()),
+				map[string]string{"Content-Type": "text/calendar; charset=utf-8", "If-Match": o.etag})
+			if err != nil {
+				return err
+			}
+			switch code {
+			case http.StatusOK, http.StatusCreated, http.StatusNoContent:
+				return nil
+			case http.StatusPreconditionFailed:
+				return ErrChanged
+			}
+			return &ErrStatus{"PUT", code}
+		}
+	}
+	return ErrNoTodo
+}
+
+func recurring(t *Component) bool {
+	for _, n := range []string{"RRULE", "RDATE", "RECURRENCE-ID"} {
+		if _, ok := t.Get(n); ok {
+			return true
+		}
+	}
+	return false
+}
+
+// what completed replaces in the reminder itself (not in its alarms)
+var completion = map[string]bool{"STATUS": true, "COMPLETED": true, "PERCENT-COMPLETE": true, "DTSTAMP": true, "LAST-MODIFIED": true}
+
+// completed is the object's text with the VTODO uid ticked off at now:
+// every other line as it was, the new properties before its first alarm.
+func completed(data, uid string, now time.Time) string {
+	lines := unfold(data)
+	var b strings.Builder
+	for i := 0; i < len(lines); i++ {
+		if !strings.EqualFold(lines[i], "BEGIN:VTODO") {
+			fold(&b, lines[i])
+			continue
+		}
+		end := i + 1
+		for end < len(lines) && !strings.EqualFold(lines[end], "END:VTODO") {
+			end++
+		}
+		block := lines[i:min(end+1, len(lines))]
+		i = end
+		if !ownUID(block, uid) {
+			for _, l := range block {
+				fold(&b, l)
+			}
+			continue
+		}
+		added, depth := false, 0
+		add := func() {
+			if !added {
+				for _, l := range []string{"STATUS:COMPLETED", "COMPLETED:" + utc(now), "PERCENT-COMPLETE:100", "DTSTAMP:" + utc(now), "LAST-MODIFIED:" + utc(now)} {
+					fold(&b, l)
+				}
+				added = true
+			}
+		}
+		for j, l := range block {
+			p, ok := parseLine(l)
+			switch {
+			case j == 0:
+			case j == len(block)-1 && depth == 0:
+				add()
+			case ok && p.Name == "BEGIN":
+				if depth == 0 {
+					add()
+				}
+				depth++
+			case ok && p.Name == "END":
+				depth--
+			case ok && depth == 0 && completion[p.Name]:
+				continue
+			}
+			fold(&b, l)
+		}
+	}
+	return b.String()
+}
+
+// ownUID says whether a BEGIN:VTODO … END:VTODO block's own UID is uid.
+func ownUID(block []string, uid string) bool {
+	depth := 0
+	for _, l := range block[1:] {
+		p, ok := parseLine(l)
+		switch {
+		case !ok:
+		case p.Name == "BEGIN":
+			depth++
+		case p.Name == "END":
+			depth--
+		case depth == 0 && p.Name == "UID":
+			return UnescapeText(p.Value) == uid
+		}
+	}
+	return false
 }
 
 // NewUID is a fresh object id.

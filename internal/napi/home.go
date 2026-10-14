@@ -69,6 +69,8 @@ func (h *homeAPI) routes(mux *http.ServeMux, auth func(http.HandlerFunc) http.Ha
 	mux.HandleFunc("GET /napi/portal/energy", auth(h.energy))
 	mux.HandleFunc("GET /napi/portal/entity-history", auth(h.history))
 	mux.HandleFunc("GET /napi/portal/active", auth(h.active))
+	mux.HandleFunc("GET /napi/portal/camera/{entity_id}/snapshot", auth(h.snapshot))
+	mux.HandleFunc("GET /napi/portal/start/addable", auth(h.addable))
 }
 
 func answer(w http.ResponseWriter, code int, v any) {

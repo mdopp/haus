@@ -283,7 +283,7 @@ func TestCompleteTodo(t *testing.T) {
 	if todo.Text("STATUS") != "COMPLETED" || todo.Text("COMPLETED") != "20261014T120000Z" || todo.Text("PERCENT-COMPLETE") != "100" {
 		t.Fatalf("completion:\n%s", got)
 	}
-	if todo.Text("DESCRIPTION") != long || todo.Text("X-PHONE-FLAG") != "bleibt" || root.Text("PRODID") != "-//phone//DE" {
+	if todo.Text("DESCRIPTION") != long || todo.Text("X-PHONE-FLAG") != "bleibt" || root.Children[0].Text("PRODID") != "-//phone//DE" {
 		t.Fatalf("everything else stays:\n%s", got)
 	}
 	if strings.Count(got, "STATUS:") != 1 || strings.Count(got, "PERCENT-COMPLETE") != 1 {
