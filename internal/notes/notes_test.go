@@ -8,6 +8,7 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+	"time"
 )
 
 var bg = context.Background()
@@ -238,5 +239,51 @@ func TestSearchIsCapped(t *testing.T) {
 	}
 	if _, err := d.Read(ctx, "nicht-da"); !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancelled read by title: %v", err)
+	}
+}
+
+// haus#12: the Start page shows the newest notes: by modification time,
+// newest first, at most n, hidden files and folders and non-notes left out.
+func TestRecentNewestFirst(t *testing.T) {
+	d, dir := open(t)
+	base := time.Date(2026, 10, 14, 10, 0, 0, 0, time.UTC)
+	put := func(name, body string, age time.Duration) {
+		p := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(p, base.Add(-age), base.Add(-age)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	put("alt.md", "# Alte Notiz\n", 72*time.Hour)
+	put("einkauf.md", "# Einkaufsliste\nMilch\n", time.Hour)
+	put("urlaub/packliste.md", "# Packliste\n", 2*time.Hour)
+	put("wlan.txt", "Gäste-WLAN steht auf dem Router\n", 3*time.Hour)
+	put(".versteckt.md", "# Geheim\n", 0)
+	put(".stversions/einkauf~1.md", "# Einkaufsliste alt\n", 0)
+	put("bild.jpg", "jpeg", 0)
+	got, err := d.Recent(bg, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var titles []string
+	for _, n := range got {
+		titles = append(titles, n.Title)
+		if n.Changed.IsZero() {
+			t.Fatalf("%s: no time", n.Name)
+		}
+	}
+	if strings.Join(titles, "|") != "Einkaufsliste|Packliste|wlan" {
+		t.Fatalf("recent: %v", titles)
+	}
+	if !got[0].Changed.Equal(base.Add(-time.Hour)) {
+		t.Fatalf("changed: %v", got[0].Changed)
+	}
+	if none, err := d.Recent(bg, 0); err != nil || len(none) != 0 {
+		t.Fatalf("n=0: %v %v", none, err)
 	}
 }

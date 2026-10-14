@@ -18,7 +18,9 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 )
@@ -416,4 +418,75 @@ func (d *Dir) Read(ctx context.Context, ref string) (Note, error) {
 		}
 	}
 	return Note{}, ErrNotFound
+}
+
+// Entry is a note in a listing: its file, its title, when it last changed.
+type Entry struct {
+	Name    string
+	Title   string
+	Changed time.Time
+}
+
+// Recent lists the n most recently changed notes, newest first. It looks at
+// at most maxFiles files, the hidden ones left out, and reads only the n
+// it returns, each just far enough for its title.
+func (d *Dir) Recent(ctx context.Context, n int) ([]Entry, error) {
+	if n <= 0 {
+		return []Entry{}, nil
+	}
+	root, err := os.OpenRoot(d.path)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+	fsys := root.FS()
+	var all []Entry
+	err = fs.WalkDir(fsys, ".", func(name string, e fs.DirEntry, err error) error {
+		if cerr := ctx.Err(); cerr != nil {
+			return cerr
+		}
+		if err != nil {
+			return nil
+		}
+		if e.IsDir() {
+			if name != "." && strings.HasPrefix(e.Name(), ".") {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if !e.Type().IsRegular() || strings.HasPrefix(e.Name(), ".") || !isNote(name) {
+			return nil
+		}
+		if len(all) >= maxFiles {
+			return errStop
+		}
+		if info, err := e.Info(); err == nil {
+			all = append(all, Entry{Name: name, Changed: info.ModTime()})
+		}
+		return nil
+	})
+	if err != nil && !errors.Is(err, errStop) {
+		return nil, err
+	}
+	sort.SliceStable(all, func(i, j int) bool {
+		if !all[i].Changed.Equal(all[j].Changed) {
+			return all[i].Changed.After(all[j].Changed)
+		}
+		return all[i].Name < all[j].Name
+	})
+	out := make([]Entry, 0, n)
+	for _, e := range all {
+		if len(out) == n {
+			break
+		}
+		f, err := fsys.Open(e.Name)
+		if err != nil {
+			continue
+		}
+		head, _ := io.ReadAll(io.LimitReader(f, 4<<10))
+		f.Close()
+		e.Title = title(e.Name, head)
+		out = append(out, e)
+	}
+	return out, nil
 }

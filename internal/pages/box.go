@@ -31,7 +31,7 @@ func head(title string) string {
 	if g := House.Greet("de"); g != "" {
 		greet = "<span class=gruss>" + html.EscapeString(g) + "</span>"
 	}
-	return "<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><title>" + html.EscapeString(title) + " · " + html.EscapeString(House.Display) + "</title>" + style +
+	return "<!doctype html><html lang=de><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><title>" + html.EscapeString(title) + " · " + html.EscapeString(House.Display) + "</title>" + style +
 		"<style>header{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin:-1.2rem -1.2rem 1rem;padding:.6rem 1.2rem;background:" + House.Ground() + ";color:" + House.Accent() + "}header b{font-size:1.05rem}header .gruss{opacity:.85}</style>" +
 		"<header>" + icon + "<b>" + html.EscapeString(House.Display) + "</b>" + greet + "</header>"
 }
@@ -70,6 +70,9 @@ func BoxWith(c *laib.Client, laibURL string, tickets *werkstatt.Tickets) http.Ha
 			http.Error(w, "Haus entscheidet nichts: Freigeben und Ablehnen gibt es nur auf der Laib-Seite", http.StatusForbidden)
 			return
 		}
+		if !adminOnly(w, r) {
+			return
+		}
 		ready, rows, err := c.Status(ctx)
 		var b strings.Builder
 		b.WriteString(head("Box"))
@@ -81,7 +84,7 @@ func BoxWith(c *laib.Client, laibURL string, tickets *werkstatt.Tickets) http.Ha
 			return
 		}
 		// the three guarantees, for everyone in the family (haus#2)
-		b.WriteString(guarantees(ready, rows, strings.Contains(","+r.Header.Get("Remote-Groups")+",", ",admins,"), laibURL))
+		b.WriteString(guarantees(ready, rows, isAdmin(r), laibURL))
 		fmt.Fprintf(&b, "<h1>Box · <span class=%s>%s</span> <span class=k>· %d Dienste · %d grün · %d gelb · %d rot · Drift %d</span></h1>",
 			readyClass(ready), html.EscapeString(ready.State), ready.Services, ready.Green, ready.Yellow, ready.Red, ready.Drift)
 		fmt.Fprintf(&b, "<p>Operator: <span class=%s>%s</span></p>", operatorClass(ready.Operator), html.EscapeString(ready.Operator))
@@ -135,6 +138,17 @@ func BoxWith(c *laib.Client, laibURL string, tickets *werkstatt.Tickets) http.Ha
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Write([]byte(b.String()))
 	}
+}
+
+// adminOnly lets admins through and sends everyone else to Start (303):
+// Box is the admins' page (laib DEKONSTRUKTION). It says who sees the
+// page, it decides nothing.
+func adminOnly(w http.ResponseWriter, r *http.Request) bool {
+	if isAdmin(r) {
+		return true
+	}
+	http.Redirect(w, r, "/start", http.StatusSeeOther)
+	return false
 }
 
 func operatorClass(s string) string {
