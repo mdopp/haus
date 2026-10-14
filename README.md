@@ -43,11 +43,13 @@ the house persona, and the old Solaris and ServiceBay names live only in
     Temperatures carry HA's unit: the entity's `temperature_unit`, else
     `unit_system.temperature` from `/api/config`, °C only when HA says
     neither. The rooms, the hidden entities and the unit are read once and
-    kept 5 minutes (the rooms shared with `/napi/portal/active`); until the
-    registries have been read, the cards are left out rather than put
-    everything in Ohne Raum. Switching comes later, with where actions live.
+    kept 5 minutes (the rooms shared with `/napi/portal/active`), refreshed
+    in the background whoever asked; until the registries have been read,
+    the page says it is reading them rather than put everything in Ohne
+    Raum. Switching comes later, with where actions live.
   - *Kalender*: *Heute* (the day's appointments with time and place),
-    *Nächste 14 Tage*, *Erinnerungen* (open reminders, overdue said so),
+    *Nächste 14 Tage*, *Erinnerungen* (open reminders, overdue said so; one
+    due on a day, not at a time, shows the day and is overdue the day after),
     every calendar of the Radicale account, at most 50 rows a card.
   - *Notizen*: a search field (`GET /notizen?q=…`, the notes search above:
     20 hits, its caps) and the ten newest notes. `/notizen/<file>` (the
