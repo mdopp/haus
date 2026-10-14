@@ -1,7 +1,11 @@
 package napi
 
 import (
+	"bytes"
 	"encoding/json"
+	"image"
+	"image/color"
+	"image/png"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -184,13 +188,135 @@ func TestTheAppReadsTheHousePersona(t *testing.T) {
 	lb := fakeLaib(t, &calls)
 	defer lb.Close()
 	h := Handler(Config{Laib: &laib.Client{URL: lb.URL, Token: "ops"}, Validate: StaticValidator([]string{"dev1"}),
-		House: persona.Persona{Display: "Joshua", Greeting: map[string]string{"de": "Hallo."}, Colors: map[string]string{"accent": "#3ddc84"}, Icon: []byte("<svg/>")}})
+		House: persona.Persona{Display: "Joshua", Languages: []string{"de"}, Greeting: map[string]string{"de": "Hallo."}, Colors: map[string]string{"accent": "#3ddc84"}}})
 	code, p := get(t, h, "GET", "/napi/persona", "dev1", "")
-	if code != 200 || p["display"] != "Joshua" || p["icon"] != "/napi/persona/icon.svg" {
+	if code != 200 || p["display"] != "Joshua" || p["greeting"] != "Hallo." || p["accent"] != "#3ddc84" {
 		t.Fatalf("persona: %d %v", code, p)
 	}
 	if code, _ := get(t, h, "GET", "/napi/persona", "", ""); code != 401 {
 		t.Fatalf("without a token: %d", code)
+	}
+}
+
+// a persona as Laib renders it to /persona/<name>, with the icon files given
+func personaDir(t *testing.T, icons map[string][]byte) string {
+	t.Helper()
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "joshua"), 0o755)
+	os.WriteFile(filepath.Join(dir, "joshua", "persona.json"), []byte(`{"name":"joshua","display":"Joshua","greeting":{"de":"Hallo."},"languages":["de"],"colors":{"accent":"#3ddc84","ground":"#0c120e"}}`), 0o644)
+	for name, b := range icons {
+		os.WriteFile(filepath.Join(dir, "joshua", name), b, 0o644)
+	}
+	return dir
+}
+
+func tinyPNG(t *testing.T) []byte {
+	t.Helper()
+	img := image.NewNRGBA(image.Rect(0, 0, 4, 4))
+	img.Set(1, 1, color.NRGBA{0x3d, 0xdc, 0x84, 0xff})
+	var b bytes.Buffer
+	if err := png.Encode(&b, img); err != nil {
+		t.Fatal(err)
+	}
+	return b.Bytes()
+}
+
+// haus#28: a phone draws PNG without a library, so /napi hands it the
+// persona's icon as PNG (icon.png next to icon.svg; Laib renders it, laib#191)
+// and no SVG; the pages keep the SVG for browsers. A persona without a PNG,
+// or with a file that is not one, has no icon on the phone.
+func TestThePhoneGetsThePersonaIconAsPNG(t *testing.T) {
+	var calls []string
+	lb := fakeLaib(t, &calls)
+	defer lb.Close()
+	pic := tinyPNG(t)
+	handler := func(icons map[string][]byte) http.Handler {
+		return Handler(Config{Laib: &laib.Client{URL: lb.URL, Token: "ops"}, Validate: StaticValidator([]string{"dev1"}),
+			House: persona.Load(personaDir(t, icons), "joshua")})
+	}
+
+	h := handler(map[string][]byte{"icon.svg": []byte("<svg/>"), "icon.png": pic})
+	if code, p := get(t, h, "GET", "/napi/persona", "dev1", ""); code != 200 || p["display"] != "Joshua" || p["icon"] != "/napi/persona/icon.png" {
+		t.Fatalf("persona: %d %v", code, p)
+	}
+	req := httptest.NewRequest("GET", "/napi/persona/icon.png", nil)
+	req.Header.Set("Authorization", "Bearer dev1")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != 200 || rec.Header().Get("Content-Type") != "image/png" || !bytes.Equal(rec.Body.Bytes(), pic) {
+		t.Fatalf("icon.png: %d %q %d bytes", rec.Code, rec.Header().Get("Content-Type"), rec.Body.Len())
+	}
+	if _, err := png.Decode(bytes.NewReader(rec.Body.Bytes())); err != nil {
+		t.Fatalf("icon.png does not decode: %v", err)
+	}
+	code, body := raw(t, h, "GET", "/napi/persona/icon.svg", "dev1", "")
+	notFound(t, "the SVG on /napi", code, body)
+
+	for what, icons := range map[string]map[string][]byte{
+		"an SVG only":       {"icon.svg": []byte("<svg/>")},
+		"no icon":           {},
+		"a PNG that is not": {"icon.png": []byte("<svg/>")},
+	} {
+		h := handler(icons)
+		if _, p := get(t, h, "GET", "/napi/persona", "dev1", ""); p["icon"] != "" {
+			t.Errorf("%s: icon %v, want none", what, p["icon"])
+		}
+		code, body := raw(t, h, "GET", "/napi/persona/icon.png", "dev1", "")
+		notFound(t, what+": icon.png", code, body)
+	}
+}
+
+// laibAnswering is a Laib whose tools answer the given text; any other
+// tool is an error.
+func laibAnswering(t *testing.T, texts map[string]string) *laib.Client {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Params struct {
+				Name string `json:"name"`
+			} `json:"params"`
+		}
+		json.NewDecoder(r.Body).Decode(&req)
+		text, ok := texts[req.Params.Name]
+		json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": 1, "result": map[string]any{"content": []map[string]string{{"type": "text", "text": text}}, "isError": !ok}})
+	}))
+	t.Cleanup(srv.Close)
+	return &laib.Client{URL: srv.URL, Token: "ops"}
+}
+
+// haus#28: pendingUpdates is Laib's count of template updates waiting:
+// `laib template sync --propose` files each as a proposal whose kind is
+// template-update, whatever class the dial gave it (a public route makes
+// it human). An update is counted and listed as an update only, never as
+// an approval too: three updates and one other proposal are one approval
+// and three updates. Haus decides none of them (haus#1).
+func TestPendingUpdatesAreLaibsTemplateUpdates(t *testing.T) {
+	lb := laibAnswering(t, map[string]string{
+		"laib_status": `{"ready":{"state":"bereit"},"services":[{"name":"immich","state":"grün"}]}`,
+		"laib_inbox": `[{"id":7,"actor":"pi","reason":"immich: mehr Speicher","tier":"apply","status":"open","created":"2026-10-10T19:00:00Z","files":["services/immich/values.yml"],"class":"values","kind":"values"},
+{"id":8,"actor":"laib","reason":"immich: Vorlage 1.2 → 1.3","tier":"apply","status":"open","created":"2026-10-11T04:00:00Z","files":["services/immich/template.yml"],"class":"template-update","kind":"template-update"},
+{"id":9,"actor":"laib","reason":"caddy: Vorlage 2.0 → 2.1","tier":"apply","status":"open","created":"2026-10-11T04:00:01Z","files":["services/caddy/template.yml"],"class":"human","kind":"template-update","reasons":["eine öffentliche Route"]},
+{"id":10,"actor":"laib","reason":"paperless: Vorlage 3.0 → 3.1","tier":"apply","status":"open","created":"2026-10-11T04:00:02Z","files":["services/paperless/template.yml"],"class":"template-update","kind":"template-update"}]`,
+	})
+	h := Handler(Config{Laib: lb, Validate: StaticValidator([]string{"dev1"})})
+	code, home := get(t, h, "GET", "/napi/box/home", "dev1", "")
+	if code != 200 || home["pendingUpdates"] != 3.0 || home["pendingApprovals"] != 1.0 {
+		t.Fatalf("home: %d %v, want 1 approval and 3 updates", code, home)
+	}
+	_, aps := get(t, h, "GET", "/napi/box/approvals", "dev1", "")
+	if rows, _ := aps["approvals"].([]any); len(rows) != 1 || rows[0].(map[string]any)["id"] != "7" {
+		t.Fatalf("approvals, the updates left out: %v", aps)
+	}
+	_, ups := get(t, h, "GET", "/napi/box/upgrades", "dev1", "")
+	rows, _ := ups["upgrades"].([]any)
+	if len(rows) != 3 {
+		t.Fatalf("upgrades: %v", ups)
+	}
+	if u := rows[0].(map[string]any); u["id"] != "8" || u["service"] != "immich" || u["title"] != "immich: Vorlage 1.2 → 1.3" || u["created_at"] != "2026-10-11T04:00:00Z" {
+		t.Fatalf("first upgrade: %v", u)
+	}
+	if u := rows[1].(map[string]any); u["id"] != "9" || u["service"] != "caddy" {
+		t.Fatalf("second upgrade: %v", u)
 	}
 }
 
@@ -220,7 +346,7 @@ func TestUnknownNapiPathWantsADeviceFirst(t *testing.T) {
 		code, body := raw(t, h, "GET", p, "dev1", "")
 		notFound(t, "GET "+p, code, body)
 	}
-	code, body := raw(t, h, "GET", "/napi/persona/icon.svg", "dev1", "")
+	code, body := raw(t, h, "GET", "/napi/persona/icon.png", "dev1", "")
 	notFound(t, "the persona icon without an icon", code, body)
 }
 
@@ -266,9 +392,9 @@ func TestEveryNapiRouteWantsADevice(t *testing.T) {
 		HA:        &ha.Client{URL: dead, Token: "ha"},
 		Haushalt:  haushalt.Config{Calendar: dav, Contacts: dav, Documents: &paperless.Client{URL: dead, Token: "pl"}, Notes: nd},
 		UploadDir: t.TempDir(),
-		House:     persona.Persona{Display: "Haus", Icon: []byte("<svg/>")}})
+		House:     persona.Load(personaDir(t, map[string][]byte{"icon.svg": []byte("<svg/>"), "icon.png": tinyPNG(t)}), "joshua")})
 	routes := map[string]bool{
-		"GET /napi/persona": true, "GET /napi/persona/icon.svg": true, "GET /napi/whoami": true,
+		"GET /napi/persona": true, "GET /napi/persona/icon.png": true, "GET /napi/whoami": true,
 		"GET /napi/box/home": true, "GET /napi/box/services": true, "GET /napi/box/approvals": true, "GET /napi/box/upgrades": true,
 		"POST /napi/box/services/{name}/operate": true, "POST /napi/box/approvals/{id}/approve": true, "POST /napi/box/approvals/{id}/deny": true,
 		"POST /napi/ha/call": true, "GET /napi/portal/state": true, "GET /napi/portal/energy": true, "GET /napi/portal/entity-history": true,

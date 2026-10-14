@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -56,6 +57,10 @@ type State struct {
 	LastUpdated string         `json:"last_updated"`
 	LastChanged string         `json:"last_changed"`
 }
+
+// EntityRE is an entity id's shape, domain.object_id; anything else is
+// never asked of HA.
+var EntityRE = regexp.MustCompile(`^[a-z_]+\.[a-z0-9_]+$`)
 
 // ErrNotFound is HA's 404 for an entity.
 var ErrNotFound = errors.New("ha: unknown entity")

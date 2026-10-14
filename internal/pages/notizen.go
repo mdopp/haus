@@ -60,7 +60,7 @@ func Notizen(cfg StartConfig) http.HandlerFunc {
 					if len(h.Lines) > 0 {
 						first = h.Lines[0]
 					}
-					c.AddLink(summary(h.Title), first, noteHref(h.Name))
+					c.AddLink(summary(h.Title), first, cards.NotePage(h.Name))
 				}
 				more(&c, res.Total-len(res.Hits))
 				if res.Total == 0 {
@@ -82,7 +82,7 @@ func Notizen(cfg StartConfig) http.HandlerFunc {
 		if err == nil {
 			c := cards.Card{Title: "Zuletzt geändert"}
 			for _, n := range recent {
-				c.AddLink(summary(n.Title), "geändert "+dayWord(n.Changed, now, loc)+" "+n.Changed.In(loc).Format("15:04"), noteHref(n.Name))
+				c.AddLink(summary(n.Title), "geändert "+dayWord(n.Changed, now, loc)+" "+n.Changed.In(loc).Format("15:04"), cards.NotePage(n.Name))
 			}
 			if c.Empty() {
 				c.Add("Noch keine Notizen", "")

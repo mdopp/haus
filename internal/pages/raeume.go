@@ -68,12 +68,12 @@ func Raeume(cfg StartConfig) http.HandlerFunc {
 }
 
 // roomCards groups the states by room: rooms by name, "Ohne Raum" last;
-// in a room lights, heating, covers, media, each by name. What HA hides
-// (hidden, config, diagnostic) is left out.
+// in a room lights, heating, covers, media, each by name, each leading to
+// its own page. What HA hides (hidden, config, diagnostic) is left out.
 func roomCards(states []ha.State, reg ha.Registry) []cards.Card {
 	type thing struct {
-		kind         int
-		name, detail string
+		kind             int
+		id, name, detail string
 	}
 	byRoom := map[string][]thing{}
 	for _, s := range states {
@@ -89,7 +89,7 @@ func roomCards(states []ha.State, reg ha.Registry) []cards.Card {
 			continue
 		}
 		room := oneLine(reg.Rooms[s.EntityID])
-		byRoom[room] = append(byRoom[room], thing{kind, friendly(s), roomDetail(domain, s, reg.TempUnit)})
+		byRoom[room] = append(byRoom[room], thing{kind, s.EntityID, friendly(s), roomDetail(domain, s, reg.TempUnit)})
 	}
 	names := make([]string, 0, len(byRoom))
 	for n := range byRoom {
@@ -119,7 +119,7 @@ func roomCards(states []ha.State, reg ha.Registry) []cards.Card {
 			if i == maxRoomRows {
 				break
 			}
-			c.Add(t.name, t.detail)
+			c.AddLink(t.name, t.detail, cards.ThingPage(t.id))
 		}
 		more(&c, len(things)-maxRoomRows)
 		out = append(out, c)
@@ -127,9 +127,10 @@ func roomCards(states []ha.State, reg ha.Registry) []cards.Card {
 	return out
 }
 
-// roomDetail says a thing's state in the family's words. houseUnit is HA's
-// temperature unit; an entity's own temperature_unit wins, °C is the last
-// resort.
+// roomDetail says a thing's state in the family's words: the room kinds,
+// and the other things a widget shows (a thing's own page, haus#28).
+// houseUnit is HA's temperature unit; an entity's own temperature_unit
+// wins, °C is the last resort.
 func roomDetail(domain string, s ha.State, houseUnit string) string {
 	switch s.State {
 	case "unavailable":
@@ -198,9 +199,34 @@ func roomDetail(domain string, s ha.State, houseUnit string) string {
 			}
 		}
 		return word
+	case "switch":
+		if w := map[string]string{"on": "an", "off": "aus"}[s.State]; w != "" {
+			return w
+		}
+	case "binary_sensor":
+		dc, _ := s.Attributes["device_class"].(string)
+		words := map[string]string{"on": "an", "off": "aus"}
+		if openings[dc] {
+			words = map[string]string{"on": "offen", "off": "geschlossen"}
+		}
+		if w := words[s.State]; w != "" {
+			return w
+		}
+	case "lock":
+		if w := map[string]string{"locked": "verriegelt", "unlocked": "offen", "locking": "verriegelt gerade", "unlocking": "öffnet",
+			"jammed": "klemmt", "open": "offen", "opening": "öffnet"}[s.State]; w != "" {
+			return w
+		}
+	case "sensor":
+		if u, _ := s.Attributes["unit_of_measurement"].(string); trimRunes(oneLine(u), 8) != "" {
+			return trimRunes(oneLine(s.State), 40) + " " + trimRunes(oneLine(u), 8)
+		}
 	}
 	return trimRunes(oneLine(s.State), 40)
 }
+
+// openings are the binary sensors that say open or closed, not on or off.
+var openings = map[string]bool{"door": true, "garage_door": true, "opening": true, "window": true}
 
 // number reads an attribute HA sends as a JSON number.
 func number(v any) (float64, bool) {

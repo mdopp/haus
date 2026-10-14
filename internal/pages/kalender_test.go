@@ -126,8 +126,10 @@ func TestKalenderReminderDueOnADay(t *testing.T) {
 	dav.Put("/haus/familie/b.ics", todo("b", "Gestern schon", "DUE;VALUE=DATE:20261013\r\n"))
 	dav.Put("/haus/familie/c.ics", todo("c", "Freitag", "DUE;VALUE=DATE:20261016\r\n"))
 	_, body, _ := familyPage(t, Kalender, StartConfig{Calendar: cal}, "GET", "/kalender", "")
-	mustContain(t, body, "Heute irgendwann <span class=k>heute</span>", "Gestern schon <span class=k>überfällig seit gestern</span>",
-		"Freitag <span class=k>Fr 16.10.</span>")
+	// each leads to its own page (haus#28)
+	mustContain(t, body, `<a href="/kalender/erinnerung/a">Heute irgendwann</a> <span class=k>heute</span>`,
+		`<a href="/kalender/erinnerung/b">Gestern schon</a> <span class=k>überfällig seit gestern</span>`,
+		`<a href="/kalender/erinnerung/c">Freitag</a> <span class=k>Fr 16.10.</span>`)
 	mustNotContain(t, body, "00:00", "überfällig seit heute")
 
 	_, body = startPage(t, StartConfig{Calendar: cal}, "")

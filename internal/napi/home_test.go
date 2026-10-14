@@ -440,6 +440,219 @@ func TestWatchAndEvents(t *testing.T) {
 	}
 }
 
+// haus#28: a device that shows the active devices says so in its watch
+// (active: true) and gets an active_set frame whenever the set of things
+// that are on or open changes, whichever entity it was, watched or not:
+// once when Haus subscribes, then at most every SensorEvery, the latest
+// set always. The frame names the set; the app re-reads
+// /napi/portal/active. A change inside the set (a brightness) is no frame,
+// and a device that did not ask gets none.
+func TestActiveSetEvents(t *testing.T) {
+	fake, h := houseWith(t, func(c *Config) { c.SensorEvery = 200 * time.Millisecond })
+	srv := httptest.NewServer(h)
+	defer srv.Close()
+	if code, body := raw(t, h, "POST", "/napi/portal/watch", "dev1", `{"entity_ids":[],"active":true}`); code != 200 {
+		t.Fatalf("watch: %d %s", code, body)
+	}
+	raw(t, h, "POST", "/napi/portal/watch", "dev2", `{"entity_ids":["light.flur"]}`)
+	r1, l1 := stream(t, srv.URL, "dev1")
+	defer r1.Body.Close()
+	r2, l2 := stream(t, srv.URL, "dev2")
+	defer r2.Body.Close()
+	if !fake.WaitSubscribed(1) {
+		t.Fatal("Haus never subscribed to state_changed")
+	}
+	set := func(f []frame) []string {
+		t.Helper()
+		if len(f) != 1 || f[0].event != "active_set" {
+			t.Fatalf("want one active_set frame, got %+v", f)
+		}
+		var d struct {
+			EntityIDs []string `json:"entity_ids"`
+		}
+		if err := json.Unmarshal([]byte(f[0].data), &d); err != nil {
+			t.Fatalf("active_set data: %s", f[0].data)
+		}
+		return d.EntityIDs
+	}
+	if got := strings.Join(set(readFrames(t, l1, 1, 2*time.Second)), " "); got != "cover.garage light.kueche switch.kaffee" {
+		t.Fatalf("the set on subscribe: %q", got)
+	}
+	fake.Change("light.kueche", "on", map[string]any{"friendly_name": "Küche", "brightness": 200}) // still on
+	fake.Change("light.flur", "on", map[string]any{"friendly_name": "Flur"})                       // dev1 watches no entity
+	if got := strings.Join(set(readFrames(t, l1, 1, 2*time.Second)), " "); got != "cover.garage light.flur light.kueche switch.kaffee" {
+		t.Fatalf("after the hall light: %q", got)
+	}
+	fake.Change("switch.kaffee", "off", map[string]any{"friendly_name": "Kaffeemaschine"})
+	fake.Change("cover.garage", "closed", map[string]any{"friendly_name": "Garagentor", "device_class": "garage"})
+	if got := strings.Join(set(readFrames(t, l1, 1, 2*time.Second)), " "); got != "light.flur light.kueche" {
+		t.Fatalf("two changes inside the interval, the latest set once: %q", got)
+	}
+	if f := readFrames(t, l1, 1, 500*time.Millisecond); len(f) != 0 {
+		t.Fatalf("nothing more changed the set: %+v", f)
+	}
+	for _, f := range readFrames(t, l2, 5, 800*time.Millisecond) {
+		if f.event != "card_state" {
+			t.Fatalf("dev2 did not ask for the active set: %+v", f)
+		}
+	}
+}
+
+// activeSet reads one frame and returns its set, or fails.
+func activeSet(t *testing.T, f []frame) string {
+	t.Helper()
+	if len(f) != 1 || f[0].event != "active_set" {
+		t.Fatalf("want one active_set frame, got %+v", f)
+	}
+	var d struct {
+		EntityIDs []string `json:"entity_ids"`
+	}
+	if err := json.Unmarshal([]byte(f[0].data), &d); err != nil {
+		t.Fatalf("active_set data: %s", f[0].data)
+	}
+	return strings.Join(d.EntityIDs, " ")
+}
+
+// haus#28: the first active_set goes per phone, at once: to a stream that
+// opens while Haus already holds HA's subscription, and to an open stream
+// whose watch turns active on. Not the interval, which is 10s here.
+func TestEachPhoneGetsTheActiveSetAtOnce(t *testing.T) {
+	fake, h := house(t)
+	srv := httptest.NewServer(h)
+	defer srv.Close()
+	raw(t, h, "POST", "/napi/portal/watch", "dev1", `{"entity_ids":[],"active":true}`)
+	r1, l1 := stream(t, srv.URL, "dev1")
+	defer r1.Body.Close()
+	if !fake.WaitSubscribed(1) {
+		t.Fatal("Haus never subscribed")
+	}
+	const now = "cover.garage light.kueche switch.kaffee"
+	if got := activeSet(t, readFrames(t, l1, 1, 2*time.Second)); got != now {
+		t.Fatalf("the first phone: %q", got)
+	}
+	// a second phone, its watch already active, connects while the subscription runs
+	raw(t, h, "POST", "/napi/portal/watch", "dev2", `{"entity_ids":[],"active":true}`)
+	r2, l2 := stream(t, srv.URL, "dev2")
+	defer r2.Body.Close()
+	if got := activeSet(t, readFrames(t, l2, 1, time.Second)); got != now {
+		t.Fatalf("the second phone: %q", got)
+	}
+	// a phone with an open stream turns its watch active on
+	r3, l3 := stream(t, srv.URL, "dev1")
+	defer r3.Body.Close()
+	readFrames(t, l3, 1, 300*time.Millisecond) // dev1's watch is active: its new stream gets the set too
+	raw(t, h, "POST", "/napi/portal/watch", "dev2", `{"entity_ids":[]}`)
+	raw(t, h, "POST", "/napi/portal/watch", "dev2", `{"entity_ids":[],"active":true}`)
+	if got := activeSet(t, readFrames(t, l2, 1, time.Second)); got != now {
+		t.Fatalf("a watch turned active on: %q", got)
+	}
+	// nobody else got anything from that
+	if f := readFrames(t, l1, 1, 300*time.Millisecond); len(f) != 0 {
+		t.Fatalf("dev1's first stream: %+v", f)
+	}
+}
+
+// haus#28: a new stream of a device whose watch is active gets the set.
+func TestANewStreamOfAnActiveDeviceGetsTheSet(t *testing.T) {
+	fake, h := house(t)
+	srv := httptest.NewServer(h)
+	defer srv.Close()
+	raw(t, h, "POST", "/napi/portal/watch", "dev1", `{"entity_ids":[],"active":true}`)
+	r1, l1 := stream(t, srv.URL, "dev1")
+	defer r1.Body.Close()
+	if !fake.WaitSubscribed(1) {
+		t.Fatal("Haus never subscribed")
+	}
+	activeSet(t, readFrames(t, l1, 1, 2*time.Second))
+	r2, l2 := stream(t, srv.URL, "dev1")
+	defer r2.Body.Close()
+	if got := activeSet(t, readFrames(t, l2, 1, time.Second)); got != "cover.garage light.kueche switch.kaffee" {
+		t.Fatalf("the device's new stream: %q", got)
+	}
+}
+
+// After HA drops and Haus resubscribes, a phone that already has the set
+// gets no frame unless the set changed: the first frame is per phone, not
+// per subscription. The interval is short here, so a frame would show.
+func TestNoActiveSetAgainAfterAnHAReconnect(t *testing.T) {
+	fake, h := houseWith(t, func(c *Config) { c.SensorEvery = 100 * time.Millisecond })
+	srv := httptest.NewServer(h)
+	defer srv.Close()
+	raw(t, h, "POST", "/napi/portal/watch", "dev1", `{"entity_ids":[],"active":true}`)
+	r1, l1 := stream(t, srv.URL, "dev1")
+	defer r1.Body.Close()
+	if !fake.WaitSubscribed(1) {
+		t.Fatal("Haus never subscribed")
+	}
+	activeSet(t, readFrames(t, l1, 1, 2*time.Second))
+	fake.DropAll()
+	if !fake.WaitSubscribedExactly(0) || !fake.WaitSubscribed(1) {
+		t.Fatal("no reconnect")
+	}
+	if f := readFrames(t, l1, 1, time.Second); len(f) != 0 {
+		t.Fatalf("the same set again after a reconnect: %+v", f)
+	}
+	// a change missed while away does arrive
+	fake.DropAll()
+	if !fake.WaitSubscribedExactly(0) {
+		t.Fatal("the drop did not drop")
+	}
+	fake.Set("light.flur", "on", map[string]any{"friendly_name": "Flur"})
+	if !fake.WaitSubscribed(1) {
+		t.Fatal("no reconnect")
+	}
+	if got := activeSet(t, readFrames(t, l1, 1, 3*time.Second)); got != "cover.garage light.flur light.kueche switch.kaffee" {
+		t.Fatalf("the change missed while away: %q", got)
+	}
+}
+
+// A set that is back to what the phone has within the interval (a light on
+// and off again) sends nothing.
+func TestTheSameSetWithinTheIntervalIsNoFrame(t *testing.T) {
+	fake, h := houseWith(t, func(c *Config) { c.SensorEvery = time.Second })
+	srv := httptest.NewServer(h)
+	defer srv.Close()
+	raw(t, h, "POST", "/napi/portal/watch", "dev1", `{"entity_ids":[],"active":true}`)
+	r1, l1 := stream(t, srv.URL, "dev1")
+	defer r1.Body.Close()
+	if !fake.WaitSubscribed(1) {
+		t.Fatal("Haus never subscribed")
+	}
+	activeSet(t, readFrames(t, l1, 1, 2*time.Second))
+	fake.Change("light.flur", "on", map[string]any{"friendly_name": "Flur"})
+	fake.Change("light.flur", "off", map[string]any{"friendly_name": "Flur"})
+	if f := readFrames(t, l1, 1, 1800*time.Millisecond); len(f) != 0 {
+		t.Fatalf("on and off again within the interval: %+v", f)
+	}
+}
+
+// haus#28: every card names its page, the thing's own page on Haus, for
+// the device widget and each active row to open.
+func TestACardNamesItsPage(t *testing.T) {
+	_, h := house(t)
+	_, body := raw(t, h, "GET", "/napi/portal/state?entity_id=light.kueche", "dev1", "")
+	var st struct {
+		Card map[string]any `json:"card"`
+	}
+	json.Unmarshal([]byte(body), &st)
+	if st.Card["page"] != "/raeume/light.kueche" {
+		t.Fatalf("state card: %s", body)
+	}
+	_, body = raw(t, h, "GET", "/napi/portal/active", "dev1", "")
+	var act struct {
+		Active []map[string]any `json:"active"`
+	}
+	json.Unmarshal([]byte(body), &act)
+	if len(act.Active) == 0 {
+		t.Fatalf("active: %s", body)
+	}
+	for _, c := range act.Active {
+		if c["page"] != "/raeume/"+c["entity_id"].(string) {
+			t.Errorf("active card without its page: %v", c)
+		}
+	}
+}
+
 type frame struct{ event, data string }
 
 // readFrames reads up to n SSE events within d; comments are skipped.

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mdopp/haus/internal/cards"
 	"github.com/mdopp/haus/internal/ha"
 )
 
@@ -21,8 +22,7 @@ import (
 // are structural here.
 
 var (
-	entityRE = regexp.MustCompile(`^[a-z_]+\.[a-z0-9_]+$`)
-	nameRE   = regexp.MustCompile(`^[a-z_][a-z0-9_]*$`)
+	nameRE = regexp.MustCompile(`^[a-z_][a-z0-9_]*$`)
 
 	// what a card may switch. `button` stays off on purpose: a door opener's
 	// press unlatches the door and no confirm rule covers it.
@@ -38,7 +38,6 @@ var (
 	// a call names its one entity; data may not widen it to another target
 	targetKeys = set("entity_id", "device_id", "area_id", "floor_id", "label_id", "target")
 
-	cardDomains     = set("sensor", "binary_sensor", "cover", "light", "switch", "climate", "media_player", "lock")
 	actuatorDomains = set("light", "switch", "cover", "climate", "media_player", "lock")
 	// the attributes the app's controls read off a card
 	controlAttrs = []string{"supported_features", "brightness", "color_temp", "rgb_color", "color_mode", "supported_color_modes",
@@ -99,7 +98,7 @@ func (h *homeAPI) call(w http.ResponseWriter, r *http.Request) {
 		refuse(w, http.StatusBadRequest, "unsupported_domain")
 		return
 	}
-	if !entityRE.MatchString(body.EntityID) {
+	if !ha.EntityRE.MatchString(body.EntityID) {
 		refuse(w, http.StatusBadRequest, "invalid entity_id")
 		return
 	}
@@ -162,19 +161,20 @@ func (h *homeAPI) sensitive(ctx context.Context, entityID, domain, action string
 	return sensitiveCoverClasses[strings.ToLower(dc)]
 }
 
-// card is one entity as the app's widgets draw it (ApiClient.parseCardJson).
-// An absent value is left out, never null: Android's optString reads a JSON
-// null as the string "null".
+// card is one entity as the app's widgets draw it (ApiClient.parseCardJson),
+// with its own page on Haus for a tap (haus#28). An absent value is left
+// out, never null: Android's optString reads a JSON null as the string
+// "null".
 func card(s ha.State) map[string]any {
 	domain, _, _ := strings.Cut(s.EntityID, ".")
-	if !cardDomains[domain] {
+	if !cards.Domains[domain] {
 		return nil
 	}
 	name, _ := s.Attributes["friendly_name"].(string)
 	if name == "" {
 		name = s.EntityID
 	}
-	c := map[string]any{"entity_id": s.EntityID, "name": name, "domain": domain, "state": s.State}
+	c := map[string]any{"entity_id": s.EntityID, "name": name, "domain": domain, "state": s.State, "page": cards.ThingPage(s.EntityID)}
 	if v := s.Attributes["device_class"]; v != nil {
 		c["device_class"] = v
 	}
@@ -195,7 +195,7 @@ func card(s ha.State) map[string]any {
 // GET /napi/portal/state?entity_id= → {ok, card}
 func (h *homeAPI) state(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("entity_id")
-	if !entityRE.MatchString(id) {
+	if !ha.EntityRE.MatchString(id) {
 		refuse(w, http.StatusBadRequest, "invalid entity_id")
 		return
 	}
@@ -219,7 +219,7 @@ func (h *homeAPI) state(w http.ResponseWriter, r *http.Request) {
 // GET /napi/portal/entity-history?entity_id=&range=24h|48h|7d → {ok, history:[{t,state}]}
 func (h *homeAPI) history(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("entity_id")
-	if !entityRE.MatchString(id) {
+	if !ha.EntityRE.MatchString(id) {
 		refuse(w, http.StatusBadRequest, "invalid entity_id")
 		return
 	}

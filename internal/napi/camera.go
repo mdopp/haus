@@ -27,7 +27,7 @@ var addableDomains = set("light", "switch", "cover", "climate", "media_player", 
 // GET /napi/portal/camera/{entity_id}/snapshot → the frame's bytes, camera.* only.
 func (h *homeAPI) snapshot(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("entity_id")
-	if !entityRE.MatchString(id) || !strings.HasPrefix(id, "camera.") {
+	if !ha.EntityRE.MatchString(id) || !strings.HasPrefix(id, "camera.") {
 		refuse(w, http.StatusBadRequest, "invalid entity_id")
 		return
 	}
@@ -68,7 +68,7 @@ func (h *homeAPI) addable(w http.ResponseWriter, r *http.Request) {
 	rooms := map[string][]map[string]any{}
 	for _, s := range states {
 		domain, _, _ := strings.Cut(s.EntityID, ".")
-		if !addableDomains[domain] || !entityRE.MatchString(s.EntityID) {
+		if !addableDomains[domain] || !ha.EntityRE.MatchString(s.EntityID) {
 			continue
 		}
 		name, _ := s.Attributes["friendly_name"].(string)

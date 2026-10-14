@@ -12,6 +12,7 @@ import (
 	"time"
 	_ "time/tzdata" // the image is scratch: TZ needs the zone database inside the binary
 
+	"github.com/mdopp/haus/internal/cards"
 	"github.com/mdopp/haus/internal/devices"
 	"github.com/mdopp/haus/internal/ha"
 	"github.com/mdopp/haus/internal/haushalt"
@@ -55,12 +56,18 @@ func routes(s site) http.Handler {
 	pagesMux := http.NewServeMux()
 	// the family's pages (haus#12): each card only from a backend that is set; a
 	// page whose backend is not set lands on Start
-	family := pages.StartConfig{Laib: s.ops, LaibURL: s.laibURL, HA: s.napi.HA, Calendar: s.hh.Calendar, Notes: s.hh.Notes, Loc: s.hh.Loc}
+	family := pages.StartConfig{Laib: s.ops, LaibURL: s.laibURL, HA: s.napi.HA, Calendar: s.hh.Calendar, Contacts: s.hh.Contacts,
+		Notes: s.hh.Notes, Docs: s.hh.Documents, Loc: s.hh.Loc}
 	pagesMux.HandleFunc("/start", pages.Start(family))
 	pagesMux.HandleFunc("/raeume", pages.Raeume(family))
 	pagesMux.HandleFunc("/kalender", pages.Kalender(family))
 	pagesMux.HandleFunc("/notizen", pages.Notizen(family))
-	pagesMux.HandleFunc("/notizen/", pages.Notizen(family)) // a note's own page
+	// each thing's and each tool item's own page, which the widgets name (haus#28)
+	pagesMux.HandleFunc(cards.ThingPages, pages.Ding(family))
+	pagesMux.HandleFunc(cards.ReminderPages, pages.Erinnerung(family))
+	pagesMux.HandleFunc(cards.ContactPages, pages.Kontakt(family))
+	pagesMux.HandleFunc(cards.DocumentPages, pages.Dokument(family))
+	pagesMux.HandleFunc(cards.NotePages, pages.Notizen(family)) // a note's own page
 	pagesMux.HandleFunc("/box", pages.BoxWith(s.ops, s.laibURL, s.tickets))
 	pagesMux.HandleFunc("/box/geraete", pages.Geraete(s.store, s.publicURL))
 	pagesMux.HandleFunc("/pair-device", pages.PairDevice(s.store)) // the app's own pairing path (haus#6)

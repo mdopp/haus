@@ -13,6 +13,7 @@ import (
 	"github.com/mdopp/haus/internal/ha"
 	"github.com/mdopp/haus/internal/laib"
 	"github.com/mdopp/haus/internal/notes"
+	"github.com/mdopp/haus/internal/paperless"
 )
 
 // StartConfig is what the family's pages read (Start, Räume, Kalender,
@@ -23,9 +24,11 @@ type StartConfig struct {
 	LaibURL  string // where Rückgängig lives (the guarantees, admins only)
 	HA       *ha.Client
 	Calendar *caldav.Client
+	Contacts *caldav.Client // a contact's page (haus#28)
 	Notes    *notes.Dir
-	Loc      *time.Location   // the house's time zone; default time.Local
-	Now      func() time.Time // for the tests; default time.Now
+	Docs     *paperless.Client // a document's page sends on to Paperless (haus#28)
+	Loc      *time.Location    // the house's time zone; default time.Local
+	Now      func() time.Time  // for the tests; default time.Now
 }
 
 // backendWait is how long a page waits for any one backend: a slow one
@@ -121,7 +124,7 @@ func Start(cfg StartConfig) http.HandlerFunc {
 		}
 		if cfg.Notes != nil && notesErr == nil {
 			for _, n := range recent {
-				haushalt.AddLink(summary(n.Title), "Notiz · geändert "+dayWord(n.Changed, now, loc)+" "+n.Changed.In(loc).Format("15:04"), noteHref(n.Name))
+				haushalt.AddLink(summary(n.Title), "Notiz · geändert "+dayWord(n.Changed, now, loc)+" "+n.Changed.In(loc).Format("15:04"), cards.NotePage(n.Name))
 			}
 			haushalt.Link = &cards.Link{Href: "/notizen", Text: "Alle Notizen"}
 		}

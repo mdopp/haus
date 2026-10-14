@@ -2,9 +2,9 @@ package pages
 
 import (
 	"context"
+	"html"
 	"log"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -120,13 +120,22 @@ func writePage(w http.ResponseWriter, code int, b *strings.Builder) {
 	w.Write([]byte(b.String()))
 }
 
-// noteHref is a note's own page: its file name, each part escaped.
-func noteHref(name string) string {
-	parts := strings.Split(name, "/")
-	for i, p := range parts {
-		parts[i] = url.PathEscape(p)
-	}
-	return "/notizen/" + strings.Join(parts, "/")
+// missing is an item's page for something that is not there, or cannot be
+// read now (haus#28): one plain sentence and the way back, never Start
+// pretending all is well.
+type missing struct {
+	code     int
+	say      string // the one sentence
+	page     string // the page's name, and the nav entry it marks
+	back     string // where back leads
+	backText string
+}
+
+func (m missing) write(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
+	b := familyHead(r, cfg, m.page, m.page)
+	b.WriteString("<h1 class=sr>" + html.EscapeString(m.page) + "</h1><p>" + html.EscapeString(m.say) + "</p>")
+	b.WriteString("<p><a href=" + m.back + ">" + html.EscapeString(m.backText) + "</a></p>")
+	writePage(w, m.code, b)
 }
 
 // more closes a cut list: how many were left out.

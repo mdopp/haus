@@ -61,7 +61,7 @@ func EnergyFromEnv() (EnergyMap, error) {
 		}
 		k, e, ok := strings.Cut(item, "=")
 		k, e = strings.TrimSpace(k), strings.TrimSpace(e)
-		if !ok || !legs[k] || !entityRE.MatchString(e) {
+		if !ok || !legs[k] || !ha.EntityRE.MatchString(e) {
 			return EnergyMap{}, fmt.Errorf("HAUS_ENERGY_FLOW %q: want pv|house|grid|battery=<entity_id>", item)
 		}
 		m.Flow[k] = e
@@ -75,7 +75,7 @@ func EnergyFromEnv() (EnergyMap, error) {
 			return EnergyMap{}, fmt.Errorf("HAUS_ENERGY_TOTALS %q: want <label>=<entity_id>", item)
 		}
 		l, e := strings.TrimSpace(item[:i]), strings.TrimSpace(item[i+1:])
-		if l == "" || !entityRE.MatchString(e) {
+		if l == "" || !ha.EntityRE.MatchString(e) {
 			return EnergyMap{}, fmt.Errorf("HAUS_ENERGY_TOTALS %q: want <label>=<entity_id>", item)
 		}
 		m.Totals = append(m.Totals, EnergyTotal{Label: l, Entity: e})

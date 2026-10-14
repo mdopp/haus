@@ -47,17 +47,31 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     kept 5 minutes (the rooms shared with `/napi/portal/active`), refreshed
     in the background whoever asked; until the registries have been read,
     the page says it is reading them rather than put everything in Ohne
-    Raum. Switching comes later, with where actions live.
+    Raum. Switching comes later, with where actions live. Each thing links
+    to its own page.
   - *Kalender*: *Heute* (the day's appointments with time and place),
     *Nächste 14 Tage*, *Erinnerungen* (open reminders, overdue said so; one
     due on a day, not at a time, shows the day and is overdue the day after),
-    every calendar of the Radicale account, at most 50 rows a card.
+    every calendar of the Radicale account, at most 50 rows a card. Each
+    reminder links to its own page.
   - *Notizen*: a search field (`GET /notizen?q=…`, the notes search above:
     20 hits, its caps) and the ten newest notes. `/notizen/<file>` (the
     note's file name, e.g. `einkaufsliste.md`; a slug or title works too)
     shows the note as text: paragraphs and line breaks, no Markdown
     rendering, never markup from the file. Outside the folder, hidden or
     missing is a 404.
+  - The item pages (haus#28), what a widget opens on a tap: `/raeume/<entity_id>`
+    (a thing: its state in words, since when, its room; only an entity of
+    a card domain, `cards.Domains`, that HA does not hide — a person, a
+    tracker, a hidden entity are a 404; until the registry is read, 503),
+    `/kalender/erinnerung/<uid>` (a reminder: open and due, done, or
+    cancelled), `/kontakte/<uid>` (a contact: numbers and addresses to tap,
+    the birthday), `/dokumente/<id>` (a 302 to the document's page in
+    Paperless, `HAUS_PAPERLESS_PUBLIC_URL`; without it a 404), and a note's
+    `/notizen/<file>`.
+    Something not there is a 404 that says so, with the way back. Their
+    paths are `internal/cards/pages.go`, one place for the routes and the
+    rows.
 - `GET /box` — the admins' page behind Authelia, linked from Start for
   the `admins` group. Haus itself sends anyone whose `Remote-Groups` lacks
   `admins` from `/box` and everything under it (Geräte included) to
@@ -70,7 +84,10 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   loopback port is shared with every host-network container, so without
   the secret nobody is anybody.
 - `/napi/box/{home,services,approvals,upgrades}` — the four Box keys the
-  widgets read, from `laib status`, `laib inbox`. `POST …/services/{name}/operate`
+  widgets read, from `laib status`, `laib inbox`. `pendingUpdates` and
+  `upgrades` are the open proposals of kind `template-update` (`laib
+  template sync --propose` files one per update); `pendingApprovals` and
+  `approvals` are the others. An update is counted once, as an update. `POST …/services/{name}/operate`
   (restart). `POST …/approvals/{id}/approve|deny` answers 403: Haus decides
   nothing (haus#1); approvals reach the admin through the relay (laib ADR 0012).
 
@@ -90,7 +107,9 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   `/persona` and sets `HAUS_PERSONA`. Pages carry its name in the title,
   a header with its icon, name and greeting in its colours, and
   `/persona/icon.svg`. The app reads `GET /napi/persona` (display, greeting,
-  accent, ground, icon) and `/napi/persona/icon.svg` with its device token.
+  accent, ground, icon) and `/napi/persona/icon.png` with its device token:
+  PNG, which a phone draws without a library (haus#28). It is the persona's
+  `icon.png` (laib#191); a persona without one has no icon on the phone.
   Without a persona Haus is plain Haus; internally it is always `haus`.
 
 - The house paths, from Home Assistant (haus#10, set by `HAUS_HA_URL` +
@@ -105,18 +124,25 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   `ha_unavailable`, HA's detail stays in Haus's log) and
   `GET /napi/portal/{state,energy,entity-history,active}`. Every one wants
   a paired device. The shapes are the ones the app's `data/ApiClient.kt` parses; no JSON `null` goes out
-  (Android reads it as `"null"`).
+  (Android reads it as `"null"`). Every card names its thing's page
+  (`page`, `/raeume/<entity_id>`).
 - The energy picture reads the entities `HAUS_ENERGY_FLOW`
   (`pv=sensor.…,house=sensor.…,grid=sensor.…,battery=sensor.…`, any subset)
   and `HAUS_ENERGY_TOTALS` (`<Label>=sensor.…,…`, in that order) name;
   every other power sensor is a circuit. Unset, it falls back to matching
   one house's German friendly names (`Aktuell erzeugter PV-Strom`, …).
 - The realtime pair `POST /napi/portal/watch` + `GET /napi/portal/events`,
-  from Home Assistant too. The stream is SSE and carries only `card_state`
-  (laib ADR 0022 §2): a frame for each entity the device watches, the
-  current cards again after every (re)subscribe, a sensor at most every
-  10s, `: ping` every 90s, at most three streams per device; watch answers
-  503 while HA does not. The app holds it only while the screen is on.
+  from Home Assistant too. The stream is SSE and carries state changes only
+  (laib ADR 0022 §2): `card_state`, a frame for each entity the device
+  watches, the current cards again after every (re)subscribe, a sensor at
+  most every 10s; and `active_set` (`{entity_ids}`, haus#28) for a device
+  whose watch says `active: true`: at once to each of its streams when it
+  opens or the watch turns active (once the set is known), then when the
+  set of things that are on or open changes, whichever entity it was, at
+  most every 10s, the latest set always, and only to a stream that has
+  another. `: ping` every 90s, at
+  most three streams per device; watch answers 503 while HA does not. The
+  app holds it only while the screen is on.
 - The camera widget, from Home Assistant too (haus#10):
   `GET /napi/portal/camera/{entity_id}/snapshot` passes HA's
   `camera_proxy` frame for a `camera.*` entity only (anything else 400,
@@ -138,9 +164,10 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   cancelled (`dismissed`) ones after them, the latest first; contacts by
   name with the first number and address; the newest Paperless
   documents; the newest notes; at most 40 rows, no JSON `null`, a
-  backend in trouble 502). No def names a create or item page: Haus has
-  none, and a guessed route lands on Start. A path whose backend is not
-  set is 404.
+  backend in trouble 502). Each row with an id names its item page
+  (`page`, above); a document only when Paperless's public address is
+  set. No def names a create page: Haus has none. A path whose backend is
+  not set is 404.
   `POST /napi/action-callback` (at most 64 KB, else 413 `too_large`)
   knows one action; any other id is 404 `unknown_action`.
   `task.set_status` with `{entity_id: <the reminder's UID>, status:

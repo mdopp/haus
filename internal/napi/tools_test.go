@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -332,6 +333,48 @@ func TestContactDocumentAndNoteRows(t *testing.T) {
 	ns := rows(t, s.h, "/napi/portal/notes", "notes")
 	if len(ns) != 2 || ns[0]["title"] != "Urlaub 2027" || ns[0]["id"] != "urlaub.md" || ns[1]["title"] != "Einkauf" {
 		t.Fatalf("the newest notes, hidden ones never: %v", ns)
+	}
+}
+
+// haus#28: every row with an id names its page on Haus, which the app
+// opens on a tap: a reminder's and a contact's own page, a document's
+// (which leads on to Paperless), a note's. Each id is escaped as one path
+// part; a note's name keeps its folders.
+func TestEveryToolRowNamesItsPage(t *testing.T) {
+	s := allTools(t)
+	for _, c := range []struct{ path, key string }{
+		{"/napi/portal/tasks?done=1", "tasks"}, {"/napi/portal/contacts", "contacts"},
+		{"/napi/portal/documents", "documents"}, {"/napi/portal/notes", "notes"},
+	} {
+		for _, r := range rows(t, s.h, c.path, c.key) {
+			want := map[string]string{
+				"tasks": "/kalender/erinnerung/", "contacts": "/kontakte/", "documents": "/dokumente/", "notes": "/notizen/",
+			}[c.key] + url.PathEscape(fmt.Sprint(r["id"]))
+			if r["page"] != want {
+				t.Errorf("%s: page %v, want %q: %v", c.key, r["page"], want, r)
+			}
+		}
+	}
+	// a contact without a UID has no page to open
+	s.dav.Put("/bote/kontakte/ohne.vcf", "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Ohne Uid\r\nEND:VCARD\r\n")
+	seen := false
+	for _, r := range rows(t, s.h, "/napi/portal/contacts", "contacts") {
+		if r["name"] == "Ohne Uid" {
+			seen = true
+			if _, ok := r["page"]; ok {
+				t.Fatalf("a contact without a UID names a page: %v", r)
+			}
+		}
+	}
+	if !seen {
+		t.Fatal("the contact without a UID is not listed")
+	}
+	// a reminder whose UID needs escaping
+	s.dav.Put("/bote/familie/x.ics", "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VTODO\r\nUID:a/b c?\r\nDTSTAMP:20261010T080000Z\r\nSUMMARY:Seltsam\r\nEND:VTODO\r\nEND:VCALENDAR\r\n")
+	for _, r := range rows(t, s.h, "/napi/portal/tasks", "tasks") {
+		if r["id"] == "a/b c?" && r["page"] != "/kalender/erinnerung/a%2Fb%20c%3F" {
+			t.Fatalf("an odd UID: %v", r)
+		}
 	}
 }
 
