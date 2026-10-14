@@ -88,14 +88,19 @@ the house persona, and the old Solaris and ServiceBay names live only in
     set, else the one named `Haushalt`, made on the first write when
     missing. No request goes to a host other than `HAUS_RADICALE_URL`'s.
   - The same Radicale account (CardDAV): `kontakte_suchen(text)` (name,
-    nickname, organisation, email, or a number by its digits, so `0170 …`
-    finds `+49 170 …`; ten hits with phone, email and birthday),
+    nickname, organisation, email, or a number of three digits or more,
+    however either side writes it: `0170 …`, `+49 170 …` and `0049 170 …`
+    are one number, a `+`/`00` query must match the whole international
+    number, any other is a piece of it; the house's calling code is
+    `HAUS_PHONE_COUNTRY`, default `49`; ten hits with phone, email and
+    birthday),
     `kontakt_anlegen(name, telefon?, email?, geburtstag?)` (a vCard 4.0
     with a random `urn:uuid` UID; `geburtstag` `JJJJ-MM-TT` or `--MM-TT`).
     Reads cover every address book of the account; writes go to
     `HAUS_RADICALE_ADDRESSBOOK` when set, else the address book named
     `Haushalt`, made on the first write at `/<user>/haushalt-kontakte/`.
-    A read stops at 5000 cards or 64 MB per address book and says so.
+    A read stops at 5000 cards, 64 MB per address book or the 15 s
+    timeout (after the first card) and says so. No redirect is followed.
   - `HAUS_PAPERLESS_URL` + `HAUS_PAPERLESS_TOKEN` (a Paperless API token;
     what its user may see is what the Bote sees): `dokumente_suchen(text)`,
     full text, at most 20 hits with date, correspondent, title and, when
