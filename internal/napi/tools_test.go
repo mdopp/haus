@@ -231,29 +231,64 @@ func TestToolCatalog(t *testing.T) {
 }
 
 func TestToolCatalogListsOnlyWhatIsSet(t *testing.T) {
-	var got []string
-	bridge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		b, _ := io.ReadAll(r.Body)
-		got = append(got, r.Method+" "+r.URL.Path+" "+string(b))
-		w.Write([]byte(`{"ok":true,"via":"bridge"}`))
-	}))
-	defer bridge.Close()
-	u, _ := url.Parse(bridge.URL)
-
-	s := toolsWith(t, which{notes: true}, u)
+	s := toolsWith(t, which{notes: true}, nil)
 	code, body := raw(t, s.h, "GET", "/napi/defs/tool", "dev1", "")
 	out := decode(t, body)
 	defs, _ := out["defs"].([]any)
 	if code != 200 || len(defs) != 1 || defs[0].(map[string]any)["tool-id"] != "note" {
 		t.Fatalf("notes only: %d %s", code, body)
 	}
-	// a path whose backend is not set stays on the bridge
-	if code, body := raw(t, s.h, "GET", "/napi/portal/tasks", "dev1", ""); code != 200 || !strings.Contains(body, "bridge") {
-		t.Fatalf("tasks without a calendar: %d %s", code, body)
-	}
-	// but the actions are Haus's once the catalog is: the app acts on Haus's rows
+	// without a bridge the actions are all Haus's: one it does not know is 404
 	if code, body := raw(t, s.h, "POST", "/napi/action-callback", "dev1", `{"action_id":"task.set_status","params":{"entity_id":"x","status":"done"}}`); code != 404 || !strings.Contains(body, "unknown_action") {
 		t.Fatalf("set_status without a calendar: %d %s", code, body)
+	}
+}
+
+// While the bridge is set, its catalog stays (Haus's would hide the tools
+// only the bridge has: photo, model, home, energy), and so do the actions
+// Haus does not know. The rows of a backend that is set are Haus's: the
+// bridge's catalog names the same paths, so its widgets show Haus's data,
+// and ticking one of those reminders off is Haus's too.
+func TestWithABridgeTheCatalogStaysOnTheBridge(t *testing.T) {
+	var got []string
+	bridge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		got = append(got, r.Method+" "+r.URL.Path+" "+string(b))
+		w.Write([]byte(`{"ok":true,"via":"bridge","defs":[{"tool-id":"photo"}]}`))
+	}))
+	defer bridge.Close()
+	u, _ := url.Parse(bridge.URL)
+
+	s := toolsWith(t, which{cal: true, notes: true}, u)
+	if code, body := raw(t, s.h, "GET", "/napi/defs/tool", "dev1", ""); code != 200 || !strings.Contains(body, "photo") {
+		t.Fatalf("defs with a bridge: %d %s", code, body)
+	}
+	// the rows of a backend that is set are Haus's
+	if rs := rows(t, s.h, "/napi/portal/tasks?done=1", "tasks"); len(rs) == 0 || rs[0]["id"] != "milch-1" {
+		t.Fatalf("tasks with a bridge: %v", rs)
+	}
+	// one whose backend is not set stays on the bridge
+	if code, body := raw(t, s.h, "GET", "/napi/portal/contacts", "dev1", ""); code != 200 || !strings.Contains(body, "bridge") {
+		t.Fatalf("contacts without an address book: %d %s", code, body)
+	}
+	// an action Haus knows is Haus's
+	if code, out := callback(t, s.h, `{"action_id":"task.set_status","params":{"entity_id":"milch-1","status":"done"}}`); code != 200 || out["ok"] != true || out["via"] != nil {
+		t.Fatalf("set_status with a bridge: %d %v", code, out)
+	}
+	if !strings.Contains(s.dav.Objects()["/bote/familie/milch-1.ics"], "STATUS:COMPLETED") {
+		t.Fatal("Haus did not tick it off")
+	}
+	// one it does not know goes to the bridge, body and all
+	unknown := `{"action_id":"model.release","params":{"x":"y"}}`
+	if code, out := callback(t, s.h, unknown); code != 200 || out["via"] != "bridge" {
+		t.Fatalf("unknown action with a bridge: %d %v", code, out)
+	}
+	if len(got) == 0 || got[len(got)-1] != "POST /napi/action-callback "+unknown {
+		t.Fatalf("bridge saw: %v", got)
+	}
+	// Haus's own refusals of an action it knows stay Haus's
+	if code, out := callback(t, s.h, `{"action_id":"task.set_status","params":{"entity_id":"milch-1","status":"open"}}`); code != 400 || out["reason"] != "bad_params" {
+		t.Fatalf("bad params with a bridge: %d %v", code, out)
 	}
 
 	none := toolsWith(t, which{}, u)
