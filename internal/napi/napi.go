@@ -1,8 +1,9 @@
 // Package napi is the companion API the Android widgets speak (the app's
-// SbApiClient.kt): the four box keys under legacy.NapiPrefix served from
-// Laib, operate and verdicts behind the right token, and every other /napi
-// path passed through the migration bridge (bridge.go) until Haus serves it
-// (laib#28).
+// SbApiClient.kt and ApiClient.kt): the four box keys under
+// legacy.NapiPrefix served from Laib, operate and verdicts behind the right
+// token, the house paths from Home Assistant (home.go, live.go, haus#10),
+// and every other /napi path passed through the migration bridge
+// (bridge.go) until Haus serves it (laib#28).
 package napi
 
 import (
@@ -15,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mdopp/haus/internal/ha"
 	"github.com/mdopp/haus/internal/laib"
 	"github.com/mdopp/haus/internal/legacy"
 	"github.com/mdopp/haus/internal/persona"
@@ -30,6 +32,8 @@ type Config struct {
 	Bridge   *url.URL                           // the migration bridge (bridge.go), for every other /napi path; nil = 404
 	Whoami   func(bearer string) (string, bool) // Haus's own devices: uid behind a bearer; others go through the bridge
 	House    persona.Persona                    // the house persona the app shows (laib#129, #130)
+	HA       *ha.Client                         // Home Assistant for the house paths (home.go, live.go); nil = they stay on the bridge
+	Ping     time.Duration                      // the event stream's keepalive; 0 = 90s
 }
 
 // Handler serves /napi/*.
@@ -170,6 +174,10 @@ func Handler(c Config) http.Handler {
 		w.Header().Set("WWW-Authenticate", "Bearer")
 		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 	})
+	if c.HA != nil { // haus#10: the house paths are Haus's own
+		(&homeAPI{ha: c.HA}).routes(mux, auth)
+		newLive(c.HA, c.Ping).routes(mux, auth)
+	}
 	if c.Bridge != nil {
 		proxy := httputil.NewSingleHostReverseProxy(c.Bridge)
 		proxy.FlushInterval = 100 * time.Millisecond // /napi/portal/events streams

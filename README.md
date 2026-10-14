@@ -42,6 +42,25 @@ the house persona, and the old Solaris and ServiceBay names live only in
   accent, ground, icon) and `/napi/persona/icon.svg` with its device token.
   Without a persona Haus is plain Haus; internally it is always `haus`.
 
+- The house paths, from Home Assistant (haus#10, set by `HAUS_HA_URL` +
+  `HAUS_HA_TOKEN`, a long-lived token; unset, they stay on the bridge):
+  `POST /napi/ha/call` (`{entity_id, service, data?, confirmed?}`; only
+  `light|switch|cover|climate|lock`, else 400; the service's domain is the
+  entity's; any `lock`, and a cover open whose `device_class` is
+  garage/door/gate or cannot be read, answers **403 `sensitive_action`**
+  without `confirmed:true`; `data` cannot name another target),
+  `GET /napi/portal/{state,energy,entity-history,active}`, and the realtime
+  pair `POST /napi/portal/watch` + `GET /napi/portal/events` (SSE: a
+  `card_state` frame for each entity the device watches, `: ping` every
+  90s, from one HA `state_changed` subscription while anyone listens).
+  Every one wants a paired device. The shapes are `ApiClient.kt`'s; no
+  JSON `null` goes out (Android reads it as `"null"`). The stream carries
+  only `card_state` so far: notices and approval frames still need the
+  bridge's stream.
+- `GET /.well-known/assetlinks.json` — the app's signing fingerprints from
+  `HAUS_ANDROID_FINGERPRINTS` (comma-separated, public), so the app opens
+  Haus's pages without a URL bar. `[]` without them.
+
 Not yet: Start, Räume, Energie, Medien, Notizen, Kalender; the `Sprechen`
 field to the Bote. Those come with the Home Assistant
 and Solaris deconstruction (laib#21).
@@ -51,15 +70,18 @@ and Solaris deconstruction (laib#21).
 ```
 LAIB_URL=http://host.containers.internal:5900 LAIB_TOKEN=<the haus hand's token, minted on laib add haus> \
 HAUS_PROXY_SECRET=<what Caddy sends as X-Haus-Proxy> LAIB_PUBLIC_URL=https://laib.<domain> \
-SOLARIS_URL=http://host.containers.internal:8787 HAUS_LISTEN=0.0.0.0:8650 ./haus
+SOLARIS_URL=http://host.containers.internal:8787 HAUS_LISTEN=0.0.0.0:8650 \
+HAUS_HA_URL=http://host.containers.internal:8123 HAUS_HA_TOKEN=<a long-lived HA token> \
+HAUS_ANDROID_FINGERPRINTS=<the app's SHA-256 signing fingerprints> ./haus
 ```
 
 `HAUS_DATA` (default `/data`) holds `devices.json`; `HAUS_PUBLIC_URL` is the
 origin the setup link carries (default `https://<Host>`). Haus's Laib token is the `haus` hand: status, inbox, journal, restart —
 nothing else (no exec, no write). There are no static device tokens. Image: `ghcr.io/mdopp/haus`. Laib template: `haus` (route `haus.<domain>`,
-`bypass: [/napi/]`).
+`bypass: [/napi/]`; assetlinks needs `/.well-known/` there too).
 
 ## Tests
 
-`go test ./...` — a fake Laib MCP and a fake Solaris; the shapes are
-pinned to `SbApiClient.kt` in solaris-android.
+`go test ./...` — a fake Laib MCP, a fake Solaris and a fake Home
+Assistant (`internal/ha/hafake`, REST and WebSocket); the shapes are
+pinned to `SbApiClient.kt` and `ApiClient.kt` in solaris-android.
