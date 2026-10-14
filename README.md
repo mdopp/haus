@@ -26,6 +26,31 @@ the house persona, and the old Solaris and ServiceBay names live only in
   `/#/p/servicebay/approvals/<id>`, `/#/p/<tool>/item/<id>`,
   `/#/?tool=<id>`, `/#/?ask=<text>`) arrive as `/` and all land on Start
   until their pages exist; so does `/download`.
+  Each card row and card links to the page behind it: *Jetzt* to Räume,
+  an appointment or reminder to Kalender, a note to its own page.
+- `GET /raeume`, `/kalender`, `/notizen` — the family's other pages
+  (haus#12), read-only, from the same cards, under the persona's header and
+  one nav (Start · Räume · Kalender · Notizen, each only when its backend is
+  set; Box for admins). A page whose backend is not set lands on Start; one
+  not answering within 4s is left out, its error in the log. Anything but
+  GET/HEAD is 405.
+  - *Räume*: one card per Home Assistant area (the entity's own, else its
+    device's), rooms by name: lights (on/off, brightness), heating (current
+    and target temperature), covers (open/closed, position), media (what
+    plays); groups left out, at most 40 rows a room; entities without an
+    area in *Ohne Raum* at the end. The rooms are read over HA's WebSocket
+    and kept 5 minutes (shared with `/napi/portal/active`); until a read
+    has worked, the cards are left out rather than put everything in Ohne
+    Raum. Switching comes later, with where actions live.
+  - *Kalender*: *Heute* (the day's appointments with time and place),
+    *Nächste 14 Tage*, *Erinnerungen* (open reminders, overdue said so),
+    every calendar of the Radicale account, at most 50 rows a card.
+  - *Notizen*: a search field (`GET /notizen?q=…`, the notes search above:
+    20 hits, its caps) and the ten newest notes. `/notizen/<file>` (the
+    note's file name, e.g. `einkaufsliste.md`; a slug or title works too)
+    shows the note as text: paragraphs and line breaks, no Markdown
+    rendering, never markup from the file. Outside the folder, hidden or
+    missing is a 404.
 - `GET /box` — the admins' page behind Authelia, linked from Start for
   the `admins` group. Haus itself sends anyone whose `Remote-Groups` lacks
   `admins` from `/box` and everything under it (Geräte included) to
@@ -141,8 +166,9 @@ the house persona, and the old Solaris and ServiceBay names live only in
   reads the files, there is no second index. Identity per person (the
   person's own calendar, laib ADR 0017 §3) comes next.
 
-Not yet: Start's *Meine Favoriten* and *Häufig genutzt*; Räume, Energie,
-Medien, Notizen, Kalender; the `Sprechen` field to the Bote. Those come with the Home Assistant
+Not yet: Start's *Meine Favoriten* and *Häufig genutzt*; switching in
+Räume; Energie, Medien; Paperless and dictation in Notizen, timers in
+Kalender; the `Sprechen` field to the Bote. Those come with the Home Assistant
 and Solaris deconstruction (laib#21).
 
 - The Box page's Werkstatt card (haus#15): the open tickets of the repos in
