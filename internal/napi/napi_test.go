@@ -5,10 +5,18 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
+	"github.com/mdopp/haus/internal/caldav"
+	"github.com/mdopp/haus/internal/ha"
+	"github.com/mdopp/haus/internal/haushalt"
 	"github.com/mdopp/haus/internal/laib"
+	"github.com/mdopp/haus/internal/notes"
+	"github.com/mdopp/haus/internal/paperless"
 	"github.com/mdopp/haus/internal/persona"
 )
 
@@ -205,4 +213,66 @@ func TestUnknownNapiPathIsJSON404WithoutAToken(t *testing.T) {
 	notFound(t, "GET /napi/gibtsnicht", code, body)
 	code, body = raw(t, h, "GET", "/napi/persona/icon.svg", "dev1", "")
 	notFound(t, "the persona icon without an icon", code, body)
+}
+
+// Every route Haus registers under /napi wants a paired device: built with
+// every backend set, each one answers 401 without a token and with a wrong
+// one. The routes are read from the source, so a new route without a row
+// here fails too.
+func TestEveryNapiRouteWantsADevice(t *testing.T) {
+	var calls []string
+	lb := fakeLaib(t, &calls)
+	defer lb.Close()
+	nd, err := notes.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	dead := "http://127.0.0.1:1"
+	dav := &caldav.Client{URL: dead, User: "u", Password: "p"}
+	h := Handler(Config{Laib: &laib.Client{URL: lb.URL, Token: "ops"}, Validate: StaticValidator([]string{"dev1"}),
+		HA:        &ha.Client{URL: dead, Token: "ha"},
+		Haushalt:  haushalt.Config{Calendar: dav, Contacts: dav, Documents: &paperless.Client{URL: dead, Token: "pl"}, Notes: nd},
+		UploadDir: t.TempDir(),
+		House:     persona.Persona{Display: "Haus", Icon: []byte("<svg/>")}})
+	routes := map[string]bool{
+		"GET /napi/persona": true, "GET /napi/persona/icon.svg": true, "GET /napi/whoami": true,
+		"GET /napi/box/home": true, "GET /napi/box/services": true, "GET /napi/box/approvals": true, "GET /napi/box/upgrades": true,
+		"POST /napi/box/services/{name}/operate": true, "POST /napi/box/approvals/{id}/approve": true, "POST /napi/box/approvals/{id}/deny": true,
+		"POST /napi/ha/call": true, "GET /napi/portal/state": true, "GET /napi/portal/energy": true, "GET /napi/portal/entity-history": true,
+		"GET /napi/portal/active": true, "GET /napi/portal/camera/{entity_id}/snapshot": true, "GET /napi/portal/start/addable": true,
+		"POST /napi/portal/watch": true, "GET /napi/portal/events": true,
+		"GET /napi/defs/tool": true, "POST /napi/action-callback": true, "GET /napi/portal/tasks": true, "GET /napi/portal/contacts": true,
+		"GET /napi/portal/documents": true, "GET /napi/portal/notes": true, "POST /napi/upload": true,
+	}
+	// what the source registers: "METHOD /napi/…" and "METHOD "+prefix+"/…" (prefix is /napi/box)
+	re := regexp.MustCompile(`HandleFunc\("([A-Z]+) (?:(/napi/[^"]*)"|"\+prefix\+"([^"]*)")`)
+	files, _ := filepath.Glob("*.go")
+	for _, f := range files {
+		if strings.HasSuffix(f, "_test.go") {
+			continue
+		}
+		b, _ := os.ReadFile(f)
+		for _, m := range re.FindAllStringSubmatch(string(b), -1) {
+			p := m[2]
+			if p == "" {
+				p = "/napi/box" + m[3]
+			}
+			if !routes[m[1]+" "+p] {
+				t.Errorf("%s registers %s %s, which this table does not cover", f, m[1], p)
+			}
+		}
+	}
+	fill := strings.NewReplacer("{name}", "media", "{id}", "7", "{entity_id}", "camera.einfahrt")
+	for route := range routes {
+		method, path, _ := strings.Cut(route, " ")
+		path = fill.Replace(path)
+		for _, bearer := range []string{"", "wrong"} {
+			if code, body := raw(t, h, method, path, bearer, "{}"); code != 401 {
+				t.Errorf("%s %s with %q → %d %s, want 401", method, path, bearer, code, body)
+			}
+		}
+	}
+	if len(calls) != 0 {
+		t.Fatalf("Laib was asked without a device: %v", calls)
+	}
 }

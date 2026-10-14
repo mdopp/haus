@@ -38,3 +38,31 @@ func TestNoAssetLinks(t *testing.T) {
 		}
 	}
 }
+
+// Who gets in where: the pages only with the proxy secret Caddy adds,
+// /healthz always, /napi with a device token (401, not the pages' 403), the
+// Haushalt source with the Bote's bearer.
+func TestRoutesGuards(t *testing.T) {
+	h := routes(testSite(t))
+	for _, c := range []struct {
+		method, path string
+		want         int
+	}{
+		{"GET", "/start", 403},
+		{"POST", "/pair-device", 403},
+		{"GET", "/pair-device", 403},
+		{"GET", "/box/geraete", 403},
+		{"GET", "/healthz", 200},
+		{"GET", "/napi/box/home", 401},
+		{"POST", "/mcp/haushalt", 401},
+	} {
+		req := httptest.NewRequest(c.method, c.path, strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
+		req.Header.Set("Remote-User", "anna")
+		req.Header.Set("Remote-Groups", "admins")
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != c.want {
+			t.Errorf("%s %s → %d %s, want %d", c.method, c.path, rec.Code, rec.Body.String(), c.want)
+		}
+	}
+}
