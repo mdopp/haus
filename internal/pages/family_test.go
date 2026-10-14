@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/mdopp/haus/internal/caldav"
 )
 
 // familyPage asks one of the family's pages, with Start's test clock.
@@ -117,5 +119,37 @@ func TestFamilyPagesWearThePersona(t *testing.T) {
 		if h.Get("Content-Type") != "text/html; charset=utf-8" {
 			t.Fatalf("%s: %q", p.path, h.Get("Content-Type"))
 		}
+	}
+}
+
+// A backend that hangs is waited for backendWait, then left out: the page
+// still comes, with what the others had.
+func TestFamilyPagesDoNotWaitForAHangingBackend(t *testing.T) {
+	old := backendWait
+	backendWait = 200 * time.Millisecond
+	defer func() { backendWait = old }()
+	release := make(chan struct{})
+	hang := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-r.Context().Done():
+		case <-release:
+		}
+	}))
+	defer hang.Close()
+	defer close(release)
+	cal := &caldav.Client{URL: hang.URL, User: "haus", Password: "pw", Loc: berlin(t)}
+	nd := notesDir(t, map[string]time.Duration{"Einkaufsliste": time.Hour})
+	for _, p := range []struct {
+		page func(StartConfig) http.HandlerFunc
+		path string
+		want string
+	}{{Start, "/start", "Einkaufsliste"}, {Kalender, "/kalender", "<h1 class=sr>Kalender</h1>"}} {
+		began := time.Now()
+		code, body, _ := familyPage(t, p.page, StartConfig{Calendar: cal, Notes: nd}, "GET", p.path, "")
+		if took := time.Since(began); took > 3*time.Second || code != 200 {
+			t.Fatalf("%s: %d after %v", p.path, code, took)
+		}
+		mustContain(t, body, p.want)
+		mustNotContain(t, body, "karte-heute", "Termin", "Erinnerungen")
 	}
 }

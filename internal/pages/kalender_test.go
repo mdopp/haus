@@ -2,6 +2,7 @@ package pages
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -90,7 +91,48 @@ func TestKalenderCutsLongLists(t *testing.T) {
 		dav.Put(fmt.Sprintf("/haus/familie/t%02d.ics", i), todo(fmt.Sprintf("t%02d", i), fmt.Sprintf("Aufgabe %02d", i), fmt.Sprintf("DUE:202611%02dT070000Z\r\n", i%28+1)))
 	}
 	_, body, _ := familyPage(t, Kalender, StartConfig{Calendar: cal}, "GET", "/kalender", "")
-	mustContain(t, body, "und 10 weitere")
+	mustContain(t, body, "und 10 weitere", "Aufgabe 00")
+}
+
+// Heute and the next 14 days are cut at 50 rows each, the rest counted;
+// a list of exactly 50 is not cut and says no "weitere".
+func TestKalenderCutsLongDays(t *testing.T) {
+	dav, cal := calendar(t)
+	for i := 0; i < 60; i++ {
+		dav.Put(fmt.Sprintf("/haus/familie/h%02d.ics", i), event(fmt.Sprintf("h%02d", i), fmt.Sprintf("20261014T08%02d00Z", i), fmt.Sprintf("20261014T08%02d30Z", i), fmt.Sprintf("Heute %02d", i)))
+		dav.Put(fmt.Sprintf("/haus/familie/n%02d.ics", i), event(fmt.Sprintf("n%02d", i), fmt.Sprintf("20261016T08%02d00Z", i), fmt.Sprintf("20261016T08%02d30Z", i), fmt.Sprintf("Später %02d", i)))
+	}
+	_, body, _ := familyPage(t, Kalender, StartConfig{Calendar: cal}, "GET", "/kalender", "")
+	mustContain(t, body, "Heute 00", "Heute 49", "Später 00", "Später 49")
+	mustNotContain(t, body, "Heute 50", "Heute 59", "Später 50", "Später 59")
+	if n := strings.Count(body, "und 10 weitere"); n != 2 {
+		t.Fatalf("%d cut lists, want 2", n)
+	}
+
+	dav2, cal2 := calendar(t)
+	for i := 0; i < 50; i++ {
+		dav2.Put(fmt.Sprintf("/haus/familie/t%02d.ics", i), todo(fmt.Sprintf("t%02d", i), fmt.Sprintf("Aufgabe %02d", i), ""))
+	}
+	_, body, _ = familyPage(t, Kalender, StartConfig{Calendar: cal2}, "GET", "/kalender", "")
+	mustContain(t, body, "Aufgabe 49")
+	mustNotContain(t, body, "weitere")
+}
+
+// A reminder due on a day, not at a time, says the day only, and is
+// overdue once that day is past — not at midnight of its own day.
+func TestKalenderReminderDueOnADay(t *testing.T) {
+	dav, cal := calendar(t)
+	dav.Put("/haus/familie/a.ics", todo("a", "Heute irgendwann", "DUE;VALUE=DATE:20261014\r\n"))
+	dav.Put("/haus/familie/b.ics", todo("b", "Gestern schon", "DUE;VALUE=DATE:20261013\r\n"))
+	dav.Put("/haus/familie/c.ics", todo("c", "Freitag", "DUE;VALUE=DATE:20261016\r\n"))
+	_, body, _ := familyPage(t, Kalender, StartConfig{Calendar: cal}, "GET", "/kalender", "")
+	mustContain(t, body, "Heute irgendwann <span class=k>heute</span>", "Gestern schon <span class=k>überfällig seit gestern</span>",
+		"Freitag <span class=k>Fr 16.10.</span>")
+	mustNotContain(t, body, "00:00", "überfällig seit heute")
+
+	_, body = startPage(t, StartConfig{Calendar: cal}, "")
+	mustContain(t, body, "Erinnerung · heute<", "Erinnerung · überfällig seit gestern<")
+	mustNotContain(t, body, "00:00")
 }
 
 // Radicale in trouble is left out without a word on the page.

@@ -120,6 +120,57 @@ func TestCachedRegistry(t *testing.T) {
 	}
 }
 
+// The shared refresh is not the caller's: a first caller that gives up
+// (a closed tab, a page's 4s) does not end the read, and the next caller
+// gets the rooms instead of a 30s backoff with none.
+func TestCachedRegistryOutlivesItsCaller(t *testing.T) {
+	fake := hafake.New("tok")
+	defer fake.Close()
+	fake.SetRegistries([]map[string]any{{"area_id": "kueche", "name": "Küche"}}, nil,
+		[]map[string]any{{"entity_id": "light.k", "area_id": "kueche"}})
+	c := &Client{URL: fake.URL, Token: "tok"}
+	gone, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, ok := c.CachedRegistry(gone); ok {
+		t.Fatal("a caller that gave up got rooms nobody had read yet")
+	}
+	ctx, cancel2 := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel2()
+	if reg, ok := c.CachedRegistry(ctx); !ok || reg.Rooms["light.k"] != "Küche" {
+		t.Fatalf("the next caller: %+v %v", reg, ok)
+	}
+}
+
+// A refresh that fails keeps the last good registry: rooms do not vanish
+// because HA hiccuped once.
+func TestCachedRegistryKeepsTheLastGood(t *testing.T) {
+	fake := hafake.New("tok")
+	defer fake.Close()
+	fake.SetRegistries([]map[string]any{{"area_id": "kueche", "name": "Küche"}}, nil,
+		[]map[string]any{{"entity_id": "light.k", "area_id": "kueche"}})
+	c := &Client{URL: fake.URL, Token: "tok"}
+	if _, ok := c.CachedRegistry(context.Background()); !ok {
+		t.Fatal("first read")
+	}
+	fake.RegistriesDown(true)
+	for i := 0; i < 2; i++ {
+		c.registry.mu.Lock()
+		c.registry.next = time.Time{} // the five minutes are over
+		c.registry.mu.Unlock()
+		reg, ok := c.CachedRegistry(context.Background())
+		if !ok || reg.Rooms["light.k"] != "Küche" {
+			t.Fatalf("after a failed refresh: %+v %v", reg, ok)
+		}
+		c.registry.wait() // the refresh in the background has failed by now
+	}
+	c.registry.mu.Lock()
+	ok, next := c.registry.ok, c.registry.next
+	c.registry.mu.Unlock()
+	if !ok || time.Until(next) > time.Minute {
+		t.Fatalf("a failed refresh: ok %v, retry in %v (want the last good kept, a retry soon)", ok, time.Until(next))
+	}
+}
+
 func TestSubscribe(t *testing.T) {
 	fake := hafake.New("tok")
 	defer fake.Close()

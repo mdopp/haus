@@ -26,6 +26,7 @@ func shelf(t *testing.T) (string, *notes.Dir) {
 		".stversions/geheim.md":    "# Geheim\n\nApfel und Passwort\n",
 		"WLAN für Gäste.md":        "# WLAN für Gäste\n\nNetz: Gast\n",
 		"schraeg.md":               "# <i>Schräger Titel</i>\n\nText\n",
+		"steuer.md":                "# Steuer\n\na\x1bb\x00c\x07\tdef\n",
 		"../draussen.md":           "# Draußen\n\nApfel von draußen\n",
 		"rezepte/.versteckt.md":    "# Versteckt\n\nApfel\n",
 		"rezepte/zwiebelkuchen.md": "Zwiebeln, kein Titel, kein Apfel.\n",
@@ -124,7 +125,10 @@ func TestNotizShowsItsTextEscaped(t *testing.T) {
 			t.Fatalf("%s: want two paragraphs:\n%s", path, body)
 		}
 	}
-	_, body, _ := familyPage(t, Notizen, StartConfig{Notes: nd}, "GET", "/notizen/rezepte/apfelkuchen.md", "")
+	_, body, _ := familyPage(t, Notizen, StartConfig{Notes: nd}, "GET", "/notizen/steuer.md", "")
+	mustContain(t, body, ">Steuer</h1>", "abc\tdef")
+	mustNotContain(t, body, "\x1b", "\x00", "\x07")
+	_, body, _ = familyPage(t, Notizen, StartConfig{Notes: nd}, "GET", "/notizen/rezepte/apfelkuchen.md", "")
 	mustContain(t, body, ">Apfelkuchen</h1>", "Äpfel schälen")
 	_, body, _ = familyPage(t, Notizen, StartConfig{Notes: nd}, "GET", "/notizen/"+"schraeg.md", "")
 	mustContain(t, body, "&lt;i&gt;Schräger Titel&lt;/i&gt;")

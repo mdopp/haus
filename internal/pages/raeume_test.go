@@ -122,6 +122,8 @@ func TestRaeumeHidesBrokenBackends(t *testing.T) {
 		t.Fatalf("status %d", code)
 	}
 	mustNotContain(t, body, "karte-", "Ohne Raum", "Deckenlampe", "registry", "class=rot")
+	// one plain line instead of an empty page
+	mustContain(t, body, "Die Räume werden gerade gelesen — gleich nochmal versuchen.")
 
 	fake2, hc2 := house(t)
 	rooms(t, fake2)
@@ -130,7 +132,7 @@ func TestRaeumeHidesBrokenBackends(t *testing.T) {
 	if code != 200 {
 		t.Fatalf("status %d", code)
 	}
-	mustNotContain(t, body, "karte-", "boom", "HA 500", "class=rot")
+	mustNotContain(t, body, "karte-", "boom", "HA 500", "class=rot", "gerade gelesen")
 	if !strings.Contains(body, "<h1") {
 		t.Fatal("the page still comes")
 	}
