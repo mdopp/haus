@@ -65,45 +65,53 @@ func get(t *testing.T, h http.Handler, method, path, bearer, body string) (int, 
 	return rec.Code, out
 }
 
+// haus#17: the app (solaris-android#174) reads /napi/box first and falls
+// back to the legacy /napi/servicebay; both answer the same, with the same rules.
 func TestCompanionKeysFromLaib(t *testing.T) {
+	for _, prefix := range []string{"/napi/servicebay", "/napi/box"} {
+		t.Run(prefix, func(t *testing.T) { companionKeys(t, prefix) })
+	}
+}
+
+func companionKeys(t *testing.T, prefix string) {
 	var calls []string
 	srv := fakeLaib(t, &calls)
 	defer srv.Close()
 	ops := &laib.Client{URL: srv.URL, Token: "ops"}
 	h := Handler(Config{Laib: ops, Validate: StaticValidator([]string{"dev1"})})
 
-	if code, _ := get(t, h, "GET", "/napi/servicebay/home", "", ""); code != 401 {
+	if code, _ := get(t, h, "GET", prefix+"/home", "", ""); code != 401 {
 		t.Fatalf("no token → %d", code)
 	}
-	if code, _ := get(t, h, "GET", "/napi/servicebay/home", "wrong", ""); code != 401 {
+	if code, _ := get(t, h, "GET", prefix+"/home", "wrong", ""); code != 401 {
 		t.Fatalf("wrong token → %d", code)
 	}
-	code, home := get(t, h, "GET", "/napi/servicebay/home", "dev1", "")
+	code, home := get(t, h, "GET", prefix+"/home", "dev1", "")
 	if code != 200 || home["servicesUp"] != 1.0 || home["servicesFailed"] != 1.0 || home["pendingApprovals"] != 1.0 || home["operator"] != "stumm" {
 		t.Fatalf("home: %d %v", code, home)
 	}
-	_, svcs := get(t, h, "GET", "/napi/servicebay/services", "dev1", "")
+	_, svcs := get(t, h, "GET", prefix+"/services", "dev1", "")
 	rows := svcs["services"].([]any)
 	if len(rows) != 2 || rows[1].(map[string]any)["activeState"] != "failed" || rows[0].(map[string]any)["health"] != "ok" {
 		t.Fatalf("services: %v", rows)
 	}
-	_, aps := get(t, h, "GET", "/napi/servicebay/approvals", "dev1", "")
+	_, aps := get(t, h, "GET", prefix+"/approvals", "dev1", "")
 	a := aps["approvals"].([]any)[0].(map[string]any)
 	if a["id"] != "7" || a["service"] != "immich" || a["title"] != "immich: neue Version" || a["status"] != "pending" || a["created_at"] != "2026-10-10T19:00:00Z" {
 		t.Fatalf("approvals: %v", a)
 	}
-	_, ups := get(t, h, "GET", "/napi/servicebay/upgrades", "dev1", "")
+	_, ups := get(t, h, "GET", prefix+"/upgrades", "dev1", "")
 	if len(ups["upgrades"].([]any)) != 0 {
 		t.Fatalf("upgrades: %v", ups)
 	}
 	// haus#1: a phone cannot approve, whoever it belongs to — Laib's page is the one place
-	if code, _ := get(t, h, "POST", "/napi/servicebay/approvals/7/approve", "dev1", ""); code != 403 {
+	if code, _ := get(t, h, "POST", prefix+"/approvals/7/approve", "dev1", ""); code != 403 {
 		t.Fatalf("approve from a phone → %d, want 403", code)
 	}
-	if code, _ := get(t, h, "POST", "/napi/servicebay/services/media/operate", "dev1", `{"action":"start"}`); code != 400 {
+	if code, _ := get(t, h, "POST", prefix+"/services/media/operate", "dev1", `{"action":"start"}`); code != 400 {
 		t.Fatalf("start must be refused, got %d", code)
 	}
-	if code, _ := get(t, h, "POST", "/napi/servicebay/services/media/operate", "dev1", `{"action":"restart"}`); code != 200 {
+	if code, _ := get(t, h, "POST", prefix+"/services/media/operate", "dev1", `{"action":"restart"}`); code != 200 {
 		t.Fatalf("restart → %d", code)
 	}
 	joined := strings.Join(calls, "\n")
