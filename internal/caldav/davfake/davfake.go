@@ -35,7 +35,12 @@ type Server struct {
 	MkcalendarStatus int
 	// MkcolStatus, when set, is MKCOL's answer whatever the state.
 	MkcolStatus int
-	behind      map[string]col // made by "another client" right after the next PROPFIND
+	// Redirect, when set, answers every request with a 302 to it.
+	Redirect string
+	// StallAfter, when set, makes an address book REPORT send that many
+	// responses and then hang until the client gives up.
+	StallAfter int
+	behind     map[string]col // made by "another client" right after the next PROPFIND
 }
 
 // CreateAfterPropfind makes a calendar appear right after the next PROPFIND
@@ -139,6 +144,13 @@ func esc(s string) string {
 }
 
 func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	redirect := s.Redirect
+	s.mu.Unlock()
+	if redirect != "" {
+		http.Redirect(w, r, redirect, http.StatusFound)
+		return
+	}
 	u, p, ok := r.BasicAuth()
 	if !ok || u != s.User || p != s.Password {
 		w.Header().Set("WWW-Authenticate", `Basic realm="Radicale"`)
@@ -210,7 +222,16 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		sort.Strings(paths)
 		var b strings.Builder
 		b.WriteString(`<?xml version="1.0" encoding="utf-8"?><D:multistatus xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:CR="urn:ietf:params:xml:ns:carddav">`)
-		for _, k := range paths {
+		for i, k := range paths {
+			if c.book && s.StallAfter > 0 && i == s.StallAfter {
+				w.WriteHeader(http.StatusMultiStatus)
+				io.WriteString(w, b.String())
+				w.(http.Flusher).Flush()
+				s.mu.Unlock()
+				<-r.Context().Done() // hang mid-body until the client gives up
+				s.mu.Lock()
+				return
+			}
 			b.WriteString(`<D:response><D:href>` + esc(k) + `</D:href><D:propstat><D:prop><D:getetag>"1"</D:getetag><` + data + `>` + esc(s.objs[k]) + `</` + data + `></D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response>`)
 		}
 		b.WriteString(`</D:multistatus>`)

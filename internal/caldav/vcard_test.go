@@ -71,3 +71,74 @@ func TestBirthdayForms(t *testing.T) {
 		}
 	}
 }
+
+// Every value is escaped, not only the name: a newline in a phone, an
+// email, an organisation or a nickname cannot add a property.
+func TestVCardEscapesEveryValue(t *testing.T) {
+	ct := Contact{Name: "x", Phones: []string{"1\nEND:VCARD"}, Emails: []string{"a;b\nX-TEL:y"}, Org: "A\nORG2:c", Nickname: "n\nNOTE:z"}
+	vcf := ct.VCF(time.Now())
+	lines := strings.Split(strings.TrimSuffix(vcf, "\r\n"), "\r\n")
+	for i, l := range lines {
+		for _, bad := range []string{"END:VCARD", "X-TEL:", "ORG2:", "NOTE:"} {
+			if strings.HasPrefix(l, bad) && !(bad == "END:VCARD" && i == len(lines)-1) {
+				t.Fatalf("injected %q:\n%s", l, vcf)
+			}
+		}
+	}
+	root, err := Parse(vcf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := Contacts(root)[0]
+	if got.Phones[0] != "1\nEND:VCARD" || got.Emails[0] != "a;b\nX-TEL:y" || got.Nickname != "n\nNOTE:z" {
+		t.Fatalf("read back: %+v", got)
+	}
+}
+
+// iOS writes a birthday without a year as 1604 (with X-APPLE-OMIT-YEAR);
+// that is --MM-TT, not a 422-year-old.
+func TestAppleOmitYear(t *testing.T) {
+	for _, line := range []string{"BDAY;X-APPLE-OMIT-YEAR=1604:1604-04-12", "BDAY;VALUE=date:1604-04-12", "BDAY:16040412"} {
+		root, err := Parse("BEGIN:VCARD\r\nFN:x\r\n" + line + "\r\nEND:VCARD\r\n")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := Contacts(root)[0].Birthday; got != "--04-12" {
+			t.Fatalf("%q: %q", line, got)
+		}
+	}
+}
+
+// vCard 2.1 parameters without a name (TEL;CELL:) are TYPEs; the line is
+// not dropped.
+func TestBareParams(t *testing.T) {
+	root, err := Parse("BEGIN:VCARD\r\nVERSION:2.1\r\nFN:Alt\r\nTEL;CELL:0170 1\r\nTEL;HOME;VOICE:0711 2\r\nEND:VCARD\r\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ct := Contacts(root)[0]
+	if strings.Join(ct.Phones, "|") != "0170 1|0711 2" {
+		t.Fatalf("phones: %v", ct.Phones)
+	}
+	var types []string
+	root.Walk(func(c *Component) {
+		for _, p := range c.Props {
+			if p.Name == "TEL" {
+				types = append(types, p.Params["TYPE"])
+			}
+		}
+	})
+	if strings.Join(types, "|") != "CELL|HOME,VOICE" {
+		t.Fatalf("types: %v", types)
+	}
+}
+
+// A birthday in the year 0000 is no date: no BDAY is written.
+func TestBirthdayYearZero(t *testing.T) {
+	if ValidBirthday("0000-04-12") || !ValidBirthday("1985-04-12") || !ValidBirthday("--02-29") || ValidBirthday("--02-30") || ValidBirthday("12.04.") {
+		t.Fatal("ValidBirthday")
+	}
+	if strings.Contains((Contact{Name: "x", Birthday: "0000-04-12"}).VCF(time.Now()), "BDAY") {
+		t.Fatal("year 0000 written")
+	}
+}

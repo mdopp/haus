@@ -119,3 +119,57 @@ func TestTimeout(t *testing.T) {
 		t.Fatalf("a client timeout of its own: %v", defaultHTTP.Timeout)
 	}
 }
+
+// A Paperless that ignores page_size still gives at most max.
+func TestAtMostMax(t *testing.T) {
+	fake := paperlessfake.New(token)
+	defer fake.Close()
+	fake.IgnorePageSize = true
+	for i := 1; i <= 5; i++ {
+		fake.Add(paperlessfake.Doc{ID: i, Title: "Rechnung"})
+	}
+	c := &Client{URL: fake.URL, Token: token}
+	if docs, total, err := c.Search(context.Background(), "rechnung", 2); err != nil || len(docs) != 2 || total != 5 {
+		t.Fatalf("%d %d %v", len(docs), total, err)
+	}
+}
+
+// A caller's own HTTP client does not follow redirects either.
+func TestNoRedirectOwnClient(t *testing.T) {
+	var hits atomic.Int32
+	evil := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { hits.Add(1) }))
+	defer evil.Close()
+	fake := paperlessfake.New(token)
+	defer fake.Close()
+	fake.Redirect = evil.URL + "/api/documents/"
+	own := &http.Client{}
+	c := &Client{URL: fake.URL, Token: token, HTTP: own}
+	if _, _, err := c.Search(context.Background(), "x", 20); err == nil || hits.Load() != 0 {
+		t.Fatalf("%v, %d hits", err, hits.Load())
+	}
+	if own.CheckRedirect != nil {
+		t.Fatal("the caller's client is not changed")
+	}
+}
+
+// The token is taken out of any error that would carry it, here a
+// transport error naming an address with it.
+func TestScrub(t *testing.T) {
+	c := &Client{URL: "http://127.0.0.1:1/" + token, Token: token}
+	_, _, err := c.Search(context.Background(), "x", 20)
+	if err == nil || strings.Contains(err.Error(), token) || !strings.Contains(err.Error(), "nicht erreichbar") {
+		t.Fatalf("%v", err)
+	}
+}
+
+// An answer bigger than maxBody is not read whole: an error.
+func TestMaxBody(t *testing.T) {
+	big := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"count":1,"results":[{"id":1,"title":"` + strings.Repeat("x", maxBody+1000) + `"}]}`))
+	}))
+	defer big.Close()
+	c := &Client{URL: big.URL, Token: token}
+	if docs, _, err := c.Search(context.Background(), "x", 20); err == nil {
+		t.Fatalf("read %d docs past the cap", len(docs))
+	}
+}

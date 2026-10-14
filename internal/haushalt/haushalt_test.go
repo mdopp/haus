@@ -38,14 +38,17 @@ type setup struct {
 }
 
 // want says which backends a setup has.
-type want struct{ cal, notes, contacts, docs bool }
+type want struct {
+	cal, notes, contacts, docs bool
+	country                    string // HAUS_PHONE_COUNTRY; "" the default
+}
 
 const plToken = "pl-geheim-123"
 
 func newSetup(t *testing.T, w want) setup {
 	t.Helper()
 	s := setup{}
-	cfg := Config{Token: tok, Loc: berlin(t), Version: "test"}
+	cfg := Config{Token: tok, Loc: berlin(t), Version: "test", PhoneCountry: w.country}
 	if w.cal || w.contacts {
 		s.fake = davfake.New("bote", "pw")
 		t.Cleanup(s.fake.Close)
@@ -483,6 +486,8 @@ func TestFromEnvPaperless(t *testing.T) {
 				t.Fatalf("%s=%q refuses to start", k, v)
 			} else if strings.Contains(err.Error(), plToken) {
 				t.Fatal("the token never goes into a message")
+			} else if !strings.Contains(err.Error(), "http(s)://") {
+				t.Fatalf("http is allowed, the message says so: %v", err)
 			}
 		})
 	}
@@ -624,5 +629,73 @@ func TestDocumentTools(t *testing.T) {
 	text, isErr = call(t, s.h, "dokumente_suchen", map[string]any{"text": "rechnung"})
 	if !isErr || !strings.Contains(text, "Paperless") || strings.Contains(text, plToken) {
 		t.Fatalf("failure: %q %v", text, isErr)
+	}
+}
+
+// A number is found however either side writes it: national, +49 or
+// 0049, spaces, dashes, slashes; the country is HAUS_PHONE_COUNTRY.
+func TestPhoneSearchBothWays(t *testing.T) {
+	s := newSetup(t, want{contacts: true})
+	s.fake.Put("/bote/kontakte/a.vcf", "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:a\r\nFN:Anna National\r\nTEL:0170 1234567\r\nEND:VCARD\r\n")
+	s.fake.Put("/bote/kontakte/b.vcf", "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:b\r\nFN:Bert International\r\nTEL:+49 (0)711 / 98-76-54\r\nEND:VCARD\r\n")
+	s.fake.Put("/bote/kontakte/c.vcf", "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:c\r\nFN:Carla Doppelnull\r\nTEL:0049 30 555666\r\nEND:VCARD\r\n")
+	s.fake.Put("/bote/kontakte/d.vcf", "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:d\r\nFN:Dora Wien\r\nTEL:+43 660 1234567\r\nEND:VCARD\r\n")
+	for q, want := range map[string]string{
+		"+49 170 1234567": "Anna", "0049 170 1234567": "Anna", "0170-1234567": "Anna", "+491701234567": "Anna",
+		"0711 987654": "Bert", "+49 711 987654": "Bert", "0049711987654": "Bert",
+		"030 555666": "Carla", "+49 30 555666": "Carla",
+		"+43 660 1234567": "Dora", "0043 660 1234567": "Dora",
+	} {
+		text, isErr := call(t, s.h, "kontakte_suchen", map[string]any{"text": q})
+		if isErr || !strings.Contains(text, want) || strings.Contains(text, "\n") {
+			t.Fatalf("%q: %q", q, text)
+		}
+	}
+	// a foreign number written nationally is not a German one
+	if text, _ := call(t, s.h, "kontakte_suchen", map[string]any{"text": "+49 660 1234567"}); strings.Contains(text, "Dora") {
+		t.Fatalf("+49 660 is not +43 660: %q", text)
+	}
+	// one or two digits match no phone
+	for _, q := range []string{"1", "7", "17", "+4"} {
+		if text, _ := call(t, s.h, "kontakte_suchen", map[string]any{"text": q}); !strings.HasPrefix(text, "Kein Kontakt") {
+			t.Fatalf("%q matched: %q", q, text)
+		}
+	}
+
+	at := newSetup(t, want{contacts: true, country: "43"})
+	at.fake.Put("/bote/kontakte/d.vcf", "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:d\r\nFN:Dora Wien\r\nTEL:0660 1234567\r\nEND:VCARD\r\n")
+	if text, _ := call(t, at.h, "kontakte_suchen", map[string]any{"text": "+43 660 1234567"}); !strings.Contains(text, "Dora") {
+		t.Fatalf("HAUS_PHONE_COUNTRY=43: %q", text)
+	}
+}
+
+func TestFromEnvPhoneCountry(t *testing.T) {
+	t.Setenv("HAUS_RADICALE_URL", "")
+	t.Setenv("HAUS_NOTES_DIR", "")
+	t.Setenv("HAUS_PAPERLESS_URL", "")
+	t.Setenv("HAUS_PHONE_COUNTRY", "")
+	if cfg, err := FromEnv(); err != nil || cfg.PhoneCountry != "49" {
+		t.Fatalf("default: %q %v", cfg.PhoneCountry, err)
+	}
+	t.Setenv("HAUS_PHONE_COUNTRY", "+43")
+	if cfg, err := FromEnv(); err != nil || cfg.PhoneCountry != "43" {
+		t.Fatalf("+43: %q %v", cfg.PhoneCountry, err)
+	}
+	for _, bad := range []string{"Österreich", "0043", "12345"} {
+		t.Setenv("HAUS_PHONE_COUNTRY", bad)
+		if _, err := FromEnv(); err == nil {
+			t.Fatalf("%q refuses to start", bad)
+		}
+	}
+}
+
+// The year 0000 is no birthday.
+func TestBirthdayYearZeroRefused(t *testing.T) {
+	s := newSetup(t, want{contacts: true})
+	if text, isErr := call(t, s.h, "kontakt_anlegen", map[string]any{"name": "x", "geburtstag": "0000-04-12"}); !isErr {
+		t.Fatalf("%q", text)
+	}
+	if len(s.fake.Objects()) != 0 {
+		t.Fatal("written")
 	}
 }

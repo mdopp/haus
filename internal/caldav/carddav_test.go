@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -230,5 +232,125 @@ func TestContactsWrongPassword(t *testing.T) {
 	c := &Client{URL: fake.URL, User: "bote", Password: "nope"}
 	if _, _, err := c.Contacts(context.Background()); err == nil || !strings.Contains(err.Error(), "Anmeldung abgelehnt") || strings.Contains(err.Error(), "nope") {
 		t.Fatalf("want the refusal, got %v", err)
+	}
+}
+
+// An answer bigger than maxCardBytes is read only so far: the cards
+// before the cut, partial, no error.
+func TestContactsByteCap(t *testing.T) {
+	old := maxCardBytes
+	maxCardBytes = 3000
+	defer func() { maxCardBytes = old }()
+	fake := davfake.New("bote", "pw")
+	defer fake.Close()
+	fake.AddAddressBook("/bote/kontakte/", "Kontakte")
+	for i := 0; i < 40; i++ {
+		fake.Put(fmt.Sprintf("/bote/kontakte/%02d.vcf", i), card(fmt.Sprint(i), fmt.Sprint("Name ", i), "NOTE:"+strings.Repeat("n", 100)+"\r\n"))
+	}
+	c := &Client{URL: fake.URL, User: "bote", Password: "pw"}
+	cs, partial, err := c.Contacts(context.Background())
+	if err != nil || !partial || len(cs) == 0 || len(cs) >= 40 {
+		t.Fatalf("%d cards, partial %v, %v", len(cs), partial, err)
+	}
+}
+
+// One broken card (BEGIN without END) does not hide the address book.
+func TestBrokenCardSkipped(t *testing.T) {
+	fake := davfake.New("bote", "pw")
+	defer fake.Close()
+	fake.AddAddressBook("/bote/kontakte/", "Kontakte")
+	fake.Put("/bote/kontakte/a.vcf", "BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Kaputt\r\n")
+	fake.Put("/bote/kontakte/b.vcf", card("b", "Bert", ""))
+	c := &Client{URL: fake.URL, User: "bote", Password: "pw"}
+	cs, partial, err := c.Contacts(context.Background())
+	if err != nil || partial || len(cs) != 1 || cs[0].Name != "Bert" {
+		t.Fatalf("%+v %v %v", cs, partial, err)
+	}
+}
+
+// A configured address book that is not there (404) is skipped; the
+// account's own are still read.
+func TestGoneAddressBookSkipped(t *testing.T) {
+	fake := davfake.New("bote", "pw")
+	defer fake.Close()
+	fake.AddAddressBook("/bote/kontakte/", "Kontakte")
+	fake.Put("/bote/kontakte/b.vcf", card("b", "Bert", ""))
+	c := &Client{URL: fake.URL, User: "bote", Password: "pw", AddressBook: "/familie/fehlt/"}
+	cs, _, err := c.Contacts(context.Background())
+	if err != nil || len(cs) != 1 {
+		t.Fatalf("%+v %v", cs, err)
+	}
+}
+
+// The address book Haus made earlier is found by its path, whatever
+// someone renamed it to: no second one.
+func TestHaushaltBookFoundByPath(t *testing.T) {
+	fake := davfake.New("bote", "pw")
+	defer fake.Close()
+	fake.AddAddressBook("/bote/a-kontakte/", "Kontakte")
+	fake.AddAddressBook("/bote/"+bookSlug+"/", "Familie (umbenannt)")
+	c := &Client{URL: fake.URL, User: "bote", Password: "pw"}
+	col, err := c.PutContact(context.Background(), Contact{Name: "x"})
+	if err != nil || col.URL != fake.URL+"/bote/"+bookSlug+"/" || count(fake.Methods, "MKCOL") != 0 {
+		t.Fatalf("%+v %v %v", col, err, fake.Methods)
+	}
+}
+
+// A Radicale that stalls mid-answer: the cards read so far, marked
+// partial, not an error that hides them all.
+func TestContactsTimeoutMidBody(t *testing.T) {
+	fake := davfake.New("bote", "pw")
+	defer fake.Close()
+	fake.AddAddressBook("/bote/kontakte/", "Kontakte")
+	for i := 0; i < 5; i++ {
+		fake.Put(fmt.Sprintf("/bote/kontakte/%d.vcf", i), card(fmt.Sprint(i), fmt.Sprint("Name ", i), ""))
+	}
+	fake.StallAfter = 3
+	c := &Client{URL: fake.URL, User: "bote", Password: "pw", HTTP: &http.Client{Timeout: 300 * time.Millisecond}}
+	cs, partial, err := c.Contacts(context.Background())
+	if err != nil || !partial || len(cs) != 3 {
+		t.Fatalf("%d cards, partial %v, %v", len(cs), partial, err)
+	}
+}
+
+// A redirect is not followed: Basic auth never goes to another address;
+// the 3xx is an error.
+func TestNoRedirectDAV(t *testing.T) {
+	var hits atomic.Int32
+	evil := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { hits.Add(1) }))
+	defer evil.Close()
+	fake := davfake.New("bote", "pw")
+	defer fake.Close()
+	fake.Redirect = evil.URL + "/bote/"
+	for name, c := range map[string]*Client{
+		"default": {URL: fake.URL, User: "bote", Password: "pw"},
+		"own":     {URL: fake.URL, User: "bote", Password: "pw", HTTP: &http.Client{}},
+	} {
+		if _, err := c.Events(context.Background(), time.Now(), time.Now().Add(time.Hour)); err == nil {
+			t.Fatalf("%s: events: want an error", name)
+		}
+		if _, _, err := c.Contacts(context.Background()); err == nil {
+			t.Fatalf("%s: contacts: want an error", name)
+		}
+		if _, err := c.PutContact(context.Background(), Contact{Name: "x"}); err == nil {
+			t.Fatalf("%s: put: want an error", name)
+		}
+	}
+	if hits.Load() != 0 {
+		t.Fatalf("followed a redirect %d times", hits.Load())
+	}
+}
+
+// A contact's error speaks of Radicale or contacts, not of the calendar.
+func TestContactErrorsNotKalender(t *testing.T) {
+	fake := davfake.New("bote", "pw")
+	defer fake.Close()
+	c := &Client{URL: fake.URL, User: "bote", Password: "nope"}
+	_, _, err := c.Contacts(context.Background())
+	if err == nil || strings.Contains(err.Error(), "Kalender") {
+		t.Fatalf("%v", err)
+	}
+	if _, err := c.PutContact(context.Background(), Contact{Name: "x"}); err == nil || strings.Contains(err.Error(), "Kalender") {
+		t.Fatalf("%v", err)
 	}
 }

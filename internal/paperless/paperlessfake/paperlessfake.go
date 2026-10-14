@@ -38,6 +38,9 @@ type Server struct {
 	Status int
 	// Redirect, when set, answers every request with a 302 to it.
 	Redirect string
+	// IgnorePageSize answers with every hit, as a server that does not
+	// honour page_size would.
+	IgnorePageSize bool
 }
 
 // New starts a fake that accepts token.
@@ -94,6 +97,9 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	size, _ := strconv.Atoi(q.Get("page_size"))
 	if size <= 0 {
 		size = 25
+	}
+	if s.IgnorePageSize {
+		size = 1 << 30
 	}
 	w.Header().Set("Content-Type", "application/json")
 	switch r.URL.Path {
