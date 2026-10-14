@@ -1,33 +1,26 @@
-// Package napi is the companion API the Android widgets speak (the app's
-// SbApiClient.kt and ApiClient.kt): the four box keys under
-// legacy.NapiPrefix served from Laib, operate and verdicts behind the right
-// token, the house paths and the camera from Home Assistant (home.go,
-// live.go, camera.go, haus#10), the tool widgets from the Haushalt source
-// (tools.go), the capture upload (upload.go), and every other /napi path
-// passed through the migration bridge
-// (bridge.go) until Haus serves it (laib#28).
+// Package napi is the API the Haus app's widgets speak (mdopp/haus-android,
+// its data/*.kt parsers; laib ADR 0022): the four Box keys under
+// app.BoxPrefix served from Laib, operate and verdicts behind the right
+// token, the house paths, the event stream and the camera from Home
+// Assistant (home.go, live.go, camera.go), the tool widgets from the
+// Haushalt source (tools.go), the capture upload (upload.go) and the house
+// persona. Every other /napi path is 404.
 package napi
 
 import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"net/http/httputil"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/mdopp/haus/internal/app"
 	"github.com/mdopp/haus/internal/ha"
 	"github.com/mdopp/haus/internal/haushalt"
 	"github.com/mdopp/haus/internal/laib"
-	"github.com/mdopp/haus/internal/legacy"
 	"github.com/mdopp/haus/internal/persona"
 )
-
-// BoxPrefix is the box keys' new, neutral name (laib ADR 0021); the app
-// knows it since the app's #174 and falls back to legacy.NapiPrefix.
-const BoxPrefix = "/napi/box"
 
 // Validator says whether a bearer is a paired device.
 type Validator func(ctx context.Context, bearer string) bool
@@ -36,18 +29,17 @@ type Validator func(ctx context.Context, bearer string) bool
 type Config struct {
 	Laib     *laib.Client // the haus hand: status, inbox, journal, restart — nothing else
 	Validate Validator
-	Bridge   *url.URL                           // the migration bridge (bridge.go), for every other /napi path; nil = 404
-	Whoami   func(bearer string) (string, bool) // Haus's own devices: uid behind a bearer; others go through the bridge
+	Whoami   func(bearer string) (string, bool) // the paired devices: uid behind a bearer
 	House    persona.Persona                    // the house persona the app shows (laib#129, #130)
-	HA       *ha.Client                         // Home Assistant for the house paths (home.go, live.go); nil = they stay on the bridge
+	HA       *ha.Client                         // Home Assistant for the house paths and the event stream (home.go, live.go); nil = 404
 	Ping     time.Duration                      // the event stream's keepalive; 0 = 90s
 	// SensorEvery: a sensor's card_state at most this often; 0 = 10s
 	SensorEvery time.Duration
 	Energy      EnergyMap // the energy entities (energy.go); empty = by friendly name
-	// Haushalt: the backends of the tool widgets (tools.go); none set = the bridge's
+	// Haushalt: the backends of the tool widgets (tools.go); none set = 404
 	Haushalt haushalt.Config
 	// UploadDir: where /napi/upload stores (upload.go), the share's Paperless
-	// consume folder; "" = the bridge's
+	// consume folder; "" = 404
 	UploadDir string
 }
 
@@ -86,134 +78,118 @@ func Handler(c Config) http.Handler {
 		w.Header().Set("Content-Type", "image/svg+xml")
 		w.Write(c.House.Icon)
 	}))
-	// The box keys answer under the app's new name and its legacy one alike
-	// (haus#17, the app's #174): the app asks /napi/box first.
-	for _, prefix := range []string{BoxPrefix, legacy.NapiPrefix} {
-		mux.HandleFunc("GET "+prefix+"/home", auth(func(w http.ResponseWriter, r *http.Request) {
-			ready, rows, err := c.Laib.Status(r.Context())
-			if err != nil {
-				fail(w, err)
-				return
+	// the Box keys (laib ADR 0022 §4: one name, app.BoxPrefix)
+	prefix := app.BoxPrefix
+	mux.HandleFunc("GET "+prefix+"/home", auth(func(w http.ResponseWriter, r *http.Request) {
+		ready, rows, err := c.Laib.Status(r.Context())
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		open, _ := c.Laib.Inbox(r.Context())
+		up, failed, down := 0, 0, 0
+		for _, s := range rows {
+			switch s.State {
+			case "grün":
+				up++
+			case "rot":
+				failed++
+			default:
+				down++
 			}
-			open, _ := c.Laib.Inbox(r.Context())
-			up, failed, down := 0, 0, 0
-			for _, s := range rows {
-				switch s.State {
-				case "grün":
-					up++
-				case "rot":
-					failed++
-				default:
-					down++
-				}
-			}
-			writeJSON(w, map[string]any{
-				"servicesUp": up, "servicesFailed": failed, "servicesDown": down,
-				"pendingApprovals": len(open), "pendingUpdates": 0,
-				"state": ready.State, "drift": ready.Drift, "lastHeard": ready.LastHeard, "operator": ready.Operator,
-			})
-		}))
-		mux.HandleFunc("GET "+prefix+"/services", auth(func(w http.ResponseWriter, r *http.Request) {
-			_, rows, err := c.Laib.Status(r.Context())
-			if err != nil {
-				fail(w, err)
-				return
-			}
-			out := []map[string]string{}
-			for _, s := range rows {
-				active, sub, health := "active", "running", "ok"
-				switch s.State {
-				case "rot":
-					active, sub, health = "failed", "failed", "failed"
-				case "gelb":
-					health = "degraded"
-				}
-				out = append(out, map[string]string{"name": s.Name, "activeState": active, "subState": sub, "health": health, "detail": s.Detail})
-			}
-			writeJSON(w, map[string]any{"services": out})
-		}))
-		mux.HandleFunc("GET "+prefix+"/approvals", auth(func(w http.ResponseWriter, r *http.Request) {
-			ps, err := c.Laib.Inbox(r.Context())
-			if err != nil {
-				fail(w, err)
-				return
-			}
-			out := []map[string]any{}
-			for _, p := range ps {
-				out = append(out, map[string]any{
-					"id": strconv.Itoa(p.ID), "service": serviceOf(p.Files), "title": p.Reason,
-					"description": p.Tier + " · " + p.Class + " · " + strings.Join(p.Files, ", ") + " · von " + p.Actor,
-					"created_at":  p.Created.UTC().Format(time.RFC3339), "status": "pending",
-				})
-			}
-			writeJSON(w, map[string]any{"approvals": out})
-		}))
-		mux.HandleFunc("GET "+prefix+"/upgrades", auth(func(w http.ResponseWriter, r *http.Request) {
-			// Laib's images update themselves (podman auto-update) and templates
-			// sync by timer; there is no pending-upgrade list to show yet.
-			writeJSON(w, map[string]any{"upgrades": []any{}})
-		}))
-		mux.HandleFunc("POST "+prefix+"/services/{name}/operate", auth(func(w http.ResponseWriter, r *http.Request) {
-			var body struct {
-				Action string `json:"action"`
-			}
-			json.NewDecoder(r.Body).Decode(&body)
-			name := r.PathValue("name")
-			if body.Action != "restart" {
-				http.Error(w, `{"error":"Laib knows restart only; start and stop are state changes that go through a proposal"}`, http.StatusBadRequest)
-				return
-			}
-			if _, err := c.Laib.Restart(r.Context(), name); err != nil {
-				fail(w, err)
-				return
-			}
-			writeJSON(w, map[string]any{"ok": true, "name": name, "action": "restart"})
-		}))
-		// Verdicts are not Haus's (haus#1, ADR 0012): the one approval surface is
-		// Laib's own page behind Authelia; phones decide, if ever, through the
-		// relay. The app's buttons get a plain answer.
-		verdict := auth(func(w http.ResponseWriter, r *http.Request) {
-			http.Error(w, `{"error":"Haus entscheidet nichts: Freigeben und Ablehnen gibt es nur auf der Laib-Seite (laib.<domain>/inbox)"}`, http.StatusForbidden)
+		}
+		writeJSON(w, map[string]any{
+			"servicesUp": up, "servicesFailed": failed, "servicesDown": down,
+			"pendingApprovals": len(open), "pendingUpdates": 0,
+			"state": ready.State, "drift": ready.Drift, "lastHeard": ready.LastHeard, "operator": ready.Operator,
 		})
-		mux.HandleFunc("POST "+prefix+"/approvals/{id}/approve", verdict)
-		mux.HandleFunc("POST "+prefix+"/approvals/{id}/deny", verdict)
-	}
+	}))
+	mux.HandleFunc("GET "+prefix+"/services", auth(func(w http.ResponseWriter, r *http.Request) {
+		_, rows, err := c.Laib.Status(r.Context())
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		out := []map[string]string{}
+		for _, s := range rows {
+			active, sub, health := "active", "running", "ok"
+			switch s.State {
+			case "rot":
+				active, sub, health = "failed", "failed", "failed"
+			case "gelb":
+				health = "degraded"
+			}
+			out = append(out, map[string]string{"name": s.Name, "activeState": active, "subState": sub, "health": health, "detail": s.Detail})
+		}
+		writeJSON(w, map[string]any{"services": out})
+	}))
+	mux.HandleFunc("GET "+prefix+"/approvals", auth(func(w http.ResponseWriter, r *http.Request) {
+		ps, err := c.Laib.Inbox(r.Context())
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		out := []map[string]any{}
+		for _, p := range ps {
+			out = append(out, map[string]any{
+				"id": strconv.Itoa(p.ID), "service": serviceOf(p.Files), "title": p.Reason,
+				"description": p.Tier + " · " + p.Class + " · " + strings.Join(p.Files, ", ") + " · von " + p.Actor,
+				"created_at":  p.Created.UTC().Format(time.RFC3339), "status": "pending",
+			})
+		}
+		writeJSON(w, map[string]any{"approvals": out})
+	}))
+	mux.HandleFunc("GET "+prefix+"/upgrades", auth(func(w http.ResponseWriter, r *http.Request) {
+		// Laib's images update themselves (podman auto-update) and templates
+		// sync by timer; there is no pending-upgrade list to show yet.
+		writeJSON(w, map[string]any{"upgrades": []any{}})
+	}))
+	mux.HandleFunc("POST "+prefix+"/services/{name}/operate", auth(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Action string `json:"action"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		name := r.PathValue("name")
+		if body.Action != "restart" {
+			http.Error(w, `{"error":"Laib knows restart only; start and stop are state changes that go through a proposal"}`, http.StatusBadRequest)
+			return
+		}
+		if _, err := c.Laib.Restart(r.Context(), name); err != nil {
+			fail(w, err)
+			return
+		}
+		writeJSON(w, map[string]any{"ok": true, "name": name, "action": "restart"})
+	}))
+	// Verdicts are not Haus's (haus#1, ADR 0012): the one approval surface is
+	// Laib's own page behind Authelia; phones decide, if ever, through the
+	// relay. The app's buttons get a plain answer.
+	verdict := auth(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, `{"error":"Haus entscheidet nichts: Freigeben und Ablehnen gibt es nur auf der Laib-Seite (laib.<domain>/inbox)"}`, http.StatusForbidden)
+	})
+	mux.HandleFunc("POST "+prefix+"/approvals/{id}/approve", verdict)
+	mux.HandleFunc("POST "+prefix+"/approvals/{id}/deny", verdict)
 	mux.HandleFunc("GET /napi/whoami", func(w http.ResponseWriter, r *http.Request) {
 		bearer := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-		if c.Whoami != nil {
+		if c.Whoami != nil && bearer != "" {
 			if uid, ok := c.Whoami(bearer); ok {
 				writeJSON(w, map[string]any{"uid": uid, "via": "haus"})
 				return
 			}
 		}
-		if c.Bridge != nil {
-			httputil.NewSingleHostReverseProxy(c.Bridge).ServeHTTP(w, r)
-			return
-		}
 		w.Header().Set("WWW-Authenticate", "Bearer")
 		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 	})
-	if c.HA != nil { // haus#10: the house paths are Haus's own
+	if c.HA != nil { // the house paths and the event stream, from Home Assistant
 		(&homeAPI{ha: c.HA, sources: c.Energy}).routes(mux, auth)
-		if c.Bridge == nil { // the app's one stream also carries notices and approvals only the bridge has (live.go)
-			newLive(c.HA, c.Ping, c.SensorEvery).routes(mux, auth)
-		}
+		newLive(c.HA, c.Ping, c.SensorEvery).routes(mux, auth)
 	}
 	if t := newTools(c.Haushalt); t != nil { // the tool widgets from the Haushalt source
-		if c.Bridge != nil { // the bridge keeps its catalog and the actions Haus does not know (tools.go)
-			t.bridge = httputil.NewSingleHostReverseProxy(c.Bridge)
-		}
 		t.routes(mux, auth)
 	}
 	if c.UploadDir != "" { // the camera capture into the consume folder
 		newUploads(c.UploadDir).routes(mux, auth)
 	}
-	if c.Bridge != nil {
-		proxy := httputil.NewSingleHostReverseProxy(c.Bridge)
-		proxy.FlushInterval = 100 * time.Millisecond // /napi/portal/events streams
-		mux.Handle("/napi/", proxy)
-	}
-	return mux
+	return mux // every other /napi path: 404, passed on to nobody
 }
 
 func serviceOf(files []string) string {
@@ -237,16 +213,4 @@ func fail(w http.ResponseWriter, err error) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusBadGateway)
 	json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-}
-
-// Chain accepts a bearer when any validator does.
-func Chain(vs ...Validator) Validator {
-	return func(ctx context.Context, bearer string) bool {
-		for _, v := range vs {
-			if v != nil && v(ctx, bearer) {
-				return true
-			}
-		}
-		return false
-	}
 }

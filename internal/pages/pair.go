@@ -4,8 +4,8 @@ import (
 	"html"
 	"net/http"
 
+	"github.com/mdopp/haus/internal/app"
 	"github.com/mdopp/haus/internal/devices"
-	"github.com/mdopp/haus/internal/legacy"
 )
 
 // PairDevice is where the app pairs itself (haus#6): after the person enters
@@ -35,7 +35,7 @@ func PairDevice(store *devices.Store) http.HandlerFunc {
 			return
 		}
 		// Location set by hand: the app's intent filter matches …://pair exactly.
-		w.Header().Set("Location", legacy.AppScheme+"://pair#token="+tok+"&id="+d.ID)
+		w.Header().Set("Location", app.Scheme+"://pair#token="+tok+"&id="+d.ID)
 		w.WriteHeader(http.StatusFound)
 	}
 }

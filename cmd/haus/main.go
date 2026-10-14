@@ -1,7 +1,7 @@
 // Command haus is the family's surface for the Laib box (laib ADR 0014):
-// pages for people, the companion API for the Android widgets. The box keys
-// come from Laib; every other /napi path, and phones paired before Haus, go
-// through the migration bridge (internal/napi/bridge.go) while it is set.
+// pages for people, the API the Haus app's widgets speak (laib ADR 0022).
+// The Box keys come from Laib, the house from Home Assistant, the tools from
+// the Haushalt source.
 package main
 
 import (
@@ -46,31 +46,26 @@ func main() {
 	}
 	pages.House = persona.Load(env("HAUS_PERSONA_DIR", "/persona"), os.Getenv("HAUS_PERSONA")) // laib ADR 0020; plain Haus without it
 	cfg := napi.Config{Laib: ops, House: pages.House}
-	own := func(ctx context.Context, b string) bool { _, ok := store.Lookup(b); return ok }
 	cfg.Whoami = func(b string) (string, bool) {
 		d, ok := store.Lookup(b)
 		return d.UID, ok
 	}
-	bridge, paired, err := napi.BridgeFromEnv()
-	if err != nil {
-		log.Fatalf("haus: %v", err)
-	}
-	cfg.Bridge = bridge
-	if cfg.HA, err = ha.FromEnv(); err != nil { // haus#10: the house paths from HA; unset, they stay on the bridge
+	// only phones paired through Haus; nothing old is carried (laib ADR 0022 §4)
+	cfg.Validate = func(_ context.Context, b string) bool { _, ok := store.Lookup(b); return ok }
+	if cfg.HA, err = ha.FromEnv(); err != nil { // the house paths and the event stream from HA; unset, 404
 		log.Fatalf("haus: %v", err)
 	}
 	if cfg.Energy, err = napi.EnergyFromEnv(); err != nil {
 		log.Fatalf("haus: %v", err)
 	}
-	cfg.Validate = napi.Chain(own, paired) // phones paired before Haus keep working through the bridge
 	// laib ADR 0017: the Haushalt MCP source; a tool only when its backend is set
 	hh, err := haushalt.FromEnv()
 	if err != nil {
 		log.Fatalf("haus: %v", err)
 	}
 	hh.Version = Version
-	cfg.Haushalt = hh // haus#10: the tool widgets from the same backends; none set, they stay on the bridge
-	// haus#10: the camera capture into the share's Paperless consume folder; unset, the bridge's
+	cfg.Haushalt = hh // haus#10: the tool widgets from the same backends; none set, 404
+	// haus#10: the camera capture into the share's Paperless consume folder; unset, 404
 	if cfg.UploadDir = os.Getenv("HAUS_UPLOAD_DIR"); cfg.UploadDir != "" {
 		if fi, err := os.Stat(cfg.UploadDir); err != nil || !fi.IsDir() {
 			log.Printf("haus: HAUS_UPLOAD_DIR %s is not a folder (yet): uploads answer 503 until it is", cfg.UploadDir)
@@ -107,6 +102,6 @@ func main() {
 	pagesMux.HandleFunc("/", pages.ToStart()) // "/", the app's /#/p/… routes and every path not served land on Start
 	mux.Handle("/", pages.RequireProxy(proxySecret, pagesMux))
 	addr := env("HAUS_LISTEN", "127.0.0.1:8650")
-	log.Printf("haus %s: listening on %s as %s, laib %s, migration bridge %v, home assistant %v, haushalt %d tools, uploads %q, pages only behind the proxy secret", Version, addr, pages.House.Display, ops.URL, bridge, cfg.HA != nil, len(haushalt.Tools(hh)), cfg.UploadDir)
+	log.Printf("haus %s: listening on %s as %s, laib %s, home assistant %v, haushalt %d tools, uploads %q, pages only behind the proxy secret", Version, addr, pages.House.Display, ops.URL, cfg.HA != nil, len(haushalt.Tools(hh)), cfg.UploadDir)
 	log.Fatal((&http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}).ListenAndServe())
 }

@@ -2,11 +2,7 @@ package napi
 
 import (
 	"bytes"
-	"encoding/json"
-	"io"
-	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"strings"
 	"testing"
 
@@ -142,25 +138,14 @@ func TestStartAddable(t *testing.T) {
 	}
 }
 
-func TestWithoutHACameraAndAddableGoThroughTheBridge(t *testing.T) {
+func TestWithoutHACameraAndAddableAre404(t *testing.T) {
 	var calls []string
 	lb := fakeLaib(t, &calls)
 	defer lb.Close()
-	var got []string
-	bridge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		io.Copy(io.Discard, r.Body)
-		got = append(got, r.Method+" "+r.URL.Path)
-		json.NewEncoder(w).Encode(map[string]any{"ok": true, "via": "bridge"})
-	}))
-	defer bridge.Close()
-	u, _ := url.Parse(bridge.URL)
-	h := Handler(Config{Laib: &laib.Client{URL: lb.URL, Token: "ops"}, Validate: StaticValidator([]string{"dev1"}), Bridge: u})
+	h := Handler(Config{Laib: &laib.Client{URL: lb.URL, Token: "ops"}, Validate: StaticValidator([]string{"dev1"})})
 	for _, p := range []string{"/napi/portal/camera/camera.einfahrt/snapshot", "/napi/portal/start/addable"} {
-		if code, body := raw(t, h, "GET", p, "dev1", ""); code != 200 || !strings.Contains(body, "bridge") {
-			t.Errorf("%s → %d %s, want the bridge", p, code, body)
+		if code, body := raw(t, h, "GET", p, "dev1", ""); code != 404 {
+			t.Errorf("%s → %d %s, want 404", p, code, body)
 		}
-	}
-	if len(got) != 2 {
-		t.Fatalf("bridge saw %v", got)
 	}
 }

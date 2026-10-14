@@ -30,7 +30,7 @@ type Client struct {
 }
 
 // FromEnv reads HAUS_HA_URL and HAUS_HA_TOKEN. Unset URL means no HA: the
-// house paths stay on the migration bridge.
+// house paths and the event stream are 404.
 func FromEnv() (*Client, error) {
 	u := strings.TrimRight(os.Getenv("HAUS_HA_URL"), "/")
 	if u == "" {
@@ -42,7 +42,7 @@ func FromEnv() (*Client, error) {
 	tok := os.Getenv("HAUS_HA_TOKEN")
 	if tok == "" {
 		// the template names the address; the token is the admin's one step
-		log.Printf("haus: HAUS_HA_TOKEN is not set: the house paths stay on the bridge (laib secret set HAUS_HA_TOKEN)")
+		log.Printf("haus: HAUS_HA_TOKEN is not set: the house paths are off (laib secret set HAUS_HA_TOKEN)")
 		return nil, nil
 	}
 	return &Client{URL: u, Token: tok}, nil

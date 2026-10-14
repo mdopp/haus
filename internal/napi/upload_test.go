@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/textproto"
-	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -200,21 +199,13 @@ func TestUploadWantsAPairedDevice(t *testing.T) {
 	}
 }
 
-func TestWithoutAnUploadDirTheUploadGoesThroughTheBridge(t *testing.T) {
+func TestWithoutAnUploadDirTheUploadIs404(t *testing.T) {
 	var calls []string
 	lb := fakeLaib(t, &calls)
 	defer lb.Close()
-	var got int
-	bridge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		b, _ := io.ReadAll(r.Body)
-		got = len(b)
-		w.Write([]byte(`{"ok":true,"via":"bridge"}`))
-	}))
-	defer bridge.Close()
-	u, _ := url.Parse(bridge.URL)
-	h := Handler(Config{Laib: &laib.Client{URL: lb.URL, Token: "ops"}, Validate: StaticValidator([]string{"dev1"}), Bridge: u})
+	h := Handler(Config{Laib: &laib.Client{URL: lb.URL, Token: "ops"}, Validate: StaticValidator([]string{"dev1"})})
 	ct, body := multipartBody(t, part{name: "file", filename: "a.jpg", ctype: "image/jpeg", body: jpeg})
-	if code, out := upload(t, h, "dev1", ct, body); code != 200 || out["via"] != "bridge" || got == 0 {
+	if code, out := upload(t, h, "dev1", ct, body); code != 404 {
 		t.Fatalf("no upload dir: %d %v", code, out)
 	}
 }

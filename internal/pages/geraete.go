@@ -7,8 +7,8 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/mdopp/haus/internal/app"
 	"github.com/mdopp/haus/internal/devices"
-	"github.com/mdopp/haus/internal/legacy"
 )
 
 // Geraete lists the paired phones with Entfernen and says how to pair one:
@@ -44,7 +44,7 @@ func Geraete(store *devices.Store, publicURL string) http.HandlerFunc {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			qr := legacy.AppScheme + "://setup?server=" + url.QueryEscape(origin) + "&token=" + url.QueryEscape(tok)
+			qr := app.Scheme + "://setup?server=" + url.QueryEscape(origin) + "&token=" + url.QueryEscape(tok)
 			fmt.Fprintf(&b, "<h2>%s angelegt</h2><p>Inhalt für einen QR-Code, den die App scannt (einmalig sichtbar):</p><p class=k><code>%s</code></p>",
 				html.EscapeString(d.Name), html.EscapeString(qr))
 		}

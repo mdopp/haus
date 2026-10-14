@@ -1,12 +1,10 @@
 package napi
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"strings"
 	"testing"
 
@@ -148,67 +146,27 @@ func TestTheOldPathsAreGone(t *testing.T) {
 	}
 }
 
-func TestSolarisValidatorAndProxy(t *testing.T) {
-	var calls []string
-	lb := fakeLaib(t, &calls)
-	defer lb.Close()
-	whoami := 0
-	solaris := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/napi/whoami":
-			whoami++
-			if r.Header.Get("Authorization") == "Bearer sol_device_ok" {
-				w.Write([]byte(`{"uid":"mdopp"}`))
-			} else {
-				w.WriteHeader(401)
-			}
-		case "/napi/portal/energy":
-			w.Write([]byte(`{"pv":1234}`))
-		default:
-			w.WriteHeader(404)
-		}
-	}))
-	defer solaris.Close()
-	u, _ := url.Parse(solaris.URL)
-	h := Handler(Config{Laib: &laib.Client{URL: lb.URL, Token: "ops"}, Validate: SolarisValidator(u, nil), Bridge: u})
-	if code, _ := get(t, h, "GET", "/napi/servicebay/home", "sol_device_ok", ""); code != 200 {
-		t.Fatalf("solaris-paired device → %d", code)
-	}
-	get(t, h, "GET", "/napi/servicebay/home", "sol_device_ok", "")
-	if whoami != 1 {
-		t.Fatalf("whoami asked %d times, want 1 (cached)", whoami)
-	}
-	if code, _ := get(t, h, "GET", "/napi/servicebay/home", "sol_device_no", ""); code != 401 {
-		t.Fatalf("unknown device → %d", code)
-	}
-	code, energy := get(t, h, "GET", "/napi/portal/energy", "sol_device_ok", "")
-	if code != 200 || energy["pv"] != 1234.0 {
-		t.Fatalf("proxy: %d %v", code, energy)
-	}
-	_ = context.Background()
-}
-
 func TestWhoamiFromHausDevices(t *testing.T) {
 	var calls []string
 	lb := fakeLaib(t, &calls)
 	defer lb.Close()
 	h := Handler(Config{Laib: &laib.Client{URL: lb.URL, Token: "ops"},
-		Validate: Chain(StaticValidator([]string{"sol_device_haus"})),
+		Validate: StaticValidator([]string{"haus_device_a"}),
 		Whoami: func(b string) (string, bool) {
-			if b == "sol_device_haus" {
+			if b == "haus_device_a" {
 				return "mdopp", true
 			}
 			return "", false
 		}})
-	code, who := get(t, h, "GET", "/napi/whoami", "sol_device_haus", "")
+	code, who := get(t, h, "GET", "/napi/whoami", "haus_device_a", "")
 	if code != 200 || who["uid"] != "mdopp" {
 		t.Fatalf("whoami: %d %v", code, who)
 	}
-	if code, _ := get(t, h, "GET", "/napi/whoami", "sol_device_other", ""); code != 401 {
-		t.Fatalf("unknown device without Solaris → %d, want 401", code)
+	if code, _ := get(t, h, "GET", "/napi/whoami", "haus_device_other", ""); code != 401 {
+		t.Fatalf("unknown device → %d, want 401", code)
 	}
-	if code, _ := get(t, h, "GET", "/napi/portal/energy", "sol_device_haus", ""); code != 404 {
-		t.Fatalf("portal without Solaris → %d, want 404", code)
+	if code, _ := get(t, h, "GET", "/napi/portal/energy", "haus_device_a", ""); code != 404 {
+		t.Fatalf("portal without HA → %d, want 404", code)
 	}
 }
 
