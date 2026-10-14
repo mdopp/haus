@@ -31,6 +31,50 @@ func env(k, def string) string {
 	return def
 }
 
+// site is what the routes are built from; main reads it from the environment.
+type site struct {
+	napi         napi.Config
+	hh           haushalt.Config
+	store        *devices.Store
+	ops          *laib.Client
+	proxySecret  string
+	laibURL      string
+	publicURL    string
+	tickets      *werkstatt.Tickets // haus#15: the Werkstatt card; nil, no card
+	fingerprints string
+}
+
+// routes is Haus's whole surface: /napi for the app, /mcp/haushalt for the
+// Bote, and the pages behind the proxy secret.
+func routes(s site) http.Handler {
+	mux := http.NewServeMux()
+	mux.Handle("/napi/", napi.Handler(s.napi))
+	// the Bote's bearer, not the proxy secret: Hermes calls the host port from its pod
+	// (laib ADR 0012 §4; the template publishes 8650 lan:false, the firewall keeps
+	// the LAN out). Not through Caddy: the route has no /mcp/ bypass.
+	mux.Handle("/mcp/haushalt", haushalt.Handler(s.hh))
+	// public, like /napi: the app's verifier fetches it without a login (the route bypasses Authelia for /.well-known/)
+	mux.Handle("GET /.well-known/assetlinks.json", napi.AssetLinks(s.fingerprints))
+	pagesMux := http.NewServeMux()
+	// the family's pages (haus#12): each card only from a backend that is set; a
+	// page whose backend is not set lands on Start
+	family := pages.StartConfig{Laib: s.ops, LaibURL: s.laibURL, HA: s.napi.HA, Calendar: s.hh.Calendar, Notes: s.hh.Notes, Loc: s.hh.Loc}
+	pagesMux.HandleFunc("/start", pages.Start(family))
+	pagesMux.HandleFunc("/raeume", pages.Raeume(family))
+	pagesMux.HandleFunc("/kalender", pages.Kalender(family))
+	pagesMux.HandleFunc("/notizen", pages.Notizen(family))
+	pagesMux.HandleFunc("/notizen/", pages.Notizen(family)) // a note's own page
+	pagesMux.HandleFunc("/box", pages.BoxWith(s.ops, s.laibURL, s.tickets))
+	pagesMux.HandleFunc("/box/geraete", pages.Geraete(s.store, s.publicURL))
+	pagesMux.HandleFunc("/pair-device", pages.PairDevice(s.store)) // the app's own pairing path (haus#6)
+	pagesMux.HandleFunc("/box/", pages.BoxWith(s.ops, s.laibURL, s.tickets))
+	pagesMux.HandleFunc("/persona/icon.svg", pages.Icon())
+	pagesMux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
+	pagesMux.HandleFunc("/", pages.ToStart()) // "/" and every path not served land on Start
+	mux.Handle("/", pages.RequireProxy(s.proxySecret, pagesMux))
+	return mux
+}
+
 func main() {
 	ops := &laib.Client{URL: env("LAIB_URL", "http://host.containers.internal:5900"), Token: os.Getenv("LAIB_TOKEN")}
 	if ops.Token == "" {
@@ -73,34 +117,9 @@ func main() {
 			log.Printf("haus: HAUS_UPLOAD_DIR: sweeping staged parts: %v", err)
 		}
 	}
-	mux := http.NewServeMux()
-	mux.Handle("/napi/", napi.Handler(cfg))
-	// the Bote's bearer, not the proxy secret: Hermes calls the host port from its pod
-	// (laib ADR 0012 §4; the template publishes 8650 lan:false, the firewall keeps
-	// the LAN out). Not through Caddy: the route has no /mcp/ bypass.
-	mux.Handle("/mcp/haushalt", haushalt.Handler(hh))
-	// public, like /napi: the app's verifier fetches it without a login (the route bypasses Authelia for /.well-known/)
-	mux.Handle("GET /.well-known/assetlinks.json", napi.AssetLinks(os.Getenv("HAUS_ANDROID_FINGERPRINTS")))
 	laibURL := env("LAIB_PUBLIC_URL", "https://laib."+env("LAIB_DOMAIN", "example"))
-	pagesMux := http.NewServeMux()
-	// the family's pages (haus#12): each card only from a backend that is set; a
-	// page whose backend is not set lands on Start
-	family := pages.StartConfig{Laib: ops, LaibURL: laibURL, HA: cfg.HA, Calendar: hh.Calendar, Notes: hh.Notes, Loc: hh.Loc}
-	pagesMux.HandleFunc("/start", pages.Start(family))
-	pagesMux.HandleFunc("/raeume", pages.Raeume(family))
-	pagesMux.HandleFunc("/kalender", pages.Kalender(family))
-	pagesMux.HandleFunc("/notizen", pages.Notizen(family))
-	pagesMux.HandleFunc("/notizen/", pages.Notizen(family)) // a note's own page
-
-	tickets := werkstatt.FromEnv() // haus#15: the Werkstatt card; HAUS_WERKSTATT_REPOS unset, no card
-	pagesMux.HandleFunc("/box", pages.BoxWith(ops, laibURL, tickets))
-	pagesMux.HandleFunc("/box/geraete", pages.Geraete(store, os.Getenv("HAUS_PUBLIC_URL")))
-	pagesMux.HandleFunc("/pair-device", pages.PairDevice(store)) // the app's own pairing path (haus#6)
-	pagesMux.HandleFunc("/box/", pages.BoxWith(ops, laibURL, tickets))
-	pagesMux.HandleFunc("/persona/icon.svg", pages.Icon())
-	pagesMux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
-	pagesMux.HandleFunc("/", pages.ToStart()) // "/", the app's /#/p/… routes and every path not served land on Start
-	mux.Handle("/", pages.RequireProxy(proxySecret, pagesMux))
+	mux := routes(site{napi: cfg, hh: hh, store: store, ops: ops, proxySecret: proxySecret, laibURL: laibURL,
+		publicURL: os.Getenv("HAUS_PUBLIC_URL"), tickets: werkstatt.FromEnv(), fingerprints: os.Getenv("HAUS_ANDROID_FINGERPRINTS")})
 	addr := env("HAUS_LISTEN", "127.0.0.1:8650")
 	log.Printf("haus %s: listening on %s as %s, laib %s, home assistant %v, haushalt %d tools, uploads %q, pages only behind the proxy secret", Version, addr, pages.House.Display, ops.URL, cfg.HA != nil, len(haushalt.Tools(hh)), cfg.UploadDir)
 	log.Fatal((&http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}).ListenAndServe())
