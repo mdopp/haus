@@ -203,16 +203,49 @@ func notFound(t *testing.T, what string, code int, body string) {
 	}
 }
 
-// Even without a token: the path is not there, whoever asks.
-func TestUnknownNapiPathIsJSON404WithoutAToken(t *testing.T) {
+// Auth comes before the 404: without a paired device every /napi path is
+// 401, so a stranger learns nothing about which backends are set. With
+// one, a path Haus does not serve is the JSON 404.
+func TestUnknownNapiPathWantsADeviceFirst(t *testing.T) {
 	var calls []string
 	lb := fakeLaib(t, &calls)
 	defer lb.Close()
 	h := Handler(Config{Laib: &laib.Client{URL: lb.URL, Token: "ops"}, Validate: StaticValidator([]string{"dev1"})})
-	code, body := raw(t, h, "GET", "/napi/gibtsnicht", "", "")
-	notFound(t, "GET /napi/gibtsnicht", code, body)
-	code, body = raw(t, h, "GET", "/napi/persona/icon.svg", "dev1", "")
+	for _, p := range []string{"/napi/gibtsnicht", "/napi/portal/energy", "/napi/defs/tool", "/napi/upload"} {
+		for _, bearer := range []string{"", "wrong"} {
+			if code, body := raw(t, h, "GET", p, bearer, ""); code != 401 {
+				t.Errorf("GET %s with %q → %d %s, want 401", p, bearer, code, body)
+			}
+		}
+		code, body := raw(t, h, "GET", p, "dev1", "")
+		notFound(t, "GET "+p, code, body)
+	}
+	code, body := raw(t, h, "GET", "/napi/persona/icon.svg", "dev1", "")
 	notFound(t, "the persona icon without an icon", code, body)
+}
+
+// A device token counts only after the literal "Bearer ": a bare token, or
+// another scheme, is no device.
+func TestTheTokenWantsTheBearerScheme(t *testing.T) {
+	var calls []string
+	lb := fakeLaib(t, &calls)
+	defer lb.Close()
+	h := Handler(Config{Laib: &laib.Client{URL: lb.URL, Token: "ops"}, Validate: StaticValidator([]string{"dev1"}),
+		Whoami: func(b string) (string, bool) { return "anna", b == "dev1" }})
+	for _, auth := range []string{"dev1", "Basic dev1", "Bearerdev1", "bearer dev1"} {
+		for _, p := range []string{"/napi/box/home", "/napi/whoami", "/napi/gibtsnicht"} {
+			req := httptest.NewRequest("GET", p, nil)
+			req.Header.Set("Authorization", auth)
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, req)
+			if rec.Code != 401 {
+				t.Errorf("GET %s with Authorization %q → %d, want 401", p, auth, rec.Code)
+			}
+		}
+	}
+	if code, _ := raw(t, h, "GET", "/napi/whoami", "dev1", ""); code != 200 {
+		t.Fatalf("whoami with Bearer dev1 → %d", code)
+	}
 }
 
 // Every route Haus registers under /napi wants a paired device: built with
