@@ -38,10 +38,14 @@ the house persona, and the old Solaris and ServiceBay names live only in
     device's), rooms by name: lights (on/off, brightness), heating (current
     and target temperature), covers (open/closed, position), media (what
     plays); groups left out, at most 40 rows a room; entities without an
-    area in *Ohne Raum* at the end. The rooms are read over HA's WebSocket
-    and kept 5 minutes (shared with `/napi/portal/active`); until a read
-    has worked, the cards are left out rather than put everything in Ohne
-    Raum. Switching comes later, with where actions live.
+    area in *Ohne Raum* at the end. What HA hides (`hidden_by` set, or
+    `entity_category` config/diagnostic) is left out here and on Start.
+    Temperatures carry HA's unit: the entity's `temperature_unit`, else
+    `unit_system.temperature` from `/api/config`, °C only when HA says
+    neither. The rooms, the hidden entities and the unit are read once and
+    kept 5 minutes (the rooms shared with `/napi/portal/active`); until the
+    registries have been read, the cards are left out rather than put
+    everything in Ohne Raum. Switching comes later, with where actions live.
   - *Kalender*: *Heute* (the day's appointments with time and place),
     *Nächste 14 Tage*, *Erinnerungen* (open reminders, overdue said so),
     every calendar of the Radicale account, at most 50 rows a card.
