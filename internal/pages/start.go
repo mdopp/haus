@@ -131,8 +131,7 @@ func Start(cfg StartConfig) http.HandlerFunc {
 }
 
 // ToStart sends every page path Haus does not serve to Start (haus#12): an
-// installed app's route never ends on an error. The app's hash routes
-// (/#/p/start, …) arrive as "/", the fragment stays in the browser.
+// old bookmark never ends on an error.
 func ToStart() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/start", http.StatusFound)

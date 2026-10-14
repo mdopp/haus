@@ -261,7 +261,7 @@ func TestStartLinksTheBoxForAdmins(t *testing.T) {
 }
 
 // haus#12: "/" and every path Haus does not serve land on Start, never on
-// an error; the app's hash routes (/#/p/…) arrive as "/".
+// an error.
 func TestEverythingElseLandsOnStart(t *testing.T) {
 	for _, p := range []string{"/", "/download", "/p/start", "/unbekannt"} {
 		rec := httptest.NewRecorder()
