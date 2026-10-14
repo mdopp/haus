@@ -74,6 +74,34 @@ func TestAreasOverTheWebSocket(t *testing.T) {
 	}
 }
 
+// haus#12: the rooms are read once and kept for a while, shared by the
+// /napi paths and the Räume page. A read that never worked says so (the
+// page then leaves the rooms out); a failed refresh keeps the last good map.
+func TestCachedAreas(t *testing.T) {
+	fake := hafake.New("tok")
+	defer fake.Close()
+	fake.SetRegistries([]map[string]any{{"area_id": "kueche", "name": "Küche"}}, nil,
+		[]map[string]any{{"entity_id": "light.k", "area_id": "kueche"}})
+	fake.RegistriesDown(true)
+	c := &Client{URL: fake.URL, Token: "tok"}
+	if m, ok := c.CachedAreas(context.Background()); ok || len(m) != 0 {
+		t.Fatalf("a registry that never answered: %v %v", m, ok)
+	}
+
+	fake.RegistriesDown(false)
+	c2 := &Client{URL: fake.URL, Token: "tok"}
+	m, ok := c2.CachedAreas(context.Background())
+	if !ok || m["light.k"] != "Küche" {
+		t.Fatalf("first read: %v %v", m, ok)
+	}
+	// a room renamed in HA is seen after the cache's minutes, not on every page
+	fake.SetRegistries([]map[string]any{{"area_id": "kueche", "name": "Wohnküche"}}, nil,
+		[]map[string]any{{"entity_id": "light.k", "area_id": "kueche"}})
+	if m, ok := c2.CachedAreas(context.Background()); !ok || m["light.k"] != "Küche" {
+		t.Fatalf("cached read: %v %v", m, ok)
+	}
+}
+
 func TestSubscribe(t *testing.T) {
 	fake := hafake.New("tok")
 	defer fake.Close()

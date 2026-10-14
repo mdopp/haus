@@ -11,6 +11,7 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -44,6 +45,7 @@ type HA struct {
 	areas    []map[string]any
 	devices  []map[string]any
 	entities []map[string]any
+	regsDown bool
 	subs     []*conn
 }
 
@@ -130,6 +132,14 @@ func (h *HA) SetRegistries(areas, devices, entities []map[string]any) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.areas, h.devices, h.entities = areas, devices, entities
+}
+
+// RegistriesDown makes the three registry commands on the WebSocket fail
+// (success:false), so the areas cannot be read while the states can.
+func (h *HA) RegistriesDown(down bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.regsDown = down
 }
 
 // FailCalls makes service calls answer status (0: succeed again).
@@ -361,6 +371,11 @@ func (h *HA) websocket(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		h.mu.Lock()
+		if h.regsDown && strings.HasSuffix(fmt.Sprint(m["type"]), "_registry/list") {
+			h.mu.Unlock()
+			c.send(map[string]any{"id": m["id"], "type": "result", "success": false, "error": map[string]any{"code": "unknown_error", "message": "registry broken"}})
+			continue
+		}
 		var result any
 		switch m["type"] {
 		case "subscribe_events":
