@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/mdopp/haus/internal/caldav"
+	"github.com/mdopp/haus/internal/cards"
 	"github.com/mdopp/haus/internal/haushalt"
 )
 
@@ -117,7 +118,7 @@ func first(vs []string) string {
 	return ""
 }
 
-// GET /napi/portal/tasks[?done=1] → {ok, tasks:[{id?, title, status, due?}]}:
+// GET /napi/portal/tasks[?done=1] → {ok, tasks:[{id?, page?, title, status, due?}]}:
 // the open reminders, the soonest first, those without a date last; with
 // done=1 the ticked-off and cancelled ones after them, the latest first.
 // status is the app's word: open,
@@ -161,7 +162,7 @@ func (t *toolsAPI) tasks(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if id := strings.TrimSpace(td.UID); id != "" {
-			row["id"] = id
+			row["id"], row["page"] = id, cards.ReminderPage(id)
 		}
 		switch {
 		case td.Due.IsZero():
@@ -175,7 +176,7 @@ func (t *toolsAPI) tasks(w http.ResponseWriter, r *http.Request) {
 	answer(w, http.StatusOK, map[string]any{"ok": true, "tasks": out})
 }
 
-// GET /napi/portal/contacts → {ok, contacts:[{id?, name, phone?, email?, birthday?}]}, by name.
+// GET /napi/portal/contacts → {ok, contacts:[{id?, page?, name, phone?, email?, birthday?}]}, by name.
 func (t *toolsAPI) contacts(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), rowsTimeout)
 	defer cancel()
@@ -205,6 +206,9 @@ func (t *toolsAPI) contacts(w http.ResponseWriter, r *http.Request) {
 				row[k] = v
 			}
 		}
+		if ct.UID != "" {
+			row["page"] = cards.ContactPage(ct.UID)
+		}
 		if ct.Birthday != "" {
 			row["birthday"] = haushalt.BirthdayText(ct.Birthday)
 		}
@@ -213,8 +217,9 @@ func (t *toolsAPI) contacts(w http.ResponseWriter, r *http.Request) {
 	answer(w, http.StatusOK, map[string]any{"ok": true, "contacts": out})
 }
 
-// GET /napi/portal/documents → {ok, documents:[{id, title, created?, correspondent?, link?}]}:
-// the newest in Paperless, what its token's user may see.
+// GET /napi/portal/documents → {ok, documents:[{id, title, created?, correspondent?, link?, page?}]}:
+// the newest in Paperless, what its token's user may see. A page only when
+// Paperless's public address is known: Haus's page sends the tap on there.
 func (t *toolsAPI) documents(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), rowsTimeout)
 	defer cancel()
@@ -236,14 +241,14 @@ func (t *toolsAPI) documents(w http.ResponseWriter, r *http.Request) {
 			row["correspondent"] = c
 		}
 		if d.Link != "" {
-			row["link"] = d.Link
+			row["link"], row["page"] = d.Link, cards.DocumentPage(d.ID)
 		}
 		out = append(out, row)
 	}
 	answer(w, http.StatusOK, map[string]any{"ok": true, "documents": out})
 }
 
-// GET /napi/portal/notes → {ok, notes:[{id, title, changed}]}: the newest notes.
+// GET /napi/portal/notes → {ok, notes:[{id, page, title, changed}]}: the newest notes.
 func (t *toolsAPI) notes(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), rowsTimeout)
 	defer cancel()
@@ -254,7 +259,7 @@ func (t *toolsAPI) notes(w http.ResponseWriter, r *http.Request) {
 	}
 	out := []map[string]any{}
 	for _, e := range es {
-		out = append(out, map[string]any{"id": e.Name, "title": e.Title, "changed": haushalt.DayTime(e.Changed.In(t.loc))})
+		out = append(out, map[string]any{"id": e.Name, "page": cards.NotePage(e.Name), "title": e.Title, "changed": haushalt.DayTime(e.Changed.In(t.loc))})
 	}
 	answer(w, http.StatusOK, map[string]any{"ok": true, "notes": out})
 }

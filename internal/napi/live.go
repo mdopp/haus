@@ -8,6 +8,8 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,9 +20,11 @@ import (
 // entities its widgets show (POST /napi/portal/watch) and holds one SSE
 // stream (GET /napi/portal/events). While anyone listens, Haus holds one
 // state_changed subscription to HA and sends a device a card_state frame
-// for the entities it watches, and nothing else: the stream carries only
-// card_state (laib ADR 0022 §2). Messages to people go through their chat
-// channel, not the app (§3).
+// for the entities it watches, and, when it shows the active devices
+// (active: true in its watch), an active_set frame when the set of things
+// that are on or open changes (haus#28). Nothing else: state changes only
+// (laib ADR 0022 §2). Messages to people go through their chat channel,
+// not the app (§3).
 
 const (
 	watchTTL           = time.Hour        // the app re-posts while widgets exist
@@ -30,8 +34,9 @@ const (
 )
 
 type watchSet struct {
-	ids   map[string]bool
-	until time.Time
+	ids    map[string]bool
+	active bool // the device shows the active devices: it wants active_set
+	until  time.Time
 }
 
 type listener struct {
@@ -55,6 +60,15 @@ type live struct {
 	lastAt  map[string]int64     // entity → updated_at_ms of that card: nothing older goes out
 	ready   map[string]time.Time // sensor entity → earliest next send
 	pending map[string]map[string]any
+
+	// the active set: the actuators that are on or open, as /napi/portal/active
+	// lists them. It goes out like a sensor: at most every l.every, the last
+	// set always.
+	on        map[string]bool  // entity → on or open
+	onAt      map[string]int64 // entity → updated_at_ms of the state that said so: nothing older counts
+	onSent    string           // the set that went out last
+	onReady   time.Time        // earliest next send
+	onPending bool             // a send waits for onReady
 }
 
 func newLive(c *ha.Client, ping, sensorEvery time.Duration) *live {
@@ -72,6 +86,7 @@ func newLive(c *ha.Client, ping, sensorEvery time.Duration) *live {
 // reset forgets what was sent: after a (re)connect everything is new.
 func (l *live) reset() {
 	l.last, l.lastAt, l.ready, l.pending = map[string]string{}, map[string]int64{}, map[string]time.Time{}, map[string]map[string]any{}
+	l.on, l.onAt, l.onSent = map[string]bool{}, map[string]int64{}, ""
 }
 
 func (l *live) routes(mux *http.ServeMux, auth func(http.HandlerFunc) http.HandlerFunc) {
@@ -86,8 +101,8 @@ func deviceOf(r *http.Request) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// POST /napi/portal/watch {entity_ids:[…]} → {ok}: replaces this device's
-// set; 503 while HA does not answer.
+// POST /napi/portal/watch {entity_ids:[…], active?} → {ok}: replaces this
+// device's set; 503 while HA does not answer.
 func (l *live) watch(w http.ResponseWriter, r *http.Request) {
 	if err := l.ha.Ping(r.Context()); err != nil {
 		log.Printf("haus: watch: HA: %v", err)
@@ -96,6 +111,7 @@ func (l *live) watch(w http.ResponseWriter, r *http.Request) {
 	}
 	var body struct {
 		EntityIDs []any `json:"entity_ids"`
+		Active    bool  `json:"active"`
 	}
 	json.NewDecoder(io.LimitReader(r.Body, 256<<10)).Decode(&body)
 	ids := map[string]bool{}
@@ -106,7 +122,7 @@ func (l *live) watch(w http.ResponseWriter, r *http.Request) {
 	}
 	now := time.Now()
 	l.mu.Lock()
-	l.watches[deviceOf(r)] = watchSet{ids: ids, until: now.Add(watchTTL)}
+	l.watches[deviceOf(r)] = watchSet{ids: ids, active: body.Active, until: now.Add(watchTTL)}
 	for d, ws := range l.watches {
 		if now.After(ws.until) {
 			delete(l.watches, d)
@@ -217,30 +233,46 @@ func (l *live) run(ctx context.Context) {
 	}
 }
 
-// resync sends the watched entities' current cards once HA confirmed the
-// subscription: what changed while Haus was not listening (first connect,
-// an HA restart) arrives, and the deduplication drops the rest.
+// resync sends the watched entities' current cards and the active set
+// once HA confirmed the subscription: what changed while Haus was not
+// listening (first connect, an HA restart) arrives, and the deduplication
+// drops the rest. The set goes out once, read whole.
 func (l *live) resync(ctx context.Context) {
 	states, err := l.ha.States(ctx)
 	if err != nil {
 		log.Printf("haus: HA resync: %v", err)
 		return
 	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	moved := false
 	for _, s := range states {
-		l.changed(s)
+		l.cardOf(s)
+		moved = l.activity(s) || moved
+	}
+	if moved || l.onSent == "" {
+		l.activeOut()
 	}
 }
 
-// changed is one state_changed: drop it unless someone watches the entity
-// and its card shows something new; a sensor goes out at most every
-// l.every, its latest value always.
+// changed is one state_changed: its card, and the active set.
 func (l *live) changed(s ha.State) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.cardOf(s)
+	if l.activity(s) {
+		l.activeOut()
+	}
+}
+
+// cardOf drops a state unless someone watches the entity and its card
+// shows something new; a sensor goes out at most every l.every, its latest
+// value always (l.mu held).
+func (l *live) cardOf(s ha.State) {
 	c := card(s)
 	if c == nil {
 		return
 	}
-	l.mu.Lock()
-	defer l.mu.Unlock()
 	if len(l.watchers(s.EntityID)) == 0 {
 		delete(l.last, s.EntityID)
 		return
@@ -276,6 +308,74 @@ func (l *live) changed(s ha.State) {
 		time.AfterFunc(l.ready[s.EntityID].Sub(now), func() { l.flush(s.EntityID) })
 	}
 	l.pending[s.EntityID] = c
+}
+
+// activity notes whether s is an actuator that is on or open, as
+// /napi/portal/active counts it, and says whether the set moved (l.mu
+// held). A state older than the last one read for the entity is dropped.
+func (l *live) activity(s ha.State) bool {
+	domain, _, _ := strings.Cut(s.EntityID, ".")
+	if !actuatorDomains[domain] {
+		return false
+	}
+	if t, err := time.Parse(time.RFC3339Nano, s.LastUpdated); err == nil {
+		at := t.UnixMilli()
+		if at < l.onAt[s.EntityID] {
+			return false
+		}
+		l.onAt[s.EntityID] = at
+	}
+	st := strings.ToLower(s.State)
+	on := st == "on" || st == "open"
+	if on == l.on[s.EntityID] {
+		return false
+	}
+	if on {
+		l.on[s.EntityID] = true
+	} else {
+		delete(l.on, s.EntityID)
+	}
+	return true
+}
+
+// activeOut sends the active set to the devices that asked, unless it is
+// the one that went out last; within l.every of the last send it waits,
+// and then the latest set goes (l.mu held).
+func (l *live) activeOut() {
+	now := time.Now()
+	if now.Before(l.onReady) {
+		if !l.onPending {
+			l.onPending = true
+			time.AfterFunc(l.onReady.Sub(now), l.activeFlush)
+		}
+		return
+	}
+	ids := make([]string, 0, len(l.on))
+	for id := range l.on {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	data, _ := json.Marshal(map[string]any{"entity_ids": ids})
+	if string(data) == l.onSent {
+		return
+	}
+	l.onSent, l.onReady = string(data), now.Add(l.every)
+	frame := []byte("event: active_set\ndata: " + string(data) + "\n\n")
+	for me := range l.subs {
+		if ws, ok := l.watches[me.device]; ok && ws.active && now.Before(ws.until) {
+			select {
+			case me.ch <- frame:
+			default:
+			}
+		}
+	}
+}
+
+func (l *live) activeFlush() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.onPending = false
+	l.activeOut()
 }
 
 func (l *live) flush(entity string) {

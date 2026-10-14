@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mdopp/haus/internal/cards"
 	"github.com/mdopp/haus/internal/ha"
 )
 
@@ -162,9 +163,10 @@ func (h *homeAPI) sensitive(ctx context.Context, entityID, domain, action string
 	return sensitiveCoverClasses[strings.ToLower(dc)]
 }
 
-// card is one entity as the app's widgets draw it (ApiClient.parseCardJson).
-// An absent value is left out, never null: Android's optString reads a JSON
-// null as the string "null".
+// card is one entity as the app's widgets draw it (ApiClient.parseCardJson),
+// with its own page on Haus for a tap (haus#28). An absent value is left
+// out, never null: Android's optString reads a JSON null as the string
+// "null".
 func card(s ha.State) map[string]any {
 	domain, _, _ := strings.Cut(s.EntityID, ".")
 	if !cardDomains[domain] {
@@ -174,7 +176,7 @@ func card(s ha.State) map[string]any {
 	if name == "" {
 		name = s.EntityID
 	}
-	c := map[string]any{"entity_id": s.EntityID, "name": name, "domain": domain, "state": s.State}
+	c := map[string]any{"entity_id": s.EntityID, "name": name, "domain": domain, "state": s.State, "page": cards.ThingPage(s.EntityID)}
 	if v := s.Attributes["device_class"]; v != nil {
 		c["device_class"] = v
 	}

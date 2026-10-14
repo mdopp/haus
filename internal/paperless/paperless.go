@@ -132,7 +132,6 @@ func (c *Client) list(ctx context.Context, q url.Values, max int) ([]Doc, int, e
 		}
 	}
 	names := c.correspondents(ctx, ids)
-	pub := strings.TrimRight(c.PublicURL, "/")
 	out := make([]Doc, 0, len(page.Results))
 	for _, r := range page.Results {
 		d := Doc{ID: r.ID, Title: r.Title}
@@ -147,12 +146,19 @@ func (c *Client) list(ctx context.Context, q url.Values, max int) ([]Doc, int, e
 				}
 			}
 		}
-		if pub != "" {
-			d.Link = pub + "/documents/" + strconv.Itoa(r.ID) + "/details"
-		}
+		d.Link = c.Page(r.ID)
 		out = append(out, d)
 	}
 	return out, page.Count, nil
+}
+
+// Page is Paperless's own page for a document; "" without PublicURL.
+func (c *Client) Page(id int) string {
+	pub := strings.TrimRight(c.PublicURL, "/")
+	if pub == "" {
+		return ""
+	}
+	return pub + "/documents/" + strconv.Itoa(id) + "/details"
 }
 
 // correspondents names the ids in one request; one Paperless will not

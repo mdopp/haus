@@ -55,6 +55,8 @@ func TestRaeumeOneCardPerRoom(t *testing.T) {
 		"Heizung Wohnzimmer", "21,5 °C · Soll 22 °C",
 		"Sonos", "Abbey Road · The Beatles",
 		"Kellerlicht")
+	// each thing leads to its own page (haus#28)
+	mustContain(t, body, `<a href="/raeume/light.kueche_decke">Deckenlampe</a>`, `<a href="/raeume/media_player.wz">Sonos</a>`)
 	mustNotContain(t, body, "Bad</h2>", "Kaffeemaschine", "Küchentemperatur", "Feuchte", "Erdgeschoss",
 		"<form", "<button", "<script")
 	// rooms by name, Ohne Raum last

@@ -2,9 +2,9 @@ package pages
 
 import (
 	"context"
+	"html"
 	"log"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -120,13 +120,22 @@ func writePage(w http.ResponseWriter, code int, b *strings.Builder) {
 	w.Write([]byte(b.String()))
 }
 
-// noteHref is a note's own page: its file name, each part escaped.
-func noteHref(name string) string {
-	parts := strings.Split(name, "/")
-	for i, p := range parts {
-		parts[i] = url.PathEscape(p)
+// notThere is an item's page for something that is not there, or cannot be
+// read now (haus#28): one plain sentence and the way back, never Start
+// pretending all is well.
+func notThere(w http.ResponseWriter, r *http.Request, cfg StartConfig, code int, say, current, back, backText string) {
+	b := familyHead(r, cfg, current, current)
+	b.WriteString("<h1 class=sr>" + html.EscapeString(current) + "</h1><p>" + html.EscapeString(say) + "</p>")
+	if back != "" {
+		b.WriteString("<p><a href=" + back + ">" + html.EscapeString(backText) + "</a></p>")
 	}
-	return "/notizen/" + strings.Join(parts, "/")
+	writePage(w, code, b)
+}
+
+// itemRef is the item an item page names: the path after prefix, "" for
+// none.
+func itemRef(r *http.Request, prefix string) string {
+	return strings.TrimPrefix(r.URL.Path, prefix)
 }
 
 // more closes a cut list: how many were left out.

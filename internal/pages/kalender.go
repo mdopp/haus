@@ -82,7 +82,11 @@ func Kalender(cfg StartConfig) http.HandlerFunc {
 				if i == maxCalendarRows {
 					break
 				}
-				rem.Add(summary(t.Summary), dueWords(t, now, loc))
+				if uid := strings.TrimSpace(t.UID); uid != "" {
+					rem.AddLink(summary(t.Summary), dueWords(t, now, loc), cards.ReminderPage(uid))
+				} else {
+					rem.Add(summary(t.Summary), dueWords(t, now, loc))
+				}
 			}
 			more(&rem, len(todos)-maxCalendarRows)
 			if rem.Empty() {

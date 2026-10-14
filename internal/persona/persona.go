@@ -1,10 +1,11 @@
 // Package persona is the house persona as Laib renders it (laib ADR 0020):
-// /persona/<name>/persona.json and icon.svg, mounted read-only. The family
+// /persona/<name>/persona.json, icon.svg and icon.png, mounted read-only. The family
 // sees its name, greeting, icon and colours; internally everything stays Haus.
 // A persona change restarts Haus (PERSONA_REV), so it is read once.
 package persona
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -18,7 +19,8 @@ type Persona struct {
 	Languages []string          `json:"languages"`
 	Greeting  map[string]string `json:"greeting"`
 	Colors    map[string]string `json:"colors"`
-	Icon      []byte            `json:"-"`
+	Icon      []byte            `json:"-"` // icon.svg, for the pages
+	IconPNG   []byte            `json:"-"` // icon.png, for the phone (haus#28, laib#191)
 }
 
 // Default is plain Haus: no persona mounted, or one that does not read.
@@ -26,10 +28,13 @@ func Default() Persona {
 	return Persona{Display: "Haus", Colors: map[string]string{"accent": "#faf9f6", "ground": "#1d1d1b"}}
 }
 
+var pngSignature = []byte("\x89PNG\r\n\x1a\n")
+
 var nameRe = regexp.MustCompile(`^[a-z][a-z0-9-]{0,62}$`)
 
-// Load reads dir/<name>/persona.json and icon.svg; Default on any failure, so
-// a missing persona costs a costume, never the page.
+// Load reads dir/<name>/persona.json and its icons; Default on any failure,
+// so a missing persona costs a costume, never the page. An icon.png that is
+// not a PNG is no icon.
 func Load(dir, name string) Persona {
 	if !nameRe.MatchString(name) {
 		return Default()
@@ -43,6 +48,9 @@ func Load(dir, name string) Persona {
 		return Default()
 	}
 	p.Icon, _ = os.ReadFile(filepath.Join(dir, name, "icon.svg"))
+	if b, _ := os.ReadFile(filepath.Join(dir, name, "icon.png")); bytes.HasPrefix(b, pngSignature) {
+		p.IconPNG = b
+	}
 	return p
 }
 

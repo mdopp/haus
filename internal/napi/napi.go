@@ -57,26 +57,28 @@ func Handler(c Config) http.Handler {
 			next(w, r)
 		}
 	}
-	// the house persona for the app: name, greeting, colours, icon (laib#130)
+	// the house persona for the app: name, greeting, colours, icon (laib#130).
+	// The icon is PNG, which a phone draws without a library (haus#28); the
+	// SVG is the pages' (/persona/icon.svg), for browsers.
 	mux.HandleFunc("GET /napi/persona", auth(func(w http.ResponseWriter, r *http.Request) {
 		p := c.House
 		if p.Display == "" {
 			p = persona.Default()
 		}
 		icon := ""
-		if len(p.Icon) > 0 {
-			icon = "/napi/persona/icon.svg"
+		if len(p.IconPNG) > 0 {
+			icon = "/napi/persona/icon.png"
 		}
 		writeJSON(w, map[string]any{"name": p.Name, "display": p.Display, "greeting": p.Greet(r.URL.Query().Get("lang")),
 			"accent": p.Accent(), "ground": p.Ground(), "icon": icon})
 	}))
-	mux.HandleFunc("GET /napi/persona/icon.svg", auth(func(w http.ResponseWriter, r *http.Request) {
-		if len(c.House.Icon) == 0 {
+	mux.HandleFunc("GET /napi/persona/icon.png", auth(func(w http.ResponseWriter, r *http.Request) {
+		if len(c.House.IconPNG) == 0 {
 			noSuchPath(w, r)
 			return
 		}
-		w.Header().Set("Content-Type", "image/svg+xml")
-		w.Write(c.House.Icon)
+		w.Header().Set("Content-Type", "image/png")
+		w.Write(c.House.IconPNG)
 	}))
 	// the Box keys (laib ADR 0022 §4: one name, app.BoxPrefix)
 	prefix := app.BoxPrefix
@@ -100,7 +102,7 @@ func Handler(c Config) http.Handler {
 		}
 		writeJSON(w, map[string]any{
 			"servicesUp": up, "servicesFailed": failed, "servicesDown": down,
-			"pendingApprovals": len(open), "pendingUpdates": 0,
+			"pendingApprovals": len(open), "pendingUpdates": len(updates(open)),
 			"state": ready.State, "drift": ready.Drift, "lastHeard": ready.LastHeard, "operator": ready.Operator,
 		})
 	}))
@@ -131,18 +133,23 @@ func Handler(c Config) http.Handler {
 		}
 		out := []map[string]any{}
 		for _, p := range ps {
-			out = append(out, map[string]any{
-				"id": strconv.Itoa(p.ID), "service": serviceOf(p.Files), "title": p.Reason,
-				"description": p.Tier + " · " + p.Class + " · " + strings.Join(p.Files, ", ") + " · von " + p.Actor,
-				"created_at":  p.Created.UTC().Format(time.RFC3339), "status": "pending",
-			})
+			row := proposalRow(p)
+			row["status"] = "pending"
+			out = append(out, row)
 		}
 		writeJSON(w, map[string]any{"approvals": out})
 	}))
 	mux.HandleFunc("GET "+prefix+"/upgrades", auth(func(w http.ResponseWriter, r *http.Request) {
-		// Laib's images update themselves (podman auto-update) and templates
-		// sync by timer; there is no pending-upgrade list to show yet.
-		writeJSON(w, map[string]any{"upgrades": []any{}})
+		ps, err := c.Laib.Inbox(r.Context())
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		out := []map[string]any{}
+		for _, p := range updates(ps) {
+			out = append(out, proposalRow(p))
+		}
+		writeJSON(w, map[string]any{"upgrades": out})
 	}))
 	mux.HandleFunc("POST "+prefix+"/services/{name}/operate", auth(func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
@@ -204,6 +211,29 @@ func bearerOf(r *http.Request) (string, bool) {
 // backend is not set. JSON, as every refusal the app parses.
 func noSuchPath(w http.ResponseWriter, r *http.Request) {
 	answer(w, http.StatusNotFound, map[string]any{"ok": false, "reason": "not_found"})
+}
+
+// updates are the template updates among the open proposals (haus#28):
+// `laib template sync --propose` files one per update, its kind
+// template-update whatever class the dial gave it. Each waits in Laib's
+// inbox like any proposal; Haus only counts and lists them (haus#1).
+func updates(ps []laib.Proposal) []laib.Proposal {
+	var out []laib.Proposal
+	for _, p := range ps {
+		if p.Kind == "template-update" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// proposalRow is one inbox entry as the Box keys list it.
+func proposalRow(p laib.Proposal) map[string]any {
+	return map[string]any{
+		"id": strconv.Itoa(p.ID), "service": serviceOf(p.Files), "title": p.Reason,
+		"description": p.Tier + " · " + p.Class + " · " + strings.Join(p.Files, ", ") + " · von " + p.Actor,
+		"created_at":  p.Created.UTC().Format(time.RFC3339),
+	}
 }
 
 func serviceOf(files []string) string {
