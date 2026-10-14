@@ -1,6 +1,6 @@
 // Package legacy holds the names Haus still speaks because the installed
 // Android app depends on them (laib ADR 0021 rule 8). They are the app's
-// contract, not Haus's names; each ends with laib#130, when the app ships new
+// contract, not Haus's names; each ends with solaris-android#174, when the app ships new
 // names next to these and Haus can switch.
 package legacy
 

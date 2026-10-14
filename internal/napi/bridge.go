@@ -15,7 +15,7 @@ import (
 // phones paired with Solaris keep working (their tokens are checked there),
 // and /napi paths Haus does not serve yet are passed to it. It ends when
 // every phone is paired through Haus and Haus serves every /napi path the app
-// uses (haus#5). SOLARIS_URL unset means no bridge.
+// uses (haus#10). SOLARIS_URL unset means no bridge.
 func BridgeFromEnv() (*url.URL, Validator, error) {
 	raw := os.Getenv("SOLARIS_URL")
 	if raw == "" {
