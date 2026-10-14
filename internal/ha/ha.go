@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -38,7 +39,9 @@ func FromEnv() (*Client, error) {
 	}
 	tok := os.Getenv("HAUS_HA_TOKEN")
 	if tok == "" {
-		return nil, errors.New("HAUS_HA_URL is set but HAUS_HA_TOKEN is not (a long-lived token from HA's profile page)")
+		// the template names the address; the token is the admin's one step
+		log.Printf("haus: HAUS_HA_TOKEN is not set: the house paths stay on the bridge (laib secret set HAUS_HA_TOKEN)")
+		return nil, nil
 	}
 	return &Client{URL: u, Token: tok}, nil
 }
