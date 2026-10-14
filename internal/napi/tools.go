@@ -1,6 +1,7 @@
 package napi
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -34,6 +35,11 @@ const rowsTimeout = 12 * time.Second
 type toolsAPI struct {
 	hh  haushalt.Config
 	loc *time.Location
+	// bridge, when set, keeps the catalog and every action Haus does not
+	// know: Haus's catalog would hide the tools only the bridge has (photo,
+	// model, home, energy). Its catalog names the same row paths, so its
+	// widgets read Haus's rows wherever a backend is set.
+	bridge http.Handler
 }
 
 func newTools(hh haushalt.Config) *toolsAPI {
@@ -48,9 +54,11 @@ func newTools(hh haushalt.Config) *toolsAPI {
 }
 
 func (t *toolsAPI) routes(mux *http.ServeMux, auth func(http.HandlerFunc) http.HandlerFunc) {
-	mux.HandleFunc("GET /napi/defs/tool", auth(t.defs))
-	// Once the catalog is Haus's, so are the actions on its rows, even when
-	// no tool declares one: the bridge must not act on a row Haus drew.
+	if t.bridge == nil {
+		mux.HandleFunc("GET /napi/defs/tool", auth(t.defs))
+	}
+	// Haus answers the actions it knows (on the rows it draws, whoever's
+	// catalog named them); the rest is the bridge's, or 404 without one.
 	mux.HandleFunc("POST /napi/action-callback", auth(t.action))
 	if t.hh.Calendar != nil {
 		mux.HandleFunc("GET /napi/portal/tasks", auth(t.tasks))
@@ -253,11 +261,20 @@ func (t *toolsAPI) action(w http.ResponseWriter, r *http.Request) {
 		ActionID any            `json:"action_id"`
 		Params   map[string]any `json:"params"`
 	}
-	if err := json.NewDecoder(io.LimitReader(r.Body, 64<<10)).Decode(&body); err != nil {
+	raw, err := io.ReadAll(io.LimitReader(r.Body, 64<<10))
+	if err == nil {
+		err = json.Unmarshal(raw, &body)
+	}
+	id, _ := body.ActionID.(string)
+	if (err != nil || id != actionDone || t.hh.Calendar == nil) && t.bridge != nil {
+		r.Body, r.ContentLength = io.NopCloser(bytes.NewReader(raw)), int64(len(raw))
+		t.bridge.ServeHTTP(w, r)
+		return
+	}
+	if err != nil {
 		refuseAction(w, http.StatusBadRequest, "invalid_json")
 		return
 	}
-	id, _ := body.ActionID.(string)
 	if id == "" {
 		refuseAction(w, http.StatusBadRequest, "no_action_id")
 		return
@@ -277,7 +294,7 @@ func (t *toolsAPI) action(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), rowsTimeout)
 	defer cancel()
-	err := haushalt.ReminderDone(ctx, t.hh.Calendar, uid)
+	err = haushalt.ReminderDone(ctx, t.hh.Calendar, uid)
 	switch {
 	case err == nil:
 		answer(w, http.StatusOK, map[string]any{"ok": true})

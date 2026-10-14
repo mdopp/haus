@@ -200,6 +200,9 @@ func Handler(c Config) http.Handler {
 		}
 	}
 	if t := newTools(c.Haushalt); t != nil { // the tool widgets from the Haushalt source
+		if c.Bridge != nil { // the bridge keeps its catalog and the actions Haus does not know (tools.go)
+			t.bridge = httputil.NewSingleHostReverseProxy(c.Bridge)
+		}
 		t.routes(mux, auth)
 	}
 	if c.UploadDir != "" { // the camera capture into the consume folder
