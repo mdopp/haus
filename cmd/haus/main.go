@@ -33,15 +33,14 @@ func env(k, def string) string {
 
 // site is what the routes are built from; main reads it from the environment.
 type site struct {
-	napi         napi.Config
-	hh           haushalt.Config
-	store        *devices.Store
-	ops          *laib.Client
-	proxySecret  string
-	laibURL      string
-	publicURL    string
-	tickets      *werkstatt.Tickets // haus#15: the Werkstatt card; nil, no card
-	fingerprints string
+	napi        napi.Config
+	hh          haushalt.Config
+	store       *devices.Store
+	ops         *laib.Client
+	proxySecret string
+	laibURL     string
+	publicURL   string
+	tickets     *werkstatt.Tickets // haus#15: the Werkstatt card; nil, no card
 }
 
 // routes is Haus's whole surface: /napi for the app, /mcp/haushalt for the
@@ -53,8 +52,6 @@ func routes(s site) http.Handler {
 	// (laib ADR 0012 §4; the template publishes 8650 lan:false, the firewall keeps
 	// the LAN out). Not through Caddy: the route has no /mcp/ bypass.
 	mux.Handle("/mcp/haushalt", haushalt.Handler(s.hh))
-	// public, like /napi: the app's verifier fetches it without a login (the route bypasses Authelia for /.well-known/)
-	mux.Handle("GET /.well-known/assetlinks.json", napi.AssetLinks(s.fingerprints))
 	pagesMux := http.NewServeMux()
 	// the family's pages (haus#12): each card only from a backend that is set; a
 	// page whose backend is not set lands on Start
@@ -119,7 +116,7 @@ func main() {
 	}
 	laibURL := env("LAIB_PUBLIC_URL", "https://laib."+env("LAIB_DOMAIN", "example"))
 	mux := routes(site{napi: cfg, hh: hh, store: store, ops: ops, proxySecret: proxySecret, laibURL: laibURL,
-		publicURL: os.Getenv("HAUS_PUBLIC_URL"), tickets: werkstatt.FromEnv(), fingerprints: os.Getenv("HAUS_ANDROID_FINGERPRINTS")})
+		publicURL: os.Getenv("HAUS_PUBLIC_URL"), tickets: werkstatt.FromEnv()})
 	addr := env("HAUS_LISTEN", "127.0.0.1:8650")
 	log.Printf("haus %s: listening on %s as %s, laib %s, home assistant %v, haushalt %d tools, uploads %q, pages only behind the proxy secret", Version, addr, pages.House.Display, ops.URL, cfg.HA != nil, len(haushalt.Tools(hh)), cfg.UploadDir)
 	log.Fatal((&http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}).ListenAndServe())

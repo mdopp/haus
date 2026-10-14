@@ -6,7 +6,7 @@ app ([mdopp/haus-android](https://github.com/mdopp/haus-android)) speak.
 Haus renders and decides nothing; Laib acts; the Bote is who you talk to,
 and messages to people go through their chat channel, not the app (laib ADR
 0014, 0016, 0022). The family sees the house persona (laib ADR 0021). The
-app's names (package and scheme `cloud.dopp.haus`, token prefix
+app's names (scheme `cloud.dopp.haus`, token prefix
 `haus_device_`, the Box keys under `/napi/box`) live in `internal/app`; a
 `/napi` path Haus does not serve is 404.
 
@@ -171,9 +171,6 @@ app's names (package and scheme `cloud.dopp.haus`, token prefix
   share has less than 128 MB free or runs full, 429 while two uploads
   run, 408 when a body stalls past two minutes; a disk error is 500
   `store_failed`, not the phone's fault.
-- `GET /.well-known/assetlinks.json` — the Digital Asset Links statement
-  for the app `cloud.dopp.haus` with its signing fingerprints from
-  `HAUS_ANDROID_FINGERPRINTS` (comma-separated, public). `[]` without them.
 
 - The Haushalt MCP source (laib ADR 0017, haus#11): `POST /mcp/haushalt`,
   laib's MCP shape (JSON-RPC over POST: `initialize`, `tools/list`,
@@ -239,7 +236,6 @@ LAIB_URL=http://host.containers.internal:5900 LAIB_TOKEN=<the haus hand's token,
 HAUS_PROXY_SECRET=<what Caddy sends as X-Haus-Proxy> LAIB_PUBLIC_URL=https://laib.<domain> \
 HAUS_LISTEN=0.0.0.0:8650 \
 HAUS_HA_URL=http://host.containers.internal:8123 HAUS_HA_TOKEN=<a long-lived HA token> \
-HAUS_ANDROID_FINGERPRINTS=<the app's SHA-256 signing fingerprints> \
 HAUS_ENERGY_FLOW=pv=sensor.…,house=sensor.…,grid=sensor.…,battery=sensor.… HAUS_ENERGY_TOTALS=PV-Erzeugung=sensor.…,… \
 HAUS_HAUSHALT_TOKEN=<the Bote's bearer> TZ=Europe/Berlin \
 HAUS_RADICALE_URL=http://host.containers.internal:5232 HAUS_RADICALE_USER=<service account> HAUS_RADICALE_PASSWORD=<its password> \
@@ -251,7 +247,7 @@ HAUS_UPLOAD_DIR=/consume ./haus
 `HAUS_DATA` (default `/data`) holds `devices.json`; `HAUS_PUBLIC_URL` is the
 origin the setup link carries (default `https://<Host>`). Haus's Laib token is the `haus` hand: status, inbox, journal, restart —
 nothing else (no exec, no write). There are no static device tokens. Image: `ghcr.io/mdopp/haus`. Laib template: `haus` (route `haus.<domain>`,
-`bypass: [/napi/]`; assetlinks needs `/.well-known/` there too; the
+`bypass: [/napi/]`; the
 upload needs the share's consume folder mounted writable at
 `HAUS_UPLOAD_DIR`, on a file system with hard links, and Caddy letting a
 request of 64 MB through).

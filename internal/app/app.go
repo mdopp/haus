@@ -1,13 +1,10 @@
 // Package app holds the names the Haus app (mdopp/haus-android) and Haus
-// share: its package id, its deep-link scheme, its device-token prefix and
-// where its widgets read the box. They are the new app's contract (laib ADR
+// share: its deep-link scheme, its device-token prefix and where its widgets
+// read the box. They are the new app's contract (laib ADR
 // 0022 §1), one set, nothing old next to them (§4).
 package app
 
 const (
-	// Package is the app's Android package id, which the assetlinks statement
-	// names.
-	Package = "cloud.dopp.haus"
 	// Scheme is the app's deep-link scheme: <scheme>://pair#token=…&id=… opens
 	// the app after pairing, <scheme>://setup?server=…&token=… is what its QR
 	// scanner reads.
