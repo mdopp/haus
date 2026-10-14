@@ -70,7 +70,9 @@ func main() {
 	hh.Version = Version
 	mux := http.NewServeMux()
 	mux.Handle("/napi/", napi.Handler(cfg))
-	// the Bote's bearer, not the proxy secret: Hermes calls it directly (the route bypasses Authelia for /mcp/)
+	// the Bote's bearer, not the proxy secret: Hermes calls the host port from its pod
+	// (laib ADR 0012 §4; the template publishes 8650 lan:false, the firewall keeps
+	// the LAN out). Not through Caddy: the route has no /mcp/ bypass.
 	mux.Handle("/mcp/haushalt", haushalt.Handler(hh))
 	// public, like /napi: the app's verifier fetches it without a login (the route bypasses Authelia for /.well-known/)
 	mux.Handle("GET /.well-known/assetlinks.json", napi.AssetLinks(os.Getenv("HAUS_ANDROID_FINGERPRINTS")))

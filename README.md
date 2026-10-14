@@ -75,18 +75,24 @@ the house persona, and the old Solaris and ServiceBay names live only in
   laib's MCP shape (JSON-RPC over POST: `initialize`, `tools/list`,
   `tools/call`), for the Bote and Claude. Only `Authorization: Bearer
   <HAUS_HAUSHALT_TOKEN>` gets in; without that variable it refuses everyone.
-  It is not a page: no proxy secret, and the route bypasses Authelia for it.
+  It is not a page and not behind Caddy: the Bote calls the host port from
+  its pod (laib ADR 0012 §4; the template publishes 8650 `lan: false`, the
+  firewall keeps the LAN out), so no proxy secret and no Authelia bypass.
   A tool is listed only when its backend is set:
   - `HAUS_RADICALE_URL` + `HAUS_RADICALE_USER` + `HAUS_RADICALE_PASSWORD`
     (CalDAV): `termine(von, bis?)`, `termin_anlegen(titel, beginn, ende?, ort?)`,
     `erinnerungen()`, `erinnerung_anlegen(text, wann)` (a VTODO due then,
-    with a display alarm). The account's calendars are found by PROPFIND; a
-    fresh account gets a `Haushalt` calendar on its first write.
-    `HAUS_RADICALE_CALENDAR` (`/<owner>/<collection>/`) names one instead.
+    with a display alarm). Reads cover every calendar of the account that
+    holds the component (found by PROPFIND). Writes go to one calendar
+    only: `HAUS_RADICALE_CALENDAR` (`/<owner>/<collection>/`, read too) when
+    set, else the one named `Haushalt`, made on the first write when
+    missing. No request goes to a host other than `HAUS_RADICALE_URL`'s.
   - `HAUS_NOTES_DIR` (the share's `notes` folder): `notizen_suchen(text)`,
     `notiz_lesen(titel)`, `notiz_anlegen(titel, text)`. A note is
     `<slug>.md`, `# Titel` first, never written over an existing one (`-2`,
-    `-3`); no name reaches outside the folder.
+    `-3`; a share without hard links is an error); no name reaches outside
+    the folder, hidden files and folders are never notes, a search reads at
+    most 5000 files and 64 MB and says when it stopped early.
   Times are local (`TZ`, e.g. `Europe/Berlin`): `JJJJ-MM-TT` or
   `JJJJ-MM-TTTHH:MM`. Haus keeps nothing of it (ADR 0017 §3): a note is a
   file the family syncs, a reminder an entry on their phones; a search
@@ -114,8 +120,7 @@ HAUS_NOTES_DIR=/notes ./haus
 `HAUS_DATA` (default `/data`) holds `devices.json`; `HAUS_PUBLIC_URL` is the
 origin the setup link carries (default `https://<Host>`). Haus's Laib token is the `haus` hand: status, inbox, journal, restart —
 nothing else (no exec, no write). There are no static device tokens. Image: `ghcr.io/mdopp/haus`. Laib template: `haus` (route `haus.<domain>`,
-`bypass: [/napi/]`; assetlinks needs `/.well-known/` there too, the
-Haushalt source `/mcp/`).
+`bypass: [/napi/]`; assetlinks needs `/.well-known/` there too).
 
 ## Tests
 

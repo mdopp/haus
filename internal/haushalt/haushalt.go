@@ -16,6 +16,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/mdopp/haus/internal/caldav"
 	"github.com/mdopp/haus/internal/mcpserver"
@@ -95,6 +96,27 @@ func obj(props map[string]any, required ...string) map[string]any {
 
 const whenHelp = "JJJJ-MM-TT (ganzer Tag) oder JJJJ-MM-TTTHH:MM, Ortszeit"
 
+// MaxField caps a title or a place, MaxReminder a reminder's text, in
+// characters: refused on a write, cut in an answer.
+const (
+	MaxField    = 200
+	MaxReminder = 500
+)
+
+func tooLong(name, v string, max int) error {
+	if utf8.RuneCountInString(v) > max {
+		return fmt.Errorf("%s ist zu lang (höchstens %d Zeichen)", name, max)
+	}
+	return nil
+}
+
+func cut(s string, n int) string {
+	if r := []rune(s); len(r) > n {
+		return string(r[:n]) + "…"
+	}
+	return s
+}
+
 // Tools are the tools whose backends are configured.
 func Tools(cfg Config) []mcpserver.Tool {
 	loc := cfg.Loc
@@ -137,13 +159,13 @@ func Tools(cfg Config) []mcpserver.Tool {
 				Name:        "notizen_suchen",
 				Description: "Sucht in den Notizen der Familie (Titel und Text, Groß-/Kleinschreibung egal) und zeigt Titel und erste Zeilen.",
 				Schema:      obj(map[string]any{"text": str("Wonach gesucht wird")}, "text"),
-				Call:        func(ctx context.Context, a map[string]any) (string, error) { return notizenSuchen(n, a) },
+				Call:        func(ctx context.Context, a map[string]any) (string, error) { return notizenSuchen(ctx, n, a) },
 			},
 			mcpserver.Tool{
 				Name:        "notiz_lesen",
 				Description: "Liest eine Notiz ganz, nach Titel oder Dateiname (wie notizen_suchen ihn zeigt).",
 				Schema:      obj(map[string]any{"titel": str("Titel oder Dateiname der Notiz")}, "titel"),
-				Call:        func(ctx context.Context, a map[string]any) (string, error) { return notizLesen(n, a) },
+				Call:        func(ctx context.Context, a map[string]any) (string, error) { return notizLesen(ctx, n, a) },
 			},
 			mcpserver.Tool{
 				Name:        "notiz_anlegen",
@@ -200,17 +222,20 @@ func eventLine(e caldav.Event, loc *time.Location) string {
 		}
 	}
 	line := when + ": " + orDash(e.Summary)
-	if e.Location != "" {
-		line += " (" + e.Location + ")"
+	if loc := oneLine(e.Location); loc != "" {
+		line += " (" + cut(loc, MaxField) + ")"
 	}
 	return line
 }
 
+func oneLine(s string) string { return strings.Join(strings.Fields(s), " ") }
+
+// orDash is a title for an answer: one line, cut at MaxField.
 func orDash(s string) string {
-	if s = strings.TrimSpace(s); s == "" {
+	if s = oneLine(s); s == "" {
 		return "(ohne Titel)"
 	}
-	return strings.Join(strings.Fields(s), " ")
+	return cut(s, MaxField)
 }
 
 const maxEvents = 50
@@ -235,7 +260,7 @@ func termine(ctx context.Context, c *caldav.Client, loc *time.Location, a map[st
 	if to.Sub(from) > 366*24*time.Hour {
 		return "", errors.New("höchstens ein Jahr auf einmal")
 	}
-	evs, _, err := c.Events(ctx, from, to)
+	evs, err := c.Events(ctx, from, to)
 	if err != nil {
 		return "", err
 	}
@@ -257,6 +282,9 @@ func terminAnlegen(ctx context.Context, c *caldav.Client, loc *time.Location, a 
 	title := mcpserver.Str(a, "titel")
 	if title == "" {
 		return "", errors.New("titel fehlt")
+	}
+	if err := errors.Join(tooLong("titel", title, MaxField), tooLong("ort", mcpserver.Str(a, "ort"), MaxField)); err != nil {
+		return "", err
 	}
 	start, allDay, err := ParseWhen(mcpserver.Str(a, "beginn"), loc)
 	if err != nil {
@@ -296,12 +324,15 @@ func erinnerungAnlegen(ctx context.Context, c *caldav.Client, loc *time.Location
 	if text == "" {
 		return "", errors.New("text fehlt")
 	}
+	if err := tooLong("text", text, MaxReminder); err != nil {
+		return "", err
+	}
 	when, dateOnly, err := ParseWhen(mcpserver.Str(a, "wann"), loc)
 	if err != nil {
 		return "", fmt.Errorf("wann: %w", err)
 	}
-	if dateOnly {
-		when = when.Add(9 * time.Hour) // a day without a time: in the morning, not at midnight
+	if dateOnly { // a day without a time: 9:00 that day, also when the clocks change
+		when = time.Date(when.Year(), when.Month(), when.Day(), 9, 0, 0, 0, loc)
 	}
 	col, err := c.PutTodo(ctx, caldav.Todo{Summary: text, Due: when})
 	if err != nil {
@@ -313,7 +344,7 @@ func erinnerungAnlegen(ctx context.Context, c *caldav.Client, loc *time.Location
 const maxTodos = 30
 
 func erinnerungen(ctx context.Context, c *caldav.Client, loc *time.Location) (string, error) {
-	todos, _, err := c.OpenTodos(ctx)
+	todos, err := c.OpenTodos(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -337,31 +368,36 @@ func erinnerungen(ctx context.Context, c *caldav.Client, loc *time.Location) (st
 
 const maxHits = 20
 
-func notizenSuchen(n *notes.Dir, a map[string]any) (string, error) {
+func notizenSuchen(ctx context.Context, n *notes.Dir, a map[string]any) (string, error) {
 	q := mcpserver.Str(a, "text")
-	hits, total, err := n.Search(q, maxHits)
+	res, err := n.Search(ctx, q, maxHits)
 	if err != nil {
 		return "", err
 	}
-	if len(hits) == 0 {
-		return "Keine Notiz enthält „" + q + "“.", nil
+	more := ""
+	if res.Partial {
+		more = "Nur ein Teil der Notizen ist durchsucht (zu viele oder zu große Dateien); such genauer.\n"
+	}
+	if len(res.Hits) == 0 {
+		return strings.TrimRight(more+"Keine Notiz enthält „"+cut(q, MaxField)+"“.", "\n"), nil
 	}
 	var b strings.Builder
-	for _, h := range hits {
+	for _, h := range res.Hits {
 		b.WriteString("## " + h.Title + " (" + h.Name + ")\n")
 		for _, l := range h.Lines {
 			b.WriteString(l + "\n")
 		}
 		b.WriteString("\n")
 	}
-	if total > len(hits) {
-		fmt.Fprintf(&b, "… und %d weitere; such genauer.\n", total-len(hits))
+	if res.Total > len(res.Hits) {
+		fmt.Fprintf(&b, "… und %d weitere; such genauer.\n", res.Total-len(res.Hits))
 	}
+	b.WriteString(more)
 	return strings.TrimRight(b.String(), "\n"), nil
 }
 
-func notizLesen(n *notes.Dir, a map[string]any) (string, error) {
-	note, err := n.Read(mcpserver.Str(a, "titel"))
+func notizLesen(ctx context.Context, n *notes.Dir, a map[string]any) (string, error) {
+	note, err := n.Read(ctx, mcpserver.Str(a, "titel"))
 	if err != nil {
 		return "", err
 	}

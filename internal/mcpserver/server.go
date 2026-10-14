@@ -1,14 +1,19 @@
-// Package mcpserver is the same small MCP server laib's own tools speak
-// (laib internal/mcpserver): JSON-RPC over POST, the streamable-HTTP
-// transport's request side, with initialize, tools/list and tools/call.
-// Unlike laib's, the bearer is not optional: a server without a token
-// refuses everyone, it is never open.
+// Package mcpserver is the same small MCP server laib's own tools speak:
+// JSON-RPC over POST, the streamable-HTTP transport's request side, with
+// initialize, tools/list and tools/call.
+//
+// Keep in sync with laib internal/mcpserver. It differs on purpose in three
+// places: the bearer is not optional (no token refuses everyone, never
+// open), a notification gets 202 without a body, as the transport says,
+// and an argument whose schema says string but which is not one is a
+// type error before the tool runs.
 package mcpserver
 
 import (
 	"context"
 	"crypto/subtle"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -70,6 +75,10 @@ func (s *Server) Handler() http.HandlerFunc {
 			reply(w, nil, nil, -32700, "parse error")
 			return
 		}
+		if strings.HasPrefix(req.Method, "notifications/") {
+			w.WriteHeader(http.StatusAccepted)
+			return
+		}
 		switch req.Method {
 		case "initialize":
 			reply(w, req.ID, map[string]any{
@@ -78,7 +87,7 @@ func (s *Server) Handler() http.HandlerFunc {
 				"serverInfo":      map[string]any{"name": s.Name, "version": s.Version},
 				"instructions":    s.Instructions,
 			}, 0, "")
-		case "notifications/initialized", "ping":
+		case "ping":
 			reply(w, req.ID, map[string]any{}, 0, "")
 		case "tools/list":
 			tools := []map[string]any{}
@@ -99,7 +108,11 @@ func (s *Server) Handler() http.HandlerFunc {
 				if p.Args == nil {
 					p.Args = map[string]any{}
 				}
-				out, err := t.Call(r.Context(), p.Args)
+				var out string
+				err := checkTypes(t.Schema, p.Args)
+				if err == nil {
+					out, err = t.Call(r.Context(), p.Args)
+				}
 				isErr := err != nil
 				if isErr {
 					out = err.Error()
@@ -112,6 +125,30 @@ func (s *Server) Handler() http.HandlerFunc {
 			reply(w, req.ID, nil, -32601, "method not found: "+req.Method)
 		}
 	}
+}
+
+// checkTypes refuses an argument the schema types as string that is not
+// one (null counts as absent).
+func checkTypes(schema map[string]any, args map[string]any) error {
+	props, _ := schema["properties"].(map[string]any)
+	for k, v := range args {
+		p, _ := props[k].(map[string]any)
+		if v == nil || p == nil || p["type"] != "string" {
+			continue
+		}
+		switch v.(type) {
+		case string:
+		case float64:
+			return fmt.Errorf("%s: erwarte Text, nicht eine Zahl", k)
+		case bool:
+			return fmt.Errorf("%s: erwarte Text, nicht ja/nein", k)
+		case []any:
+			return fmt.Errorf("%s: erwarte Text, nicht eine Liste", k)
+		default:
+			return fmt.Errorf("%s: erwarte Text", k)
+		}
+	}
+	return nil
 }
 
 // Str reads a string argument.

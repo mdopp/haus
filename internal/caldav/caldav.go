@@ -1,8 +1,11 @@
 // Package caldav is Haus's CalDAV client for Radicale (laib ADR 0017):
-// appointments as VEVENT, reminders as VTODO with VALARM, in the calendar
+// appointments as VEVENT, reminders as VTODO with VALARM, in the calendars
 // the family's phones sync. It finds the account's calendars with PROPFIND,
-// reads ranges with a REPORT calendar-query and writes with PUT; nothing is
-// kept in Haus. Address, account and password come from the environment.
+// reads every one that holds the component with a REPORT calendar-query,
+// and writes with PUT to one calendar only: the configured one, else the
+// one named "Haushalt", made when missing. Nothing is kept in Haus.
+// Address, account and password come from the environment; no request
+// leaves for another host.
 package caldav
 
 import (
@@ -10,6 +13,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -34,14 +38,22 @@ type Client struct {
 	Now      func() time.Time
 
 	mu    sync.Mutex
-	colls map[string]Collection // by component, VEVENT / VTODO
+	write *Collection // the Haushalt calendar, once found
 }
 
 // Collection is one calendar.
 type Collection struct {
-	URL  string
-	Name string
+	URL   string
+	Name  string
+	comps []string // the components it takes; empty: all
 }
+
+// WriteName is the calendar the Bote writes to when none is configured.
+const WriteName = "Haushalt"
+
+// ErrForeignHost is an address on a host other than the Radicale one:
+// never followed, the account's Basic auth stays home.
+var ErrForeignHost = errors.New("Kalender: Adresse auf einem anderen Host")
 
 // ErrStatus is an answer the client did not expect.
 type ErrStatus struct {
@@ -100,6 +112,7 @@ func (c *Client) do(ctx context.Context, method, u, depth, body string, hdr map[
 	return resp.StatusCode, raw, err
 }
 
+// resolve makes an href absolute; one on another host (or scheme) is refused.
 func (c *Client) resolve(ref string) (string, error) {
 	base, err := url.Parse(strings.TrimRight(c.URL, "/") + "/")
 	if err != nil {
@@ -109,7 +122,11 @@ func (c *Client) resolve(ref string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return base.ResolveReference(r).String(), nil
+	u := base.ResolveReference(r)
+	if u.Scheme != base.Scheme || u.Host != base.Host {
+		return "", ErrForeignHost
+	}
+	return u.String(), nil
 }
 
 // the account's home: /<user>/ below the server's own path
@@ -144,29 +161,28 @@ const propfindBody = `<?xml version="1.0" encoding="utf-8"?>
   <D:prop><D:resourcetype/><D:displayname/><C:supported-calendar-component-set/></D:prop>
 </D:propfind>`
 
-// Calendars lists the account's calendars and the components each takes
-// (empty: all).
-func (c *Client) Calendars(ctx context.Context) ([]Collection, map[string][]string, error) {
+// Calendars lists the account's calendars, sorted by address; one whose
+// href names another host is left out.
+func (c *Client) Calendars(ctx context.Context) ([]Collection, error) {
 	home, err := c.home()
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	code, raw, err := c.do(ctx, "PROPFIND", home, "1", propfindBody, nil)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if code == http.StatusNotFound {
-		return nil, nil, nil // a fresh account: Radicale creates the home on first write
+		return nil, nil // a fresh account: Radicale creates the home on first write
 	}
 	if code != http.StatusMultiStatus {
-		return nil, nil, &ErrStatus{"PROPFIND", code}
+		return nil, &ErrStatus{"PROPFIND", code}
 	}
 	var ms multistatus
 	if err := xml.Unmarshal(raw, &ms); err != nil {
-		return nil, nil, fmt.Errorf("Kalender: PROPFIND unlesbar: %w", err)
+		return nil, fmt.Errorf("Kalender: PROPFIND unlesbar: %w", err)
 	}
 	var out []Collection
-	comps := map[string][]string{}
 	for _, r := range ms.Responses {
 		isCal, name := false, ""
 		var cs []string
@@ -191,18 +207,18 @@ func (c *Client) Calendars(ctx context.Context) ([]Collection, map[string][]stri
 		if name == "" {
 			name = path.Base(strings.TrimRight(r.Href, "/"))
 		}
-		out = append(out, Collection{URL: u, Name: name})
-		comps[u] = cs
+		out = append(out, Collection{URL: u, Name: name, comps: cs})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].URL < out[j].URL })
-	return out, comps, nil
+	return out, nil
 }
 
-func takes(cs []string, comp string) bool {
-	if len(cs) == 0 {
+// Takes says whether the calendar holds that component.
+func (col Collection) Takes(comp string) bool {
+	if len(col.comps) == 0 {
 		return true
 	}
-	for _, c := range cs {
+	for _, c := range col.comps {
 		if c == comp {
 			return true
 		}
@@ -210,46 +226,95 @@ func takes(cs []string, comp string) bool {
 	return false
 }
 
-// collection finds the calendar for a component; with create, an account
-// without one gets "Haushalt" (VEVENT and VTODO).
-func (c *Client) collection(ctx context.Context, comp string, create bool) (Collection, bool, error) {
-	if c.Calendar != "" {
-		u, err := c.resolve(strings.TrimRight(c.Calendar, "/") + "/")
-		return Collection{URL: u, Name: path.Base(strings.TrimRight(c.Calendar, "/"))}, err == nil, err
-	}
-	c.mu.Lock()
-	if col, ok := c.colls[comp]; ok {
-		c.mu.Unlock()
-		return col, true, nil
-	}
-	c.mu.Unlock()
-	cols, comps, err := c.Calendars(ctx)
+func (c *Client) configured() (Collection, error) {
+	u, err := c.resolve(strings.TrimRight(c.Calendar, "/") + "/")
+	return Collection{URL: u, Name: path.Base(strings.TrimRight(c.Calendar, "/"))}, err
+}
+
+// readable is every calendar holding comp: the account's own, and the
+// configured one.
+func (c *Client) readable(ctx context.Context, comp string) ([]Collection, error) {
+	cols, err := c.Calendars(ctx)
 	if err != nil {
-		return Collection{}, false, err
+		return nil, err
+	}
+	var out []Collection
+	seen := map[string]bool{}
+	if c.Calendar != "" {
+		col, err := c.configured()
+		if err != nil {
+			return nil, err
+		}
+		out, seen[col.URL] = append(out, col), true
 	}
 	for _, col := range cols {
-		if takes(comps[col.URL], comp) {
-			c.remember(comp, col)
-			return col, true, nil
+		if col.Takes(comp) && !seen[col.URL] {
+			out, seen[col.URL] = append(out, col), true
 		}
 	}
-	if !create {
-		return Collection{}, false, nil
+	return out, nil
+}
+
+// haushalt finds the account's calendar named "Haushalt" (by display name
+// or path), if any.
+func haushalt(cols []Collection) (Collection, bool) {
+	for _, col := range cols {
+		if strings.EqualFold(col.Name, WriteName) || strings.EqualFold(path.Base(strings.TrimRight(col.URL, "/")), WriteName) {
+			return col, true
+		}
 	}
-	home, err := c.home()
-	if err != nil {
-		return Collection{}, false, err
+	return Collection{}, false
+}
+
+// target is where a write goes: the configured calendar, else the one
+// named "Haushalt", made when missing. Never whichever calendar comes first.
+func (c *Client) target(ctx context.Context, comp string) (Collection, error) {
+	if c.Calendar != "" {
+		return c.configured()
 	}
-	col := Collection{URL: home + "haushalt/", Name: "Haushalt"}
-	code, _, err := c.do(ctx, "MKCALENDAR", col.URL, "", mkcalendarBody, nil)
-	if err != nil {
-		return Collection{}, false, err
+	c.mu.Lock()
+	cached := c.write
+	c.mu.Unlock()
+	col, ok := Collection{}, false
+	if cached != nil {
+		col, ok = *cached, true
+	} else {
+		cols, err := c.Calendars(ctx)
+		if err != nil {
+			return Collection{}, err
+		}
+		col, ok = haushalt(cols)
 	}
-	if code != http.StatusCreated && code != http.StatusMethodNotAllowed { // 405: it is there already
-		return Collection{}, false, &ErrStatus{"MKCALENDAR", code}
+	if !ok {
+		home, err := c.home()
+		if err != nil {
+			return Collection{}, err
+		}
+		col = Collection{URL: home + "haushalt/", Name: WriteName}
+		code, _, err := c.do(ctx, "MKCALENDAR", col.URL, "", mkcalendarBody, nil)
+		if err != nil {
+			return Collection{}, err
+		}
+		if code != http.StatusCreated {
+			// 405/409: someone made it meanwhile, 403: we may not; either
+			// way, look again and take what is there, or fail
+			c.forget()
+			cols, err := c.Calendars(ctx)
+			if err != nil {
+				return Collection{}, err
+			}
+			if col, ok = haushalt(cols); !ok {
+				return Collection{}, &ErrStatus{"MKCALENDAR", code}
+			}
+		}
 	}
-	c.remember(comp, col)
-	return col, true, nil
+	if !col.Takes(comp) {
+		return Collection{}, fmt.Errorf("Kalender: „%s“ nimmt kein %s", col.Name, comp)
+	}
+	c.mu.Lock()
+	c.write = &col
+	c.mu.Unlock()
+	return col, nil
 }
 
 const mkcalendarBody = `<?xml version="1.0" encoding="utf-8"?>
@@ -260,18 +325,9 @@ const mkcalendarBody = `<?xml version="1.0" encoding="utf-8"?>
   </D:prop></D:set>
 </C:mkcalendar>`
 
-func (c *Client) remember(comp string, col Collection) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.colls == nil {
-		c.colls = map[string]Collection{}
-	}
-	c.colls[comp] = col
-}
-
 func (c *Client) forget() {
 	c.mu.Lock()
-	c.colls = nil
+	c.write = nil
 	c.mu.Unlock()
 }
 
@@ -281,9 +337,6 @@ func (c *Client) report(ctx context.Context, col Collection, body string) ([]*Co
 		return nil, err
 	}
 	if code != http.StatusMultiStatus {
-		if code == http.StatusNotFound {
-			c.forget()
-		}
 		return nil, &ErrStatus{"REPORT", code}
 	}
 	var ms multistatus
@@ -304,12 +357,30 @@ func (c *Client) report(ctx context.Context, col Collection, body string) ([]*Co
 	return out, nil
 }
 
-// Events lists the appointments overlapping [from, to), recurring ones
-// expanded by the server, sorted by start.
-func (c *Client) Events(ctx context.Context, from, to time.Time) ([]Event, Collection, error) {
-	col, ok, err := c.collection(ctx, "VEVENT", false)
-	if err != nil || !ok {
-		return nil, col, err
+// reportAll runs one query against each calendar; a calendar gone since
+// the PROPFIND (404) is skipped.
+func (c *Client) reportAll(ctx context.Context, cols []Collection, body string) ([]*Component, error) {
+	var out []*Component
+	for _, col := range cols {
+		roots, err := c.report(ctx, col, body)
+		var st *ErrStatus
+		if errors.As(err, &st) && st.Code == http.StatusNotFound {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, roots...)
+	}
+	return out, nil
+}
+
+// Events lists the appointments overlapping [from, to) in every calendar
+// that holds them, recurring ones expanded by the server, sorted by start.
+func (c *Client) Events(ctx context.Context, from, to time.Time) ([]Event, error) {
+	cols, err := c.readable(ctx, "VEVENT")
+	if err != nil {
+		return nil, err
 	}
 	s, e := utc(from), utc(to)
 	body := `<?xml version="1.0" encoding="utf-8"?>
@@ -317,9 +388,9 @@ func (c *Client) Events(ctx context.Context, from, to time.Time) ([]Event, Colle
   <D:prop><D:getetag/><C:calendar-data><C:expand start="` + s + `" end="` + e + `"/></C:calendar-data></D:prop>
   <C:filter><C:comp-filter name="VCALENDAR"><C:comp-filter name="VEVENT"><C:time-range start="` + s + `" end="` + e + `"/></C:comp-filter></C:comp-filter></C:filter>
 </C:calendar-query>`
-	roots, err := c.report(ctx, col, body)
+	roots, err := c.reportAll(ctx, cols, body)
 	if err != nil {
-		return nil, col, err
+		return nil, err
 	}
 	var out []Event
 	for _, r := range roots {
@@ -331,24 +402,25 @@ func (c *Client) Events(ctx context.Context, from, to time.Time) ([]Event, Colle
 		}
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Start.Before(out[j].Start) })
-	return out, col, nil
+	return out, nil
 }
 
-// OpenTodos lists the reminders nobody has ticked off, the soonest first,
+// OpenTodos lists the reminders nobody has ticked off, from every calendar
+// that holds them, the soonest first,
 // those without a due date last.
-func (c *Client) OpenTodos(ctx context.Context) ([]Todo, Collection, error) {
-	col, ok, err := c.collection(ctx, "VTODO", false)
-	if err != nil || !ok {
-		return nil, col, err
+func (c *Client) OpenTodos(ctx context.Context) ([]Todo, error) {
+	cols, err := c.readable(ctx, "VTODO")
+	if err != nil {
+		return nil, err
 	}
 	body := `<?xml version="1.0" encoding="utf-8"?>
 <C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
   <D:prop><D:getetag/><C:calendar-data/></D:prop>
   <C:filter><C:comp-filter name="VCALENDAR"><C:comp-filter name="VTODO"><C:prop-filter name="COMPLETED"><C:is-not-defined/></C:prop-filter></C:comp-filter></C:comp-filter></C:filter>
 </C:calendar-query>`
-	roots, err := c.report(ctx, col, body)
+	roots, err := c.reportAll(ctx, cols, body)
 	if err != nil {
-		return nil, col, err
+		return nil, err
 	}
 	var out []Todo
 	for _, r := range roots {
@@ -365,7 +437,7 @@ func (c *Client) OpenTodos(ctx context.Context) ([]Todo, Collection, error) {
 		}
 		return a.Before(b)
 	})
-	return out, col, nil
+	return out, nil
 }
 
 // NewUID is a fresh object id.
@@ -392,7 +464,7 @@ func (c *Client) PutTodo(ctx context.Context, t Todo) (Collection, error) {
 }
 
 func (c *Client) put(ctx context.Context, comp, uid, ics string) (Collection, error) {
-	col, _, err := c.collection(ctx, comp, true)
+	col, err := c.target(ctx, comp)
 	if err != nil {
 		return col, err
 	}
