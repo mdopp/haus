@@ -252,3 +252,78 @@ func TestWrongPassword(t *testing.T) {
 		t.Fatal("the password never goes into a message")
 	}
 }
+
+// haus#10: ticking a reminder off from the widget. The object is found by its
+// UID in every calendar holding reminders, rewritten with what it had plus
+// the completion, and put back only if nobody changed it in between.
+func TestCompleteTodo(t *testing.T) {
+	fake := davfake.New("bote", "pw")
+	defer fake.Close()
+	fake.AddCalendar("/bote/aufgaben/", "Aufgaben", "VTODO")
+	long := strings.Repeat("Sehr langer Text mit Umlauten äöü ", 6)
+	fake.Put("/bote/aufgaben/x.ics", "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//phone//DE\r\nBEGIN:VTODO\r\nUID:abc\r\nDTSTAMP:20261010T080000Z\r\n"+
+		"SUMMARY:Einkauf\r\nDESCRIPTION:"+long[:60]+"\r\n "+long[60:]+"\r\nX-PHONE-FLAG;VALUE=TEXT:bleibt\r\nPERCENT-COMPLETE:40\r\nSTATUS:IN-PROCESS\r\nEND:VTODO\r\nEND:VCALENDAR\r\n")
+	fake.Put("/bote/aufgaben/y.ics", "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VTODO\r\nUID:abcdef\r\nSUMMARY:Andere\r\nEND:VTODO\r\nEND:VCALENDAR\r\n")
+	now := time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)
+	c := &Client{URL: fake.URL, User: "bote", Password: "pw", Loc: berlin(t), Now: func() time.Time { return now }}
+	if err := c.CompleteTodo(context.Background(), "abc"); err != nil {
+		t.Fatal(err)
+	}
+	got := fake.Objects()["/bote/aufgaben/x.ics"]
+	root, err := Parse(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var todo *Component
+	root.Walk(func(c *Component) {
+		if c.Name == "VTODO" {
+			todo = c
+		}
+	})
+	if todo.Text("STATUS") != "COMPLETED" || todo.Text("COMPLETED") != "20261014T120000Z" || todo.Text("PERCENT-COMPLETE") != "100" {
+		t.Fatalf("completion:\n%s", got)
+	}
+	if todo.Text("DESCRIPTION") != long || todo.Text("X-PHONE-FLAG") != "bleibt" || root.Text("PRODID") != "-//phone//DE" {
+		t.Fatalf("everything else stays:\n%s", got)
+	}
+	if strings.Count(got, "STATUS:") != 1 || strings.Count(got, "PERCENT-COMPLETE") != 1 {
+		t.Fatalf("one of each:\n%s", got)
+	}
+	for _, l := range strings.Split(got, "\r\n") {
+		if len(l) > 75 {
+			t.Fatalf("lines stay folded: %q", l)
+		}
+	}
+	if !strings.Contains(fake.Objects()["/bote/aufgaben/y.ics"], "UID:abcdef") || strings.Contains(fake.Objects()["/bote/aufgaben/y.ics"], "COMPLETED") {
+		t.Fatal("another UID that starts the same is not it")
+	}
+	h := fake.Header[len(fake.Header)-1]
+	if h.Get("If-Match") == "" {
+		t.Fatalf("conditional: %v", h)
+	}
+	if err := c.CompleteTodo(context.Background(), "nope"); err != ErrNoTodo {
+		t.Fatalf("unknown: %v", err)
+	}
+}
+
+func TestCompleteTodoRefusesASeries(t *testing.T) {
+	fake := davfake.New("bote", "pw")
+	defer fake.Close()
+	fake.AddCalendar("/bote/aufgaben/", "Aufgaben", "VTODO")
+	series := "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VTODO\r\nUID:muell\r\nSUMMARY:Müll\r\nDUE:20261016T050000Z\r\nRRULE:FREQ=WEEKLY\r\nEND:VTODO\r\nEND:VCALENDAR\r\n"
+	override := "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VTODO\r\nUID:pflanzen\r\nSUMMARY:Gießen\r\nEND:VTODO\r\nBEGIN:VTODO\r\nUID:pflanzen\r\nRECURRENCE-ID:20261020T050000Z\r\nSUMMARY:Gießen\r\nEND:VTODO\r\nEND:VCALENDAR\r\n"
+	fake.Put("/bote/aufgaben/m.ics", series)
+	fake.Put("/bote/aufgaben/p.ics", override)
+	c := &Client{URL: fake.URL, User: "bote", Password: "pw", Loc: berlin(t)}
+	for _, uid := range []string{"muell", "pflanzen"} {
+		if err := c.CompleteTodo(context.Background(), uid); err != ErrRecurring {
+			t.Fatalf("%s: %v, want ErrRecurring", uid, err)
+		}
+	}
+	if fake.Objects()["/bote/aufgaben/m.ics"] != series || fake.Objects()["/bote/aufgaben/p.ics"] != override {
+		t.Fatal("a refused completion changed the object")
+	}
+	if count(fake.Methods, "PUT") != 0 {
+		t.Fatalf("methods: %v", fake.Methods)
+	}
+}

@@ -1,7 +1,8 @@
 // Package paperlessfake is a fake Paperless-ngx REST API for tests:
-// "Authorization: Token …", GET /api/documents/ with query, page_size and
-// fields, GET /api/correspondents/ with id__in. A query matches title and
-// content, case-insensitively, the way a full-text hit would look.
+// "Authorization: Token …", GET /api/documents/ with query, page_size,
+// fields and ordering (-created only), GET /api/correspondents/ with
+// id__in. A query matches title and content, case-insensitively, the way
+// a full-text hit would look.
 package paperlessfake
 
 import (
@@ -112,6 +113,9 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		sort.SliceStable(hits, func(i, j int) bool { return hits[i].ID < hits[j].ID })
+		if q.Get("ordering") == "-created" {
+			sort.SliceStable(hits, func(i, j int) bool { return hits[i].Created > hits[j].Created })
+		}
 		fields := map[string]bool{}
 		for _, f := range strings.Split(q.Get("fields"), ",") {
 			if f != "" {

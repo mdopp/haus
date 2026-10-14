@@ -1,6 +1,7 @@
 // Package davfake is a fake Radicale for tests: Basic auth, PROPFIND on the
 // account's home, REPORT calendar-query on a calendar and addressbook-query
-// on an address book, PUT with If-None-Match, MKCALENDAR, and MKCOL
+// on an address book (each object with its ETag), PUT with If-None-Match
+// or If-Match, MKCALENDAR, and MKCOL
 // extended for an address book. It filters a calendar REPORT by component
 // only and an address book REPORT not at all; the client filters itself,
 // and tests read the query it sent.
@@ -12,6 +13,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -24,9 +26,11 @@ type Server struct {
 	mu      sync.Mutex
 	cols    map[string]col    // path → calendar
 	objs    map[string]string // path → ICS
-	Reports []string          // REPORT bodies, in order
-	Methods []string          // "METHOD path", in order
-	Header  []http.Header     // the PUT headers, in order
+	etags   map[string]int    // path → its version, the ETag "<n>"
+	version int
+	Reports []string      // REPORT bodies, in order
+	Methods []string      // "METHOD path", in order
+	Header  []http.Header // the PUT headers, in order
 
 	// ExistsStatus is MKCALENDAR's answer for a calendar that is there
 	// (default 405, as Radicale; some servers say 409).
@@ -72,7 +76,7 @@ type col struct {
 
 // New starts a fake for one account.
 func New(user, password string) *Server {
-	s := &Server{User: user, Password: password, cols: map[string]col{}, objs: map[string]string{}}
+	s := &Server{User: user, Password: password, cols: map[string]col{}, objs: map[string]string{}, etags: map[string]int{}}
 	s.Server = httptest.NewServer(http.HandlerFunc(s.serve))
 	return s
 }
@@ -93,12 +97,20 @@ func (s *Server) AddAddressBook(path, name string) {
 	s.cols[path] = col{name: name, book: true}
 }
 
-// Put stores an object as a phone would.
+// Put stores an object as a phone would; its ETag changes.
 func (s *Server) Put(path, ics string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.objs[path] = ics
+	s.store(path, ics)
 }
+
+func (s *Server) store(path, ics string) {
+	s.version++
+	s.objs[path] = ics
+	s.etags[path] = s.version
+}
+
+func (s *Server) etag(path string) string { return `"` + strconv.Itoa(s.etags[path]) + `"` }
 
 // Objects returns the stored objects by path.
 func (s *Server) Objects() map[string]string {
@@ -232,7 +244,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 				s.mu.Lock()
 				return
 			}
-			b.WriteString(`<D:response><D:href>` + esc(k) + `</D:href><D:propstat><D:prop><D:getetag>"1"</D:getetag><` + data + `>` + esc(s.objs[k]) + `</` + data + `></D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response>`)
+			b.WriteString(`<D:response><D:href>` + esc(k) + `</D:href><D:propstat><D:prop><D:getetag>` + esc(s.etag(k)) + `</D:getetag><` + data + `>` + esc(s.objs[k]) + `</` + data + `></D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response>`)
 		}
 		b.WriteString(`</D:multistatus>`)
 		w.WriteHeader(http.StatusMultiStatus)
@@ -244,11 +256,16 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusConflict)
 			return
 		}
-		if _, exists := s.objs[r.URL.Path]; exists && r.Header.Get("If-None-Match") == "*" {
+		_, exists := s.objs[r.URL.Path]
+		if exists && r.Header.Get("If-None-Match") == "*" {
 			w.WriteHeader(http.StatusPreconditionFailed)
 			return
 		}
-		s.objs[r.URL.Path] = string(body)
+		if m := r.Header.Get("If-Match"); m != "" && (!exists || m != s.etag(r.URL.Path)) {
+			w.WriteHeader(http.StatusPreconditionFailed)
+			return
+		}
+		s.store(r.URL.Path, string(body))
 		w.WriteHeader(http.StatusCreated)
 	case "MKCALENDAR":
 		if s.MkcalendarStatus != 0 {
