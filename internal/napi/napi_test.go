@@ -287,23 +287,29 @@ func laibAnswering(t *testing.T, texts map[string]string) *laib.Client {
 // haus#28: pendingUpdates is Laib's count of template updates waiting:
 // `laib template sync --propose` files each as a proposal whose kind is
 // template-update, whatever class the dial gave it (a public route makes
-// it human). Each waits for a verdict, so it is an approval too; Haus
-// decides none of them (haus#1). /upgrades lists them.
+// it human). An update is counted and listed as an update only, never as
+// an approval too: three updates and one other proposal are one approval
+// and three updates. Haus decides none of them (haus#1).
 func TestPendingUpdatesAreLaibsTemplateUpdates(t *testing.T) {
 	lb := laibAnswering(t, map[string]string{
 		"laib_status": `{"ready":{"state":"bereit"},"services":[{"name":"immich","state":"grün"}]}`,
 		"laib_inbox": `[{"id":7,"actor":"pi","reason":"immich: mehr Speicher","tier":"apply","status":"open","created":"2026-10-10T19:00:00Z","files":["services/immich/values.yml"],"class":"values","kind":"values"},
 {"id":8,"actor":"laib","reason":"immich: Vorlage 1.2 → 1.3","tier":"apply","status":"open","created":"2026-10-11T04:00:00Z","files":["services/immich/template.yml"],"class":"template-update","kind":"template-update"},
-{"id":9,"actor":"laib","reason":"caddy: Vorlage 2.0 → 2.1","tier":"apply","status":"open","created":"2026-10-11T04:00:01Z","files":["services/caddy/template.yml"],"class":"human","kind":"template-update","reasons":["eine öffentliche Route"]}]`,
+{"id":9,"actor":"laib","reason":"caddy: Vorlage 2.0 → 2.1","tier":"apply","status":"open","created":"2026-10-11T04:00:01Z","files":["services/caddy/template.yml"],"class":"human","kind":"template-update","reasons":["eine öffentliche Route"]},
+{"id":10,"actor":"laib","reason":"paperless: Vorlage 3.0 → 3.1","tier":"apply","status":"open","created":"2026-10-11T04:00:02Z","files":["services/paperless/template.yml"],"class":"template-update","kind":"template-update"}]`,
 	})
 	h := Handler(Config{Laib: lb, Validate: StaticValidator([]string{"dev1"})})
 	code, home := get(t, h, "GET", "/napi/box/home", "dev1", "")
-	if code != 200 || home["pendingUpdates"] != 2.0 || home["pendingApprovals"] != 3.0 {
-		t.Fatalf("home: %d %v", code, home)
+	if code != 200 || home["pendingUpdates"] != 3.0 || home["pendingApprovals"] != 1.0 {
+		t.Fatalf("home: %d %v, want 1 approval and 3 updates", code, home)
+	}
+	_, aps := get(t, h, "GET", "/napi/box/approvals", "dev1", "")
+	if rows, _ := aps["approvals"].([]any); len(rows) != 1 || rows[0].(map[string]any)["id"] != "7" {
+		t.Fatalf("approvals, the updates left out: %v", aps)
 	}
 	_, ups := get(t, h, "GET", "/napi/box/upgrades", "dev1", "")
 	rows, _ := ups["upgrades"].([]any)
-	if len(rows) != 2 {
+	if len(rows) != 3 {
 		t.Fatalf("upgrades: %v", ups)
 	}
 	if u := rows[0].(map[string]any); u["id"] != "8" || u["service"] != "immich" || u["title"] != "immich: Vorlage 1.2 → 1.3" || u["created_at"] != "2026-10-11T04:00:00Z" {

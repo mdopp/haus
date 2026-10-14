@@ -21,8 +21,9 @@ import (
 	"github.com/mdopp/haus/internal/paperless/paperlessfake"
 )
 
-// a site with every backend set, each from a fake
-func fullSite(t *testing.T) site {
+// a site with every backend set, each from a fake; the HA and Radicale
+// fakes for a test to add to
+func fullSite(t *testing.T) (site, *hafake.HA, *davfake.Server) {
 	t.Helper()
 	s := testSite(t)
 	fake := hafake.New("ha-token")
@@ -64,7 +65,7 @@ func fullSite(t *testing.T) site {
 	s.napi.HA = &ha.Client{URL: fake.URL, Token: "ha-token"}
 	s.napi.Haushalt = s.hh
 	s.napi.Validate = func(_ context.Context, b string) bool { return b == "dev1" }
-	return s
+	return s, fake, dav
 }
 
 func napiGet(t *testing.T, h http.Handler, path string) map[string]any {
@@ -95,7 +96,8 @@ func page(h http.Handler, path string) *httptest.ResponseRecorder {
 // which leads on to Paperless. The app opens page in the browser, where the
 // person's Authelia session is.
 func TestEveryPageAWidgetIsHandedIsThere(t *testing.T) {
-	h := routes(fullSite(t))
+	s, _, _ := fullSite(t)
+	h := routes(s)
 	type want struct {
 		page string
 		says []string
@@ -164,11 +166,127 @@ func TestEveryPageAWidgetIsHandedIsThere(t *testing.T) {
 // What is not there says so plainly, a 404 with a way back, never Start
 // pretending all is well.
 func TestAnItemPageForNothingIsA404(t *testing.T) {
-	h := routes(fullSite(t))
+	s, _, _ := fullSite(t)
+	h := routes(s)
 	for _, p := range []string{"/raeume/light.gibtsnicht", "/kalender/erinnerung/gibtsnicht", "/kontakte/gibtsnicht"} {
 		rec := page(h, p)
 		if rec.Code != 404 || !strings.Contains(rec.Body.String(), "gibt es nicht") {
 			t.Errorf("%s → %d, want a 404 that says so: %s", p, rec.Code, rec.Body.String())
 		}
+	}
+}
+
+// A thing's page shows only what a widget may show: an entity of a card
+// domain (the ones /napi/portal/state draws) that HA does not hide. A
+// person's whereabouts, a phone's address sensor in another domain, a
+// hidden entity: each is a 404, never a page.
+func TestAThingPageShowsOnlyCardDomainsNotHidden(t *testing.T) {
+	s, fake, _ := fullSite(t)
+	fake.SetRegistries([]map[string]any{{"area_id": "kueche", "name": "Küche"}}, nil, []map[string]any{
+		{"entity_id": "light.decke", "area_id": "kueche"},
+		{"entity_id": "light.versteckt", "hidden_by": "user"},
+		{"entity_id": "sensor.diagnose", "entity_category": "diagnostic"},
+	})
+	fake.Set("person.anna", "Arbeit", map[string]any{"friendly_name": "Anna"})
+	fake.Set("device_tracker.anna_handy", "home", map[string]any{"friendly_name": "Annas Handy"})
+	fake.Set("zone.home", "1", map[string]any{"friendly_name": "Zuhause"})
+	fake.Set("light.versteckt", "off", map[string]any{"friendly_name": "Versteckt"})
+	fake.Set("sensor.diagnose", "3", map[string]any{"friendly_name": "Diagnose"})
+	h := routes(s)
+	for _, p := range []string{"/raeume/person.anna", "/raeume/device_tracker.anna_handy", "/raeume/zone.home",
+		"/raeume/light.versteckt", "/raeume/sensor.diagnose"} {
+		rec := page(h, p)
+		if body := rec.Body.String(); rec.Code != 404 || !strings.Contains(body, "gibt es nicht") ||
+			strings.Contains(body, "Arbeit") || strings.Contains(body, "Versteckt") || strings.Contains(body, "Diagnose") {
+			t.Errorf("%s → %d, want a 404 that shows nothing of it: %s", p, rec.Code, body)
+		}
+	}
+	if rec := page(h, "/raeume/light.decke"); rec.Code != 200 {
+		t.Fatalf("a card domain, not hidden → %d", rec.Code)
+	}
+}
+
+// A thing's state in the family's words, for each kind a widget shows.
+func TestAThingPageSaysItsStateInWords(t *testing.T) {
+	s, fake, _ := fullSite(t)
+	fake.Set("switch.radio", "off", map[string]any{"friendly_name": "Radio"})
+	fake.Set("binary_sensor.haustuer", "on", map[string]any{"friendly_name": "Haustür", "device_class": "door"})
+	fake.Set("binary_sensor.fenster", "off", map[string]any{"friendly_name": "Fenster", "device_class": "window"})
+	fake.Set("binary_sensor.flur", "on", map[string]any{"friendly_name": "Bewegung", "device_class": "motion"})
+	fake.Set("lock.keller", "locked", map[string]any{"friendly_name": "Keller"})
+	fake.Set("lock.hof", "unlocked", map[string]any{"friendly_name": "Hoftor"})
+	h := routes(s)
+	for id, want := range map[string]string{
+		"switch.radio": "<li>aus ", "binary_sensor.haustuer": "<li>offen ", "binary_sensor.fenster": "<li>geschlossen ",
+		"binary_sensor.flur": "<li>an ", "lock.keller": "<li>verriegelt ", "lock.hof": "<li>offen ",
+		"sensor.temp": "<li>21.5 °C ", "light.decke": "<li>an · 50 % ",
+	} {
+		rec := page(h, "/raeume/"+id)
+		if rec.Code != 200 || !strings.Contains(rec.Body.String(), want) {
+			t.Errorf("%s → %d, want %q:\n%s", id, rec.Code, want, rec.Body.String())
+		}
+	}
+}
+
+// What a name or title holds is text, in the heading and the title alike.
+func TestItemPagesEscapeWhatTheyShow(t *testing.T) {
+	s, fake, dav := fullSite(t)
+	evil := "<script>alert(1)</script>"
+	fake.Set("sensor.boese", "1", map[string]any{"friendly_name": evil})
+	dav.Put("/bote/familie/boese.ics", "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VTODO\r\nUID:boese\r\nDTSTAMP:20261010T080000Z\r\n"+
+		"SUMMARY:"+evil+"\r\nEND:VTODO\r\nEND:VCALENDAR\r\n")
+	dav.Put("/bote/kontakte/boese.vcf", "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:boese\r\nFN:"+evil+"\r\nEND:VCARD\r\n")
+	h := routes(s)
+	for _, p := range []string{"/raeume/sensor.boese", "/kalender/erinnerung/boese", "/kontakte/boese"} {
+		rec := page(h, p)
+		body := rec.Body.String()
+		if rec.Code != 200 || strings.Contains(body, "<script>") ||
+			!strings.Contains(body, "<h1>&lt;script&gt;alert(1)&lt;/script&gt;</h1>") ||
+			!strings.Contains(body, "<title>&lt;script&gt;alert(1)&lt;/script&gt; · ") {
+			t.Errorf("%s → %d, not escaped:\n%s", p, rec.Code, body)
+		}
+	}
+}
+
+// A reminder's page says what became of it: cancelled is not done.
+func TestAReminderPageSaysCancelledOrDone(t *testing.T) {
+	s, _, dav := fullSite(t)
+	dav.Put("/bote/familie/abgesagt.ics", "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VTODO\r\nUID:abgesagt\r\nDTSTAMP:20261010T080000Z\r\n"+
+		"SUMMARY:Feier\r\nSTATUS:CANCELLED\r\nEND:VTODO\r\nEND:VCALENDAR\r\n")
+	dav.Put("/bote/familie/fertig.ics", "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VTODO\r\nUID:fertig\r\nDTSTAMP:20261010T080000Z\r\n"+
+		"SUMMARY:Abwasch\r\nSTATUS:COMPLETED\r\nCOMPLETED:20261011T080000Z\r\nEND:VTODO\r\nEND:VCALENDAR\r\n")
+	h := routes(s)
+	if body := page(h, "/kalender/erinnerung/abgesagt").Body.String(); !strings.Contains(body, "<li>abgesagt") || strings.Contains(body, "erledigt") {
+		t.Errorf("cancelled:\n%s", body)
+	}
+	if body := page(h, "/kalender/erinnerung/fertig").Body.String(); !strings.Contains(body, "<li>erledigt") || strings.Contains(body, "abgesagt") {
+		t.Errorf("done:\n%s", body)
+	}
+	if body := page(h, "/kalender/erinnerung/milch-1").Body.String(); !strings.Contains(body, "<li>offen") {
+		t.Errorf("open:\n%s", body)
+	}
+}
+
+// A document's page needs a real id and Paperless's public address; with
+// neither there is nowhere to send the tap: a 404, and no row names a page.
+func TestADocumentPageWantsAnIdAndAnAddress(t *testing.T) {
+	s, _, _ := fullSite(t)
+	h := routes(s)
+	for _, p := range []string{"/dokumente/0", "/dokumente/-3", "/dokumente/x"} {
+		if rec := page(h, p); rec.Code != 404 {
+			t.Errorf("%s → %d, want 404", p, rec.Code)
+		}
+	}
+	s.hh.Documents.PublicURL = ""
+	h = routes(s)
+	if rec := page(h, "/dokumente/2"); rec.Code != 404 || rec.Header().Get("Location") != "" {
+		t.Errorf("without Paperless's address → %d %q, want 404", rec.Code, rec.Header().Get("Location"))
+	}
+	docs, _ := napiGet(t, h, "/napi/portal/documents")["documents"].([]any)
+	if len(docs) != 1 {
+		t.Fatalf("documents: %v", docs)
+	}
+	if p, ok := docs[0].(map[string]any)["page"]; ok {
+		t.Fatalf("a document row without Paperless's address names a page: %v", p)
 	}
 }

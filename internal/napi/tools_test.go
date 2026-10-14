@@ -355,6 +355,20 @@ func TestEveryToolRowNamesItsPage(t *testing.T) {
 			}
 		}
 	}
+	// a contact without a UID has no page to open
+	s.dav.Put("/bote/kontakte/ohne.vcf", "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Ohne Uid\r\nEND:VCARD\r\n")
+	seen := false
+	for _, r := range rows(t, s.h, "/napi/portal/contacts", "contacts") {
+		if r["name"] == "Ohne Uid" {
+			seen = true
+			if _, ok := r["page"]; ok {
+				t.Fatalf("a contact without a UID names a page: %v", r)
+			}
+		}
+	}
+	if !seen {
+		t.Fatal("the contact without a UID is not listed")
+	}
 	// a reminder whose UID needs escaping
 	s.dav.Put("/bote/familie/x.ics", "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VTODO\r\nUID:a/b c?\r\nDTSTAMP:20261010T080000Z\r\nSUMMARY:Seltsam\r\nEND:VTODO\r\nEND:VCALENDAR\r\n")
 	for _, r := range rows(t, s.h, "/napi/portal/tasks", "tasks") {
