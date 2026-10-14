@@ -6,6 +6,7 @@ package devices
 import (
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -98,7 +99,7 @@ func (s *Store) Lookup(bearer string) (Device, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for i := range s.list {
-		if s.list[i].Hash == h {
+		if subtle.ConstantTimeCompare([]byte(s.list[i].Hash), []byte(h)) == 1 {
 			if time.Since(s.list[i].LastSeen) > time.Hour {
 				s.list[i].LastSeen = time.Now().UTC()
 				s.save()

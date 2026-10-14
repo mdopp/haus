@@ -48,8 +48,8 @@ func Handler(c Config) http.Handler {
 	mux := http.NewServeMux()
 	auth := func(next http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
-			bearer := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-			if bearer == "" || c.Validate == nil || !c.Validate(r.Context(), bearer) {
+			bearer, ok := bearerOf(r)
+			if !ok || c.Validate == nil || !c.Validate(r.Context(), bearer) {
 				w.Header().Set("WWW-Authenticate", "Bearer")
 				http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 				return
@@ -169,8 +169,7 @@ func Handler(c Config) http.Handler {
 	mux.HandleFunc("POST "+prefix+"/approvals/{id}/approve", verdict)
 	mux.HandleFunc("POST "+prefix+"/approvals/{id}/deny", verdict)
 	mux.HandleFunc("GET /napi/whoami", func(w http.ResponseWriter, r *http.Request) {
-		bearer := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-		if c.Whoami != nil && bearer != "" {
+		if bearer, ok := bearerOf(r); ok && c.Whoami != nil {
 			if uid, ok := c.Whoami(bearer); ok {
 				writeJSON(w, map[string]any{"uid": uid, "via": "haus"})
 				return
@@ -189,8 +188,16 @@ func Handler(c Config) http.Handler {
 	if c.UploadDir != "" { // the camera capture into the consume folder
 		newUploads(c.UploadDir).routes(mux, auth)
 	}
-	mux.HandleFunc("/napi/", noSuchPath) // every other /napi path, passed on to nobody
+	// every other /napi path, passed on to nobody; a device first, so a
+	// stranger cannot tell which backends are set
+	mux.HandleFunc("/napi/", auth(noSuchPath))
 	return mux
+}
+
+// bearerOf is the token after the literal "Bearer "; anything else is none.
+func bearerOf(r *http.Request) (string, bool) {
+	b, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+	return b, ok && b != ""
 }
 
 // noSuchPath is the one 404 of /napi: a path Haus does not serve, or whose

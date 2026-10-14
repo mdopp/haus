@@ -8,8 +8,9 @@ and messages to people go through their chat channel, not the app (laib ADR
 0014, 0016, 0022). The family sees the house persona (laib ADR 0021). The
 app's names (scheme `cloud.dopp.haus`, token prefix
 `haus_device_`, the Box keys under `/napi/box`) live in `internal/app`; a
-`/napi` path Haus does not serve, or whose backend is not set, answers 404
-`{"ok":false,"reason":"not_found"}`.
+`/napi` path wants a paired device (`Authorization: Bearer haus_device_…`,
+else 401, the unknown paths too); one Haus does not serve, or whose backend
+is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
 
 ## This cut (laib#28)
 

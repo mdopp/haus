@@ -8,7 +8,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
@@ -82,7 +81,8 @@ func (l *live) routes(mux *http.ServeMux, auth func(http.HandlerFunc) http.Handl
 
 // a device is its token; Haus keeps only a digest of it in memory
 func deviceOf(r *http.Request) string {
-	sum := sha256.Sum256([]byte(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")))
+	b, _ := bearerOf(r)
+	sum := sha256.Sum256([]byte(b))
 	return hex.EncodeToString(sum[:])
 }
 
