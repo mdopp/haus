@@ -89,6 +89,51 @@ the house persona, and the old Solaris and ServiceBay names live only in
   503 while HA does not) is Haus's **only when no bridge is set**: the app
   holds one stream, and notices and approval frames still come from the
   bridge's.
+- The camera widget, from Home Assistant too (haus#10):
+  `GET /napi/portal/camera/{entity_id}/snapshot` passes HA's
+  `camera_proxy` frame for a `camera.*` entity only (anything else 400,
+  an unknown camera 404), and only a JPEG, PNG, GIF or WebP of at most
+  8 MB (else 502), `Cache-Control: private, max-age=5`.
+  `GET /napi/portal/start/addable` is what both pickers read: the device
+  picker the actuators (`light|switch|cover|climate|media_player|lock`),
+  the camera picker the cameras; `{ok, rooms:[{room, cards:[{entity_id,
+  name, domain, state, device_class?}]}], automations:[]}`, rooms by
+  name, the room-less last.
+- The tool widgets, from the Haushalt source's backends (haus#10, the
+  same variables as below; none set, they stay on the bridge):
+  `GET /napi/defs/tool` lists a tool per backend that is set, under the
+  ids widgets placed through the bridge already carry: `task`
+  (*Erinnerungen*, `HAUS_RADICALE_*`), `contacts`, `doc` (`HAUS_PAPERLESS_*`),
+  `note` (`HAUS_NOTES_DIR`). Each def names its row path
+  (`/napi/portal/tasks|contacts|documents|notes`: the open reminders,
+  soonest first, due in house time; contacts by name with the first
+  number and address; the newest Paperless documents; the newest notes;
+  at most 40 rows, no JSON `null`, a backend in trouble 502). No def names
+  a create or item page: Haus has none, and a guessed route lands on
+  Start. A path whose backend is not set stays on the bridge.
+  `POST /napi/action-callback` is Haus's once the catalog is, and knows
+  one action: `task.set_status` with `{entity_id: <the reminder's UID>,
+  status: "done"}` ticks the reminder off in Radicale (`haushalt.ReminderDone`:
+  found by its whole UID in every calendar, written back as it was plus
+  `STATUS:COMPLETED`, `COMPLETED`, `PERCENT-COMPLETE:100`, only if its
+  ETag is still the one read; done already is fine; a series (`RRULE`,
+  `RDATE`, an override) is 409 `recurring`, since ticking off its master
+  ends it — the phone does that; a phone's edit in between 409 `changed`;
+  unknown 404 `not_found`; bad params 400 `bad_params`). It is not
+  destructive (the phone unticks it), so it asks no `confirmed`; every
+  other action id is 404 `unknown_action`, so Haus adds, files or
+  changes nothing else from a row.
+- The camera capture: `POST /napi/upload` (multipart, `file` parts, an
+  optional `filename`) stores into `HAUS_UPLOAD_DIR`, the share's folder
+  Paperless consumes; unset, the bridge's. JPEG, PNG, GIF, WebP and PDF
+  whose first bytes say so (else 415), 25 MB a file (413), 64 MB and 20
+  files a request. The name is the phone's, made plain (no folder, no
+  hidden file, letters, digits, umlauts, ` ._-`), plus `-<8 hex>` and the
+  type's extension. A file is written aside as `._haus-….part` (Paperless
+  ignores `._*`) and hard-linked into place, so it appears whole and never
+  replaces another; a request is stored all or nothing. `{ok, id}` for
+  one file, `{ok, files:[{ok, id}]}` for several. Notifications and the
+  event stream with a bridge set stay on the bridge (a later slice).
 - `GET /.well-known/assetlinks.json` — the app's signing fingerprints from
   `HAUS_ANDROID_FINGERPRINTS` (comma-separated, public), so the app opens
   Haus's pages without a URL bar. `[]` without them.
@@ -162,13 +207,17 @@ HAUS_ENERGY_FLOW=pv=sensor.…,house=sensor.…,grid=sensor.…,battery=sensor.�
 HAUS_HAUSHALT_TOKEN=<the Bote's bearer> TZ=Europe/Berlin \
 HAUS_RADICALE_URL=http://host.containers.internal:5232 HAUS_RADICALE_USER=<service account> HAUS_RADICALE_PASSWORD=<its password> \
 HAUS_PAPERLESS_URL=http://host.containers.internal:8000 HAUS_PAPERLESS_TOKEN=<a Paperless API token> \
-HAUS_PAPERLESS_PUBLIC_URL=https://paperless.<domain> HAUS_NOTES_DIR=/notes ./haus
+HAUS_PAPERLESS_PUBLIC_URL=https://paperless.<domain> HAUS_NOTES_DIR=/notes \
+HAUS_UPLOAD_DIR=/consume ./haus
 ```
 
 `HAUS_DATA` (default `/data`) holds `devices.json`; `HAUS_PUBLIC_URL` is the
 origin the setup link carries (default `https://<Host>`). Haus's Laib token is the `haus` hand: status, inbox, journal, restart —
 nothing else (no exec, no write). There are no static device tokens. Image: `ghcr.io/mdopp/haus`. Laib template: `haus` (route `haus.<domain>`,
-`bypass: [/napi/]`; assetlinks needs `/.well-known/` there too).
+`bypass: [/napi/]`; assetlinks needs `/.well-known/` there too; the
+upload needs the share's consume folder mounted writable at
+`HAUS_UPLOAD_DIR`, on a file system with hard links, and Caddy letting a
+request of 64 MB through).
 
 ## Tests
 
