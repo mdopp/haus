@@ -206,7 +206,7 @@ func Handler(c Config) http.Handler {
 		t.routes(mux, auth)
 	}
 	if c.UploadDir != "" { // the camera capture into the consume folder
-		(&uploads{dir: c.UploadDir}).routes(mux, auth)
+		newUploads(c.UploadDir).routes(mux, auth)
 	}
 	if c.Bridge != nil {
 		proxy := httputil.NewSingleHostReverseProxy(c.Bridge)

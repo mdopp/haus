@@ -74,6 +74,8 @@ func main() {
 	if cfg.UploadDir = os.Getenv("HAUS_UPLOAD_DIR"); cfg.UploadDir != "" {
 		if fi, err := os.Stat(cfg.UploadDir); err != nil || !fi.IsDir() {
 			log.Printf("haus: HAUS_UPLOAD_DIR %s is not a folder (yet): uploads answer 503 until it is", cfg.UploadDir)
+		} else if err := napi.SweepUploads(cfg.UploadDir); err != nil { // parts a stopped Haus left staged
+			log.Printf("haus: HAUS_UPLOAD_DIR: sweeping staged parts: %v", err)
 		}
 	}
 	mux := http.NewServeMux()

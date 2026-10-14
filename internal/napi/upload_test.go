@@ -312,7 +312,7 @@ func TestUploadRequestCapAndNames(t *testing.T) {
 	}
 	uploadMaxBody = 64 << 20
 	for name, want := range map[string]string{
-		"a:b*?‮.jpg":           `^a_b___-[0-9a-f]{8}\.jpg$`,
+		"a:b*?\u202ec.jpg":     `^a_b___c-[0-9a-f]{8}\.jpg$`,
 		"Rechnung Müller.pdf": `^Rechnung Müller-[0-9a-f]{8}\.jpg$`,
 	} {
 		ct, body := oneJPEG(t, name)
@@ -412,14 +412,9 @@ func TestUploadsAtOnceAreFew(t *testing.T) {
 			done <- struct{}{}
 		}()
 	}
-	got := 0
-	for i := 0; i < 200 && got != 429; i++ {
-		ct, body := oneJPEG(t, "a.jpg")
-		got, _ = upload(t, h, "dev1", ct, body)
-		if got != 429 {
-			time.Sleep(10 * time.Millisecond)
-		}
-	}
+	time.Sleep(200 * time.Millisecond) // both hold a slot, blocked on their bodies
+	ct, body := oneJPEG(t, "a.jpg")
+	got, _ := upload(t, h, "dev1", ct, body)
 	for _, w := range writers {
 		w.Close()
 	}
@@ -429,7 +424,7 @@ func TestUploadsAtOnceAreFew(t *testing.T) {
 	if got != 429 {
 		t.Fatalf("with %d uploads running, another got %d, want 429", uploadConcurrent, got)
 	}
-	ct, body := oneJPEG(t, "a.jpg")
+	ct, body = oneJPEG(t, "a.jpg")
 	if code, _ := upload(t, h, "dev1", ct, body); code != 200 {
 		t.Fatalf("after them: %d", code)
 	}
