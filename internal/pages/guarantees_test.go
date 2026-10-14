@@ -50,7 +50,8 @@ func TestStartPageShowsTheThreeGuarantees(t *testing.T) {
 		"lastBackup": map[string]any{"at": now.Add(-3 * time.Hour).UTC().Format(time.RFC3339), "repos": 1, "ok": true},
 		"lastChange": map[string]any{"proposal": 4, "summary": "Paperless wird installiert — unter paperless.box.test nur im Heimnetz erreichbar", "at": now.Add(-20 * time.Hour).UTC().Format(time.RFC3339), "reversible": true}}
 	rows := []map[string]any{{"name": "immich", "state": "grün"}, {"name": "paperless", "state": "grün"}}
-	body := get(Box(fakeLaib(t, ready, rows), "https://laib.box.test"), "family")
+	// the family sees the guarantees on Start; Box is the admins' (haus#12)
+	_, body := startPage(t, StartConfig{Laib: fakeLaib(t, ready, rows), LaibURL: "https://laib.box.test"}, "family")
 	for _, want := range []string{"Alles läuft", "Letzte Sicherung", "an einem Ort", "Letzte Änderung", "Paperless wird installiert"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("start page lacks %q:\n%s", want, body[:600])
@@ -71,7 +72,7 @@ func TestStartPageSaysWhatIsBrokenInFamilyWords(t *testing.T) {
 	ready := map[string]any{"state": "bereit", "services": 2, "green": 1, "red": 1, "operator": "läuft",
 		"lastBackup": map[string]any{"at": time.Now().Add(-80 * time.Hour).UTC().Format(time.RFC3339), "repos": 1, "ok": true}}
 	rows := []map[string]any{{"name": "immich", "state": "rot"}, {"name": "paperless", "state": "grün"}}
-	body := get(Box(fakeLaib(t, ready, rows), "https://laib.box.test"), "")
+	body := get(Box(fakeLaib(t, ready, rows), "https://laib.box.test"), "admins")
 	if strings.Contains(body, "Alles läuft") {
 		t.Fatal("a red service is not 'Alles läuft'")
 	}
@@ -81,12 +82,12 @@ func TestStartPageSaysWhatIsBrokenInFamilyWords(t *testing.T) {
 		}
 	}
 	ready["operator"] = "aus"
-	body = get(Box(fakeLaib(t, ready, rows), "https://laib.box.test"), "")
+	body = get(Box(fakeLaib(t, ready, rows), "https://laib.box.test"), "admins")
 	if !strings.Contains(body, "ist informiert") {
 		t.Fatal("without the operator, the admin is informed")
 	}
 	none := map[string]any{"state": "bereit", "services": 1, "green": 1, "operator": "aus", "lastBackup": map[string]any{"ok": false, "repos": 0}}
-	body = get(Box(fakeLaib(t, none, rows[1:]), "https://laib.box.test"), "")
+	body = get(Box(fakeLaib(t, none, rows[1:]), "https://laib.box.test"), "admins")
 	if !strings.Contains(body, "class=rot>Letzte Sicherung") || !strings.Contains(body, "noch keine") {
 		t.Fatal("no backup at all is red")
 	}

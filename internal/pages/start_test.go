@@ -11,6 +11,7 @@ import (
 
 	"github.com/mdopp/haus/internal/caldav"
 	"github.com/mdopp/haus/internal/caldav/davfake"
+	"github.com/mdopp/haus/internal/devices"
 	"github.com/mdopp/haus/internal/ha"
 	"github.com/mdopp/haus/internal/ha/hafake"
 	"github.com/mdopp/haus/internal/laib"
@@ -279,4 +280,69 @@ func brokenLaib(t *testing.T) *laib.Client {
 	}))
 	t.Cleanup(srv.Close)
 	return &laib.Client{URL: srv.URL, Token: "t"}
+}
+
+// haus#12: Box is the admins' page (laib DEKONSTRUKTION). Anyone else
+// asking for /box or /box/… is sent to Start (303) — who sees the admin
+// page, not a verdict on anything. Pairing from the phone is untouched.
+func TestBoxIsForAdmins(t *testing.T) {
+	store, _ := devices.Open(t.TempDir())
+	box := Box(fakeLaib(t, allGreen(t), nil), "https://laib.box.test")
+	geraete := Geraete(store, "https://haus.example")
+	for _, c := range []struct {
+		h      http.HandlerFunc
+		method string
+		path   string
+	}{{box, "GET", "/box"}, {box, "GET", "/box/inbox"}, {geraete, "GET", "/box/geraete"}, {geraete, "POST", "/box/geraete"}} {
+		for _, groups := range []string{"", "family", "administrators", "family,admins-light"} {
+			req := httptest.NewRequest(c.method, c.path, strings.NewReader("name=Pixel"))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			req.Header.Set("Remote-User", "ben")
+			if groups != "" {
+				req.Header.Set("Remote-Groups", groups)
+			}
+			rec := httptest.NewRecorder()
+			c.h.ServeHTTP(rec, req)
+			if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/start" {
+				t.Fatalf("%s %s as %q → %d %q, want 303 /start", c.method, c.path, groups, rec.Code, rec.Header().Get("Location"))
+			}
+		}
+	}
+	if ds := store.List(); len(ds) != 0 {
+		t.Fatalf("a non-admin minted a device: %v", ds)
+	}
+	for _, c := range []struct {
+		h    http.HandlerFunc
+		path string
+	}{{box, "/box"}, {geraete, "/box/geraete"}} {
+		req := httptest.NewRequest("GET", c.path, nil)
+		req.Header.Set("Remote-User", "anna")
+		req.Header.Set("Remote-Groups", "family,admins")
+		rec := httptest.NewRecorder()
+		c.h.ServeHTTP(rec, req)
+		if rec.Code != 200 {
+			t.Fatalf("an admin on %s → %d", c.path, rec.Code)
+		}
+	}
+	// the phone's own pairing path is for everyone
+	req := httptest.NewRequest("GET", "/pair-device", nil)
+	req.Header.Set("Remote-User", "ben")
+	req.Header.Set("Remote-Groups", "family")
+	rec := httptest.NewRecorder()
+	PairDevice(store).ServeHTTP(rec, req)
+	if rec.Code == http.StatusSeeOther || rec.Code == http.StatusFound {
+		t.Fatalf("pairing redirected a family member: %d %q", rec.Code, rec.Header().Get("Location"))
+	}
+}
+
+// A group (an entity carrying an entity_id list, light groups included)
+// is not a lamp: only real lamps are counted.
+func TestStartCountsLampsNotGroups(t *testing.T) {
+	fake, hc := house(t)
+	fake.Set("light.kueche", "on", map[string]any{"friendly_name": "Küche"})
+	fake.Set("light.erdgeschoss", "on", map[string]any{"friendly_name": "Erdgeschoss", "entity_id": []any{"light.kueche", "light.flur"}})
+	fake.Set("light.flur", "off", map[string]any{"friendly_name": "Flur"})
+	_, body := startPage(t, StartConfig{HA: hc}, "")
+	mustContain(t, body, "1 Licht an", "Küche")
+	mustNotContain(t, body, "2 Lichter an", "Erdgeschoss")
 }

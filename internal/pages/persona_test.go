@@ -18,6 +18,7 @@ func TestPagesWearTheHousePersona(t *testing.T) {
 	store, _ := devices.Open(t.TempDir())
 	req := httptest.NewRequest("GET", "/box/geraete", nil)
 	req.Header.Set("Remote-User", "anna")
+	req.Header.Set("Remote-Groups", "admins")
 	rec := httptest.NewRecorder()
 	Geraete(store, "https://haus.example").ServeHTTP(rec, req)
 	body := rec.Body.String()
