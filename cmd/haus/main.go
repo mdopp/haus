@@ -19,6 +19,7 @@ import (
 	"github.com/mdopp/haus/internal/napi"
 	"github.com/mdopp/haus/internal/pages"
 	"github.com/mdopp/haus/internal/persona"
+	"github.com/mdopp/haus/internal/werkstatt"
 )
 
 var Version = "dev"
@@ -77,10 +78,11 @@ func main() {
 	// public, like /napi: the app's verifier fetches it without a login (the route bypasses Authelia for /.well-known/)
 	mux.Handle("GET /.well-known/assetlinks.json", napi.AssetLinks(os.Getenv("HAUS_ANDROID_FINGERPRINTS")))
 	pagesMux := http.NewServeMux()
-	pagesMux.HandleFunc("/box", pages.Box(ops, env("LAIB_PUBLIC_URL", "https://laib."+env("LAIB_DOMAIN", "example"))))
+	tickets := werkstatt.FromEnv() // haus#15: the Werkstatt card; HAUS_WERKSTATT_REPOS unset, no card
+	pagesMux.HandleFunc("/box", pages.BoxWith(ops, env("LAIB_PUBLIC_URL", "https://laib."+env("LAIB_DOMAIN", "example")), tickets))
 	pagesMux.HandleFunc("/box/geraete", pages.Geraete(store, os.Getenv("HAUS_PUBLIC_URL")))
 	pagesMux.HandleFunc("/pair-device", pages.PairDevice(store)) // the app's own pairing path (haus#6)
-	pagesMux.HandleFunc("/box/", pages.Box(ops, env("LAIB_PUBLIC_URL", "https://laib."+env("LAIB_DOMAIN", "example"))))
+	pagesMux.HandleFunc("/box/", pages.BoxWith(ops, env("LAIB_PUBLIC_URL", "https://laib."+env("LAIB_DOMAIN", "example")), tickets))
 	pagesMux.HandleFunc("/persona/icon.svg", pages.Icon())
 	pagesMux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
 	pagesMux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, "/box", http.StatusFound) })
