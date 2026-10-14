@@ -40,6 +40,7 @@ type HA struct {
 	queries  []url.Values
 	starts   []string
 	down     bool
+	callFail int
 	areas    []map[string]any
 	devices  []map[string]any
 	entities []map[string]any
@@ -131,6 +132,34 @@ func (h *HA) SetRegistries(areas, devices, entities []map[string]any) {
 	h.areas, h.devices, h.entities = areas, devices, entities
 }
 
+// FailCalls makes service calls answer status (0: succeed again).
+func (h *HA) FailCalls(status int) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.callFail = status
+}
+
+// DropAll closes every WebSocket connection, as an HA restart does.
+func (h *HA) DropAll() {
+	h.mu.Lock()
+	subs := append([]*conn(nil), h.subs...)
+	h.mu.Unlock()
+	for _, c := range subs {
+		c.nc.Close()
+	}
+}
+
+// WaitSubscribedExactly blocks until exactly n clients subscribe, or 5s pass.
+func (h *HA) WaitSubscribedExactly(n int) bool {
+	for i := 0; i < 500; i++ {
+		if h.Subscribed() == n {
+			return true
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	return false
+}
+
 // Down makes every REST call answer 500.
 func (h *HA) Down(down bool) {
 	h.mu.Lock()
@@ -155,6 +184,8 @@ func (h *HA) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	switch {
+	case r.Method == "GET" && r.URL.Path == "/api/":
+		w.Write([]byte(`{"message":"API running."}`))
 	case r.Method == "GET" && r.URL.Path == "/api/states":
 		out := []map[string]any{}
 		for _, id := range h.order {
@@ -173,6 +204,10 @@ func (h *HA) serve(w http.ResponseWriter, r *http.Request) {
 		parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/services/"), "/")
 		if len(parts) != 2 {
 			http.NotFound(w, r)
+			return
+		}
+		if h.callFail != 0 {
+			http.Error(w, "service failed: some detail", h.callFail)
 			return
 		}
 		var data map[string]any

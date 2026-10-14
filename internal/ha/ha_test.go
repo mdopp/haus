@@ -21,6 +21,13 @@ func TestFromEnv(t *testing.T) {
 		t.Fatal("a URL without a token must refuse to start")
 	}
 	t.Setenv("HAUS_HA_TOKEN", "llat")
+	for _, bad := range []string{"ftp://host:8123", "host.containers.internal:8123", "http://"} {
+		t.Setenv("HAUS_HA_URL", bad)
+		if _, err := FromEnv(); err == nil {
+			t.Fatalf("%q must refuse to start: http or https with a host", bad)
+		}
+	}
+	t.Setenv("HAUS_HA_URL", "http://host.containers.internal:8123")
 	c, err := FromEnv()
 	if err != nil || c.URL != "http://host.containers.internal:8123" || c.Token != "llat" {
 		t.Fatalf("set: %+v %v", c, err)

@@ -22,6 +22,11 @@ import (
 
 func house(t *testing.T) (*hafake.HA, http.Handler) {
 	t.Helper()
+	return houseWith(t, nil)
+}
+
+func houseWith(t *testing.T, tune func(*Config)) (*hafake.HA, http.Handler) {
+	t.Helper()
 	fake := hafake.New("ha-token")
 	t.Cleanup(fake.Close)
 	fake.Set("light.kueche", "on", map[string]any{"friendly_name": "Küche", "brightness": 128, "rgb_color": []int{255, 128, 0},
@@ -38,9 +43,13 @@ func house(t *testing.T) (*hafake.HA, http.Handler) {
 	var calls []string
 	lb := fakeLaib(t, &calls)
 	t.Cleanup(lb.Close)
-	h := Handler(Config{Laib: &laib.Client{URL: lb.URL, Token: "ops"}, Validate: StaticValidator([]string{"dev1", "dev2"}),
-		HA: &ha.Client{URL: fake.URL, Token: "ha-token"}, Ping: 50 * time.Millisecond})
-	return fake, h
+	fake.Set("cover.tor_gross", "closed", map[string]any{"friendly_name": "Tor", "device_class": "Garage"})
+	cfg := Config{Laib: &laib.Client{URL: lb.URL, Token: "ops"}, Validate: StaticValidator([]string{"dev1", "dev2"}),
+		HA: &ha.Client{URL: fake.URL, Token: "ha-token"}, Ping: 50 * time.Millisecond}
+	if tune != nil {
+		tune(&cfg)
+	}
+	return fake, Handler(cfg)
 }
 
 func raw(t *testing.T, h http.Handler, method, path, bearer, body string) (int, string) {
@@ -107,6 +116,19 @@ func TestHACallRules(t *testing.T) {
 		{`{"entity_id":"Light.Kueche","service":"light.toggle"}`, 400, "an entity id is lower case"},
 		{`{"entity_id":"cover.rollo","service":"cover.open_cover","data":{"entity_id":"cover.garage"}}`, 400, "data cannot name another target"},
 		{`{"entity_id":"cover.rollo","service":"cover.open_cover","data":{"area_id":"garage"}}`, 400, "nor an area"},
+		{`{"entity_id":"cover.rollo","service":"cover.open_cover","data":{"device_id":"abc"}}`, 400, "nor a device"},
+		{`{"entity_id":"cover.rollo","service":"cover.open_cover","data":{"floor_id":"eg"}}`, 400, "nor a floor"},
+		{`{"entity_id":"cover.rollo","service":"cover.open_cover","data":{"label_id":"tore"}}`, 400, "nor a label"},
+		{`{"entity_id":"cover.rollo","service":"cover.open_cover","data":{"target":{"entity_id":"cover.garage"}}}`, 400, "nor a target block"},
+		{`{"entity_id":"cover.garage","service":"cover.set_cover_tilt_position","data":{"tilt_position":50}}`, 403, "a garage tilt needs confirmed"},
+		{`{"entity_id":"cover.garage","service":"cover.open_cover_tilt"}`, 403, "a garage tilt open too"},
+		{`{"entity_id":"cover.garage","service":"cover.toggle_cover_tilt"}`, 403, "a garage tilt toggle too: only closing and stopping are free"},
+		{`{"entity_id":"cover.garage","service":"cover.stop_cover"}`, 200, "stopping the garage is free"},
+		{`{"entity_id":"cover.garage","service":"cover.close_cover_tilt"}`, 200, "closing its tilt is free"},
+		{`{"entity_id":"cover.ohne","service":"cover.close_cover"}`, 200, "closing an unknown cover is free"},
+		{`{"entity_id":"cover.ohne","service":"cover.toggle_cover_tilt"}`, 403, "anything else on an unknown cover fails closed"},
+		{`{"entity_id":"cover.tor_gross","service":"cover.open_cover"}`, 403, "device_class is compared without case"},
+		{`{"entity_id":"cover.rollo","service":"cover.toggle_cover_tilt"}`, 200, "a shutter's tilt is free"},
 		{`not json`, 400, "bad json"},
 	}
 	for _, c := range cases {
@@ -143,12 +165,30 @@ func TestHACallRules(t *testing.T) {
 	}
 }
 
+// HA's own trouble is a 502 and its detail stays in Haus's log; only HA's
+// 400 (a call HA refuses) is the caller's 400.
 func TestHACallWhenHAFails(t *testing.T) {
 	fake, h := house(t)
+	toggle := `{"entity_id":"light.kueche","service":"light.toggle"}`
+	fake.FailCalls(400)
+	if code, body := raw(t, h, "POST", "/napi/ha/call", "dev1", toggle); code != 400 || strings.Contains(body, "some detail") {
+		t.Fatalf("HA 400 → %d %s, want 400 without HA's detail", code, body)
+	}
+	for _, status := range []int{401, 403, 500} {
+		fake.FailCalls(status)
+		code, body := raw(t, h, "POST", "/napi/ha/call", "dev1", toggle)
+		if code != 502 || !strings.Contains(body, `"ha_unavailable"`) || strings.Contains(body, "some detail") {
+			t.Fatalf("HA %d → %d %s, want 502 ha_unavailable", status, code, body)
+		}
+	}
+	fake.FailCalls(0)
+	_, wrong := houseWith(t, func(c *Config) { c.HA = &ha.Client{URL: fake.URL, Token: "wrong"} })
+	if code, body := raw(t, wrong, "POST", "/napi/ha/call", "dev1", toggle); code != 502 || strings.Contains(body, "401") {
+		t.Fatalf("a wrong HA token → %d %s, want 502", code, body)
+	}
 	fake.Down(true)
-	code, body := raw(t, h, "POST", "/napi/ha/call", "dev1", `{"entity_id":"light.kueche","service":"light.toggle"}`)
-	if code < 400 || !strings.Contains(body, `"ok":false`) {
-		t.Fatalf("HA down → %d %s", code, body)
+	if code, _ := raw(t, h, "POST", "/napi/ha/call", "dev1", toggle); code != 502 {
+		t.Fatalf("HA down → %d, want 502", code)
 	}
 }
 
@@ -359,6 +399,11 @@ func TestWatchAndEvents(t *testing.T) {
 	if !fake.WaitSubscribed(1) {
 		t.Fatal("Haus never subscribed to state_changed")
 	}
+	// once subscribed, Haus sends each watched entity's current card
+	resync := readFrames(t, l1, 2, 2*time.Second)
+	if len(resync) != 2 || !strings.Contains(resync[0].data+resync[1].data, `"state":"on"`) || !strings.Contains(resync[0].data+resync[1].data, `"cover.rollo"`) {
+		t.Fatalf("resync on subscribe: %+v", resync)
+	}
 	fake.Change("light.flur", "on", map[string]any{"friendly_name": "Flur"}) // nobody watches it
 	fake.Change("light.kueche", "off", map[string]any{"friendly_name": "Küche"})
 	fake.Change("light.kueche", "off", map[string]any{"friendly_name": "Küche"}) // the same card again: nothing new
@@ -471,5 +516,238 @@ func TestWithoutHATheHousePathsGoThroughTheBridge(t *testing.T) {
 	}
 	if len(got) != 5 || !strings.Contains(got[0], "lock.unlock") {
 		t.Fatalf("bridge saw: %v", got)
+	}
+}
+
+// After HA drops the WebSocket (a restart), Haus resubscribes and resends
+// what changed while it was away.
+func TestResyncAfterReconnect(t *testing.T) {
+	fake, h := house(t)
+	srv := httptest.NewServer(h)
+	defer srv.Close()
+	raw(t, h, "POST", "/napi/portal/watch", "dev1", `{"entity_ids":["light.flur"]}`)
+	resp, lines := stream(t, srv.URL, "dev1")
+	defer resp.Body.Close()
+	if f := readFrames(t, lines, 1, 2*time.Second); len(f) != 1 || !strings.Contains(f[0].data, `"state":"off"`) {
+		t.Fatalf("first resync: %+v", f)
+	}
+	fake.DropAll()
+	if !fake.WaitSubscribedExactly(0) {
+		t.Fatal("the drop did not drop")
+	}
+	fake.Set("light.flur", "on", map[string]any{"friendly_name": "Flur"}) // no event: Haus is not listening
+	if !fake.WaitSubscribed(1) {
+		t.Fatal("Haus did not resubscribe")
+	}
+	if f := readFrames(t, lines, 1, 3*time.Second); len(f) != 1 || !strings.Contains(f[0].data, `"state":"on"`) {
+		t.Fatalf("after the reconnect the missed change must arrive: %+v", f)
+	}
+}
+
+// A sensor card goes out at most once per SensorEvery, and its last value
+// always does.
+func TestSensorThrottle(t *testing.T) {
+	fake, h := houseWith(t, func(c *Config) { c.SensorEvery = 500 * time.Millisecond })
+	srv := httptest.NewServer(h)
+	defer srv.Close()
+	attrs := map[string]any{"friendly_name": "Leistung", "device_class": "power", "unit_of_measurement": "W"}
+	fake.Set("sensor.leistung", "100", attrs)
+	raw(t, h, "POST", "/napi/portal/watch", "dev1", `{"entity_ids":["sensor.leistung"]}`)
+	resp, lines := stream(t, srv.URL, "dev1")
+	defer resp.Body.Close()
+	if f := readFrames(t, lines, 1, 2*time.Second); len(f) != 1 || !strings.Contains(f[0].data, `"state":"100"`) {
+		t.Fatalf("leading edge: %+v", f)
+	}
+	for _, v := range []string{"200", "300", "400"} {
+		fake.Change("sensor.leistung", v, attrs)
+	}
+	f := readFrames(t, lines, 3, 1500*time.Millisecond)
+	if len(f) != 1 || !strings.Contains(f[0].data, `"state":"400"`) {
+		t.Fatalf("within the interval only the last value, once: %+v", f)
+	}
+}
+
+// When the last stream leaves, Haus lets go of HA's subscription.
+func TestTheLastStreamLetsGoOfHA(t *testing.T) {
+	fake, h := house(t)
+	srv := httptest.NewServer(h)
+	defer srv.Close()
+	r1, _ := stream(t, srv.URL, "dev1")
+	r2, _ := stream(t, srv.URL, "dev2")
+	if !fake.WaitSubscribed(1) {
+		t.Fatal("never subscribed")
+	}
+	r1.Body.Close()
+	time.Sleep(100 * time.Millisecond)
+	if fake.Subscribed() != 1 {
+		t.Fatal("one stream is still open: keep the subscription")
+	}
+	r2.Body.Close()
+	if !fake.WaitSubscribedExactly(0) {
+		t.Fatalf("still subscribed after the last stream left: %d", fake.Subscribed())
+	}
+}
+
+// A device holds a few streams at most; a new one pushes out its oldest
+// (a stale one the device has long given up on).
+func TestStreamsPerDeviceAreCapped(t *testing.T) {
+	_, h := house(t)
+	srv := httptest.NewServer(h)
+	defer srv.Close()
+	var all []<-chan string
+	for i := 0; i < 4; i++ {
+		resp, lines := stream(t, srv.URL, "dev1")
+		defer resp.Body.Close()
+		all = append(all, lines)
+		time.Sleep(50 * time.Millisecond)
+	}
+	if !ended(all[0], 2*time.Second) {
+		t.Fatal("the oldest of four streams is still open")
+	}
+	if ended(all[3], 200*time.Millisecond) {
+		t.Fatal("the newest stream was closed")
+	}
+}
+
+func TestWatchWhenHAIsDown(t *testing.T) {
+	fake, h := house(t)
+	fake.Down(true)
+	if code, body := raw(t, h, "POST", "/napi/portal/watch", "dev1", `{"entity_ids":["light.kueche"]}`); code != 503 || !strings.Contains(body, `"ok":false`) {
+		t.Fatalf("watch with HA down → %d %s, want 503", code, body)
+	}
+}
+
+// The app holds ONE stream (RealtimeService.kt): it carries card_state,
+// notices (ha) and approvals (servicebay). While the bridge is set, Haus
+// cannot produce the other two, so the stream and the watch-set stay on the
+// bridge; the rest of the house paths are Haus's.
+func TestWithABridgeTheStreamStaysOnTheBridge(t *testing.T) {
+	bridge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/napi/portal/events":
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.Write([]byte("event: ha\ndata: {\"kind\":\"ha\",\"title\":\"Fenster offen\"}\n\n"))
+			w.(http.Flusher).Flush()
+			<-r.Context().Done()
+		default:
+			w.Write([]byte(`{"ok":true,"via":"bridge"}`))
+		}
+	}))
+	defer bridge.Close()
+	u, _ := url.Parse(bridge.URL)
+	fake, h := houseWith(t, func(c *Config) { c.Bridge = u })
+	srv := httptest.NewServer(h)
+	defer srv.Close()
+	resp, lines := stream(t, srv.URL, "dev1")
+	defer resp.Body.Close()
+	f := readFrames(t, lines, 1, 2*time.Second)
+	if len(f) != 1 || f[0].event != "ha" || !strings.Contains(f[0].data, "Fenster offen") {
+		t.Fatalf("the bridge's notice must reach the phone: %+v", f)
+	}
+	if code, body := raw(t, h, "POST", "/napi/portal/watch", "dev1", `{"entity_ids":["light.kueche"]}`); code != 200 || !strings.Contains(body, "bridge") {
+		t.Fatalf("watch → %d %s, want the bridge", code, body)
+	}
+	if fake.Subscribed() != 0 {
+		t.Fatal("Haus subscribed to HA although the stream is the bridge's")
+	}
+	if code, _ := raw(t, h, "POST", "/napi/ha/call", "dev1", `{"entity_id":"light.kueche","service":"light.toggle"}`); code != 200 || len(fake.Calls()) != 1 {
+		t.Fatalf("ha/call stays Haus's: %d, calls %d", code, len(fake.Calls()))
+	}
+}
+
+func stream(t *testing.T, base, bearer string) (*http.Response, <-chan string) {
+	t.Helper()
+	req, _ := http.NewRequest("GET", base+"/napi/portal/events", nil)
+	req.Header.Set("Authorization", "Bearer "+bearer)
+	req.Header.Set("Accept", "text/event-stream")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := make(chan string, 100)
+	go func() {
+		sc := bufio.NewScanner(resp.Body)
+		for sc.Scan() {
+			lines <- sc.Text()
+		}
+		close(lines)
+	}()
+	return resp, lines
+}
+
+func ended(lines <-chan string, d time.Duration) bool {
+	deadline := time.After(d)
+	for {
+		select {
+		case _, ok := <-lines:
+			if !ok {
+				return true
+			}
+		case <-deadline:
+			return false
+		}
+	}
+}
+
+// HAUS_ENERGY_FLOW / HAUS_ENERGY_TOTALS name the entities; the friendly
+// names are only the fallback.
+func TestPortalEnergyFromConfig(t *testing.T) {
+	fake, h := houseWith(t, func(c *Config) {
+		c.Energy = EnergyMap{Flow: map[string]string{"pv": "sensor.inverter", "grid": "sensor.meter"},
+			Totals: []EnergyTotal{{Label: "PV gesamt", Entity: "sensor.pv_kwh"}, {Label: "Bezug", Entity: "sensor.import_kwh"}}}
+	})
+	power := map[string]any{"device_class": "power", "unit_of_measurement": "W"}
+	fake.Set("sensor.inverter", "2500", map[string]any{"friendly_name": "Inverter", "device_class": "power", "unit_of_measurement": "W"})
+	fake.Set("sensor.meter", "-900", map[string]any{"friendly_name": "Meter", "device_class": "power", "unit_of_measurement": "W"})
+	fake.Set("sensor.fridge", "80", power)
+	fake.Set("sensor.pv_kwh", "999", map[string]any{"friendly_name": "PV lifetime", "device_class": "energy", "unit_of_measurement": "kWh"})
+	fake.Set("sensor.import_kwh", "111", map[string]any{"friendly_name": "Import", "device_class": "energy", "unit_of_measurement": "kWh"})
+	// a friendly name that would have matched the fallback must not count now
+	fake.Set("sensor.alt", "1", map[string]any{"friendly_name": "Aktueller Hausverbrauch", "device_class": "power", "unit_of_measurement": "W"})
+	_, body := raw(t, h, "GET", "/napi/portal/energy", "dev1", "")
+	var out struct {
+		Energy struct {
+			Flow     []map[string]any `json:"flow"`
+			Totals   []map[string]any `json:"totals"`
+			Circuits []map[string]any `json:"circuits"`
+		} `json:"energy"`
+	}
+	json.Unmarshal([]byte(body), &out)
+	e := out.Energy
+	if len(e.Flow) != 2 || e.Flow[0]["entity_id"] != "sensor.inverter" || e.Flow[0]["label"] != "PV" || e.Flow[0]["sense"] != "supply" ||
+		e.Flow[1]["entity_id"] != "sensor.meter" || e.Flow[1]["label"] != "Netz" || e.Flow[1]["sense"] != "grid" || e.Flow[1]["state"] != "-900" {
+		t.Fatalf("flow: %v", e.Flow)
+	}
+	if len(e.Totals) != 2 || e.Totals[0]["label"] != "PV gesamt" || e.Totals[0]["state"] != "999" || e.Totals[1]["label"] != "Bezug" {
+		t.Fatalf("totals: %v", e.Totals)
+	}
+	for _, c := range e.Circuits {
+		if c["entity_id"] == "sensor.inverter" || c["entity_id"] == "sensor.meter" {
+			t.Fatalf("a flow entity is not a circuit: %v", e.Circuits)
+		}
+	}
+	if len(e.Circuits) != 2 {
+		t.Fatalf("circuits: %v", e.Circuits)
+	}
+}
+
+func TestEnergyFromEnv(t *testing.T) {
+	t.Setenv("HAUS_ENERGY_FLOW", "")
+	t.Setenv("HAUS_ENERGY_TOTALS", "")
+	if m, err := EnergyFromEnv(); err != nil || len(m.Flow) != 0 || len(m.Totals) != 0 {
+		t.Fatalf("unset: %+v %v", m, err)
+	}
+	t.Setenv("HAUS_ENERGY_FLOW", "pv=sensor.a, house=sensor.b,grid=sensor.c,battery=sensor.d")
+	t.Setenv("HAUS_ENERGY_TOTALS", "PV-Erzeugung=sensor.e, Batterie geladen=sensor.f")
+	m, err := EnergyFromEnv()
+	if err != nil || m.Flow["pv"] != "sensor.a" || m.Flow["battery"] != "sensor.d" || len(m.Totals) != 2 ||
+		m.Totals[1] != (EnergyTotal{Label: "Batterie geladen", Entity: "sensor.f"}) {
+		t.Fatalf("set: %+v %v", m, err)
+	}
+	for _, bad := range []string{"sun=sensor.a", "pv", "pv=not an entity"} {
+		t.Setenv("HAUS_ENERGY_FLOW", bad)
+		if _, err := EnergyFromEnv(); err == nil {
+			t.Fatalf("%q must refuse to start", bad)
+		}
 	}
 }
