@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/mdopp/haus/internal/ha"
 )
@@ -59,7 +60,11 @@ func (h *homeAPI) addable(w http.ResponseWriter, r *http.Request) {
 		refuse(w, http.StatusBadGateway, "ha_unavailable")
 		return
 	}
-	areas := h.areas.get(h.ha)
+	// rooms only label, they never break the list: the shared registry cache (#12), empty at first
+	actx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	reg, _ := h.ha.CachedRegistry(actx)
+	cancel()
+	areas := reg.Rooms
 	rooms := map[string][]map[string]any{}
 	for _, s := range states {
 		domain, _, _ := strings.Cut(s.EntityID, ".")

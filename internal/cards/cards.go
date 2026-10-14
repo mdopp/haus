@@ -10,10 +10,12 @@ import (
 	"strings"
 )
 
-// Row is one line: what it is, and a quieter detail.
+// Row is one line: what it is, a quieter detail, and where it leads, if
+// anywhere (a note's page, the calendar).
 type Row struct {
 	Text   string `json:"text"`
 	Detail string `json:"detail"`
+	Href   string `json:"href,omitempty"`
 }
 
 // Link is where the card leads.
@@ -34,6 +36,11 @@ func (c Card) Empty() bool { return len(c.Rows) == 0 }
 
 // Add appends a row.
 func (c *Card) Add(text, detail string) { c.Rows = append(c.Rows, Row{Text: text, Detail: detail}) }
+
+// AddLink appends a row that leads to href.
+func (c *Card) AddLink(text, detail, href string) {
+	c.Rows = append(c.Rows, Row{Text: text, Detail: detail, Href: href})
+}
 
 // MarshalJSON keeps null out: no rows is [] (Android reads null as "null").
 func (c Card) MarshalJSON() ([]byte, error) {
@@ -75,7 +82,11 @@ func (c Card) HTML() string {
 	var b strings.Builder
 	b.WriteString("<section class=karte aria-labelledby=" + id + "><h2 id=" + id + ">" + html.EscapeString(c.Title) + "</h2><ul>")
 	for _, r := range c.Rows {
-		b.WriteString("<li>" + html.EscapeString(r.Text))
+		if r.Href != "" {
+			b.WriteString(`<li><a href="` + html.EscapeString(r.Href) + `">` + html.EscapeString(r.Text) + "</a>")
+		} else {
+			b.WriteString("<li>" + html.EscapeString(r.Text))
+		}
 		if r.Detail != "" {
 			b.WriteString(" <span class=k>" + html.EscapeString(r.Detail) + "</span>")
 		}

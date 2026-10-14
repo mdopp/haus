@@ -431,7 +431,10 @@ func erinnerungen(ctx context.Context, c *caldav.Client, loc *time.Location) (st
 			break
 		}
 		when := "ohne Zeitpunkt"
-		if !t.Due.IsZero() {
+		switch {
+		case !t.Due.IsZero() && t.DueAllDay: // due on a day: no time to show
+			when = day(t.Due.In(loc))
+		case !t.Due.IsZero():
 			when = dayTime(t.Due.In(loc))
 		}
 		b.WriteString(when + ": " + orDash(t.Summary) + "\n")

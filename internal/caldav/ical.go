@@ -268,7 +268,7 @@ type Todo struct {
 	UID       string
 	Summary   string
 	Due       time.Time // zero: no due date
-	AllDay    bool      // Due is a day, not a moment
+	DueAllDay bool      // due on a day (DUE;VALUE=DATE), not at a time: Due is that day's midnight
 	Status    string
 	Completed time.Time // when it was ticked off; zero: not, or unknown
 }
@@ -366,7 +366,7 @@ func Todos(root *Component, loc *time.Location) []Todo {
 			t.Completed, _, _ = When(p, loc)
 		}
 		if p, ok := c.Get("DUE"); ok {
-			t.Due, t.AllDay, _ = When(p, loc)
+			t.Due, t.DueAllDay, _ = When(p, loc)
 		}
 		out = append(out, t)
 	})

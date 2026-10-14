@@ -177,7 +177,7 @@ func (t *toolsAPI) tasks(w http.ResponseWriter, r *http.Request) {
 		}
 		switch {
 		case td.Due.IsZero():
-		case td.AllDay:
+		case td.DueAllDay:
 			row["due"] = haushalt.Day(td.Due.In(t.loc))
 		default:
 			row["due"] = haushalt.DayTime(td.Due.In(t.loc))

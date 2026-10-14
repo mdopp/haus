@@ -25,6 +25,8 @@ type Client struct {
 	URL   string // http://host.containers.internal:8123
 	Token string // a long-lived access token
 	HTTP  *http.Client
+
+	registry registryCache // CachedRegistry; shared by everyone holding this client
 }
 
 // FromEnv reads HAUS_HA_URL and HAUS_HA_TOKEN. Unset URL means no HA: the

@@ -59,3 +59,19 @@ func TestCardJSONHasNoNull(t *testing.T) {
 		}
 	}
 }
+
+// haus#12: a row may lead somewhere (a note, the calendar); its text stays
+// text and its address is escaped. A row without one is no link.
+func TestRowLinks(t *testing.T) {
+	c := Card{Title: "Haushalt", Rows: []Row{{Text: "<i>Einkaufsliste</i>", Detail: "Notiz", Href: "/notizen/a.md?x=1&y=2"}, {Text: "Müll"}}}
+	got := c.HTML()
+	for _, want := range []string{`<li><a href="/notizen/a.md?x=1&amp;y=2">&lt;i&gt;Einkaufsliste&lt;/i&gt;</a> <span class=k>Notiz</span></li>`, "<li>Müll</li>"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("%q missing:\n%s", want, got)
+		}
+	}
+	b, _ := json.Marshal(Card{Title: "x", Rows: []Row{{Text: "Müll"}, {Text: "a", Href: "/kalender"}}})
+	if strings.Contains(string(b), "null") || !strings.Contains(string(b), `"href":"/kalender"`) {
+		t.Fatalf("json: %s", b)
+	}
+}

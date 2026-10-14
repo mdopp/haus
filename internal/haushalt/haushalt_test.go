@@ -352,6 +352,12 @@ func TestCalendarTools(t *testing.T) {
 	if isErr || text != "Do 15.10.2026 19:00: Gelbe Tonne raus" {
 		t.Fatalf("erinnerungen: %q", text)
 	}
+	// a reminder due on a day has no time: never "00:00" (haus#12 review)
+	s.fake.Put("/bote/familie/tag.ics", "BEGIN:VCALENDAR\r\nBEGIN:VTODO\r\nUID:t\r\nSUMMARY:Geburtstagskarte\r\nDUE;VALUE=DATE:20261016\r\nSTATUS:NEEDS-ACTION\r\nEND:VTODO\r\nEND:VCALENDAR\r\n")
+	text, isErr = call(t, s.h, "erinnerungen", nil)
+	if isErr || !strings.Contains(text, "Fr 16.10.2026: Geburtstagskarte") || strings.Contains(text, "00:00") {
+		t.Fatalf("a day-only reminder: %q", text)
+	}
 }
 
 // A note is a Markdown file in the share; search and read go through the

@@ -157,3 +157,17 @@ func TestNoPropertyInjection(t *testing.T) {
 		t.Fatalf("todo: %+v", ts)
 	}
 }
+
+// haus#12: a reminder due on a day, not at a time (DUE;VALUE=DATE), says so.
+func TestTodoDueOnADay(t *testing.T) {
+	loc, _ := time.LoadLocation("Europe/Berlin")
+	root, err := Parse("BEGIN:VCALENDAR\r\nBEGIN:VTODO\r\nUID:a\r\nSUMMARY:Tag\r\nDUE;VALUE=DATE:20261014\r\nEND:VTODO\r\n" +
+		"BEGIN:VTODO\r\nUID:b\r\nSUMMARY:Zeit\r\nDUE:20261014T070000Z\r\nEND:VTODO\r\nEND:VCALENDAR\r\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts := Todos(root, loc)
+	if len(ts) != 2 || !ts[0].DueAllDay || ts[1].DueAllDay || !ts[0].Due.Equal(time.Date(2026, 10, 14, 0, 0, 0, 0, loc)) {
+		t.Fatalf("%+v", ts)
+	}
+}
