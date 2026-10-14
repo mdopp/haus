@@ -1,10 +1,12 @@
 package napi
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"io"
 	"mime/multipart"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/textproto"
@@ -12,8 +14,11 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/mdopp/haus/internal/laib"
 )
@@ -220,4 +225,256 @@ func keys[V any](m map[string]V) []string {
 		out = append(out, k)
 	}
 	return out
+}
+
+// Review of slice 2: how a file lands, what a broken disk answers, and how
+// far one phone (or anyone with a token) can push the share.
+
+func stubRand(t *testing.T, fours ...string) {
+	t.Helper()
+	real := randHex
+	t.Cleanup(func() { randHex = real })
+	randHex = func(n int) string {
+		if n == 4 && len(fours) > 0 {
+			v := fours[0]
+			fours = fours[1:]
+			return v
+		}
+		return real(n)
+	}
+}
+
+func oneJPEG(t *testing.T, name string) (string, *bytes.Buffer) {
+	return multipartBody(t, part{name: "filename", body: []byte(name)}, part{name: "file", filename: name, ctype: "image/jpeg", body: jpeg})
+}
+
+// A name that is taken is never replaced, on the rename path (renameat2
+// RENAME_NOREPLACE, which Paperless's inotify sees as MOVED_TO) and on the
+// hard-link fallback for a kernel or file system without it.
+func TestUploadNeverReplaces(t *testing.T) {
+	for _, viaLink := range []bool{false, true} {
+		dir, h := uploader(t)
+		if err := os.WriteFile(filepath.Join(dir, "x-aaaaaaaa.jpg"), []byte("first"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		stubRand(t, "aaaaaaaa", "bbbbbbbb")
+		realRename, realLink := noReplace, linkFile
+		usedLink := false
+		linkFile = func(r *os.Root, o, n string) error { usedLink = true; return realLink(r, o, n) }
+		if viaLink {
+			noReplace = func(*os.File, string, string) error { return errNoRenameat2 }
+		}
+		ct, body := oneJPEG(t, "x.jpg")
+		code, out := upload(t, h, "dev1", ct, body)
+		noReplace, linkFile = realRename, realLink
+		if code != 200 || out["id"] != "x-bbbbbbbb.jpg" {
+			t.Fatalf("link %v: %d %v", viaLink, code, out)
+		}
+		if usedLink != viaLink {
+			t.Fatalf("link %v: the link path was used: %v", viaLink, usedLink)
+		}
+		fs := files(t, dir)
+		if string(fs["x-aaaaaaaa.jpg"]) != "first" || !bytes.Equal(fs["x-bbbbbbbb.jpg"], jpeg) || len(fs) != 2 {
+			t.Fatalf("link %v: %v", viaLink, keys(fs))
+		}
+	}
+}
+
+func TestUploadStagesUnderAName_PaperlessIgnores(t *testing.T) {
+	_, h := uploader(t)
+	real := createStage
+	defer func() { createStage = real }()
+	var names []string
+	createStage = func(r *os.Root, name string) (stageFile, error) {
+		names = append(names, name)
+		return real(r, name)
+	}
+	ct, body := oneJPEG(t, "a.jpg")
+	if code, _ := upload(t, h, "dev1", ct, body); code != 200 {
+		t.Fatalf("upload: %d", code)
+	}
+	if len(names) != 1 || !regexp.MustCompile(`^\._haus-[0-9a-f]{16}\.part$`).MatchString(names[0]) {
+		t.Fatalf("staged as %v", names)
+	}
+}
+
+func TestUploadRequestCapAndNames(t *testing.T) {
+	dir, h := uploader(t)
+	defer func(n int64) { uploadMaxBody = n }(uploadMaxBody)
+	uploadMaxBody = 4 << 10
+	ct, body := multipartBody(t, part{name: "file", filename: "a.jpg", ctype: "image/jpeg", body: append(append([]byte{}, jpeg...), bytes.Repeat([]byte{1}, 3<<10)...)},
+		part{name: "file", filename: "b.jpg", ctype: "image/jpeg", body: append(append([]byte{}, jpeg...), bytes.Repeat([]byte{1}, 3<<10)...)})
+	if code, out := upload(t, h, "dev1", ct, body); code != 413 || out["ok"] != false {
+		t.Fatalf("request over the cap: %d %v", code, out)
+	}
+	if fs := files(t, dir); len(fs) != 0 {
+		t.Fatalf("left: %v", keys(fs))
+	}
+	uploadMaxBody = 64 << 20
+	for name, want := range map[string]string{
+		"a:b*?‮.jpg":           `^a_b___-[0-9a-f]{8}\.jpg$`,
+		"Rechnung Müller.pdf": `^Rechnung Müller-[0-9a-f]{8}\.jpg$`,
+	} {
+		ct, body := oneJPEG(t, name)
+		code, out := upload(t, h, "dev1", ct, body)
+		id, _ := out["id"].(string)
+		if code != 200 || !regexp.MustCompile(want).MatchString(id) {
+			t.Errorf("%q stored as %q (%d)", name, id, code)
+		}
+	}
+}
+
+func TestUploadIsAllOrNothing(t *testing.T) {
+	dir, h := uploader(t)
+	real := noReplace
+	defer func() { noReplace = real }()
+	n := 0
+	noReplace = func(d *os.File, o, nw string) error {
+		if n++; n == 2 {
+			return syscall.EPERM
+		}
+		return real(d, o, nw)
+	}
+	ct, body := multipartBody(t, part{name: "file", filename: "a.jpg", ctype: "image/jpeg", body: jpeg}, part{name: "file", filename: "b.jpg", ctype: "image/jpeg", body: jpeg})
+	if code, out := upload(t, h, "dev1", ct, body); code != 500 || out["error"] != "store_failed" {
+		t.Fatalf("second place fails: %d %v", code, out)
+	}
+	if fs := files(t, dir); len(fs) != 0 {
+		t.Fatalf("the first stayed: %v", keys(fs))
+	}
+}
+
+type brokenFile struct{ write, sync error }
+
+func (b brokenFile) Write(p []byte) (int, error) {
+	if b.write != nil {
+		return 0, b.write
+	}
+	return len(p), nil
+}
+func (b brokenFile) Sync() error  { return b.sync }
+func (b brokenFile) Close() error { return nil }
+
+// The disk's own trouble is the server's, not the phone's bad request.
+func TestUploadDiskErrors(t *testing.T) {
+	_, h := uploader(t)
+	real := createStage
+	defer func() { createStage = real }()
+	for _, c := range []struct {
+		open        error
+		write, sync error
+		code        int
+	}{
+		{write: syscall.ENOSPC, code: 507},
+		{write: syscall.EDQUOT, code: 507},
+		{sync: syscall.EIO, code: 500},
+		{open: syscall.EACCES, code: 500},
+	} {
+		createStage = func(*os.Root, string) (stageFile, error) {
+			if c.open != nil {
+				return nil, c.open
+			}
+			return brokenFile{c.write, c.sync}, nil
+		}
+		ct, body := oneJPEG(t, "a.jpg")
+		if code, out := upload(t, h, "dev1", ct, body); code != c.code || out["ok"] != false {
+			t.Errorf("%+v: %d %v", c, code, out)
+		}
+	}
+}
+
+func TestUploadWantsRoomOnTheShare(t *testing.T) {
+	dir, h := uploader(t)
+	real := freeSpace
+	defer func() { freeSpace = real }()
+	freeSpace = func(string) (uint64, error) { return uint64(uploadMaxBody), nil }
+	ct, body := oneJPEG(t, "a.jpg")
+	if code, out := upload(t, h, "dev1", ct, body); code != 507 || out["ok"] != false {
+		t.Fatalf("a nearly full share: %d %v", code, out)
+	}
+	if fs := files(t, dir); len(fs) != 0 {
+		t.Fatalf("written: %v", keys(fs))
+	}
+}
+
+func TestUploadsAtOnceAreFew(t *testing.T) {
+	_, h := uploader(t)
+	var writers []*io.PipeWriter
+	done := make(chan struct{}, uploadConcurrent)
+	for i := 0; i < uploadConcurrent; i++ {
+		pr, pw := io.Pipe()
+		writers = append(writers, pw)
+		go func() {
+			req := httptest.NewRequest("POST", "/napi/upload", pr)
+			req.Header.Set("Content-Type", "multipart/form-data; boundary=x")
+			req.Header.Set("Authorization", "Bearer dev1")
+			h.ServeHTTP(httptest.NewRecorder(), req)
+			done <- struct{}{}
+		}()
+	}
+	got := 0
+	for i := 0; i < 200 && got != 429; i++ {
+		ct, body := oneJPEG(t, "a.jpg")
+		got, _ = upload(t, h, "dev1", ct, body)
+		if got != 429 {
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	for _, w := range writers {
+		w.Close()
+	}
+	for i := 0; i < uploadConcurrent; i++ {
+		<-done
+	}
+	if got != 429 {
+		t.Fatalf("with %d uploads running, another got %d, want 429", uploadConcurrent, got)
+	}
+	ct, body := oneJPEG(t, "a.jpg")
+	if code, _ := upload(t, h, "dev1", ct, body); code != 200 {
+		t.Fatalf("after them: %d", code)
+	}
+}
+
+// A phone (or anyone with a token) that stops sending holds a slot only
+// until the read deadline.
+func TestUploadReadDeadline(t *testing.T) {
+	dir, h := uploader(t)
+	defer func(d time.Duration) { uploadReadTimeout = d }(uploadReadTimeout)
+	uploadReadTimeout = 300 * time.Millisecond
+	srv := httptest.NewServer(h)
+	defer srv.Close()
+	conn, err := net.Dial("tcp", strings.TrimPrefix(srv.URL, "http://"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	ct, body := oneJPEG(t, "a.jpg")
+	head := "POST /napi/upload HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer dev1\r\nContent-Type: " + ct + "\r\nContent-Length: " + strconv.Itoa(body.Len()) + "\r\n\r\n"
+	conn.Write([]byte(head))
+	conn.Write(body.Bytes()[:body.Len()/2]) // and then nothing
+	conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	resp, err := http.ReadResponse(bufio.NewReader(conn), nil)
+	if err != nil {
+		t.Fatalf("no answer: %v", err)
+	}
+	if resp.StatusCode != 408 {
+		t.Fatalf("a stalled upload: %d", resp.StatusCode)
+	}
+	if fs := files(t, dir); len(fs) != 0 {
+		t.Fatalf("left: %v", keys(fs))
+	}
+}
+
+func TestSweepUploads(t *testing.T) {
+	dir := t.TempDir()
+	for _, n := range []string{"._haus-0123456789abcdef.part", "._andere", "rechnung.pdf"} {
+		os.WriteFile(filepath.Join(dir, n), []byte("x"), 0o644)
+	}
+	if err := SweepUploads(dir); err != nil {
+		t.Fatal(err)
+	}
+	fs := files(t, dir)
+	if _, ok := fs["._haus-0123456789abcdef.part"]; ok || len(fs) != 2 {
+		t.Fatalf("after the sweep: %v", keys(fs))
+	}
 }
