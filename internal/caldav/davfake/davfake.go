@@ -1,7 +1,9 @@
 // Package davfake is a fake Radicale for tests: Basic auth, PROPFIND on the
-// account's home, REPORT calendar-query on a collection, PUT with
-// If-None-Match, MKCALENDAR. It filters a REPORT by component only; the
-// client filters the time range itself, and tests read the query it sent.
+// account's home, REPORT calendar-query on a calendar and addressbook-query
+// on an address book, PUT with If-None-Match, MKCALENDAR, and MKCOL
+// extended for an address book. It filters a calendar REPORT by component
+// only and an address book REPORT not at all; the client filters itself,
+// and tests read the query it sent.
 package davfake
 
 import (
@@ -31,7 +33,9 @@ type Server struct {
 	ExistsStatus int
 	// MkcalendarStatus, when set, is MKCALENDAR's answer whatever the state (403: no right to).
 	MkcalendarStatus int
-	behind           map[string]col // made by "another client" right after the next PROPFIND
+	// MkcolStatus, when set, is MKCOL's answer whatever the state.
+	MkcolStatus int
+	behind      map[string]col // made by "another client" right after the next PROPFIND
 }
 
 // CreateAfterPropfind makes a calendar appear right after the next PROPFIND
@@ -45,9 +49,20 @@ func (s *Server) CreateAfterPropfind(path, name string, comps ...string) {
 	s.behind[path] = col{name: name, comps: comps}
 }
 
+// CreateAddressBookAfterPropfind is CreateAfterPropfind for an address book.
+func (s *Server) CreateAddressBookAfterPropfind(path, name string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.behind == nil {
+		s.behind = map[string]col{}
+	}
+	s.behind[path] = col{name: name, book: true}
+}
+
 type col struct {
 	name  string
 	comps []string
+	book  bool // an address book, not a calendar
 }
 
 // New starts a fake for one account.
@@ -63,6 +78,14 @@ func (s *Server) AddCalendar(path, name string, comps ...string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.cols[path] = col{name: name, comps: comps}
+}
+
+// AddAddressBook makes an address book at path; a full URL as path is
+// listed as such.
+func (s *Server) AddAddressBook(path, name string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.cols[path] = col{name: name, book: true}
 }
 
 // Put stores an object as a phone would.
@@ -84,12 +107,26 @@ func (s *Server) Objects() map[string]string {
 }
 
 // Calendars lists the calendar paths.
-func (s *Server) Calendars() []string {
+func (s *Server) Calendars() []string { return s.paths(false) }
+
+// AddressBooks lists the address book paths.
+func (s *Server) AddressBooks() []string { return s.paths(true) }
+
+// DisplayName is the collection's display name.
+func (s *Server) DisplayName(path string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.cols[path].name
+}
+
+func (s *Server) paths(book bool) []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var out []string
-	for k := range s.cols {
-		out = append(out, k)
+	for k, c := range s.cols {
+		if c.book == book {
+			out = append(out, k)
+		}
 	}
 	sort.Strings(out)
 	return out
@@ -120,7 +157,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		var b strings.Builder
-		b.WriteString(`<?xml version="1.0" encoding="utf-8"?><multistatus xmlns="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">`)
+		b.WriteString(`<?xml version="1.0" encoding="utf-8"?><multistatus xmlns="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:CR="urn:ietf:params:xml:ns:carddav">`)
 		b.WriteString(`<response><href>` + home + `</href><propstat><prop><resourcetype><collection/></resourcetype></prop><status>HTTP/1.1 200 OK</status></propstat></response>`)
 		var paths []string
 		for k := range s.cols {
@@ -129,7 +166,11 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		sort.Strings(paths)
 		for _, k := range paths {
 			c := s.cols[k]
-			b.WriteString(`<response><href>` + esc(k) + `</href><propstat><prop><resourcetype><collection/><C:calendar/></resourcetype><displayname>` + esc(c.name) + `</displayname>`)
+			rt := `<C:calendar/>`
+			if c.book {
+				rt = `<CR:addressbook/>`
+			}
+			b.WriteString(`<response><href>` + esc(k) + `</href><propstat><prop><resourcetype><collection/>` + rt + `</resourcetype><displayname>` + esc(c.name) + `</displayname>`)
 			if len(c.comps) > 0 {
 				b.WriteString(`<C:supported-calendar-component-set>`)
 				for _, cp := range c.comps {
@@ -147,14 +188,18 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMultiStatus)
 		io.WriteString(w, b.String())
 	case "REPORT":
-		if _, ok := s.cols[r.URL.Path]; !ok {
+		c, ok := s.cols[r.URL.Path]
+		if !ok {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
 		s.Reports = append(s.Reports, string(body))
-		comp := "VEVENT"
+		comp, data := "VEVENT", "C:calendar-data"
 		if strings.Contains(string(body), `name="VTODO"`) {
 			comp = "VTODO"
+		}
+		if c.book {
+			comp, data = "VCARD", "CR:address-data"
 		}
 		var paths []string
 		for k := range s.objs {
@@ -164,9 +209,9 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		sort.Strings(paths)
 		var b strings.Builder
-		b.WriteString(`<?xml version="1.0" encoding="utf-8"?><D:multistatus xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">`)
+		b.WriteString(`<?xml version="1.0" encoding="utf-8"?><D:multistatus xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:CR="urn:ietf:params:xml:ns:carddav">`)
 		for _, k := range paths {
-			b.WriteString(`<D:response><D:href>` + esc(k) + `</D:href><D:propstat><D:prop><D:getetag>"1"</D:getetag><C:calendar-data>` + esc(s.objs[k]) + `</C:calendar-data></D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response>`)
+			b.WriteString(`<D:response><D:href>` + esc(k) + `</D:href><D:propstat><D:prop><D:getetag>"1"</D:getetag><` + data + `>` + esc(s.objs[k]) + `</` + data + `></D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response>`)
 		}
 		b.WriteString(`</D:multistatus>`)
 		w.WriteHeader(http.StatusMultiStatus)
@@ -208,6 +253,29 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 			name = string(body)[i+len("<D:displayname>") : j]
 		}
 		s.cols[r.URL.Path] = col{name: name, comps: comps}
+		w.WriteHeader(http.StatusCreated)
+	case "MKCOL":
+		if s.MkcolStatus != 0 {
+			w.WriteHeader(s.MkcolStatus)
+			return
+		}
+		if _, ok := s.cols[r.URL.Path]; ok {
+			code := s.ExistsStatus
+			if code == 0 {
+				code = http.StatusMethodNotAllowed
+			}
+			w.WriteHeader(code)
+			return
+		}
+		var mk struct {
+			Name string    `xml:"set>prop>displayname"`
+			Book *struct{} `xml:"set>prop>resourcetype>addressbook"`
+		}
+		if err := xml.Unmarshal(body, &mk); err != nil || mk.Book == nil {
+			w.WriteHeader(http.StatusForbidden) // a plain collection: not what the client should make
+			return
+		}
+		s.cols[r.URL.Path] = col{name: mk.Name, book: true}
 		w.WriteHeader(http.StatusCreated)
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
