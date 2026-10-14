@@ -16,9 +16,12 @@ func TestFromEnv(t *testing.T) {
 	if c, err := FromEnv(); c != nil || err != nil {
 		t.Fatalf("unset: %v %v", c, err)
 	}
+	// the laib template always names HA's address; the token is the one step the
+	// admin takes (laib secret set HAUS_HA_TOKEN). Without it the paths stay on
+	// the bridge: off, not a crash loop.
 	t.Setenv("HAUS_HA_URL", "http://host.containers.internal:8123")
-	if _, err := FromEnv(); err == nil {
-		t.Fatal("a URL without a token must refuse to start")
+	if c, err := FromEnv(); c != nil || err != nil {
+		t.Fatalf("a URL without a token is off, not an error: %v %v", c, err)
 	}
 	t.Setenv("HAUS_HA_TOKEN", "llat")
 	for _, bad := range []string{"ftp://host:8123", "host.containers.internal:8123", "http://"} {
