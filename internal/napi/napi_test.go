@@ -125,7 +125,7 @@ func TestDenyIsNotHausEither(t *testing.T) {
 
 // haus#26, laib ADR 0022 §4: the old app's Box keys are gone, and a /napi
 // path Haus does not serve is 404, passed on to nobody — even with a paired
-// device's token.
+// device's token. The 404 is JSON, as every refusal the app parses.
 func TestTheOldPathsAreGone(t *testing.T) {
 	var calls []string
 	lb := fakeLaib(t, &calls)
@@ -137,9 +137,8 @@ func TestTheOldPathsAreGone(t *testing.T) {
 		{"POST", old + "/services/media/operate"}, {"POST", old + "/approvals/7/deny"},
 		{"GET", "/napi/portal/nothing-here"}, {"GET", "/napi/defs/model"}, {"POST", "/napi/notifications/ack"},
 	} {
-		if code, _ := get(t, h, p.method, p.path, "dev1", `{"action":"restart"}`); code != 404 {
-			t.Errorf("%s %s → %d, want 404", p.method, p.path, code)
-		}
+		code, body := raw(t, h, p.method, p.path, "dev1", `{"action":"restart"}`)
+		notFound(t, p.method+" "+p.path, code, body)
 	}
 	if len(calls) != 0 {
 		t.Fatalf("Laib was asked: %v", calls)
@@ -185,4 +184,25 @@ func TestTheAppReadsTheHousePersona(t *testing.T) {
 	if code, _ := get(t, h, "GET", "/napi/persona", "", ""); code != 401 {
 		t.Fatalf("without a token: %d", code)
 	}
+}
+
+// notFound: an unknown or unconfigured /napi path answers the one JSON 404
+// (haus#26): the app parses JSON errors.
+func notFound(t *testing.T, what string, code int, body string) {
+	t.Helper()
+	if code != 404 || strings.TrimSpace(body) != `{"ok":false,"reason":"not_found"}` {
+		t.Errorf("%s → %d %q, want 404 {\"ok\":false,\"reason\":\"not_found\"}", what, code, body)
+	}
+}
+
+// Even without a token: the path is not there, whoever asks.
+func TestUnknownNapiPathIsJSON404WithoutAToken(t *testing.T) {
+	var calls []string
+	lb := fakeLaib(t, &calls)
+	defer lb.Close()
+	h := Handler(Config{Laib: &laib.Client{URL: lb.URL, Token: "ops"}, Validate: StaticValidator([]string{"dev1"})})
+	code, body := raw(t, h, "GET", "/napi/gibtsnicht", "", "")
+	notFound(t, "GET /napi/gibtsnicht", code, body)
+	code, body = raw(t, h, "GET", "/napi/persona/icon.svg", "dev1", "")
+	notFound(t, "the persona icon without an icon", code, body)
 }

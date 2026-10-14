@@ -144,8 +144,7 @@ func TestWithoutHACameraAndAddableAre404(t *testing.T) {
 	defer lb.Close()
 	h := Handler(Config{Laib: &laib.Client{URL: lb.URL, Token: "ops"}, Validate: StaticValidator([]string{"dev1"})})
 	for _, p := range []string{"/napi/portal/camera/camera.einfahrt/snapshot", "/napi/portal/start/addable"} {
-		if code, body := raw(t, h, "GET", p, "dev1", ""); code != 404 {
-			t.Errorf("%s → %d %s, want 404", p, code, body)
-		}
+		code, body := raw(t, h, "GET", p, "dev1", "")
+		notFound(t, p, code, body)
 	}
 }

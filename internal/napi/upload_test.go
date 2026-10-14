@@ -205,7 +205,7 @@ func TestWithoutAnUploadDirTheUploadIs404(t *testing.T) {
 	defer lb.Close()
 	h := Handler(Config{Laib: &laib.Client{URL: lb.URL, Token: "ops"}, Validate: StaticValidator([]string{"dev1"})})
 	ct, body := multipartBody(t, part{name: "file", filename: "a.jpg", ctype: "image/jpeg", body: jpeg})
-	if code, out := upload(t, h, "dev1", ct, body); code != 404 {
+	if code, out := upload(t, h, "dev1", ct, body); code != 404 || out["ok"] != false || out["reason"] != "not_found" {
 		t.Fatalf("no upload dir: %d %v", code, out)
 	}
 }

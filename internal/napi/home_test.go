@@ -502,9 +502,8 @@ func TestWithoutHATheHousePathsAre404(t *testing.T) {
 		{"POST", "/napi/portal/watch", `{"entity_ids":[]}`},
 		{"GET", "/napi/portal/events", ""},
 	} {
-		if code, body := raw(t, h, p.method, p.path, "dev1", p.body); code != 404 {
-			t.Errorf("%s %s → %d %s, want 404", p.method, p.path, code, body)
-		}
+		code, body := raw(t, h, p.method, p.path, "dev1", p.body)
+		notFound(t, p.method+" "+p.path, code, body)
 	}
 }
 

@@ -251,14 +251,12 @@ func TestWithoutABackendTheToolPathsAre404(t *testing.T) {
 		{"GET", "/napi/portal/tasks", ""},
 		{"POST", "/napi/action-callback", `{"action_id":"task.set_status"}`},
 	} {
-		if code, body := raw(t, none.h, p.method, p.path, "dev1", p.body); code != 404 {
-			t.Errorf("no backend: %s %s → %d %s, want 404", p.method, p.path, code, body)
-		}
+		code, body := raw(t, none.h, p.method, p.path, "dev1", p.body)
+		notFound(t, "no backend: "+p.method+" "+p.path, code, body)
 	}
 	s := toolsWith(t, which{cal: true})
-	if code, body := raw(t, s.h, "GET", "/napi/portal/contacts", "dev1", ""); code != 404 {
-		t.Fatalf("contacts without an address book: %d %s", code, body)
-	}
+	code, body := raw(t, s.h, "GET", "/napi/portal/contacts", "dev1", "")
+	notFound(t, "contacts without an address book", code, body)
 }
 
 func rows(t *testing.T, h http.Handler, path, key string) []map[string]any {
