@@ -71,6 +71,28 @@ the house persona, and the old Solaris and ServiceBay names live only in
   `HAUS_ANDROID_FINGERPRINTS` (comma-separated, public), so the app opens
   Haus's pages without a URL bar. `[]` without them.
 
+- The Haushalt MCP source (laib ADR 0017, haus#11): `POST /mcp/haushalt`,
+  laib's MCP shape (JSON-RPC over POST: `initialize`, `tools/list`,
+  `tools/call`), for the Bote and Claude. Only `Authorization: Bearer
+  <HAUS_HAUSHALT_TOKEN>` gets in; without that variable it refuses everyone.
+  It is not a page: no proxy secret, and the route bypasses Authelia for it.
+  A tool is listed only when its backend is set:
+  - `HAUS_RADICALE_URL` + `HAUS_RADICALE_USER` + `HAUS_RADICALE_PASSWORD`
+    (CalDAV): `termine(von, bis?)`, `termin_anlegen(titel, beginn, ende?, ort?)`,
+    `erinnerungen()`, `erinnerung_anlegen(text, wann)` (a VTODO due then,
+    with a display alarm). The account's calendars are found by PROPFIND; a
+    fresh account gets a `Haushalt` calendar on its first write.
+    `HAUS_RADICALE_CALENDAR` (`/<owner>/<collection>/`) names one instead.
+  - `HAUS_NOTES_DIR` (the share's `notes` folder): `notizen_suchen(text)`,
+    `notiz_lesen(titel)`, `notiz_anlegen(titel, text)`. A note is
+    `<slug>.md`, `# Titel` first, never written over an existing one (`-2`,
+    `-3`); no name reaches outside the folder.
+  Times are local (`TZ`, e.g. `Europe/Berlin`): `JJJJ-MM-TT` or
+  `JJJJ-MM-TTTHH:MM`. Haus keeps nothing of it (ADR 0017 §3): a note is a
+  file the family syncs, a reminder an entry on their phones; a search
+  reads the files, there is no second index. Contacts (CardDAV) and
+  documents (Paperless) come next.
+
 Not yet: Start, Räume, Energie, Medien, Notizen, Kalender; the `Sprechen`
 field to the Bote. Those come with the Home Assistant
 and Solaris deconstruction (laib#21).
@@ -83,16 +105,21 @@ HAUS_PROXY_SECRET=<what Caddy sends as X-Haus-Proxy> LAIB_PUBLIC_URL=https://lai
 SOLARIS_URL=http://host.containers.internal:8787 HAUS_LISTEN=0.0.0.0:8650 \
 HAUS_HA_URL=http://host.containers.internal:8123 HAUS_HA_TOKEN=<a long-lived HA token> \
 HAUS_ANDROID_FINGERPRINTS=<the app's SHA-256 signing fingerprints> \
-HAUS_ENERGY_FLOW=pv=sensor.…,house=sensor.…,grid=sensor.…,battery=sensor.… HAUS_ENERGY_TOTALS=PV-Erzeugung=sensor.…,… ./haus
+HAUS_ENERGY_FLOW=pv=sensor.…,house=sensor.…,grid=sensor.…,battery=sensor.… HAUS_ENERGY_TOTALS=PV-Erzeugung=sensor.…,… \
+HAUS_HAUSHALT_TOKEN=<the Bote's bearer> TZ=Europe/Berlin \
+HAUS_RADICALE_URL=http://host.containers.internal:5232 HAUS_RADICALE_USER=<service account> HAUS_RADICALE_PASSWORD=<its password> \
+HAUS_NOTES_DIR=/notes ./haus
 ```
 
 `HAUS_DATA` (default `/data`) holds `devices.json`; `HAUS_PUBLIC_URL` is the
 origin the setup link carries (default `https://<Host>`). Haus's Laib token is the `haus` hand: status, inbox, journal, restart —
 nothing else (no exec, no write). There are no static device tokens. Image: `ghcr.io/mdopp/haus`. Laib template: `haus` (route `haus.<domain>`,
-`bypass: [/napi/]`; assetlinks needs `/.well-known/` there too).
+`bypass: [/napi/]`; assetlinks needs `/.well-known/` there too, the
+Haushalt source `/mcp/`).
 
 ## Tests
 
-`go test ./...` — a fake Laib MCP, a fake Solaris and a fake Home
-Assistant (`internal/ha/hafake`, REST and WebSocket); the shapes are
+`go test ./...` — a fake Laib MCP, a fake Solaris, a fake Home
+Assistant (`internal/ha/hafake`, REST and WebSocket), a fake Radicale
+(`internal/caldav/davfake`) and a temp folder for the notes; the shapes are
 pinned to `SbApiClient.kt` and `ApiClient.kt` in solaris-android.
