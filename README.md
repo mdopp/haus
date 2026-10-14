@@ -104,7 +104,7 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   `confirmed:true`; HA refusing the call is 400, HA in trouble is 502
   `ha_unavailable`, HA's detail stays in Haus's log) and
   `GET /napi/portal/{state,energy,entity-history,active}`. Every one wants
-  a paired device. The shapes are `ApiClient.kt`'s; no JSON `null` goes out
+  a paired device. The shapes are the ones the app's `data/ApiClient.kt` parses; no JSON `null` goes out
   (Android reads it as `"null"`).
 - The energy picture reads the entities `HAUS_ENERGY_FLOW`
   (`pv=sensor.…,house=sensor.…,grid=sensor.…,battery=sensor.…`, any subset)

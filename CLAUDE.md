@@ -4,7 +4,7 @@ Haus is one of Laib's three programs (laib `docs/adr/0014-…`): the surface.
 Read `mdopp/laib` `docs/KONZEPT.md`, `docs/DEKONSTRUKTION.md` (Haus: the pages
 and the cards) and `docs/adr/README.md` before changing shape. The app's
 contract is the Haus app in `mdopp/haus-android` (laib ADR 0022): its
-`data/*.kt` parsers' field names are the law. Its names (package, scheme,
+`data/*.kt` parsers' field names are the law. Its names (deep-link scheme,
 token prefix, `/napi/box`) live in `internal/app`, one set; nothing old is
 carried (ADR 0022 §4).
 

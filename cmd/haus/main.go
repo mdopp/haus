@@ -48,7 +48,7 @@ type site struct {
 func routes(s site) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("/napi/", napi.Handler(s.napi))
-	// the Bote's bearer, not the proxy secret: Hermes calls the host port from its pod
+	// the Bote's bearer, not the proxy secret: the Bote calls the host port from its pod
 	// (laib ADR 0012 §4; the template publishes 8650 lan:false, the firewall keeps
 	// the LAN out). Not through Caddy: the route has no /mcp/ bypass.
 	mux.Handle("/mcp/haushalt", haushalt.Handler(s.hh))

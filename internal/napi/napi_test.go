@@ -73,7 +73,7 @@ func get(t *testing.T, h http.Handler, method, path, bearer, body string) (int, 
 
 // The Box keys the app's widgets read, under their one name /napi/box
 // (haus#26, laib ADR 0022 §4).
-func TestCompanionKeysFromLaib(t *testing.T) {
+func TestBoxKeysFromLaib(t *testing.T) {
 	const prefix = "/napi/box"
 	var calls []string
 	srv := fakeLaib(t, &calls)

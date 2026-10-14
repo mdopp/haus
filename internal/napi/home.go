@@ -17,7 +17,8 @@ import (
 
 // The house paths (haus#10), served from Home Assistant once HAUS_HA_URL is
 // set. The shapes are the app's (data/ApiClient.kt); the two rules for
-// /napi/ha/call are the companion contract's and stay structural here.
+// /napi/ha/call (only actuator domains, sensitive actions want confirmed)
+// are structural here.
 
 var (
 	entityRE = regexp.MustCompile(`^[a-z_]+\.[a-z0-9_]+$`)

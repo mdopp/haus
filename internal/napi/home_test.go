@@ -16,7 +16,7 @@ import (
 
 // haus#10: Haus serves the house paths itself, from Home Assistant, in the
 // shapes the app parses (the app's data/ApiClient.kt, RealtimeProtocol.kt)
-// and with the companion contract's two structural rules for /napi/ha/call.
+// and with the two structural rules for /napi/ha/call.
 
 func house(t *testing.T) (*hafake.HA, http.Handler) {
 	t.Helper()
