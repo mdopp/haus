@@ -38,6 +38,7 @@ func Kalender(cfg StartConfig) http.HandlerFunc {
 		)
 		fetch(r,
 			func(ctx context.Context) {
+				// today and the 14 days after it: [today 00:00, the 15th day 00:00)
 				events, evErr = cfg.Calendar.Events(ctx, today, today.AddDate(0, 0, horizon+1))
 			},
 			func(ctx context.Context) { todos, todoErr = cfg.Calendar.OpenTodos(ctx) })
@@ -81,7 +82,7 @@ func Kalender(cfg StartConfig) http.HandlerFunc {
 				if i == maxCalendarRows {
 					break
 				}
-				rem.Add(summary(t.Summary), dueWords(t.Due, now, loc))
+				rem.Add(summary(t.Summary), dueWords(t, now, loc))
 			}
 			more(&rem, len(todos)-maxCalendarRows)
 			if rem.Empty() {
@@ -121,13 +122,23 @@ func todaySpan(e caldav.Event, today, tomorrow time.Time, loc *time.Location) st
 }
 
 // dueWords is a reminder's due time: morgen 07:00, überfällig seit Mo
-// 12.10. 09:00; nothing without one.
-func dueWords(due, now time.Time, loc *time.Location) string {
-	if due.IsZero() {
+// 12.10. 09:00; for one due on a day the day only (heute, Fr 16.10.),
+// overdue once that day is past; nothing without a due date.
+func dueWords(t caldav.Todo, now time.Time, loc *time.Location) string {
+	if t.Due.IsZero() {
 		return ""
 	}
-	at := dayWord(due, now, loc) + " " + due.In(loc).Format("15:04")
-	if due.Before(now) {
+	if t.DueAllDay {
+		y, m, d := now.In(loc).Date()
+		dy, dm, dd := t.Due.In(loc).Date()
+		day := dayWord(t.Due, now, loc)
+		if time.Date(dy, dm, dd, 0, 0, 0, 0, loc).Before(time.Date(y, m, d, 0, 0, 0, 0, loc)) {
+			return "überfällig seit " + day
+		}
+		return day
+	}
+	at := dayWord(t.Due, now, loc) + " " + t.Due.In(loc).Format("15:04")
+	if t.Due.Before(now) {
 		return "überfällig seit " + at
 	}
 	return at

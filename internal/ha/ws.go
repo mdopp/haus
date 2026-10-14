@@ -364,33 +364,58 @@ func (c *Client) TemperatureUnit(ctx context.Context) (string, error) {
 }
 
 // CachedRegistry is the registries and the temperature unit, kept for five
-// minutes, for the /napi paths and the family's pages alike. A failed
-// refresh keeps the last good one and tries again after 30s; ok is false
+// minutes, for the /napi paths and the family's pages alike. ok is false
 // while no read of the registries has worked yet, so a caller can tell "no
-// rooms" from "rooms unknown". The unit is optional: HA not answering
-// /api/config keeps the last unit (none at first), not the rooms out. One
-// refresh at a time, outside the lock; meanwhile callers get the old one.
+// rooms" from "rooms unknown".
+//
+// The refresh is the cache's, not the caller's: it runs in the background
+// for up to 20s whoever asked, so a closed tab or a page's own short wait
+// does not end it, and the next caller gets its result. A caller with a
+// registry in hand gets it at once while a refresh runs; one without waits
+// for the refresh, at most until its own context ends. A failed refresh
+// keeps the last good registry and tries again after 30s. HA not answering
+// /api/config keeps the last unit (none at first), not the rooms out.
 func (c *Client) CachedRegistry(ctx context.Context) (reg Registry, ok bool) {
 	return c.registry.get(ctx, c)
 }
+
+// registryRefresh is how long one refresh may take.
+const registryRefresh = 20 * time.Second
 
 type registryCache struct {
 	mu   sync.Mutex
 	reg  Registry
 	ok   bool
 	next time.Time
-	busy bool
+	done chan struct{} // set while a refresh runs, closed when it ends
 }
 
 func (a *registryCache) get(ctx context.Context, c *Client) (Registry, bool) {
 	a.mu.Lock()
-	if a.busy || time.Now().Before(a.next) {
+	if a.done == nil && !time.Now().Before(a.next) {
+		a.done = make(chan struct{})
+		go a.refresh(context.WithoutCancel(ctx), c, a.done)
+	}
+	done := a.done
+	if a.ok || done == nil {
 		reg, ok := a.reg, a.ok
 		a.mu.Unlock()
 		return reg, ok
 	}
-	a.busy = true
 	a.mu.Unlock()
+	select {
+	case <-done:
+	case <-ctx.Done():
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.reg, a.ok
+}
+
+func (a *registryCache) refresh(ctx context.Context, c *Client, done chan struct{}) {
+	defer close(done)
+	ctx, cancel := context.WithTimeout(ctx, registryRefresh)
+	defer cancel()
 	reg, err := c.registries(ctx)
 	unit, uerr := "", error(nil)
 	if err == nil {
@@ -398,11 +423,11 @@ func (a *registryCache) get(ctx context.Context, c *Client) (Registry, bool) {
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	a.busy = false
+	a.done = nil
 	if err != nil {
 		log.Printf("haus: HA registries: %v", err)
 		a.next = time.Now().Add(30 * time.Second)
-		return a.reg, a.ok
+		return
 	}
 	if uerr != nil {
 		log.Printf("haus: HA config (temperature unit): %v", uerr)
@@ -410,7 +435,6 @@ func (a *registryCache) get(ctx context.Context, c *Client) (Registry, bool) {
 	}
 	reg.TempUnit = unit
 	a.reg, a.ok, a.next = reg, true, time.Now().Add(5*time.Minute)
-	return a.reg, true
 }
 
 // Subscribe calls fn with every new state HA reports (state_changed) until

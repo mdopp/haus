@@ -28,9 +28,9 @@ type StartConfig struct {
 	Now      func() time.Time // for the tests; default time.Now
 }
 
-// backendWait is how long the page waits for any one backend: a slow one
-// is left out, the page still comes.
-const backendWait = 4 * time.Second
+// backendWait is how long a page waits for any one backend: a slow one
+// is left out, the page still comes. A variable for the tests.
+var backendWait = 4 * time.Second
 
 const (
 	maxNames    = 5  // light names in the Jetzt row
@@ -113,8 +113,8 @@ func Start(cfg StartConfig) http.HandlerFunc {
 					break
 				}
 				d := "Erinnerung"
-				if !t.Due.IsZero() {
-					d += " · " + dayWord(t.Due, now, loc) + " " + t.Due.In(loc).Format("15:04")
+				if w := dueWords(t, now, loc); w != "" {
+					d += " · " + w
 				}
 				haushalt.AddLink(summary(t.Summary), d, "/kalender")
 			}

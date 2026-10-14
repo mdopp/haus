@@ -54,7 +54,11 @@ func Raeume(cfg StartConfig) http.HandlerFunc {
 		}
 		b := familyHead(r, cfg, "Räume", "Räume")
 		b.WriteString("<h1 class=sr>Räume</h1>")
-		if haErr == nil && roomsOK {
+		switch {
+		case haErr != nil: // left out; the log has it
+		case !roomsOK:
+			b.WriteString("<p class=k>Die Räume werden gerade gelesen — gleich nochmal versuchen.</p>")
+		default:
 			for _, c := range roomCards(states, reg) {
 				b.WriteString(c.HTML())
 			}

@@ -171,6 +171,16 @@ func TestCachedRegistryKeepsTheLastGood(t *testing.T) {
 	}
 }
 
+// wait blocks until a running refresh has ended (for the tests).
+func (a *registryCache) wait() {
+	a.mu.Lock()
+	done := a.done
+	a.mu.Unlock()
+	if done != nil {
+		<-done
+	}
+}
+
 func TestSubscribe(t *testing.T) {
 	fake := hafake.New("tok")
 	defer fake.Close()
