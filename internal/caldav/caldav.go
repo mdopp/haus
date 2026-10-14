@@ -66,7 +66,7 @@ const (
 
 // ErrForeignHost is an address on a host other than the Radicale one:
 // never followed, the account's Basic auth stays home.
-var ErrForeignHost = errors.New("Kalender: Adresse auf einem anderen Host")
+var ErrForeignHost = errors.New("Radicale: Adresse auf einem anderen Host")
 
 // ErrStatus is an answer the client did not expect.
 type ErrStatus struct {
@@ -76,12 +76,19 @@ type ErrStatus struct {
 
 func (e *ErrStatus) Error() string {
 	if e.Code == http.StatusUnauthorized || e.Code == http.StatusForbidden {
-		return fmt.Sprintf("Kalender: Anmeldung abgelehnt (%s, HTTP %d)", e.Method, e.Code)
+		return fmt.Sprintf("Radicale: Anmeldung abgelehnt (%s, HTTP %d)", e.Method, e.Code)
 	}
-	return fmt.Sprintf("Kalender: %s antwortet HTTP %d", e.Method, e.Code)
+	if e.Code >= 300 && e.Code < 400 {
+		return fmt.Sprintf("Radicale: %s leitet um (HTTP %d); dem folgt Haus nicht", e.Method, e.Code)
+	}
+	return fmt.Sprintf("Radicale: %s antwortet HTTP %d", e.Method, e.Code)
 }
 
-var defaultHTTP = &http.Client{Timeout: 15 * time.Second}
+// a redirect is never followed: Basic auth stays with the configured
+// address, and a 3xx is an ErrStatus
+func noRedirect(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+
+var defaultHTTP = &http.Client{Timeout: 15 * time.Second, CheckRedirect: noRedirect}
 
 func (c *Client) loc() *time.Location {
 	if c.Loc != nil {
@@ -113,13 +120,15 @@ func (c *Client) send(ctx context.Context, method, u, depth, body string, hdr ma
 	for k, v := range hdr {
 		req.Header.Set(k, v)
 	}
-	h := c.HTTP
-	if h == nil {
-		h = defaultHTTP
+	h := defaultHTTP
+	if c.HTTP != nil {
+		hc := *c.HTTP
+		hc.CheckRedirect = noRedirect
+		h = &hc
 	}
 	resp, err := h.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("Kalender nicht erreichbar: %w", err)
+		return nil, fmt.Errorf("Radicale nicht erreichbar: %w", err)
 	}
 	return resp, nil
 }
@@ -209,7 +218,7 @@ func (c *Client) list(ctx context.Context, books bool) ([]Collection, error) {
 	}
 	var ms multistatus
 	if err := xml.Unmarshal(raw, &ms); err != nil {
-		return nil, fmt.Errorf("Kalender: PROPFIND unlesbar: %w", err)
+		return nil, fmt.Errorf("Radicale: PROPFIND unlesbar: %w", err)
 	}
 	var out []Collection
 	for _, r := range ms.Responses {
@@ -402,7 +411,7 @@ func (c *Client) report(ctx context.Context, col Collection, body string) ([]*Co
 	}
 	var ms multistatus
 	if err := xml.Unmarshal(raw, &ms); err != nil {
-		return nil, fmt.Errorf("Kalender: REPORT unlesbar: %w", err)
+		return nil, fmt.Errorf("Radicale: REPORT unlesbar: %w", err)
 	}
 	var out []*Component
 	for _, r := range ms.Responses {

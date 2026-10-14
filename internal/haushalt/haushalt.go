@@ -36,8 +36,15 @@ type Config struct {
 	Notes     *notes.Dir        // nil: no note tools
 	Documents *paperless.Client // nil: no document tool
 	Loc       *time.Location    // the house's time zone
-	Version   string
+	// PhoneCountry is the house's calling code (HAUS_PHONE_COUNTRY, default
+	// 49): a national number 0170 … is +49 170 … when numbers are compared.
+	PhoneCountry string
+	Version      string
 }
+
+const defaultCountry = "49"
+
+var countryRE = regexp.MustCompile(`^[1-9][0-9]{0,2}$`)
 
 // httpURL says whether u is http(s)://host[...].
 func httpURL(u string) bool {
@@ -47,10 +54,17 @@ func httpURL(u string) bool {
 
 // FromEnv reads HAUS_HAUSHALT_TOKEN, HAUS_RADICALE_URL (+ _USER,
 // _PASSWORD, optional _CALENDAR and _ADDRESSBOOK), HAUS_NOTES_DIR,
-// HAUS_PAPERLESS_URL (+ _TOKEN, optional _PUBLIC_URL) and TZ. A malformed
-// address refuses to start; a missing backend only leaves its tools out.
+// HAUS_PAPERLESS_URL (+ _TOKEN, optional _PUBLIC_URL), HAUS_PHONE_COUNTRY
+// and TZ. A malformed address or country code refuses to start; a missing
+// backend only leaves its tools out.
 func FromEnv() (Config, error) {
-	cfg := Config{Token: os.Getenv("HAUS_HAUSHALT_TOKEN"), Loc: time.Local}
+	cfg := Config{Token: os.Getenv("HAUS_HAUSHALT_TOKEN"), Loc: time.Local, PhoneCountry: defaultCountry}
+	if cc := strings.TrimPrefix(strings.TrimSpace(os.Getenv("HAUS_PHONE_COUNTRY")), "+"); cc != "" {
+		if !countryRE.MatchString(cc) {
+			return cfg, fmt.Errorf("HAUS_PHONE_COUNTRY %q: want a calling code like 49", cc)
+		}
+		cfg.PhoneCountry = cc
+	}
 	if tz := os.Getenv("TZ"); tz != "" {
 		if l, err := time.LoadLocation(tz); err == nil {
 			cfg.Loc = l
@@ -78,7 +92,7 @@ func FromEnv() (Config, error) {
 		}
 		pub := strings.TrimRight(os.Getenv("HAUS_PAPERLESS_PUBLIC_URL"), "/")
 		if pub != "" && !httpURL(pub) {
-			return cfg, fmt.Errorf("HAUS_PAPERLESS_PUBLIC_URL %q: want https://host", pub)
+			return cfg, fmt.Errorf("HAUS_PAPERLESS_PUBLIC_URL %q: want http(s)://host", pub)
 		}
 		if tok := os.Getenv("HAUS_PAPERLESS_TOKEN"); tok == "" {
 			log.Printf("haus: HAUS_PAPERLESS_TOKEN not set: no document tool")
@@ -204,13 +218,17 @@ func Tools(cfg Config) []mcpserver.Tool {
 			},
 		)
 	}
+	cc := cfg.PhoneCountry
+	if cc == "" {
+		cc = defaultCountry
+	}
 	if c := cfg.Contacts; c != nil {
 		out = append(out,
 			mcpserver.Tool{
 				Name:        "kontakte_suchen",
 				Description: "Sucht im Adressbuch der Familie nach Name, Telefonnummer oder E-Mail und zeigt Telefon, E-Mail und Geburtstag.",
 				Schema:      obj(map[string]any{"text": str("Name, Teil einer Nummer oder E-Mail-Adresse")}, "text"),
-				Call:        func(ctx context.Context, a map[string]any) (string, error) { return kontakteSuchen(ctx, c, a) },
+				Call:        func(ctx context.Context, a map[string]any) (string, error) { return kontakteSuchen(ctx, c, cc, a) },
 			},
 			mcpserver.Tool{
 				Name:        "kontakt_anlegen",
@@ -529,28 +547,53 @@ func contactLine(ct caldav.Contact) string {
 	return line
 }
 
+// international is a number as country code and national number, digits
+// only, however it is written: +49 (0)170 …, 0049 170 …, 0170 … (the
+// house's country cc) all give 49170….
+func international(s, cc string) string {
+	d := digits(s)
+	if strings.HasPrefix(strings.TrimSpace(s), "+") || strings.HasPrefix(d, "00") {
+		d = strings.TrimPrefix(d, "00")
+		if rest, ok := strings.CutPrefix(d, cc); ok { // another country's code stays as written
+			return cc + strings.TrimLeft(rest, "0") // +49 (0)711: the trunk 0 goes
+		}
+		return d
+	}
+	return cc + strings.TrimLeft(d, "0")
+}
+
 // matches says whether a contact fits the search: name, nickname,
-// organisation or email contain it, any case; a number matches a phone
-// by its digits, however either is written (0170 … finds +49 170 …).
-func matches(ct caldav.Contact, q string) bool {
+// organisation or email contain it, any case. A number (three digits or
+// more) matches a phone by its digits, however either side is written:
+// with + or 00 the whole international number counts (+43 660 … never
+// finds +49 660 …); otherwise it is a piece of the number, leading zeros
+// dropped (0170 1234567 finds +49 170 1234567, 0815 finds …0815).
+func matches(ct caldav.Contact, q, cc string) bool {
 	lq := strings.ToLower(q)
-	fields := append([]string{ct.Name, ct.Nickname, ct.Org}, ct.Emails...)
-	for _, f := range append(fields, ct.Phones...) {
+	for _, f := range append([]string{ct.Name, ct.Nickname, ct.Org}, ct.Emails...) {
 		if strings.Contains(strings.ToLower(f), lq) {
 			return true
 		}
 	}
-	if d := strings.TrimLeft(digits(q), "0"); len(d) >= 3 && phoneRE.MatchString(q) {
-		for _, p := range ct.Phones {
-			if strings.Contains(digits(p), d) {
-				return true
-			}
+	if !phoneRE.MatchString(q) {
+		return false
+	}
+	want := strings.TrimLeft(digits(q), "0")
+	if len(want) < 3 {
+		return false
+	}
+	if strings.HasPrefix(q, "+") || strings.HasPrefix(digits(q), "00") {
+		want = international(q, cc)
+	}
+	for _, p := range ct.Phones {
+		if strings.Contains(international(p, cc), want) {
+			return true
 		}
 	}
 	return false
 }
 
-func kontakteSuchen(ctx context.Context, c *caldav.Client, a map[string]any) (string, error) {
+func kontakteSuchen(ctx context.Context, c *caldav.Client, cc string, a map[string]any) (string, error) {
 	q := oneLine(mcpserver.Str(a, "text"))
 	if q == "" {
 		return "", errors.New("text fehlt")
@@ -564,7 +607,7 @@ func kontakteSuchen(ctx context.Context, c *caldav.Client, a map[string]any) (st
 	}
 	var hits []caldav.Contact
 	for _, ct := range all {
-		if matches(ct, q) {
+		if matches(ct, q, cc) {
 			hits = append(hits, ct)
 		}
 	}
@@ -609,14 +652,7 @@ func kontaktAnlegen(ctx context.Context, c *caldav.Client, a map[string]any) (st
 		ct.Emails = []string{e}
 	}
 	if g := mcpserver.Str(a, "geburtstag"); g != "" {
-		ok := false
-		if _, err := time.Parse("2006-01-02", g); err == nil {
-			ok = true
-		} else if md, yes := strings.CutPrefix(g, "--"); yes && len(md) == 5 {
-			_, err := time.Parse("2006-01-02", "2000-"+md)
-			ok = err == nil
-		}
-		if !ok {
+		if !caldav.ValidBirthday(g) {
 			return "", fmt.Errorf("geburtstag: %q: erwarte JJJJ-MM-TT, oder --MM-TT ohne Jahr", cut(g, 40))
 		}
 		ct.Birthday = g

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 )
@@ -47,7 +48,9 @@ func (c *countingReader) Read(p []byte) (int, error) {
 
 // cards streams one address book's cards to fn, response by response, so a
 // big address book is never held whole; fn returning false stops early.
-// partial says the answer was cut at maxCardBytes.
+// partial says the answer was cut at maxCardBytes, or by the timeout
+// after at least one card (a slow Radicale with many photos).
+
 func (c *Client) cards(ctx context.Context, col Collection, fn func(Contact) bool) (partial bool, err error) {
 	resp, err := c.send(ctx, "REPORT", col.URL, "1", addressbookQuery, nil)
 	if err != nil {
@@ -59,11 +62,13 @@ func (c *Client) cards(ctx context.Context, col Collection, fn func(Contact) boo
 	}
 	cr := &countingReader{r: io.LimitReader(resp.Body, maxCardBytes)}
 	dec := xml.NewDecoder(cr)
+	read := 0
 	cut := func(err error) (bool, error) {
-		if cr.n >= maxCardBytes {
+		var ne net.Error
+		if cr.n >= maxCardBytes || (read > 0 && (errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &ne) && ne.Timeout()))) {
 			return true, nil
 		}
-		return false, fmt.Errorf("Kontakte: REPORT unlesbar: %w", err)
+		return false, fmt.Errorf("Radicale: Adressbuch unlesbar: %w", err)
 	}
 	for {
 		tok, err := dec.Token()
@@ -90,6 +95,7 @@ func (c *Client) cards(ctx context.Context, col Collection, fn func(Contact) boo
 				continue // one broken card must not hide the address book
 			}
 			for _, ct := range Contacts(root) {
+				read++
 				if !fn(ct) {
 					return false, nil
 				}

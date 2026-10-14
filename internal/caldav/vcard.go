@@ -65,28 +65,42 @@ func (ct Contact) VCF(now time.Time) string {
 	return b.String()
 }
 
-// bdayValue is a JJJJ-MM-TT or --MM-TT birthday as vCard 4.0 writes it
-// (19850412, --0412); anything else is a text birthday.
-func bdayValue(s string) string {
-	if s == "" {
-		return ""
-	}
-	if t, err := time.Parse("2006-01-02", s); err == nil {
-		return t.Format("20060102")
-	}
+// ValidBirthday says whether s is a birthday the tools write: JJJJ-MM-TT
+// (a real day, not in the year 0000) or --MM-TT without a year.
+func ValidBirthday(s string) bool {
 	if md, ok := strings.CutPrefix(s, "--"); ok {
-		if t, err := time.Parse("2006-01-02", "2000-"+md); err == nil {
-			return "--" + t.Format("0102")
-		}
+		_, err := time.Parse("2006-01-02", "2000-"+md) // a leap year: --02-29 is a birthday
+		return err == nil && len(md) == 5
 	}
-	return "" // VALUE=text is legal but the tools only write a date
+	t, err := time.Parse("2006-01-02", s)
+	return err == nil && t.Year() > 0
 }
 
+// bdayValue is a valid birthday as vCard 4.0 writes it (19850412, --0412);
+// anything else writes none (VALUE=text is legal, but the tools only
+// write a date).
+func bdayValue(s string) string {
+	if !ValidBirthday(s) {
+		return ""
+	}
+	if md, ok := strings.CutPrefix(s, "--"); ok {
+		return "--" + strings.ReplaceAll(md, "-", "")
+	}
+	return strings.ReplaceAll(s, "-", "")
+}
+
+// appleNoYear is the year iOS writes for a birthday without one.
+const appleNoYear = "1604"
+
 // birthday reads a BDAY value: 19850412, 1985-04-12, either with a time,
-// --0412, --04-12; another value is kept as it is.
-func birthday(v string) string {
+// --0412, --04-12, and iOS's 1604-04-12 for no year; another value is
+// kept as it is.
+func birthday(v string, omitYear string) string {
 	v = strings.TrimSpace(v)
 	d, _, _ := strings.Cut(v, "T")
+	if len(d) > 4 && ((len(omitYear) == 4 && strings.HasPrefix(d, omitYear)) || strings.HasPrefix(d, appleNoYear)) {
+		d = "--" + strings.TrimPrefix(d[4:], "-")
+	}
 	if md, ok := strings.CutPrefix(d, "--"); ok {
 		md = strings.ReplaceAll(md, "-", "")
 		if t, err := time.Parse("20060102", "2000"+md); err == nil && len(md) == 4 {
@@ -138,7 +152,7 @@ func Contacts(root *Component) []Contact {
 					ct.Emails = append(ct.Emails, v)
 				}
 			case "BDAY":
-				ct.Birthday = birthday(v)
+				ct.Birthday = birthday(v, p.Params["X-APPLE-OMIT-YEAR"])
 			}
 		}
 		out = append(out, ct)
