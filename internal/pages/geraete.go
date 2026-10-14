@@ -17,6 +17,9 @@ import (
 // public origin is what the phone will call.
 func Geraete(store *devices.Store, publicURL string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if !adminOnly(w, r) { // under /box: the admins' (haus#12); phones pair through /pair-device
+			return
+		}
 		user := r.Header.Get("Remote-User")
 		origin := publicURL
 		if origin == "" {

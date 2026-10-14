@@ -9,7 +9,29 @@ the house persona, and the old Solaris and ServiceBay names live only in
 
 ## This cut (laib#28)
 
-- `GET /box` — the page behind Authelia: readiness, the inbox read-only
+- `GET /start` — the family's page behind Authelia (haus#12): the
+  persona's header, the three guarantees, then the cards *Jetzt* (who is
+  home from `person.*`, the lamps that are on with their names (a group,
+  any entity with an `entity_id` list, is not counted), what
+  plays on a `media_player`, the next appointment within 14 days) and
+  *Haushalt* (the next three open reminders, the three newest notes).
+  Each part only when its backend is set (`HAUS_HA_URL` + `HAUS_HA_TOKEN`,
+  `HAUS_RADICALE_*`, `HAUS_NOTES_DIR`); one not set, or not answering
+  within 4s, is left out without a word, its error in Haus's log. The
+  page shows and changes nothing (haus#1). Cards are one renderer,
+  `internal/cards` (title, rows, optional link), for the pages and later
+  the widgets' JSON. `/` and every page path Haus does not serve redirect
+  to `/start`: the app's hash routes (`/#/p/start`, `/#/p/energy`,
+  `/#/p/device/<id>`, `/#/p/camera[/<id>]`,
+  `/#/p/servicebay/approvals/<id>`, `/#/p/<tool>/item/<id>`,
+  `/#/?tool=<id>`, `/#/?ask=<text>`) arrive as `/` and all land on Start
+  until their pages exist; so does `/download`.
+- `GET /box` — the admins' page behind Authelia, linked from Start for
+  the `admins` group. Haus itself sends anyone whose `Remote-Groups` lacks
+  `admins` from `/box` and everything under it (Geräte included) to
+  `/start` with 303, since Authelia here only restricts per host. That
+  says who sees the admin page; it is not a verdict on anything, and
+  `/napi` and `/pair-device` are untouched. The page: readiness, the inbox read-only
   with its reasons and a link to Laib's own inbox (the one approval
   surface, laib ADR 0012), what runs, the journal. Every page request must
   carry `X-Haus-Proxy: <HAUS_PROXY_SECRET>`, which only Caddy adds; the
@@ -119,9 +141,14 @@ the house persona, and the old Solaris and ServiceBay names live only in
   reads the files, there is no second index. Identity per person (the
   person's own calendar, laib ADR 0017 §3) comes next.
 
-Not yet: Start, Räume, Energie, Medien, Notizen, Kalender; the `Sprechen`
-field to the Bote. Those come with the Home Assistant
+Not yet: Start's *Meine Favoriten* and *Häufig genutzt*; Räume, Energie,
+Medien, Notizen, Kalender; the `Sprechen` field to the Bote. Those come with the Home Assistant
 and Solaris deconstruction (laib#21).
+
+- The Box page's Werkstatt card (haus#15): the open tickets of the repos in
+  `HAUS_WERKSTATT_REPOS` (owner/name, comma-separated), what pi works
+  (`pi:ready`) and what waits for Claude (`needs-claude`), read-only and
+  linked. Public GitHub API, no token, cached for 5 minutes. Unset: no card.
 
 ## Run
 

@@ -65,6 +65,7 @@ func TestPairingPageSaysApp(t *testing.T) {
 	req := httptest.NewRequest("POST", "/box/geraete", strings.NewReader("name=Pixel"))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Remote-User", "anna")
+	req.Header.Set("Remote-Groups", "admins")
 	rec := httptest.NewRecorder()
 	Geraete(store, "https://haus.example").ServeHTTP(rec, req)
 	if body := rec.Body.String(); strings.Contains(strings.ToLower(body), "solaris-app") || !strings.Contains(body, "In der App") {

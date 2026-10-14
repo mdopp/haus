@@ -4,6 +4,7 @@
 package pages
 
 import (
+	"context"
 	"fmt"
 	"html"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/mdopp/haus/internal/laib"
 	"github.com/mdopp/haus/internal/persona"
+	"github.com/mdopp/haus/internal/werkstatt"
 )
 
 // House is the house persona the family sees (laib ADR 0020), set once at
@@ -29,7 +31,7 @@ func head(title string) string {
 	if g := House.Greet("de"); g != "" {
 		greet = "<span class=gruss>" + html.EscapeString(g) + "</span>"
 	}
-	return "<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><title>" + html.EscapeString(title) + " · " + html.EscapeString(House.Display) + "</title>" + style +
+	return "<!doctype html><html lang=de><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><title>" + html.EscapeString(title) + " · " + html.EscapeString(House.Display) + "</title>" + style +
 		"<style>header{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin:-1.2rem -1.2rem 1rem;padding:.6rem 1.2rem;background:" + House.Ground() + ";color:" + House.Accent() + "}header b{font-size:1.05rem}header .gruss{opacity:.85}</style>" +
 		"<header>" + icon + "<b>" + html.EscapeString(House.Display) + "</b>" + greet + "</header>"
 }
@@ -57,12 +59,18 @@ nav a{margin-right:1rem}</style>`
 // Box is the admins' page: readiness, the inbox (read-only — deciding
 // happens on Laib's own page, the one approval surface, ADR 0012), what
 // runs, the journal. laibURL is where Freigeben lives.
-func Box(c *laib.Client, laibURL string) http.HandlerFunc {
+func Box(c *laib.Client, laibURL string) http.HandlerFunc { return BoxWith(c, laibURL, nil) }
+
+// BoxWith is Box with the Werkstatt's tickets as a card (haus#15); nil, no card.
+func BoxWith(c *laib.Client, laibURL string, tickets *werkstatt.Tickets) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		user := r.Header.Get("Remote-User")
 		ctx := r.Context()
 		if r.Method == http.MethodPost {
 			http.Error(w, "Haus entscheidet nichts: Freigeben und Ablehnen gibt es nur auf der Laib-Seite", http.StatusForbidden)
+			return
+		}
+		if !adminOnly(w, r) {
 			return
 		}
 		ready, rows, err := c.Status(ctx)
@@ -76,7 +84,7 @@ func Box(c *laib.Client, laibURL string) http.HandlerFunc {
 			return
 		}
 		// the three guarantees, for everyone in the family (haus#2)
-		b.WriteString(guarantees(ready, rows, strings.Contains(","+r.Header.Get("Remote-Groups")+",", ",admins,"), laibURL))
+		b.WriteString(guarantees(ready, rows, isAdmin(r), laibURL))
 		fmt.Fprintf(&b, "<h1>Box · <span class=%s>%s</span> <span class=k>· %d Dienste · %d grün · %d gelb · %d rot · Drift %d</span></h1>",
 			readyClass(ready), html.EscapeString(ready.State), ready.Services, ready.Green, ready.Yellow, ready.Red, ready.Drift)
 		fmt.Fprintf(&b, "<p>Operator: <span class=%s>%s</span></p>", operatorClass(ready.Operator), html.EscapeString(ready.Operator))
@@ -106,6 +114,9 @@ func Box(c *laib.Client, laibURL string) http.HandlerFunc {
 		// the window reaches back to yesterday's report; the journal table stays at 24h
 		es, jerr := c.Journal(ctx, "36h")
 		b.WriteString(morningReport(es, jerr))
+		if tickets != nil {
+			b.WriteString(werkstattCard(r.Context(), tickets))
+		}
 		b.WriteString("<h2>Was läuft</h2><table>")
 		for _, s := range rows {
 			fmt.Fprintf(&b, "<tr><td class=%s>%s</td><td>%s</td><td class=k>%s</td></tr>", cls(s.State), html.EscapeString(s.State), html.EscapeString(s.Name), html.EscapeString(s.Detail))
@@ -127,6 +138,17 @@ func Box(c *laib.Client, laibURL string) http.HandlerFunc {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Write([]byte(b.String()))
 	}
+}
+
+// adminOnly lets admins through and sends everyone else to Start (303):
+// Box is the admins' page (laib DEKONSTRUKTION). It says who sees the
+// page, it decides nothing.
+func adminOnly(w http.ResponseWriter, r *http.Request) bool {
+	if isAdmin(r) {
+		return true
+	}
+	http.Redirect(w, r, "/start", http.StatusSeeOther)
+	return false
 }
 
 func operatorClass(s string) string {
@@ -185,4 +207,28 @@ func morningReport(es []laib.Entry, err error) string {
 		}
 	}
 	return "<h2>Morgenbericht</h2><p class=k>noch keiner: Der Operator schreibt ihn jeden Morgen, wenn er an ist.</p>"
+}
+
+// werkstattCard lists what pi works and what waits for Claude, read-only:
+// deciding and working happen in the Werkstatt, not here (haus#1).
+func werkstattCard(ctx context.Context, t *werkstatt.Tickets) string {
+	ts, err := t.Open(ctx)
+	if err != nil {
+		return "<h2>Werkstatt</h2><p class=gelb>GitHub ist gerade nicht erreichbar.</p>"
+	}
+	if len(ts) == 0 {
+		return "<h2>Werkstatt</h2><p class=k>keine offenen Tickets</p>"
+	}
+	var b strings.Builder
+	b.WriteString("<h2>Werkstatt</h2><table>")
+	for _, x := range ts {
+		who := "pi arbeitet daran"
+		if x.Label == "needs-claude" {
+			who = "wartet auf Claude"
+		}
+		fmt.Fprintf(&b, "<tr><td class=k>%s#%d</td><td><a href=\"%s\">%s</a></td><td class=k>%s</td></tr>",
+			html.EscapeString(x.Repo), x.Number, html.EscapeString(x.URL), html.EscapeString(x.Title), who)
+	}
+	b.WriteString("</table>")
+	return b.String()
 }
