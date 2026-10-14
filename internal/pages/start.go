@@ -3,11 +3,9 @@ package pages
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/mdopp/haus/internal/caldav"
@@ -17,8 +15,9 @@ import (
 	"github.com/mdopp/haus/internal/notes"
 )
 
-// StartConfig is what the Start page reads. A nil backend is not
-// configured, and the page says nothing about it.
+// StartConfig is what the family's pages read (Start, Räume, Kalender,
+// Notizen). A nil backend is not configured, and no page says anything
+// about it.
 type StartConfig struct {
 	Laib     *laib.Client
 	LaibURL  string // where Rückgängig lives (the guarantees, admins only)
@@ -46,23 +45,12 @@ const (
 // answering is left out; its error goes to the log, not to the family.
 func Start(cfg StartConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet && r.Method != http.MethodHead {
-			w.Header().Set("Allow", "GET, HEAD")
-			http.Error(w, "Die Startseite zeigt nur, sie ändert nichts.", http.StatusMethodNotAllowed)
+		if !showOnly(w, r, "Die Startseite") {
 			return
 		}
-		loc := cfg.Loc
-		if loc == nil {
-			loc = time.Local
-		}
-		now := time.Now()
-		if cfg.Now != nil {
-			now = cfg.Now()
-		}
-		now = now.In(loc)
+		now, loc := cfg.clock()
 
 		var (
-			wg       sync.WaitGroup
 			ready    laib.Readiness
 			services []laib.Service
 			laibErr  error
@@ -74,45 +62,27 @@ func Start(cfg StartConfig) http.HandlerFunc {
 			todoErr  error
 			recent   []notes.Entry
 			notesErr error
+			reads    []func(context.Context)
 		)
-		run := func(f func(context.Context)) {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				ctx, cancel := context.WithTimeout(r.Context(), backendWait)
-				defer cancel()
-				f(ctx)
-			}()
-		}
 		if cfg.Laib != nil {
-			run(func(ctx context.Context) { ready, services, laibErr = cfg.Laib.Status(ctx) })
+			reads = append(reads, func(ctx context.Context) { ready, services, laibErr = cfg.Laib.Status(ctx) })
 		}
 		if cfg.HA != nil {
-			run(func(ctx context.Context) { states, haErr = cfg.HA.States(ctx) })
+			reads = append(reads, func(ctx context.Context) { states, haErr = cfg.HA.States(ctx) })
 		}
 		if cfg.Calendar != nil {
-			run(func(ctx context.Context) { events, evErr = cfg.Calendar.Events(ctx, now, now.AddDate(0, 0, horizon)) })
-			run(func(ctx context.Context) { todos, todoErr = cfg.Calendar.OpenTodos(ctx) })
+			reads = append(reads,
+				func(ctx context.Context) { events, evErr = cfg.Calendar.Events(ctx, now, now.AddDate(0, 0, horizon)) },
+				func(ctx context.Context) { todos, todoErr = cfg.Calendar.OpenTodos(ctx) })
 		}
 		if cfg.Notes != nil {
-			run(func(ctx context.Context) { recent, notesErr = cfg.Notes.Recent(ctx, maxHaushalt) })
+			reads = append(reads, func(ctx context.Context) { recent, notesErr = cfg.Notes.Recent(ctx, maxHaushalt) })
 		}
-		wg.Wait()
-		for what, err := range map[string]error{"laib": laibErr, "home assistant": haErr, "calendar": evErr, "reminders": todoErr, "notes": notesErr} {
-			if err != nil {
-				log.Printf("haus: start page: %s: %v", what, err)
-			}
-		}
+		fetch(r, reads...)
+		logErrs("start", map[string]error{"laib": laibErr, "home assistant": haErr, "calendar": evErr, "reminders": todoErr, "notes": notesErr})
 
-		var b strings.Builder
-		b.WriteString(head("Start"))
-		b.WriteString(cards.Style)
-		b.WriteString("<style>.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}</style>")
-		b.WriteString("<nav><a href=/start aria-current=page>Start</a>")
-		if isAdmin(r) {
-			b.WriteString("<a href=/box>Box</a>")
-		}
-		b.WriteString("</nav><h1 class=sr>Start</h1>")
+		b := familyHead(r, cfg, "Start", "Start")
+		b.WriteString("<h1 class=sr>Start</h1>")
 		switch {
 		case cfg.Laib == nil:
 		case laibErr != nil:
@@ -124,10 +94,11 @@ func Start(cfg StartConfig) http.HandlerFunc {
 		jetzt := cards.Card{Title: "Jetzt"}
 		if cfg.HA != nil && haErr == nil {
 			home(&jetzt, states)
+			jetzt.Link = &cards.Link{Href: "/raeume", Text: "Alle Räume"}
 		}
 		if cfg.Calendar != nil && evErr == nil && len(events) > 0 {
 			e := events[0]
-			jetzt.Add("Nächster Termin: "+summary(e.Summary), eventWhen(e, now, loc))
+			jetzt.AddLink("Nächster Termin: "+summary(e.Summary), eventWhen(e, now, loc), "/kalender")
 		}
 		b.WriteString(jetzt.HTML())
 
@@ -141,18 +112,17 @@ func Start(cfg StartConfig) http.HandlerFunc {
 				if !t.Due.IsZero() {
 					d += " · " + dayWord(t.Due, now, loc) + " " + t.Due.In(loc).Format("15:04")
 				}
-				haushalt.Add(summary(t.Summary), d)
+				haushalt.AddLink(summary(t.Summary), d, "/kalender")
 			}
 		}
 		if cfg.Notes != nil && notesErr == nil {
 			for _, n := range recent {
-				haushalt.Add(summary(n.Title), "Notiz · geändert "+dayWord(n.Changed, now, loc)+" "+n.Changed.In(loc).Format("15:04"))
+				haushalt.AddLink(summary(n.Title), "Notiz · geändert "+dayWord(n.Changed, now, loc)+" "+n.Changed.In(loc).Format("15:04"), noteHref(n.Name))
 			}
+			haushalt.Link = &cards.Link{Href: "/notizen", Text: "Alle Notizen"}
 		}
 		b.WriteString(haushalt.HTML())
-
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Write([]byte(b.String()))
+		writePage(w, http.StatusOK, b)
 	}
 }
 

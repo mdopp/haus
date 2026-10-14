@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -324,6 +325,45 @@ func (c *Client) Areas(ctx context.Context) (map[string]string, error) {
 		}
 	}
 	return out, nil
+}
+
+// CachedAreas is Areas kept for five minutes, for the /napi paths and the
+// Räume page alike. A failed refresh keeps the last good map and tries again
+// after 30s; ok is false while no read has worked yet, so a caller can tell
+// "no rooms" from "rooms unknown". One refresh at a time, outside the lock;
+// meanwhile callers get the old map.
+func (c *Client) CachedAreas(ctx context.Context) (rooms map[string]string, ok bool) {
+	return c.areas.get(ctx, c)
+}
+
+type areaCache struct {
+	mu   sync.Mutex
+	m    map[string]string
+	ok   bool
+	next time.Time
+	busy bool
+}
+
+func (a *areaCache) get(ctx context.Context, c *Client) (map[string]string, bool) {
+	a.mu.Lock()
+	if a.busy || time.Now().Before(a.next) {
+		m, ok := a.m, a.ok
+		a.mu.Unlock()
+		return m, ok
+	}
+	a.busy = true
+	a.mu.Unlock()
+	m, err := c.Areas(ctx)
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.busy = false
+	if err != nil {
+		log.Printf("haus: HA areas: %v", err)
+		a.next = time.Now().Add(30 * time.Second)
+		return a.m, a.ok
+	}
+	a.m, a.ok, a.next = m, true, time.Now().Add(5*time.Minute)
+	return a.m, true
 }
 
 // Subscribe calls fn with every new state HA reports (state_changed) until
