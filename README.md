@@ -11,7 +11,8 @@ the house persona, and the old Solaris and ServiceBay names live only in
 
 - `GET /start` — the family's page behind Authelia (haus#12): the
   persona's header, the three guarantees, then the cards *Jetzt* (who is
-  home from `person.*`, the lights that are on with their names, what
+  home from `person.*`, the lamps that are on with their names (a group,
+  any entity with an `entity_id` list, is not counted), what
   plays on a `media_player`, the next appointment within 14 days) and
   *Haushalt* (the next three open reminders, the three newest notes).
   Each part only when its backend is set (`HAUS_HA_URL` + `HAUS_HA_TOKEN`,
@@ -26,7 +27,11 @@ the house persona, and the old Solaris and ServiceBay names live only in
   `/#/?tool=<id>`, `/#/?ask=<text>`) arrive as `/` and all land on Start
   until their pages exist; so does `/download`.
 - `GET /box` — the admins' page behind Authelia, linked from Start for
-  the `admins` group: readiness, the inbox read-only
+  the `admins` group. Haus itself sends anyone whose `Remote-Groups` lacks
+  `admins` from `/box` and everything under it (Geräte included) to
+  `/start` with 303, since Authelia here only restricts per host. That
+  says who sees the admin page; it is not a verdict on anything, and
+  `/napi` and `/pair-device` are untouched. The page: readiness, the inbox read-only
   with its reasons and a link to Laib's own inbox (the one approval
   surface, laib ADR 0012), what runs, the journal. Every page request must
   carry `X-Haus-Proxy: <HAUS_PROXY_SECRET>`, which only Caddy adds; the
