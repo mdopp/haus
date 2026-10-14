@@ -10,7 +10,6 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/mdopp/haus/internal/ha"
@@ -60,7 +59,6 @@ func set(xs ...string) map[string]bool {
 type homeAPI struct {
 	ha      *ha.Client
 	sources EnergyMap // which entities the energy picture reads (energy.go)
-	areas   areaCache
 }
 
 func (h *homeAPI) routes(mux *http.ServeMux, auth func(http.HandlerFunc) http.HandlerFunc) {
@@ -258,7 +256,11 @@ func (h *homeAPI) active(w http.ResponseWriter, r *http.Request) {
 		refuse(w, http.StatusBadGateway, "ha_unavailable")
 		return
 	}
-	rooms := h.areas.get(h.ha)
+	// rooms only label, they never break a list: the last good map, empty at first
+	actx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	reg, _ := h.ha.CachedRegistry(actx)
+	rooms := reg.Rooms
+	cancel()
 	out := []map[string]any{}
 	for _, s := range states {
 		domain, _, _ := strings.Cut(s.EntityID, ".")
@@ -283,38 +285,4 @@ func (h *homeAPI) active(w http.ResponseWriter, r *http.Request) {
 		return strings.ToLower(out[i]["name"].(string)) < strings.ToLower(out[j]["name"].(string))
 	})
 	answer(w, http.StatusOK, map[string]any{"ok": true, "active": out})
-}
-
-// areaCache holds entity → room for a few minutes. A failed read keeps the
-// last good map (empty at first): rooms only label, they never break a list.
-// One refresh at a time, outside the lock; meanwhile callers get the old map.
-type areaCache struct {
-	mu   sync.Mutex
-	m    map[string]string
-	next time.Time
-	busy bool
-}
-
-func (a *areaCache) get(c *ha.Client) map[string]string {
-	a.mu.Lock()
-	if a.busy || time.Now().Before(a.next) {
-		m := a.m
-		a.mu.Unlock()
-		return m
-	}
-	a.busy = true
-	a.mu.Unlock()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	m, err := c.Areas(ctx)
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	a.busy = false
-	if err != nil {
-		log.Printf("haus: HA areas: %v", err)
-		a.next = time.Now().Add(30 * time.Second)
-		return a.m
-	}
-	a.m, a.next = m, time.Now().Add(5*time.Minute)
-	return a.m
 }

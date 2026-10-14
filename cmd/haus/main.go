@@ -79,8 +79,15 @@ func main() {
 	mux.Handle("GET /.well-known/assetlinks.json", napi.AssetLinks(os.Getenv("HAUS_ANDROID_FINGERPRINTS")))
 	laibURL := env("LAIB_PUBLIC_URL", "https://laib."+env("LAIB_DOMAIN", "example"))
 	pagesMux := http.NewServeMux()
-	// the family's page (haus#12): each card only from a backend that is set
-	pagesMux.HandleFunc("/start", pages.Start(pages.StartConfig{Laib: ops, LaibURL: laibURL, HA: cfg.HA, Calendar: hh.Calendar, Notes: hh.Notes, Loc: hh.Loc}))
+	// the family's pages (haus#12): each card only from a backend that is set; a
+	// page whose backend is not set lands on Start
+	family := pages.StartConfig{Laib: ops, LaibURL: laibURL, HA: cfg.HA, Calendar: hh.Calendar, Notes: hh.Notes, Loc: hh.Loc}
+	pagesMux.HandleFunc("/start", pages.Start(family))
+	pagesMux.HandleFunc("/raeume", pages.Raeume(family))
+	pagesMux.HandleFunc("/kalender", pages.Kalender(family))
+	pagesMux.HandleFunc("/notizen", pages.Notizen(family))
+	pagesMux.HandleFunc("/notizen/", pages.Notizen(family)) // a note's own page
+
 	tickets := werkstatt.FromEnv() // haus#15: the Werkstatt card; HAUS_WERKSTATT_REPOS unset, no card
 	pagesMux.HandleFunc("/box", pages.BoxWith(ops, laibURL, tickets))
 	pagesMux.HandleFunc("/box/geraete", pages.Geraete(store, os.Getenv("HAUS_PUBLIC_URL")))

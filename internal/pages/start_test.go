@@ -346,3 +346,44 @@ func TestStartCountsLampsNotGroups(t *testing.T) {
 	mustContain(t, body, "1 Licht an", "Küche")
 	mustNotContain(t, body, "2 Lichter an", "Erdgeschoss")
 }
+
+// haus#12: Start's cards lead to the family's pages — Jetzt to Räume, an
+// appointment and a reminder to Kalender, a note to its own page — and
+// only to pages that are there.
+func TestStartLinksToTheFamilyPages(t *testing.T) {
+	fake, hc := house(t)
+	fake.Set("light.flur", "on", map[string]any{"friendly_name": "Flur"})
+	dav, cal := calendar(t)
+	dav.Put("/haus/familie/2.ics", event("2", "20261015T130000Z", "20261015T140000Z", "Zahnarzt"))
+	dav.Put("/haus/familie/a.ics", todo("a", "Müll rausbringen", "DUE:20261015T050000Z\r\n"))
+	nd := notesDir(t, map[string]time.Duration{"Einkaufsliste": time.Hour})
+	_, body := startPage(t, StartConfig{HA: hc, Calendar: cal, Notes: nd}, "")
+	mustContain(t, body, `<a href="/raeume">Alle Räume</a>`,
+		`<a href="/kalender">Nächster Termin: Zahnarzt</a>`,
+		`<a href="/kalender">Müll rausbringen</a>`,
+		`<a href="/notizen/einkaufsliste.md">Einkaufsliste</a>`,
+		`<a href="/notizen">Alle Notizen</a>`)
+
+	// only HA: Jetzt leads to Räume, nothing leads to a calendar or notes
+	_, body = startPage(t, StartConfig{HA: hc}, "")
+	mustContain(t, body, `href="/raeume"`)
+	mustNotContain(t, body, "/kalender", "/notizen")
+}
+
+// What HA hides is not counted or named on Start: a hidden lamp is not on,
+// a config LED is no light, a diagnostic player plays nothing.
+func TestStartLeavesOutWhatHAHides(t *testing.T) {
+	fake, hc := house(t)
+	fake.SetRegistries(nil, nil, []map[string]any{
+		{"entity_id": "light.alt", "hidden_by": "user"},
+		{"entity_id": "light.status_led", "entity_category": "config"},
+		{"entity_id": "media_player.diag", "entity_category": "diagnostic"},
+	})
+	fake.Set("light.kueche", "on", map[string]any{"friendly_name": "Küche"})
+	fake.Set("light.alt", "on", map[string]any{"friendly_name": "Alte Lampe"})
+	fake.Set("light.status_led", "on", map[string]any{"friendly_name": "Status-LED"})
+	fake.Set("media_player.diag", "playing", map[string]any{"friendly_name": "Diagnoseplayer", "media_title": "Test"})
+	_, body := startPage(t, StartConfig{HA: hc}, "")
+	mustContain(t, body, "1 Licht an", "Küche")
+	mustNotContain(t, body, "Alte Lampe", "Status-LED", "Diagnoseplayer", "Lichter an")
+}

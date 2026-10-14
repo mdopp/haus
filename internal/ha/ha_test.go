@@ -74,6 +74,113 @@ func TestAreasOverTheWebSocket(t *testing.T) {
 	}
 }
 
+// haus#12: the rooms, what HA hides and the house's temperature unit are
+// read once and kept for a while, shared by the /napi paths and the family's
+// pages. A read that never worked says so (Räume then leaves the rooms
+// out); a failed refresh keeps the last good one. The unit is optional: a
+// config HA does not answer costs the unit, not the rooms.
+func TestCachedRegistry(t *testing.T) {
+	fake := hafake.New("tok")
+	defer fake.Close()
+	fake.SetRegistries([]map[string]any{{"area_id": "kueche", "name": "Küche"}}, nil,
+		[]map[string]any{{"entity_id": "light.k", "area_id": "kueche"},
+			{"entity_id": "light.versteckt", "area_id": "kueche", "hidden_by": "user"},
+			{"entity_id": "switch.identify", "entity_category": "config"},
+			{"entity_id": "sensor.rssi", "entity_category": "diagnostic"},
+			{"entity_id": "light.offen", "hidden_by": nil, "entity_category": nil}})
+	fake.SetTemperatureUnit("°F")
+	fake.RegistriesDown(true)
+	c := &Client{URL: fake.URL, Token: "tok"}
+	if reg, ok := c.CachedRegistry(context.Background()); ok || len(reg.Rooms) != 0 {
+		t.Fatalf("a registry that never answered: %+v %v", reg, ok)
+	}
+
+	fake.RegistriesDown(false)
+	c2 := &Client{URL: fake.URL, Token: "tok"}
+	reg, ok := c2.CachedRegistry(context.Background())
+	if !ok || reg.Rooms["light.k"] != "Küche" || reg.TempUnit != "°F" {
+		t.Fatalf("first read: %+v %v", reg, ok)
+	}
+	for id, want := range map[string]bool{"light.versteckt": true, "switch.identify": true, "sensor.rssi": true, "light.offen": false, "light.k": false} {
+		if reg.Hidden[id] != want {
+			t.Errorf("hidden %s = %v, want %v", id, reg.Hidden[id], want)
+		}
+	}
+	// a room renamed in HA is seen after the cache's minutes, not on every page
+	fake.SetRegistries([]map[string]any{{"area_id": "kueche", "name": "Wohnküche"}}, nil,
+		[]map[string]any{{"entity_id": "light.k", "area_id": "kueche"}})
+	if reg, ok := c2.CachedRegistry(context.Background()); !ok || reg.Rooms["light.k"] != "Küche" {
+		t.Fatalf("cached read: %+v %v", reg, ok)
+	}
+
+	fake.SetTemperatureUnit("")
+	c3 := &Client{URL: fake.URL, Token: "tok"}
+	if reg, ok := c3.CachedRegistry(context.Background()); !ok || reg.TempUnit != "" || reg.Rooms["light.k"] != "Wohnküche" {
+		t.Fatalf("without /api/config: %+v %v", reg, ok)
+	}
+}
+
+// The shared refresh is not the caller's: a first caller that gives up
+// (a closed tab, a page's 4s) does not end the read, and the next caller
+// gets the rooms instead of a 30s backoff with none.
+func TestCachedRegistryOutlivesItsCaller(t *testing.T) {
+	fake := hafake.New("tok")
+	defer fake.Close()
+	fake.SetRegistries([]map[string]any{{"area_id": "kueche", "name": "Küche"}}, nil,
+		[]map[string]any{{"entity_id": "light.k", "area_id": "kueche"}})
+	c := &Client{URL: fake.URL, Token: "tok"}
+	gone, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, ok := c.CachedRegistry(gone); ok {
+		t.Fatal("a caller that gave up got rooms nobody had read yet")
+	}
+	ctx, cancel2 := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel2()
+	if reg, ok := c.CachedRegistry(ctx); !ok || reg.Rooms["light.k"] != "Küche" {
+		t.Fatalf("the next caller: %+v %v", reg, ok)
+	}
+}
+
+// A refresh that fails keeps the last good registry: rooms do not vanish
+// because HA hiccuped once.
+func TestCachedRegistryKeepsTheLastGood(t *testing.T) {
+	fake := hafake.New("tok")
+	defer fake.Close()
+	fake.SetRegistries([]map[string]any{{"area_id": "kueche", "name": "Küche"}}, nil,
+		[]map[string]any{{"entity_id": "light.k", "area_id": "kueche"}})
+	c := &Client{URL: fake.URL, Token: "tok"}
+	if _, ok := c.CachedRegistry(context.Background()); !ok {
+		t.Fatal("first read")
+	}
+	fake.RegistriesDown(true)
+	for i := 0; i < 2; i++ {
+		c.registry.mu.Lock()
+		c.registry.next = time.Time{} // the five minutes are over
+		c.registry.mu.Unlock()
+		reg, ok := c.CachedRegistry(context.Background())
+		if !ok || reg.Rooms["light.k"] != "Küche" {
+			t.Fatalf("after a failed refresh: %+v %v", reg, ok)
+		}
+		c.registry.wait() // the refresh in the background has failed by now
+	}
+	c.registry.mu.Lock()
+	ok, next := c.registry.ok, c.registry.next
+	c.registry.mu.Unlock()
+	if !ok || time.Until(next) > time.Minute {
+		t.Fatalf("a failed refresh: ok %v, retry in %v (want the last good kept, a retry soon)", ok, time.Until(next))
+	}
+}
+
+// wait blocks until a running refresh has ended (for the tests).
+func (a *registryCache) wait() {
+	a.mu.Lock()
+	done := a.done
+	a.mu.Unlock()
+	if done != nil {
+		<-done
+	}
+}
+
 func TestSubscribe(t *testing.T) {
 	fake := hafake.New("tok")
 	defer fake.Close()
