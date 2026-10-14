@@ -65,15 +65,10 @@ func get(t *testing.T, h http.Handler, method, path, bearer, body string) (int, 
 	return rec.Code, out
 }
 
-// haus#17: the app (solaris-android#174) reads /napi/box first and falls
-// back to the legacy /napi/servicebay; both answer the same, with the same rules.
+// The Box keys the app's widgets read, under their one name /napi/box
+// (haus#26, laib ADR 0022 §4).
 func TestCompanionKeysFromLaib(t *testing.T) {
-	for _, prefix := range []string{"/napi/servicebay", "/napi/box"} {
-		t.Run(prefix, func(t *testing.T) { companionKeys(t, prefix) })
-	}
-}
-
-func companionKeys(t *testing.T, prefix string) {
+	const prefix = "/napi/box"
 	var calls []string
 	srv := fakeLaib(t, &calls)
 	defer srv.Close()
@@ -125,8 +120,31 @@ func TestDenyIsNotHausEither(t *testing.T) {
 	srv := fakeLaib(t, &calls)
 	defer srv.Close()
 	h := Handler(Config{Laib: &laib.Client{URL: srv.URL, Token: "ops"}, Validate: StaticValidator([]string{"dev1"})})
-	if code, _ := get(t, h, "POST", "/napi/servicebay/approvals/7/deny", "dev1", ""); code != 403 {
+	if code, _ := get(t, h, "POST", "/napi/box/approvals/7/deny", "dev1", ""); code != 403 {
 		t.Fatalf("deny from a phone → %d, want 403", code)
+	}
+}
+
+// haus#26, laib ADR 0022 §4: the old app's Box keys are gone, and a /napi
+// path Haus does not serve is 404, passed on to nobody — even with a paired
+// device's token.
+func TestTheOldPathsAreGone(t *testing.T) {
+	var calls []string
+	lb := fakeLaib(t, &calls)
+	defer lb.Close()
+	h := Handler(Config{Laib: &laib.Client{URL: lb.URL, Token: "ops"}, Validate: StaticValidator([]string{"dev1"})})
+	old := "/napi/" + "service" + "bay"
+	for _, p := range []struct{ method, path string }{
+		{"GET", old + "/home"}, {"GET", old + "/services"}, {"GET", old + "/approvals"}, {"GET", old + "/upgrades"},
+		{"POST", old + "/services/media/operate"}, {"POST", old + "/approvals/7/deny"},
+		{"GET", "/napi/portal/nothing-here"}, {"GET", "/napi/defs/model"}, {"POST", "/napi/notifications/ack"},
+	} {
+		if code, _ := get(t, h, p.method, p.path, "dev1", `{"action":"restart"}`); code != 404 {
+			t.Errorf("%s %s → %d, want 404", p.method, p.path, code)
+		}
+	}
+	if len(calls) != 0 {
+		t.Fatalf("Laib was asked: %v", calls)
 	}
 }
 
