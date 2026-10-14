@@ -4,6 +4,7 @@
 package pages
 
 import (
+	"context"
 	"fmt"
 	"html"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/mdopp/haus/internal/laib"
 	"github.com/mdopp/haus/internal/persona"
+	"github.com/mdopp/haus/internal/werkstatt"
 )
 
 // House is the house persona the family sees (laib ADR 0020), set once at
@@ -57,7 +59,10 @@ nav a{margin-right:1rem}</style>`
 // Box is the admins' page: readiness, the inbox (read-only — deciding
 // happens on Laib's own page, the one approval surface, ADR 0012), what
 // runs, the journal. laibURL is where Freigeben lives.
-func Box(c *laib.Client, laibURL string) http.HandlerFunc {
+func Box(c *laib.Client, laibURL string) http.HandlerFunc { return BoxWith(c, laibURL, nil) }
+
+// BoxWith is Box with the Werkstatt's tickets as a card (haus#15); nil, no card.
+func BoxWith(c *laib.Client, laibURL string, tickets *werkstatt.Tickets) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		user := r.Header.Get("Remote-User")
 		ctx := r.Context()
@@ -106,6 +111,9 @@ func Box(c *laib.Client, laibURL string) http.HandlerFunc {
 		// the window reaches back to yesterday's report; the journal table stays at 24h
 		es, jerr := c.Journal(ctx, "36h")
 		b.WriteString(morningReport(es, jerr))
+		if tickets != nil {
+			b.WriteString(werkstattCard(r.Context(), tickets))
+		}
 		b.WriteString("<h2>Was läuft</h2><table>")
 		for _, s := range rows {
 			fmt.Fprintf(&b, "<tr><td class=%s>%s</td><td>%s</td><td class=k>%s</td></tr>", cls(s.State), html.EscapeString(s.State), html.EscapeString(s.Name), html.EscapeString(s.Detail))
@@ -185,4 +193,28 @@ func morningReport(es []laib.Entry, err error) string {
 		}
 	}
 	return "<h2>Morgenbericht</h2><p class=k>noch keiner: Der Operator schreibt ihn jeden Morgen, wenn er an ist.</p>"
+}
+
+// werkstattCard lists what pi works and what waits for Claude, read-only:
+// deciding and working happen in the Werkstatt, not here (haus#1).
+func werkstattCard(ctx context.Context, t *werkstatt.Tickets) string {
+	ts, err := t.Open(ctx)
+	if err != nil {
+		return "<h2>Werkstatt</h2><p class=gelb>GitHub ist gerade nicht erreichbar.</p>"
+	}
+	if len(ts) == 0 {
+		return "<h2>Werkstatt</h2><p class=k>keine offenen Tickets</p>"
+	}
+	var b strings.Builder
+	b.WriteString("<h2>Werkstatt</h2><table>")
+	for _, x := range ts {
+		who := "pi arbeitet daran"
+		if x.Label == "needs-claude" {
+			who = "wartet auf Claude"
+		}
+		fmt.Fprintf(&b, "<tr><td class=k>%s#%d</td><td><a href=\"%s\">%s</a></td><td class=k>%s</td></tr>",
+			html.EscapeString(x.Repo), x.Number, html.EscapeString(x.URL), html.EscapeString(x.Title), who)
+	}
+	b.WriteString("</table>")
+	return b.String()
 }
