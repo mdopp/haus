@@ -103,14 +103,22 @@ func Box(c *laib.Client, laibURL string) http.HandlerFunc {
 			b.WriteString("</table>")
 			fmt.Fprintf(&b, "<p><a href=\"%s/inbox\">Entscheiden auf der Laib-Seite</a> <span class=k>— die eine Stelle, an der freigegeben wird</span></p>", html.EscapeString(strings.TrimRight(laibURL, "/")))
 		}
+		// the window reaches back to yesterday's report; the journal table stays at 24h
+		es, jerr := c.Journal(ctx, "36h")
+		b.WriteString(morningReport(es, jerr))
 		b.WriteString("<h2>Was läuft</h2><table>")
 		for _, s := range rows {
 			fmt.Fprintf(&b, "<tr><td class=%s>%s</td><td>%s</td><td class=k>%s</td></tr>", cls(s.State), html.EscapeString(s.State), html.EscapeString(s.Name), html.EscapeString(s.Detail))
 		}
 		b.WriteString("</table><h2>Journal · 24h</h2><table>")
-		if es, err := c.Journal(ctx, "24h"); err == nil {
-			for i := len(es) - 1; i >= 0 && i >= len(es)-25; i-- {
+		if jerr == nil {
+			shown := 0
+			for i := len(es) - 1; i >= 0 && shown < 25; i-- {
 				e := es[i]
+				if time.Since(e.T) > 24*time.Hour {
+					break
+				}
+				shown++
 				fmt.Fprintf(&b, "<tr><td class=k>%s</td><td>%s</td><td>%s</td><td class=%s>%s</td><td class=k>%s</td></tr>", e.T.Local().Format("02.01. 15:04"), html.EscapeString(e.Actor), html.EscapeString(e.Verb+" "+e.Service), result(e.Result), e.Result, html.EscapeString(trim(e.Reason+" "+e.Detail, 90)))
 			}
 		}
@@ -163,4 +171,18 @@ func trim(s string, n int) string {
 		return s[:n] + "…"
 	}
 	return s
+}
+
+// morningReport is the Operator's newest report (laib ADR 0013): the last
+// journal note of kind report. No report is said plainly.
+func morningReport(es []laib.Entry, err error) string {
+	if err != nil {
+		return "<h2>Morgenbericht</h2><p class=rot>Laib antwortet nicht: " + html.EscapeString(err.Error()) + "</p>"
+	}
+	for i := len(es) - 1; i >= 0; i-- {
+		if e := es[i]; e.Verb == "note" && e.Reason == "report" {
+			return fmt.Sprintf("<h2>Morgenbericht <span class=k>%s</span></h2><p>%s</p>", e.T.Local().Format("02.01. 15:04"), html.EscapeString(e.Detail))
+		}
+	}
+	return "<h2>Morgenbericht</h2><p class=k>noch keiner: Der Operator schreibt ihn jeden Morgen, wenn er an ist.</p>"
 }
