@@ -29,6 +29,9 @@ func TestCameraSnapshot(t *testing.T) {
 	if rec.Code != 200 || !bytes.Equal(rec.Body.Bytes(), jpeg) || rec.Header().Get("Content-Type") != "image/jpeg" {
 		t.Fatalf("snapshot: %d %q %q", rec.Code, rec.Header().Get("Content-Type"), rec.Body.String())
 	}
+	if rec.Header().Get("X-Content-Type-Options") != "nosniff" {
+		t.Fatalf("the browser may not guess another type: %v", rec.Header())
+	}
 	if cc := rec.Header().Get("Cache-Control"); !strings.Contains(cc, "private") {
 		t.Fatalf("a camera frame is nobody else's to cache: %q", cc)
 	}

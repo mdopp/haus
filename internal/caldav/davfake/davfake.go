@@ -44,7 +44,12 @@ type Server struct {
 	// StallAfter, when set, makes an address book REPORT send that many
 	// responses and then hang until the client gives up.
 	StallAfter int
-	behind     map[string]col // made by "another client" right after the next PROPFIND
+	// RaceOnPut, when set, is an object whose ETag changes just before the
+	// next PUT to it is judged, as if a phone had saved it in between.
+	RaceOnPut string
+	// NoETag leaves the ETag out of REPORT answers, as a lax server might.
+	NoETag bool
+	behind map[string]col // made by "another client" right after the next PROPFIND
 }
 
 // CreateAfterPropfind makes a calendar appear right after the next PROPFIND
@@ -111,6 +116,13 @@ func (s *Server) store(path, ics string) {
 }
 
 func (s *Server) etag(path string) string { return `"` + strconv.Itoa(s.etags[path]) + `"` }
+
+func (s *Server) etagProp(path string) string {
+	if s.NoETag {
+		return ""
+	}
+	return `<D:getetag>` + esc(s.etag(path)) + `</D:getetag>`
+}
 
 // Objects returns the stored objects by path.
 func (s *Server) Objects() map[string]string {
@@ -244,7 +256,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 				s.mu.Lock()
 				return
 			}
-			b.WriteString(`<D:response><D:href>` + esc(k) + `</D:href><D:propstat><D:prop><D:getetag>` + esc(s.etag(k)) + `</D:getetag><` + data + `>` + esc(s.objs[k]) + `</` + data + `></D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response>`)
+			b.WriteString(`<D:response><D:href>` + esc(k) + `</D:href><D:propstat><D:prop>` + s.etagProp(k) + `<` + data + `>` + esc(s.objs[k]) + `</` + data + `></D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response>`)
 		}
 		b.WriteString(`</D:multistatus>`)
 		w.WriteHeader(http.StatusMultiStatus)
@@ -257,6 +269,11 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		_, exists := s.objs[r.URL.Path]
+		if exists && s.RaceOnPut == r.URL.Path {
+			s.RaceOnPut = ""
+			s.version++
+			s.etags[r.URL.Path] = s.version
+		}
 		if exists && r.Header.Get("If-None-Match") == "*" {
 			w.WriteHeader(http.StatusPreconditionFailed)
 			return

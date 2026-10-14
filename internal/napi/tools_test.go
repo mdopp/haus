@@ -2,6 +2,7 @@ package napi
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -453,8 +454,8 @@ func TestReminderActionRules(t *testing.T) {
 		{`{"action_id":"task.set_status","params":{"entity_id":7,"status":"done"}}`, 400, "bad_params", "an id is text"},
 		{`{"action_id":"task.set_status","params":{"entity_id":"a\nb","status":"done"}}`, 400, "bad_params", "no line breaks in a UID"},
 		{`{"action_id":"task.set_status","params":{"entity_id":"` + strings.Repeat("x", 600) + `","status":"done"}}`, 400, "bad_params", "nor a novel"},
-		{`{"action_id":"task.set_status","params":{"entity_id":"gibtsnicht","status":"done"}}`, 404, "not_found", "an unknown reminder"},
-		{`{"action_id":"task.set_status","params":{"entity_id":"milch","status":"done"}}`, 404, "not_found", "a UID matches whole, not in part"},
+		{`{"action_id":"task.set_status","params":{"entity_id":"gibtsnicht","status":"done"}}`, 410, "not_found", "an unknown reminder: not 404, which the app reads as an unknown action"},
+		{`{"action_id":"task.set_status","params":{"entity_id":"milch","status":"done"}}`, 410, "not_found", "a UID matches whole, not in part"},
 		{`{"action_id":"task.set_status","params":{"entity_id":"muell-5","status":"done"}}`, 409, "recurring", "ticking off a series would end it"},
 	} {
 		code, out := callback(t, s.h, c.body)
@@ -476,5 +477,90 @@ func TestReminderActionWhenRadicaleFails(t *testing.T) {
 	code, out := callback(t, s.h, `{"action_id":"task.set_status","params":{"entity_id":"milch-1","status":"done"}}`)
 	if code != 502 || out["reason"] != "calendar_unavailable" {
 		t.Fatalf("Radicale in trouble: %d %v", code, out)
+	}
+}
+
+// Review of slice 2: the action body, the bridge, the answers the app can tell apart.
+func TestActionBodyIsCappedBeforeAnythingElse(t *testing.T) {
+	var got []string
+	bridge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		got = append(got, r.Header.Get("Authorization")+" "+string(b))
+		w.Write([]byte(`{"ok":true,"via":"bridge"}`))
+	}))
+	defer bridge.Close()
+	u, _ := url.Parse(bridge.URL)
+	big := `{"action_id":"model.release","params":{"x":"` + strings.Repeat("a", 71<<10) + `"}}`
+	for _, b := range []*url.URL{u, nil} {
+		s := toolsWith(t, which{cal: true}, b)
+		if code, out := callback(t, s.h, big); code != 413 || out["reason"] != "too_large" || out["ok"] != false {
+			t.Errorf("bridge %v: %d %v", b != nil, code, out)
+		}
+	}
+	if len(got) != 0 {
+		t.Fatalf("a cut body reached the bridge: %d", len(got))
+	}
+	// a forwarded action carries the device's token to the bridge
+	s := toolsWith(t, which{cal: true}, u)
+	if code, _ := callback(t, s.h, `{"action_id":"model.release","params":{}}`); code != 200 || len(got) != 1 || !strings.HasPrefix(got[0], "Bearer dev1 ") {
+		t.Fatalf("forwarded: %d %v", code, got)
+	}
+}
+
+func TestReminderActionAnswers(t *testing.T) {
+	s := allTools(t)
+	s.dav.Put("/bote/familie/abgesagt.ics", "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VTODO\r\nUID:abgesagt\r\nSUMMARY:Abgesagt\r\nSTATUS:CANCELLED\r\nEND:VTODO\r\nEND:VCALENDAR\r\n")
+	if code, out := callback(t, s.h, `{"action_id":"task.set_status","params":{"entity_id":"abgesagt","status":"done"}}`); code != 409 || out["reason"] != "cancelled" {
+		t.Fatalf("cancelled: %d %v", code, out)
+	}
+	s.dav.RaceOnPut = "/bote/familie/milch-1.ics"
+	if code, out := callback(t, s.h, `{"action_id":"task.set_status","params":{"entity_id":"milch-1","status":"done"}}`); code != 409 || out["reason"] != "changed" {
+		t.Fatalf("changed in between: %d %v", code, out)
+	}
+	if strings.Contains(s.dav.Objects()["/bote/familie/milch-1.ics"], "COMPLETED") {
+		t.Fatal("written over the phone's change")
+	}
+}
+
+func TestTaskRowsCapTrimAndDone(t *testing.T) {
+	s := allTools(t)
+	for i := 0; i < 45; i++ {
+		s.dav.Put(fmt.Sprintf("/bote/familie/viele-%02d.ics", i), fmt.Sprintf("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VTODO\r\nUID:viele-%02d\r\nSUMMARY:Viele %02d\r\nDUE:20261020T%02d0000Z\r\nEND:VTODO\r\nEND:VCALENDAR\r\n", i, i, i%24))
+	}
+	if rs := rows(t, s.h, "/napi/portal/tasks", "tasks"); len(rs) != 40 {
+		t.Fatalf("at most 40 rows: %d", len(rs))
+	}
+
+	s = allTools(t)
+	s.dav.Put("/bote/familie/spaced.ics", "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VTODO\r\nUID: spaced \r\nSUMMARY:Mit Leerzeichen\r\nEND:VTODO\r\nEND:VCALENDAR\r\n")
+	open := rows(t, s.h, "/napi/portal/tasks", "tasks")
+	found := false
+	for _, r := range open {
+		if r["status"] != "open" {
+			t.Fatalf("open rows say so: %v", r)
+		}
+		if r["title"] == "Mit Leerzeichen" {
+			found = r["id"] == "spaced"
+		}
+	}
+	if !found {
+		t.Fatalf("the row id is trimmed as the app trims it: %v", open)
+	}
+	if code, _ := callback(t, s.h, `{"action_id":"task.set_status","params":{"entity_id":"spaced","status":"done"}}`); code != 200 {
+		t.Fatalf("the trimmed id ticks it off: %d", code)
+	}
+	// done=1 (the bridge's catalog asks so): the ticked-off ones too, after the open ones
+	all := rows(t, s.h, "/napi/portal/tasks?done=1", "tasks")
+	var tail []string
+	for _, r := range all[len(open)-1:] {
+		tail = append(tail, r["title"].(string)+"="+r["status"].(string))
+	}
+	if strings.Join(tail, ",") != "Mit Leerzeichen=done,Schon erledigt=done" {
+		t.Fatalf("done=1: the done ones last, the latest first: %v", tail)
+	}
+	for _, r := range all[:len(open)-1] {
+		if r["status"] != "open" {
+			t.Fatalf("open first: %v", all)
+		}
 	}
 }

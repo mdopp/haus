@@ -327,3 +327,87 @@ func TestCompleteTodoRefusesASeries(t *testing.T) {
 		t.Fatalf("methods: %v", fake.Methods)
 	}
 }
+
+func todoFake(t *testing.T, objs map[string]string) (*davfake.Server, *Client) {
+	t.Helper()
+	fake := davfake.New("bote", "pw")
+	t.Cleanup(fake.Close)
+	fake.AddCalendar("/bote/aufgaben/", "Aufgaben", "VTODO")
+	for p, ics := range objs {
+		fake.Put("/bote/aufgaben/"+p, ics)
+	}
+	return fake, &Client{URL: fake.URL, User: "bote", Password: "pw", Loc: berlin(t)}
+}
+
+func vtodo(lines ...string) string {
+	return "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VTODO\r\n" + strings.Join(lines, "\r\n") + "\r\nEND:VTODO\r\nEND:VCALENDAR\r\n"
+}
+
+// A phone saving the reminder between Haus's read and write wins: 412, ErrChanged.
+func TestCompleteTodoChangedInBetween(t *testing.T) {
+	ics := vtodo("UID:a", "SUMMARY:A")
+	fake, c := todoFake(t, map[string]string{"a.ics": ics})
+	fake.RaceOnPut = "/bote/aufgaben/a.ics"
+	if err := c.CompleteTodo(context.Background(), "a"); err != ErrChanged {
+		t.Fatalf("raced: %v, want ErrChanged", err)
+	}
+	if fake.Objects()["/bote/aufgaben/a.ics"] != ics {
+		t.Fatal("the phone's version was replaced")
+	}
+}
+
+func TestCompleteTodoWithoutETagWritesNothing(t *testing.T) {
+	fake, c := todoFake(t, map[string]string{"a.ics": vtodo("UID:a", "SUMMARY:A")})
+	fake.NoETag = true
+	if err := c.CompleteTodo(context.Background(), "a"); err == nil || err == ErrNoTodo {
+		t.Fatalf("no ETag: %v", err)
+	}
+	if count(fake.Methods, "PUT") != 0 {
+		t.Fatalf("a blind write: %v", fake.Methods)
+	}
+}
+
+func TestCompleteTodoCases(t *testing.T) {
+	fake, c := todoFake(t, map[string]string{
+		"rdate.ics":  vtodo("UID:rdate", "SUMMARY:R", "DUE:20261016T050000Z", "RDATE:20261023T050000Z"),
+		"lone.ics":   vtodo("UID:lone", "SUMMARY:L", "RECURRENCE-ID:20261020T050000Z"),
+		"done.ics":   vtodo("UID:done", "SUMMARY:D", "STATUS:NEEDS-ACTION", "COMPLETED:20261011T080000Z"),
+		"cancel.ics": vtodo("UID:cancel", "SUMMARY:C", "STATUS:CANCELLED"),
+		"spaced.ics": vtodo("UID: spaced ", "SUMMARY:S"),
+	})
+	before := fake.Objects()
+	for uid, want := range map[string]error{"rdate": ErrRecurring, "lone": ErrRecurring, "done": nil, "cancel": ErrCancelled} {
+		if err := c.CompleteTodo(context.Background(), uid); err != want {
+			t.Errorf("%s: %v, want %v", uid, err, want)
+		}
+	}
+	for p, v := range before {
+		if fake.Objects()[p] != v && p != "/bote/aufgaben/spaced.ics" {
+			t.Errorf("%s changed", p)
+		}
+	}
+	// the app trims a row's id; so does the match
+	if err := c.CompleteTodo(context.Background(), "spaced"); err != nil {
+		t.Fatalf("spaced: %v", err)
+	}
+	if !strings.Contains(fake.Objects()["/bote/aufgaben/spaced.ics"], "STATUS:COMPLETED") {
+		t.Fatal("spaced not ticked off")
+	}
+}
+
+// Todos lists every reminder, the ticked-off ones with when.
+func TestTodosWithTheDoneOnes(t *testing.T) {
+	_, c := todoFake(t, map[string]string{
+		"o.ics": vtodo("UID:o", "SUMMARY:Offen"),
+		"d.ics": vtodo("UID:d", "SUMMARY:Erledigt", "STATUS:COMPLETED", "COMPLETED:20261011T080000Z"),
+	})
+	ts, err := c.Todos(context.Background())
+	if err != nil || len(ts) != 2 {
+		t.Fatalf("%+v %v", ts, err)
+	}
+	for _, td := range ts {
+		if td.UID == "d" && (td.Open() || td.Completed.IsZero()) {
+			t.Fatalf("done: %+v", td)
+		}
+	}
+}
