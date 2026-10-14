@@ -46,12 +46,13 @@ type HA struct {
 	devices  []map[string]any
 	entities []map[string]any
 	regsDown bool
+	tempUnit string // /api/config's unit_system.temperature; "" makes /api/config fail
 	subs     []*conn
 }
 
 // New starts a fake HA that accepts Bearer token.
 func New(token string) *HA {
-	h := &HA{Token: token, states: map[string]map[string]any{}, history: map[string][]map[string]any{}}
+	h := &HA{Token: token, states: map[string]map[string]any{}, history: map[string][]map[string]any{}, tempUnit: "°C"}
 	h.Server = httptest.NewServer(http.HandlerFunc(h.serve))
 	return h
 }
@@ -134,6 +135,14 @@ func (h *HA) SetRegistries(areas, devices, entities []map[string]any) {
 	h.areas, h.devices, h.entities = areas, devices, entities
 }
 
+// SetTemperatureUnit is the house's temperature unit in /api/config
+// (default °C); "" makes /api/config answer 500 while the rest works.
+func (h *HA) SetTemperatureUnit(u string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.tempUnit = u
+}
+
 // RegistriesDown makes the three registry commands on the WebSocket fail
 // (success:false), so the areas cannot be read while the states can.
 func (h *HA) RegistriesDown(down bool) {
@@ -196,6 +205,13 @@ func (h *HA) serve(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.Method == "GET" && r.URL.Path == "/api/":
 		w.Write([]byte(`{"message":"API running."}`))
+	case r.Method == "GET" && r.URL.Path == "/api/config":
+		if h.tempUnit == "" {
+			http.Error(w, "500: config broken", http.StatusInternalServerError)
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{"location_name": "Zuhause", "time_zone": "Europe/Berlin",
+			"unit_system": map[string]any{"length": "km", "mass": "g", "temperature": h.tempUnit, "volume": "L"}})
 	case r.Method == "GET" && r.URL.Path == "/api/states":
 		out := []map[string]any{}
 		for _, id := range h.order {

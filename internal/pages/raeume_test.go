@@ -135,3 +135,43 @@ func TestRaeumeHidesBrokenBackends(t *testing.T) {
 		t.Fatal("the page still comes")
 	}
 }
+
+// The temperature's unit is Home Assistant's: the entity's own
+// temperature_unit, else the house's unit system; °C only when HA says
+// neither.
+func TestRaeumeTemperatureUnitIsHAs(t *testing.T) {
+	fake, hc := house(t)
+	fake.SetTemperatureUnit("°F")
+	fake.Set("climate.wz", "heat", map[string]any{"friendly_name": "Heizung", "current_temperature": 70.5, "temperature": 72})
+	fake.Set("climate.bad", "heat", map[string]any{"friendly_name": "Bad", "current_temperature": 21, "temperature": 22, "temperature_unit": "°C"})
+	_, body, _ := familyPage(t, Raeume, StartConfig{HA: hc}, "GET", "/raeume", "")
+	mustContain(t, body, "70,5 °F · Soll 72 °F", "21 °C · Soll 22 °C")
+
+	fake2, hc2 := house(t)
+	fake2.SetTemperatureUnit("") // /api/config does not answer
+	fake2.Set("climate.wz", "heat", map[string]any{"friendly_name": "Heizung", "current_temperature": 21.5, "temperature": 22})
+	_, body, _ = familyPage(t, Raeume, StartConfig{HA: hc2}, "GET", "/raeume", "")
+	mustContain(t, body, "21,5 °C · Soll 22 °C")
+}
+
+// What HA hides — hidden_by set, or a config or diagnostic entity — is
+// not on the family's page either.
+func TestRaeumeLeavesOutWhatHAHides(t *testing.T) {
+	fake, hc := house(t)
+	fake.SetRegistries([]map[string]any{{"area_id": "kueche", "name": "Küche"}}, nil,
+		[]map[string]any{
+			{"entity_id": "light.decke", "area_id": "kueche"},
+			{"entity_id": "light.alt", "area_id": "kueche", "hidden_by": "user"},
+			{"entity_id": "light.status_led", "area_id": "kueche", "entity_category": "config"},
+			{"entity_id": "media_player.diag", "entity_category": "diagnostic"},
+			{"entity_id": "cover.rollo", "hidden_by": "integration"},
+		})
+	fake.Set("light.decke", "on", map[string]any{"friendly_name": "Deckenlampe"})
+	fake.Set("light.alt", "on", map[string]any{"friendly_name": "Alte Lampe"})
+	fake.Set("light.status_led", "on", map[string]any{"friendly_name": "Status-LED"})
+	fake.Set("media_player.diag", "playing", map[string]any{"friendly_name": "Diagnoseplayer"})
+	fake.Set("cover.rollo", "open", map[string]any{"friendly_name": "Verstecktes Rollo"})
+	_, body, _ := familyPage(t, Raeume, StartConfig{HA: hc}, "GET", "/raeume", "")
+	mustContain(t, body, "Deckenlampe")
+	mustNotContain(t, body, "Alte Lampe", "Status-LED", "Diagnoseplayer", "Verstecktes Rollo", "Ohne Raum")
+}

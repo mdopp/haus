@@ -369,3 +369,21 @@ func TestStartLinksToTheFamilyPages(t *testing.T) {
 	mustContain(t, body, `href="/raeume"`)
 	mustNotContain(t, body, "/kalender", "/notizen")
 }
+
+// What HA hides is not counted or named on Start: a hidden lamp is not on,
+// a config LED is no light, a diagnostic player plays nothing.
+func TestStartLeavesOutWhatHAHides(t *testing.T) {
+	fake, hc := house(t)
+	fake.SetRegistries(nil, nil, []map[string]any{
+		{"entity_id": "light.alt", "hidden_by": "user"},
+		{"entity_id": "light.status_led", "entity_category": "config"},
+		{"entity_id": "media_player.diag", "entity_category": "diagnostic"},
+	})
+	fake.Set("light.kueche", "on", map[string]any{"friendly_name": "Küche"})
+	fake.Set("light.alt", "on", map[string]any{"friendly_name": "Alte Lampe"})
+	fake.Set("light.status_led", "on", map[string]any{"friendly_name": "Status-LED"})
+	fake.Set("media_player.diag", "playing", map[string]any{"friendly_name": "Diagnoseplayer", "media_title": "Test"})
+	_, body := startPage(t, StartConfig{HA: hc}, "")
+	mustContain(t, body, "1 Licht an", "Küche")
+	mustNotContain(t, body, "Alte Lampe", "Status-LED", "Diagnoseplayer", "Lichter an")
+}
