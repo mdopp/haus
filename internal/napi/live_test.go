@@ -48,3 +48,30 @@ func TestActiveSetNotToAnExpiredWatch(t *testing.T) {
 		t.Fatalf("the active watch got %d frames", len(here.ch))
 	}
 }
+
+// A frame that reaches nobody records nothing: a stream too slow to take
+// the set keeps the one it had, and the interval does not start, so the
+// set goes out as soon as the stream can take it (haus#28).
+func TestASetNobodyTookIsNotSent(t *testing.T) {
+	l := newLive(nil, time.Minute, time.Hour)
+	slow := &listener{device: "slow", ch: make(chan []byte, 1), kick: make(chan struct{})}
+	slow.ch <- []byte("full")
+	l.mu.Lock()
+	l.watches["slow"] = watchSet{active: true, until: time.Now().Add(time.Hour)}
+	l.subs[slow] = true
+	l.on["light.flur"], l.onKnown = true, true
+	l.activeOut()
+	l.mu.Unlock()
+	<-slow.ch // the stream catches up
+	l.mu.Lock()
+	l.activeOut()
+	l.mu.Unlock()
+	select {
+	case f := <-slow.ch:
+		if string(f) != "event: active_set\ndata: {\"entity_ids\":[\"light.flur\"]}\n\n" {
+			t.Fatalf("frame: %q", f)
+		}
+	default:
+		t.Fatal("the set that never arrived was taken as sent")
+	}
+}
