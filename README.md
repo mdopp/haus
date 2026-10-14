@@ -109,6 +109,26 @@ the house persona, and the old Solaris and ServiceBay names live only in
     only: `HAUS_RADICALE_CALENDAR` (`/<owner>/<collection>/`, read too) when
     set, else the one named `Haushalt`, made on the first write when
     missing. No request goes to a host other than `HAUS_RADICALE_URL`'s.
+  - The same Radicale account (CardDAV): `kontakte_suchen(text)` (name,
+    nickname, organisation, email, or a number of three digits or more,
+    however either side writes it: `0170 …`, `+49 170 …` and `0049 170 …`
+    are one number, a `+`/`00` query must match the whole international
+    number, any other is a piece of it; the house's calling code is
+    `HAUS_PHONE_COUNTRY`, default `49`; ten hits with phone, email and
+    birthday),
+    `kontakt_anlegen(name, telefon?, email?, geburtstag?)` (a vCard 4.0
+    with a random `urn:uuid` UID; `geburtstag` `JJJJ-MM-TT` or `--MM-TT`).
+    Reads cover every address book of the account; writes go to
+    `HAUS_RADICALE_ADDRESSBOOK` when set, else the address book named
+    `Haushalt`, made on the first write at `/<user>/haushalt-kontakte/`.
+    A read stops at 5000 cards, 64 MB per address book or the 15 s
+    timeout (after the first card) and says so. No redirect is followed.
+  - `HAUS_PAPERLESS_URL` + `HAUS_PAPERLESS_TOKEN` (a Paperless API token;
+    what its user may see is what the Bote sees): `dokumente_suchen(text)`,
+    full text, at most 20 hits with date, correspondent, title and, when
+    `HAUS_PAPERLESS_PUBLIC_URL` is set, a link to
+    `<public>/documents/<id>/details`. Read-only (GET only), no redirect
+    followed, the token never in an answer.
   - `HAUS_NOTES_DIR` (the share's `notes` folder): `notizen_suchen(text)`,
     `notiz_lesen(titel)`, `notiz_anlegen(titel, text)`. A note is
     `<slug>.md`, `# Titel` first, never written over an existing one (`-2`,
@@ -118,8 +138,8 @@ the house persona, and the old Solaris and ServiceBay names live only in
   Times are local (`TZ`, e.g. `Europe/Berlin`): `JJJJ-MM-TT` or
   `JJJJ-MM-TTTHH:MM`. Haus keeps nothing of it (ADR 0017 §3): a note is a
   file the family syncs, a reminder an entry on their phones; a search
-  reads the files, there is no second index. Contacts (CardDAV) and
-  documents (Paperless) come next.
+  reads the files, there is no second index. Identity per person (the
+  person's own calendar, laib ADR 0017 §3) comes next.
 
 Not yet: Start's *Meine Favoriten* and *Häufig genutzt*; Räume, Energie,
 Medien, Notizen, Kalender; the `Sprechen` field to the Bote. Those come with the Home Assistant
@@ -141,7 +161,8 @@ HAUS_ANDROID_FINGERPRINTS=<the app's SHA-256 signing fingerprints> \
 HAUS_ENERGY_FLOW=pv=sensor.…,house=sensor.…,grid=sensor.…,battery=sensor.… HAUS_ENERGY_TOTALS=PV-Erzeugung=sensor.…,… \
 HAUS_HAUSHALT_TOKEN=<the Bote's bearer> TZ=Europe/Berlin \
 HAUS_RADICALE_URL=http://host.containers.internal:5232 HAUS_RADICALE_USER=<service account> HAUS_RADICALE_PASSWORD=<its password> \
-HAUS_NOTES_DIR=/notes ./haus
+HAUS_PAPERLESS_URL=http://host.containers.internal:8000 HAUS_PAPERLESS_TOKEN=<a Paperless API token> \
+HAUS_PAPERLESS_PUBLIC_URL=https://paperless.<domain> HAUS_NOTES_DIR=/notes ./haus
 ```
 
 `HAUS_DATA` (default `/data`) holds `devices.json`; `HAUS_PUBLIC_URL` is the
@@ -153,5 +174,6 @@ nothing else (no exec, no write). There are no static device tokens. Image: `ghc
 
 `go test ./...` — a fake Laib MCP, a fake Solaris, a fake Home
 Assistant (`internal/ha/hafake`, REST and WebSocket), a fake Radicale
-(`internal/caldav/davfake`) and a temp folder for the notes; the shapes are
+(`internal/caldav/davfake`, calendars and address books), a fake Paperless
+(`internal/paperless/paperlessfake`) and a temp folder for the notes; the shapes are
 pinned to `SbApiClient.kt` and `ApiClient.kt` in solaris-android.

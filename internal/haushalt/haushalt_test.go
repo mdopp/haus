@@ -2,6 +2,7 @@ package haushalt
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,6 +15,8 @@ import (
 	"github.com/mdopp/haus/internal/caldav"
 	"github.com/mdopp/haus/internal/caldav/davfake"
 	"github.com/mdopp/haus/internal/notes"
+	"github.com/mdopp/haus/internal/paperless"
+	"github.com/mdopp/haus/internal/paperless/paperlessfake"
 )
 
 const tok = "bote-token"
@@ -31,19 +34,40 @@ type setup struct {
 	h     http.Handler
 	fake  *davfake.Server
 	notes string
+	docs  *paperlessfake.Server
 }
 
-func newSetup(t *testing.T, calendar, withNotes bool) setup {
+// want says which backends a setup has.
+type want struct {
+	cal, notes, contacts, docs bool
+	country                    string // HAUS_PHONE_COUNTRY; "" the default
+}
+
+const plToken = "pl-geheim-123"
+
+func newSetup(t *testing.T, w want) setup {
 	t.Helper()
 	s := setup{}
-	cfg := Config{Token: tok, Loc: berlin(t), Version: "test"}
-	if calendar {
+	cfg := Config{Token: tok, Loc: berlin(t), Version: "test", PhoneCountry: w.country}
+	if w.cal || w.contacts {
 		s.fake = davfake.New("bote", "pw")
 		t.Cleanup(s.fake.Close)
-		s.fake.AddCalendar("/bote/familie/", "Haushalt")
-		cfg.Calendar = &caldav.Client{URL: s.fake.URL, User: "bote", Password: "pw", Loc: cfg.Loc}
+		dav := &caldav.Client{URL: s.fake.URL, User: "bote", Password: "pw", Loc: cfg.Loc}
+		if w.cal {
+			s.fake.AddCalendar("/bote/familie/", "Haushalt")
+			cfg.Calendar = dav
+		}
+		if w.contacts {
+			s.fake.AddAddressBook("/bote/kontakte/", "Haushalt")
+			cfg.Contacts = dav
+		}
 	}
-	if withNotes {
+	if w.docs {
+		s.docs = paperlessfake.New(plToken)
+		t.Cleanup(s.docs.Close)
+		cfg.Documents = &paperless.Client{URL: s.docs.URL, Token: plToken, PublicURL: "https://paperless.example"}
+	}
+	if w.notes {
 		s.notes = t.TempDir()
 		d, err := notes.Open(s.notes)
 		if err != nil {
@@ -108,7 +132,7 @@ func toolNames(t *testing.T, h http.Handler) []string {
 // The endpoint answers only the Bote's bearer; with no token configured it
 // answers nobody — never open.
 func TestAuth(t *testing.T) {
-	s := newSetup(t, false, true)
+	s := newSetup(t, want{notes: true})
 	for _, bearer := range []string{"", "wrong", tok + "x"} {
 		if code, _ := rpc(t, s.h, bearer, "tools/list", nil); code != http.StatusUnauthorized {
 			t.Fatalf("bearer %q: %d", bearer, code)
@@ -153,7 +177,7 @@ func TestAuth(t *testing.T) {
 // laib's internal/mcpserver shape: initialize, ping, tools/list,
 // tools/call, JSON-RPC errors for an unknown tool or method.
 func TestProtocolShape(t *testing.T) {
-	s := newSetup(t, true, true)
+	s := newSetup(t, want{cal: true, notes: true})
 	_, out := rpc(t, s.h, tok, "initialize", map[string]any{"protocolVersion": "2025-03-26"})
 	if out["jsonrpc"] != "2.0" || out["id"] != float64(7) {
 		t.Fatalf("envelope: %v", out)
@@ -191,26 +215,43 @@ func TestProtocolShape(t *testing.T) {
 func TestToolsOnlyWhatWorks(t *testing.T) {
 	cal := []string{"erinnerung_anlegen", "erinnerungen", "termin_anlegen", "termine"}
 	not := []string{"notiz_anlegen", "notiz_lesen", "notizen_suchen"}
-	both := append(append([]string{}, cal...), not...)
-	sort.Strings(both)
+	con := []string{"kontakt_anlegen", "kontakte_suchen"}
+	doc := []string{"dokumente_suchen"}
+	join := func(ls ...[]string) []string {
+		var out []string
+		for _, l := range ls {
+			out = append(out, l...)
+		}
+		sort.Strings(out)
+		return out
+	}
 	for _, c := range []struct {
-		cal, notes bool
-		want       []string
-	}{{false, false, nil}, {true, false, cal}, {false, true, not}, {true, true, both}} {
-		got := toolNames(t, newSetup(t, c.cal, c.notes).h)
+		w    want
+		want []string
+	}{
+		{want{}, nil},
+		{want{cal: true}, cal},
+		{want{notes: true}, not},
+		{want{contacts: true}, con},
+		{want{docs: true}, doc},
+		{want{cal: true, notes: true}, join(cal, not)},
+		{want{cal: true, notes: true, contacts: true, docs: true}, join(cal, not, con, doc)},
+	} {
+		got := toolNames(t, newSetup(t, c.w).h)
 		if strings.Join(got, ",") != strings.Join(c.want, ",") {
-			t.Fatalf("calendar %v notes %v: %v", c.cal, c.notes, got)
+			t.Fatalf("%+v: %v", c.w, got)
 		}
 	}
 }
 
 func TestFromEnv(t *testing.T) {
-	for _, k := range []string{"HAUS_HAUSHALT_TOKEN", "HAUS_RADICALE_URL", "HAUS_RADICALE_USER", "HAUS_RADICALE_PASSWORD", "HAUS_RADICALE_CALENDAR", "HAUS_NOTES_DIR"} {
+	for _, k := range []string{"HAUS_HAUSHALT_TOKEN", "HAUS_RADICALE_URL", "HAUS_RADICALE_USER", "HAUS_RADICALE_PASSWORD", "HAUS_RADICALE_CALENDAR",
+		"HAUS_RADICALE_ADDRESSBOOK", "HAUS_NOTES_DIR", "HAUS_PAPERLESS_URL", "HAUS_PAPERLESS_TOKEN", "HAUS_PAPERLESS_PUBLIC_URL"} {
 		t.Setenv(k, "")
 	}
 	t.Setenv("TZ", "Europe/Berlin")
 	cfg, err := FromEnv()
-	if err != nil || cfg.Calendar != nil || cfg.Notes != nil || cfg.Token != "" || cfg.Loc.String() != "Europe/Berlin" {
+	if err != nil || cfg.Calendar != nil || cfg.Contacts != nil || cfg.Documents != nil || cfg.Notes != nil || cfg.Token != "" || cfg.Loc.String() != "Europe/Berlin" {
 		t.Fatalf("unset: %+v %v", cfg, err)
 	}
 	t.Setenv("HAUS_RADICALE_URL", "radicale:5232")
@@ -218,16 +259,20 @@ func TestFromEnv(t *testing.T) {
 		t.Fatal("a malformed Radicale address refuses to start")
 	}
 	t.Setenv("HAUS_RADICALE_URL", "http://host.containers.internal:5232/")
-	if cfg, err := FromEnv(); err != nil || cfg.Calendar != nil {
+	if cfg, err := FromEnv(); err != nil || cfg.Calendar != nil || cfg.Contacts != nil {
 		t.Fatalf("an address without the account is off, not an error: %+v %v", cfg, err)
 	}
 	t.Setenv("HAUS_RADICALE_USER", "bote")
 	t.Setenv("HAUS_RADICALE_PASSWORD", "pw")
 	t.Setenv("HAUS_RADICALE_CALENDAR", "/familie/kalender/")
+	t.Setenv("HAUS_RADICALE_ADDRESSBOOK", "/familie/kontakte/")
 	t.Setenv("HAUS_NOTES_DIR", filepath.Join(t.TempDir(), "fehlt"))
 	cfg, err = FromEnv()
 	if err != nil || cfg.Calendar == nil || cfg.Calendar.URL != "http://host.containers.internal:5232" || cfg.Calendar.User != "bote" || cfg.Calendar.Calendar != "/familie/kalender/" {
 		t.Fatalf("calendar: %+v %v", cfg.Calendar, err)
+	}
+	if cfg.Contacts == nil || cfg.Contacts.URL != cfg.Calendar.URL || cfg.Contacts.AddressBook != "/familie/kontakte/" {
+		t.Fatalf("contacts on the same account: %+v", cfg.Contacts)
 	}
 	if cfg.Notes != nil {
 		t.Fatal("a notes dir that is not there leaves the note tools out")
@@ -243,7 +288,7 @@ func TestFromEnv(t *testing.T) {
 // house's time; a reminder is a VTODO with an alarm (ADR 0017 §3: where
 // people see it).
 func TestCalendarTools(t *testing.T) {
-	s := newSetup(t, true, false)
+	s := newSetup(t, want{cal: true})
 	text, isErr := call(t, s.h, "termin_anlegen", map[string]any{"titel": "Zahnarzt", "beginn": "2026-10-14T15:00", "ort": "Praxis, Hauptstr. 1"})
 	if isErr || !strings.Contains(text, "Haushalt") || !strings.Contains(text, "Mi 14.10.2026 15:00–16:00: Zahnarzt (Praxis, Hauptstr. 1)") {
 		t.Fatalf("termin_anlegen: %q %v", text, isErr)
@@ -312,7 +357,7 @@ func TestCalendarTools(t *testing.T) {
 // A note is a Markdown file in the share; search and read go through the
 // same tools; no name leaves the directory.
 func TestNoteTools(t *testing.T) {
-	s := newSetup(t, false, true)
+	s := newSetup(t, want{notes: true})
 	text, isErr := call(t, s.h, "notiz_anlegen", map[string]any{"titel": "WLAN Gäste", "text": "Netz: Gast\nPasswort steht am Router"})
 	if isErr || !strings.Contains(text, "wlan-gaeste.md") {
 		t.Fatalf("notiz_anlegen: %q", text)
@@ -345,7 +390,7 @@ func TestNoteTools(t *testing.T) {
 
 // A notification gets 202 and no body (the streamable-HTTP transport).
 func TestNotificationAccepted(t *testing.T) {
-	s := newSetup(t, false, true)
+	s := newSetup(t, want{notes: true})
 	req := httptest.NewRequest(http.MethodPost, "/mcp/haushalt", strings.NewReader(`{"jsonrpc":"2.0","method":"notifications/initialized"}`))
 	req.Header.Set("Authorization", "Bearer "+tok)
 	rec := httptest.NewRecorder()
@@ -357,7 +402,7 @@ func TestNotificationAccepted(t *testing.T) {
 
 // A number where text belongs is a type error, not a missing argument.
 func TestArgumentTypes(t *testing.T) {
-	s := newSetup(t, true, true)
+	s := newSetup(t, want{cal: true, notes: true})
 	text, isErr := call(t, s.h, "termin_anlegen", map[string]any{"titel": 5, "beginn": "2026-10-14T15:00"})
 	if !isErr || !strings.Contains(text, "titel") || !strings.Contains(text, "Text") || strings.Contains(text, "fehlt") {
 		t.Fatalf("%q %v", text, isErr)
@@ -373,7 +418,7 @@ func TestArgumentTypes(t *testing.T) {
 
 // A day without a time is 9:00 local, also on the days the clocks change.
 func TestDateOnlyReminderOnDSTDays(t *testing.T) {
-	s := newSetup(t, true, false)
+	s := newSetup(t, want{cal: true})
 	for day, due := range map[string]string{"2026-03-29": "DUE:20260329T070000Z", "2026-10-25": "DUE:20261025T080000Z"} {
 		text, isErr := call(t, s.h, "erinnerung_anlegen", map[string]any{"text": "Uhren prüfen " + day, "wann": day})
 		if isErr || !strings.Contains(text, " 09:00: ") {
@@ -393,7 +438,7 @@ func TestDateOnlyReminderOnDSTDays(t *testing.T) {
 
 // Writes refuse over-long fields; what is read back is cut short.
 func TestLengthCaps(t *testing.T) {
-	s := newSetup(t, true, true)
+	s := newSetup(t, want{cal: true, notes: true})
 	long := strings.Repeat("x", MaxField+1)
 	for name, args := range map[string]map[string]any{
 		"termin_anlegen":     {"titel": long, "beginn": "2026-10-14T15:00"},
@@ -412,5 +457,245 @@ func TestLengthCaps(t *testing.T) {
 	text, _ := call(t, s.h, "termine", map[string]any{"von": "2026-10-14"})
 	if len([]rune(text)) > 2*MaxField+100 {
 		t.Fatalf("a phone's long title is cut in the answer: %d characters", len([]rune(text)))
+	}
+}
+
+// Paperless: the address and the token switch the document tool on; a
+// malformed address refuses to start; the public address only makes links.
+func TestFromEnvPaperless(t *testing.T) {
+	for _, k := range []string{"HAUS_RADICALE_URL", "HAUS_NOTES_DIR", "HAUS_PAPERLESS_URL", "HAUS_PAPERLESS_TOKEN", "HAUS_PAPERLESS_PUBLIC_URL"} {
+		t.Setenv(k, "")
+	}
+	t.Setenv("HAUS_PAPERLESS_URL", "http://host.containers.internal:8000/")
+	if cfg, err := FromEnv(); err != nil || cfg.Documents != nil {
+		t.Fatalf("no token, no documents: %+v %v", cfg.Documents, err)
+	}
+	t.Setenv("HAUS_PAPERLESS_TOKEN", plToken)
+	cfg, err := FromEnv()
+	if err != nil || cfg.Documents == nil || cfg.Documents.URL != "http://host.containers.internal:8000" || cfg.Documents.Token != plToken || cfg.Documents.PublicURL != "" {
+		t.Fatalf("documents: %+v %v", cfg.Documents, err)
+	}
+	t.Setenv("HAUS_PAPERLESS_PUBLIC_URL", "https://paperless.example.org/")
+	if cfg, _ := FromEnv(); cfg.Documents == nil || cfg.Documents.PublicURL != "https://paperless.example.org" {
+		t.Fatalf("public: %+v", cfg.Documents)
+	}
+	for k, v := range map[string]string{"HAUS_PAPERLESS_URL": "paperless:8000", "HAUS_PAPERLESS_PUBLIC_URL": "javascript:alert(1)"} {
+		t.Run(k, func(t *testing.T) {
+			t.Setenv(k, v)
+			if _, err := FromEnv(); err == nil {
+				t.Fatalf("%s=%q refuses to start", k, v)
+			} else if strings.Contains(err.Error(), plToken) {
+				t.Fatal("the token never goes into a message")
+			} else if !strings.Contains(err.Error(), "http(s)://") {
+				t.Fatalf("http is allowed, the message says so: %v", err)
+			}
+		})
+	}
+}
+
+// A contact lands in the Haushalt address book as a vCard and is found by
+// name, by phone however it is written, and by email; the answer is short.
+func TestContactTools(t *testing.T) {
+	s := newSetup(t, want{contacts: true})
+	text, isErr := call(t, s.h, "kontakt_anlegen", map[string]any{"name": "Eva Müller", "telefon": "+49 170 1234567", "email": "eva@example.org", "geburtstag": "1985-04-12"})
+	if isErr || !strings.Contains(text, "Haushalt") || !strings.Contains(text, "Eva Müller") || !strings.Contains(text, "12.04.1985") {
+		t.Fatalf("kontakt_anlegen: %q %v", text, isErr)
+	}
+	var vcf string
+	for p, v := range s.fake.Objects() {
+		if !strings.HasPrefix(p, "/bote/kontakte/") || !strings.HasSuffix(p, ".vcf") {
+			t.Fatalf("stray object %s", p)
+		}
+		vcf = v
+	}
+	for _, want := range []string{"VERSION:4.0", "FN:Eva Müller", "TEL:+49 170 1234567", "EMAIL:eva@example.org", "BDAY:19850412", "UID:urn:uuid:"} {
+		if !strings.Contains(vcf, want) {
+			t.Fatalf("vCard lacks %q:\n%s", want, vcf)
+		}
+	}
+	s.fake.Put("/bote/kontakte/oma.vcf", "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:o\r\nFN:Oma Erna\r\nTEL:0711 98765\r\nBDAY:--0309\r\nEND:VCARD\r\n")
+	for q, want := range map[string]string{
+		"müller": "Eva Müller", "EVA": "Eva Müller", "0170 1234567": "Eva Müller", "1234567": "Eva Müller",
+		"example.org": "Eva Müller", "oma": "Oma Erna", "98765": "Oma Erna",
+	} {
+		text, isErr := call(t, s.h, "kontakte_suchen", map[string]any{"text": q})
+		if isErr || !strings.Contains(text, want) || strings.Count(text, "\n") != 0 {
+			t.Fatalf("%q: %q", q, text)
+		}
+	}
+	text, _ = call(t, s.h, "kontakte_suchen", map[string]any{"text": "eva"})
+	for _, want := range []string{"Eva Müller", "+49 170 1234567", "eva@example.org", "12.04.1985"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("the hit shows %q: %q", want, text)
+		}
+	}
+	if text, _ := call(t, s.h, "kontakte_suchen", map[string]any{"text": "oma"}); !strings.Contains(text, "09.03.") {
+		t.Fatalf("a birthday without a year: %q", text)
+	}
+	if text, _ := call(t, s.h, "kontakte_suchen", map[string]any{"text": "niemand"}); !strings.HasPrefix(text, "Kein Kontakt") {
+		t.Fatalf("no hit: %q", text)
+	}
+	n := len(s.fake.Objects())
+	for _, bad := range []map[string]any{
+		{},
+		{"name": "x", "telefon": "ruf an"},
+		{"name": "x", "telefon": "0170\nEMAIL:x@y"},
+		{"name": "x", "email": "keine-adresse"},
+		{"name": "x", "email": "a@b.de\r\nTEL:1"},
+		{"name": "x", "geburtstag": "12.04."},
+		{"name": "x", "geburtstag": "1985-02-30"},
+		{"name": strings.Repeat("x", MaxField+1)},
+	} {
+		if text, isErr := call(t, s.h, "kontakt_anlegen", bad); !isErr {
+			t.Fatalf("%v: want a tool error, got %q", bad, text)
+		}
+	}
+	if _, isErr := call(t, s.h, "kontakte_suchen", map[string]any{"text": ""}); !isErr {
+		t.Fatal("an empty search is an error")
+	}
+	if len(s.fake.Objects()) != n {
+		t.Fatal("nothing written on a refused contact")
+	}
+}
+
+// A newline or a semicolon in a name cannot add a property to the card.
+func TestContactNameInjection(t *testing.T) {
+	s := newSetup(t, want{contacts: true})
+	if text, isErr := call(t, s.h, "kontakt_anlegen", map[string]any{"name": "Eva;\r\nTEL:+49666\nEND:VCARD"}); isErr {
+		t.Fatalf("%q", text)
+	}
+	for _, v := range s.fake.Objects() {
+		root, err := caldav.Parse(v)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cs := caldav.Contacts(root)
+		if len(cs) != 1 || len(cs[0].Phones) != 0 || strings.Contains(v, "\r\nTEL:") {
+			t.Fatalf("injected:\n%s", v)
+		}
+	}
+}
+
+// Many hits: a few shown, the rest counted; a long name is cut.
+func TestContactSearchSmall(t *testing.T) {
+	s := newSetup(t, want{contacts: true})
+	for i := 0; i < 15; i++ {
+		s.fake.Put(fmt.Sprintf("/bote/kontakte/%d.vcf", i), fmt.Sprintf("BEGIN:VCARD\r\nVERSION:4.0\r\nUID:%d\r\nFN:Müller %d %s\r\nEND:VCARD\r\n", i, i, strings.Repeat("y", 3000)))
+	}
+	text, isErr := call(t, s.h, "kontakte_suchen", map[string]any{"text": "müller"})
+	if isErr || strings.Count(text, "Müller") != maxContacts || !strings.Contains(text, fmt.Sprintf("… und %d weitere", 15-maxContacts)) {
+		t.Fatalf("%q", text)
+	}
+	if len([]rune(text)) > maxContacts*(MaxField+50)+100 {
+		t.Fatalf("too long: %d", len([]rune(text)))
+	}
+}
+
+// Documents: title, correspondent, date and a link to Paperless's own
+// page; at most 20; read-only; a Paperless failure is a tool error without
+// the token.
+func TestDocumentTools(t *testing.T) {
+	s := newSetup(t, want{docs: true})
+	s.docs.Correspondent(3, "Stadtwerke")
+	s.docs.Add(paperlessfake.Doc{ID: 12, Title: "Rechnung März", Correspondent: 3, Created: "2025-03-14"})
+	text, isErr := call(t, s.h, "dokumente_suchen", map[string]any{"text": "rechnung"})
+	if isErr || text != "14.03.2025 · Stadtwerke · Rechnung März — https://paperless.example/documents/12/details" {
+		t.Fatalf("dokumente_suchen: %q %v", text, isErr)
+	}
+	if text, _ := call(t, s.h, "dokumente_suchen", map[string]any{"text": "steuer"}); !strings.HasPrefix(text, "Kein Dokument") {
+		t.Fatalf("no hit: %q", text)
+	}
+	for i := 0; i < 30; i++ {
+		s.docs.Add(paperlessfake.Doc{ID: 100 + i, Title: fmt.Sprint("Kontoauszug ", i)})
+	}
+	text, _ = call(t, s.h, "dokumente_suchen", map[string]any{"text": "kontoauszug"})
+	if strings.Count(text, "Kontoauszug") != 20 || !strings.Contains(text, "… und 10 weitere") {
+		t.Fatalf("at most 20: %q", text)
+	}
+	for _, r := range s.docs.Seen() {
+		if r.Method != http.MethodGet {
+			t.Fatalf("read-only: %s %s", r.Method, r.URL)
+		}
+		if r.URL.Path == "/api/documents/" && r.URL.Query().Get("page_size") != "20" {
+			t.Fatalf("page_size: %s", r.URL)
+		}
+	}
+	for _, bad := range []string{"", strings.Repeat("x", MaxField+1)} {
+		if _, isErr := call(t, s.h, "dokumente_suchen", map[string]any{"text": bad}); !isErr {
+			t.Fatalf("%q: want an error", bad)
+		}
+	}
+	s.docs.Status = http.StatusInternalServerError
+	text, isErr = call(t, s.h, "dokumente_suchen", map[string]any{"text": "rechnung"})
+	if !isErr || !strings.Contains(text, "Paperless") || strings.Contains(text, plToken) {
+		t.Fatalf("failure: %q %v", text, isErr)
+	}
+}
+
+// A number is found however either side writes it: national, +49 or
+// 0049, spaces, dashes, slashes; the country is HAUS_PHONE_COUNTRY.
+func TestPhoneSearchBothWays(t *testing.T) {
+	s := newSetup(t, want{contacts: true})
+	s.fake.Put("/bote/kontakte/a.vcf", "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:a\r\nFN:Anna National\r\nTEL:0170 1234567\r\nEND:VCARD\r\n")
+	s.fake.Put("/bote/kontakte/b.vcf", "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:b\r\nFN:Bert International\r\nTEL:+49 (0)711 / 98-76-54\r\nEND:VCARD\r\n")
+	s.fake.Put("/bote/kontakte/c.vcf", "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:c\r\nFN:Carla Doppelnull\r\nTEL:0049 30 555666\r\nEND:VCARD\r\n")
+	s.fake.Put("/bote/kontakte/d.vcf", "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:d\r\nFN:Dora Wien\r\nTEL:+43 660 1234567\r\nEND:VCARD\r\n")
+	for q, want := range map[string]string{
+		"+49 170 1234567": "Anna", "0049 170 1234567": "Anna", "0170-1234567": "Anna", "+491701234567": "Anna",
+		"0711 987654": "Bert", "+49 711 987654": "Bert", "0049711987654": "Bert",
+		"030 555666": "Carla", "+49 30 555666": "Carla",
+		"+43 660 1234567": "Dora", "0043 660 1234567": "Dora",
+	} {
+		text, isErr := call(t, s.h, "kontakte_suchen", map[string]any{"text": q})
+		if isErr || !strings.Contains(text, want) || strings.Contains(text, "\n") {
+			t.Fatalf("%q: %q", q, text)
+		}
+	}
+	// a foreign number written nationally is not a German one
+	if text, _ := call(t, s.h, "kontakte_suchen", map[string]any{"text": "+49 660 1234567"}); strings.Contains(text, "Dora") {
+		t.Fatalf("+49 660 is not +43 660: %q", text)
+	}
+	// one or two digits match no phone
+	for _, q := range []string{"1", "7", "17", "+4"} {
+		if text, _ := call(t, s.h, "kontakte_suchen", map[string]any{"text": q}); !strings.HasPrefix(text, "Kein Kontakt") {
+			t.Fatalf("%q matched: %q", q, text)
+		}
+	}
+
+	at := newSetup(t, want{contacts: true, country: "43"})
+	at.fake.Put("/bote/kontakte/d.vcf", "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:d\r\nFN:Dora Wien\r\nTEL:0660 1234567\r\nEND:VCARD\r\n")
+	if text, _ := call(t, at.h, "kontakte_suchen", map[string]any{"text": "+43 660 1234567"}); !strings.Contains(text, "Dora") {
+		t.Fatalf("HAUS_PHONE_COUNTRY=43: %q", text)
+	}
+}
+
+func TestFromEnvPhoneCountry(t *testing.T) {
+	t.Setenv("HAUS_RADICALE_URL", "")
+	t.Setenv("HAUS_NOTES_DIR", "")
+	t.Setenv("HAUS_PAPERLESS_URL", "")
+	t.Setenv("HAUS_PHONE_COUNTRY", "")
+	if cfg, err := FromEnv(); err != nil || cfg.PhoneCountry != "49" {
+		t.Fatalf("default: %q %v", cfg.PhoneCountry, err)
+	}
+	t.Setenv("HAUS_PHONE_COUNTRY", "+43")
+	if cfg, err := FromEnv(); err != nil || cfg.PhoneCountry != "43" {
+		t.Fatalf("+43: %q %v", cfg.PhoneCountry, err)
+	}
+	for _, bad := range []string{"Österreich", "0043", "12345"} {
+		t.Setenv("HAUS_PHONE_COUNTRY", bad)
+		if _, err := FromEnv(); err == nil {
+			t.Fatalf("%q refuses to start", bad)
+		}
+	}
+}
+
+// The year 0000 is no birthday.
+func TestBirthdayYearZeroRefused(t *testing.T) {
+	s := newSetup(t, want{contacts: true})
+	if text, isErr := call(t, s.h, "kontakt_anlegen", map[string]any{"name": "x", "geburtstag": "0000-04-12"}); !isErr {
+		t.Fatalf("%q", text)
+	}
+	if len(s.fake.Objects()) != 0 {
+		t.Fatal("written")
 	}
 }

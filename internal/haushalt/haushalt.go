@@ -1,9 +1,10 @@
 // Package haushalt is the "Haushalt" MCP source (laib ADR 0017 §2): the one
-// way the Bote and Claude reach the household's own data — appointments and
-// reminders in Radicale, notes as Markdown in the file share. Haus keeps
-// none of it: the Bote remembers about you, never for you (§3), so a note
-// becomes a file and a reminder a calendar entry, where people see them.
-// A tool is listed only when its backend is configured.
+// way the Bote and Claude reach the household's own data — appointments,
+// reminders and contacts in Radicale, notes as Markdown in the file share,
+// documents in Paperless. Haus keeps none of it: the Bote remembers about
+// you, never for you (§3), so a note becomes a file, a reminder a calendar
+// entry and a contact a card, where people see them. A tool is listed only
+// when its backend is configured.
 package haushalt
 
 import (
@@ -12,8 +13,11 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/mail"
 	"net/url"
 	"os"
+	"regexp"
+	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -21,23 +25,46 @@ import (
 	"github.com/mdopp/haus/internal/caldav"
 	"github.com/mdopp/haus/internal/mcpserver"
 	"github.com/mdopp/haus/internal/notes"
+	"github.com/mdopp/haus/internal/paperless"
 )
 
 // Config is what the endpoint serves.
 type Config struct {
-	Token    string         // HAUS_HAUSHALT_TOKEN, the Bote's bearer
-	Calendar *caldav.Client // nil: no calendar or reminder tools
-	Notes    *notes.Dir     // nil: no note tools
-	Loc      *time.Location // the house's time zone
-	Version  string
+	Token     string            // HAUS_HAUSHALT_TOKEN, the Bote's bearer
+	Calendar  *caldav.Client    // nil: no calendar or reminder tools
+	Contacts  *caldav.Client    // nil: no contact tools (the same Radicale account)
+	Notes     *notes.Dir        // nil: no note tools
+	Documents *paperless.Client // nil: no document tool
+	Loc       *time.Location    // the house's time zone
+	// PhoneCountry is the house's calling code (HAUS_PHONE_COUNTRY, default
+	// 49): a national number 0170 … is +49 170 … when numbers are compared.
+	PhoneCountry string
+	Version      string
+}
+
+const defaultCountry = "49"
+
+var countryRE = regexp.MustCompile(`^[1-9][0-9]{0,2}$`)
+
+// httpURL says whether u is http(s)://host[...].
+func httpURL(u string) bool {
+	p, err := url.Parse(u)
+	return err == nil && (p.Scheme == "http" || p.Scheme == "https") && p.Host != ""
 }
 
 // FromEnv reads HAUS_HAUSHALT_TOKEN, HAUS_RADICALE_URL (+ _USER,
-// _PASSWORD, optional _CALENDAR), HAUS_NOTES_DIR and TZ. A malformed
-// Radicale address refuses to start; a missing backend only leaves its
-// tools out.
+// _PASSWORD, optional _CALENDAR and _ADDRESSBOOK), HAUS_NOTES_DIR,
+// HAUS_PAPERLESS_URL (+ _TOKEN, optional _PUBLIC_URL), HAUS_PHONE_COUNTRY
+// and TZ. A malformed address or country code refuses to start; a missing
+// backend only leaves its tools out.
 func FromEnv() (Config, error) {
-	cfg := Config{Token: os.Getenv("HAUS_HAUSHALT_TOKEN"), Loc: time.Local}
+	cfg := Config{Token: os.Getenv("HAUS_HAUSHALT_TOKEN"), Loc: time.Local, PhoneCountry: defaultCountry}
+	if cc := strings.TrimPrefix(strings.TrimSpace(os.Getenv("HAUS_PHONE_COUNTRY")), "+"); cc != "" {
+		if !countryRE.MatchString(cc) {
+			return cfg, fmt.Errorf("HAUS_PHONE_COUNTRY %q: want a calling code like 49", cc)
+		}
+		cfg.PhoneCountry = cc
+	}
 	if tz := os.Getenv("TZ"); tz != "" {
 		if l, err := time.LoadLocation(tz); err == nil {
 			cfg.Loc = l
@@ -47,14 +74,30 @@ func FromEnv() (Config, error) {
 		log.Printf("haus: HAUS_HAUSHALT_TOKEN is not set: /mcp/haushalt refuses everyone")
 	}
 	if u := strings.TrimRight(os.Getenv("HAUS_RADICALE_URL"), "/"); u != "" {
-		if p, err := url.Parse(u); err != nil || (p.Scheme != "http" && p.Scheme != "https") || p.Host == "" {
+		if !httpURL(u) {
 			return cfg, fmt.Errorf("HAUS_RADICALE_URL %q: want http(s)://host[:port]", u)
 		}
 		user, pw := os.Getenv("HAUS_RADICALE_USER"), os.Getenv("HAUS_RADICALE_PASSWORD")
 		if user == "" || pw == "" {
-			log.Printf("haus: HAUS_RADICALE_USER/HAUS_RADICALE_PASSWORD not set: no calendar tools")
+			log.Printf("haus: HAUS_RADICALE_USER/HAUS_RADICALE_PASSWORD not set: no calendar or contact tools")
 		} else {
-			cfg.Calendar = &caldav.Client{URL: u, User: user, Password: pw, Calendar: os.Getenv("HAUS_RADICALE_CALENDAR"), Loc: cfg.Loc}
+			cfg.Calendar = &caldav.Client{URL: u, User: user, Password: pw, Calendar: os.Getenv("HAUS_RADICALE_CALENDAR"),
+				AddressBook: os.Getenv("HAUS_RADICALE_ADDRESSBOOK"), Loc: cfg.Loc}
+			cfg.Contacts = cfg.Calendar
+		}
+	}
+	if u := strings.TrimRight(os.Getenv("HAUS_PAPERLESS_URL"), "/"); u != "" {
+		if !httpURL(u) {
+			return cfg, fmt.Errorf("HAUS_PAPERLESS_URL %q: want http(s)://host[:port]", u)
+		}
+		pub := strings.TrimRight(os.Getenv("HAUS_PAPERLESS_PUBLIC_URL"), "/")
+		if pub != "" && !httpURL(pub) {
+			return cfg, fmt.Errorf("HAUS_PAPERLESS_PUBLIC_URL %q: want http(s)://host", pub)
+		}
+		if tok := os.Getenv("HAUS_PAPERLESS_TOKEN"); tok == "" {
+			log.Printf("haus: HAUS_PAPERLESS_TOKEN not set: no document tool")
+		} else {
+			cfg.Documents = &paperless.Client{URL: u, Token: tok, PublicURL: pub}
 		}
 	}
 	if d := os.Getenv("HAUS_NOTES_DIR"); d != "" {
@@ -76,9 +119,9 @@ func Handler(cfg Config) http.Handler {
 	return (&mcpserver.Server{
 		Name:    "haushalt",
 		Version: cfg.Version,
-		Instructions: "Der Haushalt: Kalender, Erinnerungen und Notizen der Familie. Was du hier anlegst, " +
-			"sieht die Familie in ihren eigenen Apps (Kalender auf dem Telefon, Notizen im Dateiordner); " +
-			"Haus merkt sich nichts selbst. Zeiten sind Ortszeit (" + cfg.Loc.String() + "), " +
+		Instructions: "Der Haushalt: Kalender, Erinnerungen, Notizen, Kontakte und Dokumente der Familie. Was du hier anlegst, " +
+			"sieht die Familie in ihren eigenen Apps (Kalender und Adressbuch auf dem Telefon, Notizen im Dateiordner, " +
+			"Dokumente in Paperless, die du nur liest); Haus merkt sich nichts selbst. Zeiten sind Ortszeit (" + cfg.Loc.String() + "), " +
 			"Datum JJJJ-MM-TT, Uhrzeit JJJJ-MM-TTTHH:MM.",
 		Token: cfg.Token,
 		Tools: Tools(cfg),
@@ -174,6 +217,35 @@ func Tools(cfg Config) []mcpserver.Tool {
 				Call:        func(ctx context.Context, a map[string]any) (string, error) { return notizAnlegen(n, a) },
 			},
 		)
+	}
+	cc := cfg.PhoneCountry
+	if cc == "" {
+		cc = defaultCountry
+	}
+	if c := cfg.Contacts; c != nil {
+		out = append(out,
+			mcpserver.Tool{
+				Name:        "kontakte_suchen",
+				Description: "Sucht im Adressbuch der Familie nach Name, Telefonnummer oder E-Mail und zeigt Telefon, E-Mail und Geburtstag.",
+				Schema:      obj(map[string]any{"text": str("Name, Teil einer Nummer oder E-Mail-Adresse")}, "text"),
+				Call:        func(ctx context.Context, a map[string]any) (string, error) { return kontakteSuchen(ctx, c, cc, a) },
+			},
+			mcpserver.Tool{
+				Name:        "kontakt_anlegen",
+				Description: "Legt einen Kontakt im Adressbuch der Familie an, das die Telefone synchronisieren; ändert nie einen bestehenden.",
+				Schema: obj(map[string]any{"name": str("Der ganze Name, wie er im Adressbuch stehen soll"), "telefon": str("optional: Telefonnummer, z. B. +49 170 1234567"),
+					"email": str("optional: E-Mail-Adresse"), "geburtstag": str("optional: JJJJ-MM-TT, oder --MM-TT ohne Jahr")}, "name"),
+				Call: func(ctx context.Context, a map[string]any) (string, error) { return kontaktAnlegen(ctx, c, a) },
+			},
+		)
+	}
+	if d := cfg.Documents; d != nil {
+		out = append(out, mcpserver.Tool{
+			Name:        "dokumente_suchen",
+			Description: "Sucht in den Dokumenten der Familie (Paperless, Volltext) und zeigt Datum, Absender, Titel und einen Link; nur lesen.",
+			Schema:      obj(map[string]any{"text": str("Wonach gesucht wird, z. B. Rechnung Stadtwerke")}, "text"),
+			Call:        func(ctx context.Context, a map[string]any) (string, error) { return dokumenteSuchen(ctx, d, a) },
+		})
 	}
 	return out
 }
@@ -414,4 +486,219 @@ func notizAnlegen(n *notes.Dir, a map[string]any) (string, error) {
 		return "", err
 	}
 	return "Notiz angelegt: " + name + " im Notizen-Ordner.", nil
+}
+
+// maxContacts is how many contacts a search shows: an answer for a phone
+// call, not an export.
+const maxContacts = 10
+
+var (
+	phoneRE  = regexp.MustCompile(`^\+?[0-9 ()./-]{3,40}$`)
+	digitsRE = regexp.MustCompile(`[^0-9]`)
+)
+
+func digits(s string) string { return digitsRE.ReplaceAllString(s, "") }
+
+// birthdayDay shows JJJJ-MM-TT as TT.MM.JJJJ and --MM-TT as TT.MM.
+func birthdayDay(b string) string {
+	if t, err := time.Parse("2006-01-02", b); err == nil {
+		return t.Format("02.01.2006")
+	}
+	if md, ok := strings.CutPrefix(b, "--"); ok {
+		if t, err := time.Parse("2006-01-02", "2000-"+md); err == nil {
+			return t.Format("02.01.")
+		}
+	}
+	return cut(oneLine(b), 40)
+}
+
+// contactLine is one contact in a line: name, then at most three phones and
+// three emails, and the birthday.
+func contactLine(ct caldav.Contact) string {
+	line := orDash(ct.Name)
+	if org := oneLine(ct.Org); org != "" {
+		line += " (" + cut(org, 60) + ")"
+	}
+	var parts []string
+	few := func(vs []string, n int) string {
+		var keep []string
+		for _, v := range vs {
+			if len(keep) == 3 {
+				break
+			}
+			if v = oneLine(v); v != "" {
+				keep = append(keep, cut(v, n))
+			}
+		}
+		return strings.Join(keep, ", ")
+	}
+	if p := few(ct.Phones, 40); p != "" {
+		parts = append(parts, "Tel. "+p)
+	}
+	if e := few(ct.Emails, 100); e != "" {
+		parts = append(parts, "E-Mail "+e)
+	}
+	if ct.Birthday != "" {
+		parts = append(parts, "Geburtstag "+birthdayDay(ct.Birthday))
+	}
+	if len(parts) > 0 {
+		line += " — " + strings.Join(parts, " · ")
+	}
+	return line
+}
+
+// international is a number as country code and national number, digits
+// only, however it is written: +49 (0)170 …, 0049 170 …, 0170 … (the
+// house's country cc) all give 49170….
+func international(s, cc string) string {
+	d := digits(s)
+	if strings.HasPrefix(strings.TrimSpace(s), "+") || strings.HasPrefix(d, "00") {
+		d = strings.TrimPrefix(d, "00")
+		if rest, ok := strings.CutPrefix(d, cc); ok { // another country's code stays as written
+			return cc + strings.TrimLeft(rest, "0") // +49 (0)711: the trunk 0 goes
+		}
+		return d
+	}
+	return cc + strings.TrimLeft(d, "0")
+}
+
+// matches says whether a contact fits the search: name, nickname,
+// organisation or email contain it, any case. A number (three digits or
+// more) matches a phone by its digits, however either side is written:
+// with + or 00 the whole international number counts (+43 660 … never
+// finds +49 660 …); otherwise it is a piece of the number, leading zeros
+// dropped (0170 1234567 finds +49 170 1234567, 0815 finds …0815).
+func matches(ct caldav.Contact, q, cc string) bool {
+	lq := strings.ToLower(q)
+	for _, f := range append([]string{ct.Name, ct.Nickname, ct.Org}, ct.Emails...) {
+		if strings.Contains(strings.ToLower(f), lq) {
+			return true
+		}
+	}
+	if !phoneRE.MatchString(q) {
+		return false
+	}
+	want := strings.TrimLeft(digits(q), "0")
+	if len(want) < 3 {
+		return false
+	}
+	if strings.HasPrefix(q, "+") || strings.HasPrefix(digits(q), "00") {
+		want = international(q, cc)
+	}
+	for _, p := range ct.Phones {
+		if strings.Contains(international(p, cc), want) {
+			return true
+		}
+	}
+	return false
+}
+
+func kontakteSuchen(ctx context.Context, c *caldav.Client, cc string, a map[string]any) (string, error) {
+	q := oneLine(mcpserver.Str(a, "text"))
+	if q == "" {
+		return "", errors.New("text fehlt")
+	}
+	if err := tooLong("text", q, MaxField); err != nil {
+		return "", err
+	}
+	all, partial, err := c.Contacts(ctx)
+	if err != nil {
+		return "", err
+	}
+	var hits []caldav.Contact
+	for _, ct := range all {
+		if matches(ct, q, cc) {
+			hits = append(hits, ct)
+		}
+	}
+	sort.SliceStable(hits, func(i, j int) bool { return strings.ToLower(hits[i].Name) < strings.ToLower(hits[j].Name) })
+	more := ""
+	if partial {
+		more = "Nur ein Teil des Adressbuchs ist durchsucht (zu viele Kontakte); such genauer.\n"
+	}
+	if len(hits) == 0 {
+		return strings.TrimRight(more+"Kein Kontakt passt zu „"+cut(q, MaxField)+"“.", "\n"), nil
+	}
+	var b strings.Builder
+	for i, ct := range hits {
+		if i == maxContacts {
+			fmt.Fprintf(&b, "… und %d weitere; such genauer.\n", len(hits)-maxContacts)
+			break
+		}
+		b.WriteString(contactLine(ct) + "\n")
+	}
+	b.WriteString(more)
+	return strings.TrimRight(b.String(), "\n"), nil
+}
+
+func kontaktAnlegen(ctx context.Context, c *caldav.Client, a map[string]any) (string, error) {
+	ct := caldav.Contact{Name: oneLine(mcpserver.Str(a, "name"))}
+	if ct.Name == "" {
+		return "", errors.New("name fehlt")
+	}
+	if err := tooLong("name", ct.Name, MaxField); err != nil {
+		return "", err
+	}
+	if p := mcpserver.Str(a, "telefon"); p != "" {
+		if !phoneRE.MatchString(p) || len(digits(p)) < 3 {
+			return "", fmt.Errorf("telefon: %q ist keine Telefonnummer (Ziffern, +, Leerzeichen, -, /)", cut(p, 40))
+		}
+		ct.Phones = []string{p}
+	}
+	if e := mcpserver.Str(a, "email"); e != "" {
+		if addr, err := mail.ParseAddress(e); err != nil || addr.Address != e || addr.Name != "" || len(e) > 254 {
+			return "", fmt.Errorf("email: %q ist keine E-Mail-Adresse", cut(oneLine(e), 100))
+		}
+		ct.Emails = []string{e}
+	}
+	if g := mcpserver.Str(a, "geburtstag"); g != "" {
+		if !caldav.ValidBirthday(g) {
+			return "", fmt.Errorf("geburtstag: %q: erwarte JJJJ-MM-TT, oder --MM-TT ohne Jahr", cut(g, 40))
+		}
+		ct.Birthday = g
+	}
+	col, err := c.PutContact(ctx, ct)
+	if err != nil {
+		return "", err
+	}
+	return "Kontakt angelegt im Adressbuch „" + col.Name + "“: " + contactLine(ct), nil
+}
+
+// maxDocs is how many documents a search shows.
+const maxDocs = 20
+
+func dokumenteSuchen(ctx context.Context, d *paperless.Client, a map[string]any) (string, error) {
+	q := oneLine(mcpserver.Str(a, "text"))
+	if q == "" {
+		return "", errors.New("text fehlt")
+	}
+	if err := tooLong("text", q, MaxField); err != nil {
+		return "", err
+	}
+	docs, total, err := d.Search(ctx, q, maxDocs)
+	if err != nil {
+		return "", err
+	}
+	if len(docs) == 0 {
+		return "Kein Dokument passt zu „" + cut(q, MaxField) + "“.", nil
+	}
+	var b strings.Builder
+	for _, doc := range docs {
+		var parts []string
+		if !doc.Created.IsZero() {
+			parts = append(parts, doc.Created.Format("02.01.2006"))
+		}
+		if c := oneLine(doc.Correspondent); c != "" {
+			parts = append(parts, cut(c, 100))
+		}
+		line := strings.Join(append(parts, orDash(doc.Title)), " · ")
+		if doc.Link != "" {
+			line += " — " + doc.Link
+		}
+		b.WriteString(line + "\n")
+	}
+	if total > len(docs) {
+		fmt.Fprintf(&b, "… und %d weitere; such genauer.\n", total-len(docs))
+	}
+	return strings.TrimRight(b.String(), "\n"), nil
 }

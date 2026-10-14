@@ -105,9 +105,17 @@ func parseLine(l string) (Prop, bool) {
 	rest := l[i:]
 	for rest[0] == ';' {
 		rest = rest[1:]
-		eq := strings.IndexByte(rest, '=')
+		eq := strings.IndexAny(rest, ";:=")
 		if eq < 0 {
 			return Prop{}, false
+		}
+		if rest[eq] != '=' { // vCard 2.1: TEL;CELL: — a bare parameter is a TYPE
+			t := strings.ToUpper(rest[:eq])
+			if prev := p.Params["TYPE"]; prev != "" {
+				t = prev + "," + t
+			}
+			p.Params["TYPE"], rest = t, rest[eq:]
+			continue
 		}
 		key := strings.ToUpper(rest[:eq])
 		rest = rest[eq+1:]
