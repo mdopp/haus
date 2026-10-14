@@ -25,6 +25,24 @@ type Server struct {
 	Reports []string          // REPORT bodies, in order
 	Methods []string          // "METHOD path", in order
 	Header  []http.Header     // the PUT headers, in order
+
+	// ExistsStatus is MKCALENDAR's answer for a calendar that is there
+	// (default 405, as Radicale; some servers say 409).
+	ExistsStatus int
+	// MkcalendarStatus, when set, is MKCALENDAR's answer whatever the state (403: no right to).
+	MkcalendarStatus int
+	behind           map[string]col // made by "another client" right after the next PROPFIND
+}
+
+// CreateAfterPropfind makes a calendar appear right after the next PROPFIND
+// has answered, as if another client had created it in between.
+func (s *Server) CreateAfterPropfind(path, name string, comps ...string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.behind == nil {
+		s.behind = map[string]col{}
+	}
+	s.behind[path] = col{name: name, comps: comps}
 }
 
 type col struct {
@@ -39,7 +57,8 @@ func New(user, password string) *Server {
 	return s
 }
 
-// AddCalendar makes a calendar at path (/<user>/<name>/) taking comps (none: all).
+// AddCalendar makes a calendar at path (/<user>/<name>/) taking comps (none:
+// all). A full URL as path is listed as such, as a hostile server would.
 func (s *Server) AddCalendar(path, name string, comps ...string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -121,6 +140,10 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 			b.WriteString(`</prop><status>HTTP/1.1 200 OK</status></propstat></response>`)
 		}
 		b.WriteString(`</multistatus>`)
+		for k, c := range s.behind {
+			s.cols[k] = c
+		}
+		s.behind = nil
 		w.WriteHeader(http.StatusMultiStatus)
 		io.WriteString(w, b.String())
 	case "REPORT":
@@ -162,8 +185,16 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		s.objs[r.URL.Path] = string(body)
 		w.WriteHeader(http.StatusCreated)
 	case "MKCALENDAR":
+		if s.MkcalendarStatus != 0 {
+			w.WriteHeader(s.MkcalendarStatus)
+			return
+		}
 		if _, ok := s.cols[r.URL.Path]; ok {
-			w.WriteHeader(http.StatusMethodNotAllowed)
+			code := s.ExistsStatus
+			if code == 0 {
+				code = http.StatusMethodNotAllowed
+			}
+			w.WriteHeader(code)
 			return
 		}
 		var comps []string

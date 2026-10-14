@@ -1,12 +1,16 @@
 package notes
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 )
+
+var bg = context.Background()
 
 func open(t *testing.T) (*Dir, string) {
 	t.Helper()
@@ -91,9 +95,10 @@ func TestSearch(t *testing.T) {
 	write("ohne-titel.md", "nur Text über apfel\n")
 	write(".stversions/alt.md", "# Apfel alt\n")
 	write("bild.jpg", "apfel")
-	hits, total, err := d.Search("APFEL", 10)
-	if err != nil || total != 2 {
-		t.Fatalf("%+v %d %v", hits, total, err)
+	res, err := d.Search(bg, "APFEL", 10)
+	hits := res.Hits
+	if err != nil || res.Total != 2 || res.Partial {
+		t.Fatalf("%+v %v", res, err)
 	}
 	if hits[0].Title != "Apfelkuchen" || hits[0].Name != "rezepte/kuchen.md" || strings.Join(hits[0].Lines, "|") != "200 g Mehl|3 Äpfel|Zimt" {
 		t.Fatalf("title match first, first lines: %+v", hits[0])
@@ -101,11 +106,11 @@ func TestSearch(t *testing.T) {
 	if hits[1].Title != "ohne-titel" || hits[1].Lines[0] != "nur Text über apfel" {
 		t.Fatalf("a note without a heading is named by its file: %+v", hits[1])
 	}
-	hits, total, _ = d.Search("äpfel", 1)
-	if total != 2 || len(hits) != 1 {
-		t.Fatalf("capped at max, the total said: %+v %d", hits, total)
+	res, _ = d.Search(bg, "äpfel", 1)
+	if res.Total != 2 || len(res.Hits) != 1 {
+		t.Fatalf("capped at max, the total said: %+v", res)
 	}
-	if _, _, err := d.Search("  ", 10); err == nil {
+	if _, err := d.Search(bg, "  ", 10); err == nil {
 		t.Fatal("an empty search is an error")
 	}
 }
@@ -116,21 +121,21 @@ func TestRead(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "rezepte", "kuchen.md"), []byte("# Apfelkuchen\n\nMehl\n"), 0o644)
 	name, _ := d.Create("WLAN Gäste", "Netz: Gast")
 	for _, ref := range []string{name, "WLAN Gäste", "wlan gäste"} {
-		n, err := d.Read(ref)
+		n, err := d.Read(bg, ref)
 		if err != nil || n.Name != "wlan-gaeste.md" || n.Title != "WLAN Gäste" || !strings.Contains(n.Text, "Netz: Gast") {
 			t.Fatalf("%q: %+v %v", ref, n, err)
 		}
 	}
 	for _, ref := range []string{"rezepte/kuchen.md", "Apfelkuchen"} {
-		if n, err := d.Read(ref); err != nil || n.Name != "rezepte/kuchen.md" {
+		if n, err := d.Read(bg, ref); err != nil || n.Name != "rezepte/kuchen.md" {
 			t.Fatalf("%q: %+v %v", ref, n, err)
 		}
 	}
-	if _, err := d.Read("gibt es nicht"); !errors.Is(err, ErrNotFound) {
+	if _, err := d.Read(bg, "gibt es nicht"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("missing: %v", err)
 	}
 	os.WriteFile(filepath.Join(dir, "lang.md"), []byte(strings.Repeat("x", maxRead+100)), 0o644)
-	if n, err := d.Read("lang.md"); err != nil || !n.Truncated || len(n.Text) != maxRead {
+	if n, err := d.Read(bg, "lang.md"); err != nil || !n.Truncated || len(n.Text) != maxRead {
 		t.Fatalf("a long note is cut: %v %v %d", err, n.Truncated, len(n.Text))
 	}
 }
@@ -145,17 +150,93 @@ func TestReadNeverLeavesTheDirectory(t *testing.T) {
 	if err := os.Symlink(secret, filepath.Join(dir, "link.md")); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.Symlink(outside, filepath.Join(dir, "raus")); err != nil {
+		t.Fatal(err)
+	}
 	rel, _ := filepath.Rel(dir, secret)
-	for _, ref := range []string{rel, "../geheim.md", secret, "/etc/passwd", "rezepte/../../geheim.md", `..\geheim.md`, "link.md"} {
-		n, err := d.Read(ref)
+	for _, ref := range []string{rel, "../geheim.md", secret, "/etc/passwd", "rezepte/../../geheim.md", `..\geheim.md`, "link.md", "raus/geheim.md"} {
+		n, err := d.Read(bg, ref)
 		if err == nil || strings.Contains(n.Text, "nicht für den Bote") {
 			t.Fatalf("%q was read: %+v", ref, n)
 		}
-		if ref != "link.md" && !errors.Is(err, ErrOutside) {
+		if !errors.Is(err, ErrOutside) {
 			t.Fatalf("%q: want ErrOutside, got %v", ref, err)
 		}
 	}
-	if hits, _, _ := d.Search("Bote", 10); len(hits) != 0 {
-		t.Fatalf("a symlink out is not searched: %+v", hits)
+	if res, _ := d.Search(bg, "Bote", 10); len(res.Hits) != 0 {
+		t.Fatalf("a symlink out is not searched: %+v", res)
+	}
+}
+
+// Hidden files and folders are not notes: Syncthing's versions, the
+// temp files, dotfiles are never read, whatever the name says.
+func TestReadRefusesHidden(t *testing.T) {
+	d, dir := open(t)
+	os.MkdirAll(filepath.Join(dir, ".stversions"), 0o755)
+	os.MkdirAll(filepath.Join(dir, "sub"), 0o755)
+	os.WriteFile(filepath.Join(dir, ".stversions", "alt.md"), []byte("# alt"), 0o644)
+	os.WriteFile(filepath.Join(dir, "sub", ".geheim.md"), []byte("# geheim"), 0o644)
+	os.WriteFile(filepath.Join(dir, ".haus-1.tmp"), []byte("halb"), 0o644)
+	for _, ref := range []string{".stversions/alt.md", "sub/.geheim.md", ".haus-1.tmp", "./.stversions/alt.md"} {
+		if n, err := d.Read(bg, ref); !errors.Is(err, ErrHidden) {
+			t.Fatalf("%q: want ErrHidden, got %+v %v", ref, n, err)
+		}
+	}
+}
+
+// A share without hard links gets an error, never a half-written or
+// overwritten note; no temp file stays.
+func TestCreateWithoutHardLinks(t *testing.T) {
+	d, dir := open(t)
+	old := link
+	t.Cleanup(func() { link = old })
+	link = func(*os.Root, string, string) error {
+		return &os.LinkError{Op: "link", Err: syscall.EPERM}
+	}
+	if name, err := d.Create("Einkauf", "Milch"); err == nil {
+		t.Fatalf("want an error, got %q", name)
+	}
+	if es, _ := os.ReadDir(dir); len(es) != 0 {
+		t.Fatalf("left behind: %v", es)
+	}
+}
+
+func TestTitleIsCapped(t *testing.T) {
+	d, _ := open(t)
+	if _, err := d.Create(strings.Repeat("a", MaxTitle+1), "x"); err == nil {
+		t.Fatal("an over-long title is refused")
+	}
+	if _, err := d.Create(strings.Repeat("ä", MaxTitle), "x"); err != nil {
+		t.Fatalf("the cap counts characters, not bytes: %v", err)
+	}
+}
+
+// A search reads at most maxFiles files and maxScan bytes, and says when
+// it stopped early; a cancelled request stops it.
+func TestSearchIsCapped(t *testing.T) {
+	d, dir := open(t)
+	for _, n := range []string{"a", "b", "c", "d"} {
+		os.WriteFile(filepath.Join(dir, n+".md"), []byte("# "+n+"\n\napfel\n"), 0o644)
+	}
+	oldF, oldS := maxFiles, maxScan
+	t.Cleanup(func() { maxFiles, maxScan = oldF, oldS })
+	maxFiles = 2
+	res, err := d.Search(bg, "apfel", 10)
+	if err != nil || res.Total != 2 || !res.Partial {
+		t.Fatalf("file cap: %+v %v", res, err)
+	}
+	maxFiles, maxScan = 100, 30
+	res, err = d.Search(bg, "apfel", 10)
+	if err != nil || res.Total > 2 || !res.Partial {
+		t.Fatalf("byte cap: %+v %v", res, err)
+	}
+	maxScan = oldS
+	ctx, cancel := context.WithCancel(bg)
+	cancel()
+	if _, err := d.Search(ctx, "apfel", 10); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled: %v", err)
+	}
+	if _, err := d.Read(ctx, "nicht-da"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled read by title: %v", err)
 	}
 }

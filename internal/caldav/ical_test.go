@@ -124,3 +124,36 @@ func TestBrokenStreams(t *testing.T) {
 		}
 	}
 }
+
+// A title cannot add a property: a newline is escaped, so the object keeps
+// exactly one DTSTART and the title reads back as written.
+func TestNoPropertyInjection(t *testing.T) {
+	evil := "x\nDTSTART:19700101T000000Z"
+	start := time.Date(2026, 10, 14, 13, 0, 0, 0, time.UTC)
+	ics := Event{UID: "u", Summary: evil, Location: evil, Start: start, End: start.Add(time.Hour)}.ICS(start)
+	n := 0
+	for _, l := range strings.Split(ics, "\r\n") {
+		if strings.HasPrefix(l, "DTSTART") {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Fatalf("%d DTSTART lines:\n%s", n, ics)
+	}
+	root, err := Parse(ics)
+	if err != nil {
+		t.Fatal(err)
+	}
+	evs := Events(root, time.UTC)
+	if len(evs) != 1 || evs[0].Summary != evil || evs[0].Location != evil || !evs[0].Start.Equal(start) {
+		t.Fatalf("read back: %+v", evs)
+	}
+	todo := Todo{UID: "t", Summary: "y\r\nEND:VTODO\r\nBEGIN:VEVENT", Due: start}.ICS(start)
+	root, err = Parse(todo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ts := Todos(root, time.UTC); len(ts) != 1 || ts[0].Summary != "y\nEND:VTODO\nBEGIN:VEVENT" || len(Events(root, time.UTC)) != 0 {
+		t.Fatalf("todo: %+v", ts)
+	}
+}

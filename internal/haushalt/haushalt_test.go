@@ -40,7 +40,7 @@ func newSetup(t *testing.T, calendar, withNotes bool) setup {
 	if calendar {
 		s.fake = davfake.New("bote", "pw")
 		t.Cleanup(s.fake.Close)
-		s.fake.AddCalendar("/bote/familie/", "Familie")
+		s.fake.AddCalendar("/bote/familie/", "Haushalt")
 		cfg.Calendar = &caldav.Client{URL: s.fake.URL, User: "bote", Password: "pw", Loc: cfg.Loc}
 	}
 	if withNotes {
@@ -125,6 +125,17 @@ func TestAuth(t *testing.T) {
 	for _, bearer := range []string{"", " "} {
 		if code, _ := rpc(t, open, bearer, "tools/list", nil); code != http.StatusUnauthorized {
 			t.Fatalf("no configured token must refuse %q: %d", bearer, code)
+		}
+	}
+	for _, header := range []string{"Bearer ", "Bearer", tok, "bearer " + tok} {
+		for _, h := range []http.Handler{open, s.h} {
+			req := httptest.NewRequest(http.MethodPost, "/mcp/haushalt", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
+			req.Header.Set("Authorization", header)
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, req)
+			if rec.Code != http.StatusUnauthorized {
+				t.Fatalf("Authorization %q: %d", header, rec.Code)
+			}
 		}
 	}
 	if code, _ := rpc(t, s.h, tok, "tools/list", nil); code != 200 {
@@ -234,7 +245,7 @@ func TestFromEnv(t *testing.T) {
 func TestCalendarTools(t *testing.T) {
 	s := newSetup(t, true, false)
 	text, isErr := call(t, s.h, "termin_anlegen", map[string]any{"titel": "Zahnarzt", "beginn": "2026-10-14T15:00", "ort": "Praxis, Hauptstr. 1"})
-	if isErr || !strings.Contains(text, "Familie") || !strings.Contains(text, "Mi 14.10.2026 15:00–16:00: Zahnarzt (Praxis, Hauptstr. 1)") {
+	if isErr || !strings.Contains(text, "Haushalt") || !strings.Contains(text, "Mi 14.10.2026 15:00–16:00: Zahnarzt (Praxis, Hauptstr. 1)") {
 		t.Fatalf("termin_anlegen: %q %v", text, isErr)
 	}
 	var ics string
@@ -329,5 +340,77 @@ func TestNoteTools(t *testing.T) {
 	}
 	if text, _ := call(t, s.h, "notizen_suchen", map[string]any{"text": "kommt nicht vor"}); !strings.HasPrefix(text, "Keine Notiz") {
 		t.Fatalf("no hit: %q", text)
+	}
+}
+
+// A notification gets 202 and no body (the streamable-HTTP transport).
+func TestNotificationAccepted(t *testing.T) {
+	s := newSetup(t, false, true)
+	req := httptest.NewRequest(http.MethodPost, "/mcp/haushalt", strings.NewReader(`{"jsonrpc":"2.0","method":"notifications/initialized"}`))
+	req.Header.Set("Authorization", "Bearer "+tok)
+	rec := httptest.NewRecorder()
+	s.h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusAccepted || rec.Body.Len() != 0 {
+		t.Fatalf("%d %q", rec.Code, rec.Body)
+	}
+}
+
+// A number where text belongs is a type error, not a missing argument.
+func TestArgumentTypes(t *testing.T) {
+	s := newSetup(t, true, true)
+	text, isErr := call(t, s.h, "termin_anlegen", map[string]any{"titel": 5, "beginn": "2026-10-14T15:00"})
+	if !isErr || !strings.Contains(text, "titel") || !strings.Contains(text, "Text") || strings.Contains(text, "fehlt") {
+		t.Fatalf("%q %v", text, isErr)
+	}
+	text, isErr = call(t, s.h, "notiz_anlegen", map[string]any{"titel": "a", "text": []any{"x"}})
+	if !isErr || !strings.Contains(text, "text") {
+		t.Fatalf("%q %v", text, isErr)
+	}
+	if len(s.fake.Objects()) != 0 {
+		t.Fatal("nothing written on a type error")
+	}
+}
+
+// A day without a time is 9:00 local, also on the days the clocks change.
+func TestDateOnlyReminderOnDSTDays(t *testing.T) {
+	s := newSetup(t, true, false)
+	for day, due := range map[string]string{"2026-03-29": "DUE:20260329T070000Z", "2026-10-25": "DUE:20261025T080000Z"} {
+		text, isErr := call(t, s.h, "erinnerung_anlegen", map[string]any{"text": "Uhren prüfen " + day, "wann": day})
+		if isErr || !strings.Contains(text, " 09:00: ") {
+			t.Fatalf("%s: %q", day, text)
+		}
+		found := false
+		for _, v := range s.fake.Objects() {
+			if strings.Contains(v, day) && strings.Contains(v, due+"\r\n") {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("%s: no VTODO with %s in %v", day, due, s.fake.Objects())
+		}
+	}
+}
+
+// Writes refuse over-long fields; what is read back is cut short.
+func TestLengthCaps(t *testing.T) {
+	s := newSetup(t, true, true)
+	long := strings.Repeat("x", MaxField+1)
+	for name, args := range map[string]map[string]any{
+		"termin_anlegen":     {"titel": long, "beginn": "2026-10-14T15:00"},
+		"termin_anlegen ort": {"titel": "a", "beginn": "2026-10-14T15:00", "ort": long},
+		"erinnerung_anlegen": {"text": strings.Repeat("x", MaxReminder+1), "wann": "2026-10-14T15:00"},
+		"notiz_anlegen":      {"titel": long, "text": "x"},
+	} {
+		if text, isErr := call(t, s.h, strings.Fields(name)[0], args); !isErr || !strings.Contains(text, "lang") {
+			t.Fatalf("%s: %q %v", name, text, isErr)
+		}
+	}
+	if len(s.fake.Objects()) != 0 {
+		t.Fatal("nothing written")
+	}
+	s.fake.Put("/bote/familie/lang.ics", "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:l\r\nDTSTART:20261014T100000Z\r\nDTEND:20261014T110000Z\r\nSUMMARY:"+strings.Repeat("y", 5000)+"\r\nLOCATION:"+strings.Repeat("z", 5000)+"\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n")
+	text, _ := call(t, s.h, "termine", map[string]any{"von": "2026-10-14"})
+	if len([]rune(text)) > 2*MaxField+100 {
+		t.Fatalf("a phone's long title is cut in the answer: %d characters", len([]rune(text)))
 	}
 }
