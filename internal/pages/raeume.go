@@ -42,12 +42,12 @@ func Raeume(cfg StartConfig) http.HandlerFunc {
 		var (
 			states  []ha.State
 			haErr   error
-			rooms   map[string]string
+			reg     ha.Registry
 			roomsOK bool
 		)
 		fetch(r,
 			func(ctx context.Context) { states, haErr = cfg.HA.States(ctx) },
-			func(ctx context.Context) { rooms, roomsOK = cfg.HA.CachedAreas(ctx) })
+			func(ctx context.Context) { reg, roomsOK = cfg.HA.CachedRegistry(ctx) })
 		logErrs("räume", map[string]error{"home assistant": haErr})
 		if haErr == nil && !roomsOK {
 			log.Printf("haus: räume page: home assistant's rooms are not known yet; the cards are left out")
@@ -55,7 +55,7 @@ func Raeume(cfg StartConfig) http.HandlerFunc {
 		b := familyHead(r, cfg, "Räume", "Räume")
 		b.WriteString("<h1 class=sr>Räume</h1>")
 		if haErr == nil && roomsOK {
-			for _, c := range roomCards(states, rooms) {
+			for _, c := range roomCards(states, reg) {
 				b.WriteString(c.HTML())
 			}
 		}
@@ -64,8 +64,9 @@ func Raeume(cfg StartConfig) http.HandlerFunc {
 }
 
 // roomCards groups the states by room: rooms by name, "Ohne Raum" last;
-// in a room lights, heating, covers, media, each by name.
-func roomCards(states []ha.State, rooms map[string]string) []cards.Card {
+// in a room lights, heating, covers, media, each by name. What HA hides
+// (hidden, config, diagnostic) is left out.
+func roomCards(states []ha.State, reg ha.Registry) []cards.Card {
 	type thing struct {
 		kind         int
 		name, detail string
@@ -80,8 +81,11 @@ func roomCards(states []ha.State, rooms map[string]string) []cards.Card {
 		if _, group := s.Attributes["entity_id"].([]any); group {
 			continue // a group is not a thing in a room; its members are
 		}
-		room := oneLine(rooms[s.EntityID])
-		byRoom[room] = append(byRoom[room], thing{kind, friendly(s), roomDetail(domain, s)})
+		if reg.Hidden[s.EntityID] {
+			continue
+		}
+		room := oneLine(reg.Rooms[s.EntityID])
+		byRoom[room] = append(byRoom[room], thing{kind, friendly(s), roomDetail(domain, s, reg.TempUnit)})
 	}
 	names := make([]string, 0, len(byRoom))
 	for n := range byRoom {
@@ -119,8 +123,10 @@ func roomCards(states []ha.State, rooms map[string]string) []cards.Card {
 	return out
 }
 
-// roomDetail says a thing's state in the family's words.
-func roomDetail(domain string, s ha.State) string {
+// roomDetail says a thing's state in the family's words. houseUnit is HA's
+// temperature unit; an entity's own temperature_unit wins, °C is the last
+// resort.
+func roomDetail(domain string, s ha.State, houseUnit string) string {
 	switch s.State {
 	case "unavailable":
 		return "nicht erreichbar"
@@ -139,15 +145,21 @@ func roomDetail(domain string, s ha.State) string {
 			return "aus"
 		}
 	case "climate":
+		unit := "°C"
+		if u, _ := s.Attributes["temperature_unit"].(string); trimRunes(oneLine(u), 8) != "" {
+			unit = trimRunes(oneLine(u), 8)
+		} else if houseUnit != "" {
+			unit = trimRunes(oneLine(houseUnit), 8)
+		}
 		var parts []string
 		if s.State == "off" {
 			parts = append(parts, "aus")
 		}
 		if v, ok := number(s.Attributes["current_temperature"]); ok {
-			parts = append(parts, decimal(v)+" °C")
+			parts = append(parts, decimal(v)+" "+unit)
 		}
 		if v, ok := number(s.Attributes["temperature"]); ok && s.State != "off" {
-			parts = append(parts, "Soll "+decimal(v)+" °C")
+			parts = append(parts, "Soll "+decimal(v)+" "+unit)
 		}
 		if len(parts) == 0 {
 			return "an"

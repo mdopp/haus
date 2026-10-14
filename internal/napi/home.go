@@ -258,7 +258,8 @@ func (h *homeAPI) active(w http.ResponseWriter, r *http.Request) {
 	}
 	// rooms only label, they never break a list: the last good map, empty at first
 	actx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	rooms, _ := h.ha.CachedAreas(actx)
+	reg, _ := h.ha.CachedRegistry(actx)
+	rooms := reg.Rooms
 	cancel()
 	out := []map[string]any{}
 	for _, s := range states {

@@ -262,9 +262,23 @@ func (w *wsConn) result(id int, out any) error {
 	}
 }
 
+// Registry is what Haus keeps from HA's registries and config.
+type Registry struct {
+	Rooms    map[string]string // entity → its room's name: its own area, else its device's; absent without one
+	Hidden   map[string]bool   // entities HA hides: hidden_by set, or entity_category config or diagnostic
+	TempUnit string            // the house's temperature unit (unit_system.temperature), "" when HA did not say
+}
+
 // Areas maps every entity to its room's name: the entity's own area, else
 // its device's. Entities without one are absent.
 func (c *Client) Areas(ctx context.Context) (map[string]string, error) {
+	reg, err := c.registries(ctx)
+	return reg.Rooms, err
+}
+
+// registries reads the area, device and entity registries over the
+// WebSocket: the rooms and what HA hides.
+func (c *Client) registries(ctx context.Context) (Registry, error) {
 	if _, ok := ctx.Deadline(); !ok {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, 20*time.Second)
@@ -272,7 +286,7 @@ func (c *Client) Areas(ctx context.Context) (map[string]string, error) {
 	}
 	w, err := c.dial(ctx)
 	if err != nil {
-		return nil, err
+		return Registry{}, err
 	}
 	defer w.close()
 	defer w.closeOn(ctx)()
@@ -285,9 +299,11 @@ func (c *Client) Areas(ctx context.Context) (map[string]string, error) {
 		AreaID string `json:"area_id"`
 	}
 	var entities []struct {
-		EntityID string `json:"entity_id"`
-		AreaID   string `json:"area_id"`
-		DeviceID string `json:"device_id"`
+		EntityID       string `json:"entity_id"`
+		AreaID         string `json:"area_id"`
+		DeviceID       string `json:"device_id"`
+		HiddenBy       string `json:"hidden_by"`
+		EntityCategory string `json:"entity_category"`
 	}
 	for _, q := range []struct {
 		cmd string
@@ -295,10 +311,10 @@ func (c *Client) Areas(ctx context.Context) (map[string]string, error) {
 	}{{"config/area_registry/list", &areas}, {"config/device_registry/list", &devices}, {"config/entity_registry/list", &entities}} {
 		id, err := w.send(map[string]any{"type": q.cmd})
 		if err != nil {
-			return nil, err
+			return Registry{}, err
 		}
 		if err := w.result(id, q.out); err != nil {
-			return nil, err
+			return Registry{}, err
 		}
 	}
 	name := map[string]string{}
@@ -314,56 +330,87 @@ func (c *Client) Areas(ctx context.Context) (map[string]string, error) {
 	for _, d := range devices {
 		devArea[d.ID] = d.AreaID
 	}
-	out := map[string]string{}
+	reg := Registry{Rooms: map[string]string{}, Hidden: map[string]bool{}}
 	for _, e := range entities {
+		if e.EntityID == "" {
+			continue
+		}
 		area := e.AreaID
 		if area == "" {
 			area = devArea[e.DeviceID]
 		}
-		if n := name[area]; n != "" && e.EntityID != "" {
-			out[e.EntityID] = n
+		if n := name[area]; n != "" {
+			reg.Rooms[e.EntityID] = n
+		}
+		if e.HiddenBy != "" || e.EntityCategory == "config" || e.EntityCategory == "diagnostic" {
+			reg.Hidden[e.EntityID] = true
 		}
 	}
-	return out, nil
+	return reg, nil
 }
 
-// CachedAreas is Areas kept for five minutes, for the /napi paths and the
-// Räume page alike. A failed refresh keeps the last good map and tries again
-// after 30s; ok is false while no read has worked yet, so a caller can tell
-// "no rooms" from "rooms unknown". One refresh at a time, outside the lock;
-// meanwhile callers get the old map.
-func (c *Client) CachedAreas(ctx context.Context) (rooms map[string]string, ok bool) {
-	return c.areas.get(ctx, c)
+// TemperatureUnit is the house's temperature unit from GET /api/config
+// (unit_system.temperature, e.g. °C).
+func (c *Client) TemperatureUnit(ctx context.Context) (string, error) {
+	var cfg struct {
+		UnitSystem struct {
+			Temperature string `json:"temperature"`
+		} `json:"unit_system"`
+	}
+	if err := c.do(ctx, "GET", "/api/config", nil, nil, &cfg); err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(cfg.UnitSystem.Temperature), nil
 }
 
-type areaCache struct {
+// CachedRegistry is the registries and the temperature unit, kept for five
+// minutes, for the /napi paths and the family's pages alike. A failed
+// refresh keeps the last good one and tries again after 30s; ok is false
+// while no read of the registries has worked yet, so a caller can tell "no
+// rooms" from "rooms unknown". The unit is optional: HA not answering
+// /api/config keeps the last unit (none at first), not the rooms out. One
+// refresh at a time, outside the lock; meanwhile callers get the old one.
+func (c *Client) CachedRegistry(ctx context.Context) (reg Registry, ok bool) {
+	return c.registry.get(ctx, c)
+}
+
+type registryCache struct {
 	mu   sync.Mutex
-	m    map[string]string
+	reg  Registry
 	ok   bool
 	next time.Time
 	busy bool
 }
 
-func (a *areaCache) get(ctx context.Context, c *Client) (map[string]string, bool) {
+func (a *registryCache) get(ctx context.Context, c *Client) (Registry, bool) {
 	a.mu.Lock()
 	if a.busy || time.Now().Before(a.next) {
-		m, ok := a.m, a.ok
+		reg, ok := a.reg, a.ok
 		a.mu.Unlock()
-		return m, ok
+		return reg, ok
 	}
 	a.busy = true
 	a.mu.Unlock()
-	m, err := c.Areas(ctx)
+	reg, err := c.registries(ctx)
+	unit, uerr := "", error(nil)
+	if err == nil {
+		unit, uerr = c.TemperatureUnit(ctx)
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.busy = false
 	if err != nil {
-		log.Printf("haus: HA areas: %v", err)
+		log.Printf("haus: HA registries: %v", err)
 		a.next = time.Now().Add(30 * time.Second)
-		return a.m, a.ok
+		return a.reg, a.ok
 	}
-	a.m, a.ok, a.next = m, true, time.Now().Add(5*time.Minute)
-	return a.m, true
+	if uerr != nil {
+		log.Printf("haus: HA config (temperature unit): %v", uerr)
+		unit = a.reg.TempUnit
+	}
+	reg.TempUnit = unit
+	a.reg, a.ok, a.next = reg, true, time.Now().Add(5*time.Minute)
+	return a.reg, true
 }
 
 // Subscribe calls fn with every new state HA reports (state_changed) until

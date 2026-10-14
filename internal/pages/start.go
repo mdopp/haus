@@ -56,6 +56,7 @@ func Start(cfg StartConfig) http.HandlerFunc {
 			laibErr  error
 			states   []ha.State
 			haErr    error
+			reg      ha.Registry
 			events   []caldav.Event
 			evErr    error
 			todos    []caldav.Todo
@@ -68,7 +69,10 @@ func Start(cfg StartConfig) http.HandlerFunc {
 			reads = append(reads, func(ctx context.Context) { ready, services, laibErr = cfg.Laib.Status(ctx) })
 		}
 		if cfg.HA != nil {
-			reads = append(reads, func(ctx context.Context) { states, haErr = cfg.HA.States(ctx) })
+			reads = append(reads,
+				func(ctx context.Context) { states, haErr = cfg.HA.States(ctx) },
+				// what HA hides stays hidden; until the registry has been read, nothing is
+				func(ctx context.Context) { reg, _ = cfg.HA.CachedRegistry(ctx) })
 		}
 		if cfg.Calendar != nil {
 			reads = append(reads,
@@ -93,7 +97,7 @@ func Start(cfg StartConfig) http.HandlerFunc {
 
 		jetzt := cards.Card{Title: "Jetzt"}
 		if cfg.HA != nil && haErr == nil {
-			home(&jetzt, states)
+			home(&jetzt, states, reg.Hidden)
 			jetzt.Link = &cards.Link{Href: "/raeume", Text: "Alle Räume"}
 		}
 		if cfg.Calendar != nil && evErr == nil && len(events) > 0 {
@@ -141,14 +145,18 @@ func isAdmin(r *http.Request) bool {
 }
 
 // home fills Jetzt from HA's states: who is home, the lights that are on,
-// what plays — in that order (laib DEKONSTRUKTION).
-func home(c *cards.Card, states []ha.State) {
+// what plays — in that order (laib DEKONSTRUKTION). What HA hides is left
+// out.
+func home(c *cards.Card, states []ha.State, hidden map[string]bool) {
 	var persons, homeNames, lights []string
 	type playing struct{ name, what string }
 	var plays []playing
 	for _, s := range states {
 		if _, group := s.Attributes["entity_id"].([]any); group {
 			continue // a group (light groups too) is not a lamp; its members count
+		}
+		if hidden[s.EntityID] {
+			continue
 		}
 		domain, _, _ := strings.Cut(s.EntityID, ".")
 		switch {
