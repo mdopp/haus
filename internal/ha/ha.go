@@ -33,8 +33,8 @@ func FromEnv() (*Client, error) {
 	if u == "" {
 		return nil, nil
 	}
-	if _, err := url.Parse(u); err != nil {
-		return nil, fmt.Errorf("HAUS_HA_URL: %w", err)
+	if p, err := url.Parse(u); err != nil || (p.Scheme != "http" && p.Scheme != "https") || p.Host == "" {
+		return nil, fmt.Errorf("HAUS_HA_URL %q: want http(s)://host[:port]", u)
 	}
 	tok := os.Getenv("HAUS_HA_TOKEN")
 	if tok == "" {
@@ -107,6 +107,11 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 		return nil
 	}
 	return json.NewDecoder(resp.Body).Decode(out)
+}
+
+// Ping asks whether HA's API answers (GET /api/).
+func (c *Client) Ping(ctx context.Context) error {
+	return c.do(ctx, "GET", "/api/", nil, nil, nil)
 }
 
 // State reads one entity (ErrNotFound when HA does not know it).

@@ -34,6 +34,9 @@ type Config struct {
 	House    persona.Persona                    // the house persona the app shows (laib#129, #130)
 	HA       *ha.Client                         // Home Assistant for the house paths (home.go, live.go); nil = they stay on the bridge
 	Ping     time.Duration                      // the event stream's keepalive; 0 = 90s
+	// SensorEvery: a sensor's card_state at most this often; 0 = 10s
+	SensorEvery time.Duration
+	Energy      EnergyMap // the energy entities (energy.go); empty = by friendly name
 }
 
 // Handler serves /napi/*.
@@ -175,8 +178,10 @@ func Handler(c Config) http.Handler {
 		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 	})
 	if c.HA != nil { // haus#10: the house paths are Haus's own
-		(&homeAPI{ha: c.HA}).routes(mux, auth)
-		newLive(c.HA, c.Ping).routes(mux, auth)
+		(&homeAPI{ha: c.HA, sources: c.Energy}).routes(mux, auth)
+		if c.Bridge == nil { // the app's one stream also carries notices and approvals only the bridge has (live.go)
+			newLive(c.HA, c.Ping, c.SensorEvery).routes(mux, auth)
+		}
 	}
 	if c.Bridge != nil {
 		proxy := httputil.NewSingleHostReverseProxy(c.Bridge)

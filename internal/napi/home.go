@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
 	"net/http"
 	"regexp"
 	"sort"
@@ -30,9 +31,12 @@ var (
 	sensitiveDomains      = set("lock", "alarm_control_panel")
 	sensitiveServices     = set("open", "unlock", "alarm_disarm")
 	sensitiveCoverClasses = set("garage", "door", "gate")
-	coverOpenServices     = set("open_cover", "toggle", "set_cover_position", "set_cover_tilt_position", "open_cover_tilt")
+	// on a garage/door/gate cover (or one whose class is unknown) only these
+	// are free; everything else, toggles and tilts and future services
+	// included, needs confirmed
+	coverFreeServices = set("close_cover", "stop_cover", "close_cover_tilt", "stop_cover_tilt")
 	// a call names its one entity; data may not widen it to another target
-	targetKeys = set("entity_id", "device_id", "area_id", "floor_id", "label_id")
+	targetKeys = set("entity_id", "device_id", "area_id", "floor_id", "label_id", "target")
 
 	cardDomains     = set("sensor", "binary_sensor", "cover", "light", "switch", "climate", "media_player", "lock")
 	actuatorDomains = set("light", "switch", "cover", "climate", "media_player", "lock")
@@ -54,8 +58,9 @@ func set(xs ...string) map[string]bool {
 
 // homeAPI serves the HA-backed paths.
 type homeAPI struct {
-	ha    *ha.Client
-	areas areaCache
+	ha      *ha.Client
+	sources EnergyMap // which entities the energy picture reads (energy.go)
+	areas   areaCache
 }
 
 func (h *homeAPI) routes(mux *http.ServeMux, auth func(http.HandlerFunc) http.HandlerFunc) {
@@ -122,9 +127,10 @@ func (h *homeAPI) call(w http.ResponseWriter, r *http.Request) {
 	}
 	payload["entity_id"] = body.EntityID
 	if err := h.ha.Call(r.Context(), domain, action, payload); err != nil {
+		log.Printf("haus: ha/call %s on %s: %v", body.Service, body.EntityID, err) // HA's detail stays here
 		var he *ha.Error
-		if errors.As(err, &he) {
-			refuse(w, http.StatusBadRequest, he.Error())
+		if errors.As(err, &he) && he.Status == http.StatusBadRequest {
+			refuse(w, http.StatusBadRequest, "ha_rejected")
 			return
 		}
 		refuse(w, http.StatusBadGateway, "ha_unavailable")
@@ -133,14 +139,15 @@ func (h *homeAPI) call(w http.ResponseWriter, r *http.Request) {
 	answer(w, http.StatusOK, map[string]any{"ok": true})
 }
 
-// sensitive: any lock, an unlock or open anywhere, and a cover open whose
-// device_class is garage, door or gate. A cover whose class cannot be read
-// (HA down, unknown entity, no class) is sensitive: fail closed.
+// sensitive: any lock, an unlock or open anywhere, and on a cover whose
+// device_class is garage, door or gate anything but closing and stopping.
+// A cover whose class cannot be read (HA down, unknown entity, no class)
+// counts as such a cover: fail closed.
 func (h *homeAPI) sensitive(ctx context.Context, entityID, domain, action string) bool {
 	if sensitiveDomains[domain] || sensitiveServices[action] {
 		return true
 	}
-	if domain != "cover" || !coverOpenServices[action] {
+	if domain != "cover" || coverFreeServices[action] {
 		return false
 	}
 	s, err := h.ha.State(ctx, entityID)
@@ -208,91 +215,6 @@ func (h *homeAPI) state(w http.ResponseWriter, r *http.Request) {
 	answer(w, http.StatusOK, map[string]any{"ok": true, "card": c})
 }
 
-// The energy picture: the "now" flow from current-power sensors (W) matched
-// by exact friendly name, the lifetime counters (kWh) as totals, every other
-// power sensor as a circuit. The names are this house's HA naming.
-var (
-	energyFlow = []struct{ key, label, name, sense string }{
-		{"pv", "PV", "Aktuell erzeugter PV-Strom", "supply"},
-		{"house", "Haus", "Aktueller Hausverbrauch", "draw"},
-		{"grid", "Netz", "Aktuelle Netz Leistung", "grid"},       // +W Bezug, −W Einspeisung
-		{"battery", "Akku", "Aktuelle Akku Leistung", "battery"}, // −W entlädt, +W lädt
-	}
-	energyTotals = []struct{ name, label string }{
-		{"PV Erzeugung", "PV-Erzeugung"},
-		{"Netzeinspeisung", "Einspeisung"},
-		{"Netzbezug", "Netzbezug"},
-		{"Batterie laden", "Batterie geladen"},
-		{"Batterie entladen", "Batterie entladen"},
-	}
-)
-
-// GET /napi/portal/energy → {ok, energy:{flow, totals, circuits}}
-func (h *homeAPI) energy(w http.ResponseWriter, r *http.Request) {
-	states, err := h.ha.States(r.Context())
-	if err != nil {
-		refuse(w, http.StatusBadGateway, "ha_unavailable")
-		return
-	}
-	flowKey := map[string]string{}
-	for _, f := range energyFlow {
-		flowKey[f.name] = f.key
-	}
-	totalLabel := map[string]string{}
-	for _, t := range energyTotals {
-		totalLabel[t.name] = t.label
-	}
-	flow := map[string]map[string]any{}
-	totals := map[string]map[string]any{}
-	circuits := []map[string]any{}
-	for _, s := range states {
-		if !strings.HasPrefix(s.EntityID, "sensor.") {
-			continue
-		}
-		dc, _ := s.Attributes["device_class"].(string)
-		dc = strings.ToLower(dc)
-		if dc != "power" && dc != "energy" {
-			continue
-		}
-		name, _ := s.Attributes["friendly_name"].(string)
-		if name == "" {
-			name = s.EntityID
-		}
-		spec := map[string]any{"entity_id": s.EntityID, "name": name, "state": s.State, "device_class": dc}
-		if u := s.Attributes["unit_of_measurement"]; u != nil {
-			spec["unit"] = u
-		}
-		key, isFlow := flowKey[name]
-		switch {
-		case dc == "power" && isFlow && flow[key] == nil:
-			flow[key] = spec
-		case dc == "energy" && totalLabel[name] != "":
-			if totals[name] == nil {
-				spec["label"] = totalLabel[name]
-				totals[name] = spec
-			}
-		case dc == "power":
-			circuits = append(circuits, spec)
-		}
-	}
-	sort.SliceStable(circuits, func(i, j int) bool {
-		return strings.ToLower(circuits[i]["name"].(string)) < strings.ToLower(circuits[j]["name"].(string))
-	})
-	out := map[string]any{"flow": []map[string]any{}, "totals": []map[string]any{}, "circuits": circuits}
-	for _, f := range energyFlow {
-		if s := flow[f.key]; s != nil {
-			s["label"], s["sense"] = f.label, f.sense
-			out["flow"] = append(out["flow"].([]map[string]any), s)
-		}
-	}
-	for _, t := range energyTotals {
-		if s := totals[t.name]; s != nil {
-			out["totals"] = append(out["totals"].([]map[string]any), s)
-		}
-	}
-	answer(w, http.StatusOK, map[string]any{"ok": true, "energy": out})
-}
-
 // GET /napi/portal/entity-history?entity_id=&range=24h|48h|7d → {ok, history:[{t,state}]}
 func (h *homeAPI) history(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get("entity_id")
@@ -336,7 +258,7 @@ func (h *homeAPI) active(w http.ResponseWriter, r *http.Request) {
 		refuse(w, http.StatusBadGateway, "ha_unavailable")
 		return
 	}
-	rooms := h.areas.get(r.Context(), h.ha)
+	rooms := h.areas.get(h.ha)
 	out := []map[string]any{}
 	for _, s := range states {
 		domain, _, _ := strings.Cut(s.EntityID, ".")
@@ -365,20 +287,31 @@ func (h *homeAPI) active(w http.ResponseWriter, r *http.Request) {
 
 // areaCache holds entity → room for a few minutes. A failed read keeps the
 // last good map (empty at first): rooms only label, they never break a list.
+// One refresh at a time, outside the lock; meanwhile callers get the old map.
 type areaCache struct {
 	mu   sync.Mutex
 	m    map[string]string
 	next time.Time
+	busy bool
 }
 
-func (a *areaCache) get(ctx context.Context, c *ha.Client) map[string]string {
+func (a *areaCache) get(c *ha.Client) map[string]string {
+	a.mu.Lock()
+	if a.busy || time.Now().Before(a.next) {
+		m := a.m
+		a.mu.Unlock()
+		return m
+	}
+	a.busy = true
+	a.mu.Unlock()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	m, err := c.Areas(ctx)
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if time.Now().Before(a.next) {
-		return a.m
-	}
-	m, err := c.Areas(ctx)
+	a.busy = false
 	if err != nil {
+		log.Printf("haus: HA areas: %v", err)
 		a.next = time.Now().Add(30 * time.Second)
 		return a.m
 	}

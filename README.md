@@ -46,17 +46,27 @@ the house persona, and the old Solaris and ServiceBay names live only in
   `HAUS_HA_TOKEN`, a long-lived token; unset, they stay on the bridge):
   `POST /napi/ha/call` (`{entity_id, service, data?, confirmed?}`; only
   `light|switch|cover|climate|lock`, else 400; the service's domain is the
-  entity's; any `lock`, and a cover open whose `device_class` is
-  garage/door/gate or cannot be read, answers **403 `sensitive_action`**
-  without `confirmed:true`; `data` cannot name another target),
-  `GET /napi/portal/{state,energy,entity-history,active}`, and the realtime
-  pair `POST /napi/portal/watch` + `GET /napi/portal/events` (SSE: a
-  `card_state` frame for each entity the device watches, `: ping` every
-  90s, from one HA `state_changed` subscription while anyone listens).
-  Every one wants a paired device. The shapes are `ApiClient.kt`'s; no
-  JSON `null` goes out (Android reads it as `"null"`). The stream carries
-  only `card_state` so far: notices and approval frames still need the
-  bridge's stream.
+  entity's; `data` cannot name another target; any `lock`, and on a
+  garage/door/gate cover — or one whose `device_class` cannot be read —
+  anything but `close_cover`, `stop_cover`, `close_cover_tilt`,
+  `stop_cover_tilt`, answers **403 `sensitive_action`** without
+  `confirmed:true`; HA refusing the call is 400, HA in trouble is 502
+  `ha_unavailable`, HA's detail stays in Haus's log) and
+  `GET /napi/portal/{state,energy,entity-history,active}`. Every one wants
+  a paired device. The shapes are `ApiClient.kt`'s; no JSON `null` goes out
+  (Android reads it as `"null"`).
+- The energy picture reads the entities `HAUS_ENERGY_FLOW`
+  (`pv=sensor.…,house=sensor.…,grid=sensor.…,battery=sensor.…`, any subset)
+  and `HAUS_ENERGY_TOTALS` (`<Label>=sensor.…,…`, in that order) name;
+  every other power sensor is a circuit. Unset, it falls back to matching
+  one house's German friendly names (`Aktuell erzeugter PV-Strom`, …).
+- The realtime pair `POST /napi/portal/watch` + `GET /napi/portal/events`
+  (SSE: a `card_state` frame for each entity the device watches, the
+  current cards again after every (re)subscribe, a sensor at most every
+  10s, `: ping` every 90s, at most three streams per device; watch answers
+  503 while HA does not) is Haus's **only when no bridge is set**: the app
+  holds one stream, and notices and approval frames still come from the
+  bridge's.
 - `GET /.well-known/assetlinks.json` — the app's signing fingerprints from
   `HAUS_ANDROID_FINGERPRINTS` (comma-separated, public), so the app opens
   Haus's pages without a URL bar. `[]` without them.
@@ -72,7 +82,8 @@ LAIB_URL=http://host.containers.internal:5900 LAIB_TOKEN=<the haus hand's token,
 HAUS_PROXY_SECRET=<what Caddy sends as X-Haus-Proxy> LAIB_PUBLIC_URL=https://laib.<domain> \
 SOLARIS_URL=http://host.containers.internal:8787 HAUS_LISTEN=0.0.0.0:8650 \
 HAUS_HA_URL=http://host.containers.internal:8123 HAUS_HA_TOKEN=<a long-lived HA token> \
-HAUS_ANDROID_FINGERPRINTS=<the app's SHA-256 signing fingerprints> ./haus
+HAUS_ANDROID_FINGERPRINTS=<the app's SHA-256 signing fingerprints> \
+HAUS_ENERGY_FLOW=pv=sensor.…,house=sensor.…,grid=sensor.…,battery=sensor.… HAUS_ENERGY_TOTALS=PV-Erzeugung=sensor.…,… ./haus
 ```
 
 `HAUS_DATA` (default `/data`) holds `devices.json`; `HAUS_PUBLIC_URL` is the

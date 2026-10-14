@@ -20,11 +20,16 @@ import (
 // stream (GET /napi/portal/events). While anyone listens, Haus holds one
 // state_changed subscription to HA and sends a device a card_state frame
 // for the entities it watches, and nothing else.
+//
+// The app holds one stream for everything: card_state, notices (ha) and
+// approvals. Haus produces only the first, so while the bridge
+// is set the stream and the watch-set stay on the bridge (napi.go).
 
 const (
-	watchTTL       = time.Hour        // the app re-posts while widgets exist
-	sensorInterval = 10 * time.Second // a sensor card at most this often, the last value always
-	defaultPing    = 90 * time.Second // ': ping' keeps proxy and carrier NAT open
+	watchTTL           = time.Hour        // the app re-posts while widgets exist
+	defaultSensorEvery = 10 * time.Second // a sensor card at most this often, the last value always
+	defaultPing        = 90 * time.Second // ': ping' keeps proxy and carrier NAT open
+	streamsPerDevice   = 3                // a fourth stream pushes out the device's oldest
 )
 
 type watchSet struct {
@@ -34,28 +39,42 @@ type watchSet struct {
 
 type listener struct {
 	device string
+	seq    uint64
 	ch     chan []byte
+	kick   chan struct{} // closed when a newer stream of the device pushes this one out
 }
 
 type live struct {
-	ha   *ha.Client
-	ping time.Duration
+	ha    *ha.Client
+	ping  time.Duration
+	every time.Duration // sensor interval
 
 	mu      sync.Mutex
 	watches map[string]watchSet // device → entities
 	subs    map[*listener]bool
-	stop    context.CancelFunc   // the HA subscription, while anyone listens
+	stop    context.CancelFunc // the HA subscription, while anyone listens
+	seq     uint64
 	last    map[string]string    // entity → last card sent (without updated_at_ms)
+	lastAt  map[string]int64     // entity → updated_at_ms of that card: nothing older goes out
 	ready   map[string]time.Time // sensor entity → earliest next send
 	pending map[string]map[string]any
 }
 
-func newLive(c *ha.Client, ping time.Duration) *live {
+func newLive(c *ha.Client, ping, sensorEvery time.Duration) *live {
 	if ping <= 0 {
 		ping = defaultPing
 	}
-	return &live{ha: c, ping: ping, watches: map[string]watchSet{}, subs: map[*listener]bool{},
-		last: map[string]string{}, ready: map[string]time.Time{}, pending: map[string]map[string]any{}}
+	if sensorEvery <= 0 {
+		sensorEvery = defaultSensorEvery
+	}
+	l := &live{ha: c, ping: ping, every: sensorEvery, watches: map[string]watchSet{}, subs: map[*listener]bool{}}
+	l.reset()
+	return l
+}
+
+// reset forgets what was sent: after a (re)connect everything is new.
+func (l *live) reset() {
+	l.last, l.lastAt, l.ready, l.pending = map[string]string{}, map[string]int64{}, map[string]time.Time{}, map[string]map[string]any{}
 }
 
 func (l *live) routes(mux *http.ServeMux, auth func(http.HandlerFunc) http.HandlerFunc) {
@@ -69,8 +88,14 @@ func deviceOf(r *http.Request) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// POST /napi/portal/watch {entity_ids:[…]} → {ok}: replaces this device's set.
+// POST /napi/portal/watch {entity_ids:[…]} → {ok}: replaces this device's
+// set; 503 while HA does not answer.
 func (l *live) watch(w http.ResponseWriter, r *http.Request) {
+	if err := l.ha.Ping(r.Context()); err != nil {
+		log.Printf("haus: watch: HA: %v", err)
+		refuse(w, http.StatusServiceUnavailable, "watch_unavailable")
+		return
+	}
 	var body struct {
 		EntityIDs []any `json:"entity_ids"`
 	}
@@ -105,7 +130,7 @@ func (l *live) events(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
 	fl.Flush()
-	me := &listener{device: deviceOf(r), ch: make(chan []byte, 64)}
+	me := &listener{device: deviceOf(r), ch: make(chan []byte, 64), kick: make(chan struct{})}
 	l.join(me)
 	defer l.leave(me)
 	tick := time.NewTicker(l.ping)
@@ -114,6 +139,8 @@ func (l *live) events(w http.ResponseWriter, r *http.Request) {
 		var b []byte
 		select {
 		case <-r.Context().Done():
+			return
+		case <-me.kick:
 			return
 		case b = <-me.ch:
 		case <-tick.C:
@@ -129,6 +156,24 @@ func (l *live) events(w http.ResponseWriter, r *http.Request) {
 func (l *live) join(me *listener) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	l.seq++
+	me.seq = l.seq
+	var mine []*listener
+	for o := range l.subs {
+		if o.device == me.device {
+			mine = append(mine, o)
+		}
+	}
+	if len(mine) >= streamsPerDevice {
+		oldest := mine[0]
+		for _, o := range mine {
+			if o.seq < oldest.seq {
+				oldest = o
+			}
+		}
+		delete(l.subs, oldest)
+		close(oldest.kick)
+	}
 	l.subs[me] = true
 	if l.stop == nil {
 		ctx, cancel := context.WithCancel(context.Background())
@@ -140,7 +185,7 @@ func (l *live) join(me *listener) {
 func (l *live) leave(me *listener) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	delete(l.subs, me)
+	delete(l.subs, me) // a kicked stream is gone already
 	if len(l.subs) == 0 && l.stop != nil {
 		l.stop()
 		l.stop = nil
@@ -152,10 +197,10 @@ func (l *live) run(ctx context.Context) {
 	backoff := 2 * time.Second
 	for ctx.Err() == nil {
 		l.mu.Lock()
-		l.last, l.ready, l.pending = map[string]string{}, map[string]time.Time{}, map[string]map[string]any{}
+		l.reset()
 		l.mu.Unlock()
 		began := time.Now()
-		err := l.ha.Subscribe(ctx, l.changed)
+		err := l.ha.SubscribeSynced(ctx, func() { l.resync(ctx) }, l.changed)
 		if ctx.Err() != nil {
 			return
 		}
@@ -174,9 +219,23 @@ func (l *live) run(ctx context.Context) {
 	}
 }
 
+// resync sends the watched entities' current cards once HA confirmed the
+// subscription: what changed while Haus was not listening (first connect,
+// an HA restart) arrives, and the deduplication drops the rest.
+func (l *live) resync(ctx context.Context) {
+	states, err := l.ha.States(ctx)
+	if err != nil {
+		log.Printf("haus: HA resync: %v", err)
+		return
+	}
+	for _, s := range states {
+		l.changed(s)
+	}
+}
+
 // changed is one state_changed: drop it unless someone watches the entity
 // and its card shows something new; a sensor goes out at most every
-// sensorInterval, its latest value always.
+// l.every, its latest value always.
 func (l *live) changed(s ha.State) {
 	c := card(s)
 	if c == nil {
@@ -198,6 +257,12 @@ func (l *live) changed(s ha.State) {
 	if l.last[s.EntityID] == string(b) {
 		return
 	}
+	if at, ok := c["updated_at_ms"].(int64); ok {
+		if at < l.lastAt[s.EntityID] {
+			return // older than what went out (a resync racing an event)
+		}
+		l.lastAt[s.EntityID] = at
+	}
 	l.last[s.EntityID] = string(b)
 	if c["domain"] != "sensor" {
 		l.send(s.EntityID, c)
@@ -205,7 +270,7 @@ func (l *live) changed(s ha.State) {
 	}
 	now := time.Now()
 	if ready := l.ready[s.EntityID]; !now.Before(ready) {
-		l.ready[s.EntityID] = now.Add(sensorInterval)
+		l.ready[s.EntityID] = now.Add(l.every)
 		l.send(s.EntityID, c)
 		return
 	}
@@ -223,7 +288,7 @@ func (l *live) flush(entity string) {
 		return
 	}
 	delete(l.pending, entity)
-	l.ready[entity] = time.Now().Add(sensorInterval)
+	l.ready[entity] = time.Now().Add(l.every)
 	l.send(entity, c)
 }
 

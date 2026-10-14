@@ -56,6 +56,9 @@ func main() {
 	if cfg.HA, err = ha.FromEnv(); err != nil { // haus#10: the house paths from HA; unset, they stay on the bridge
 		log.Fatalf("haus: %v", err)
 	}
+	if cfg.Energy, err = napi.EnergyFromEnv(); err != nil {
+		log.Fatalf("haus: %v", err)
+	}
 	cfg.Validate = napi.Chain(own, paired) // phones paired before Haus keep working through the bridge
 	mux := http.NewServeMux()
 	mux.Handle("/napi/", napi.Handler(cfg))

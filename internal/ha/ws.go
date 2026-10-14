@@ -330,13 +330,21 @@ func (c *Client) Areas(ctx context.Context) (map[string]string, error) {
 // ctx ends or the connection drops; the caller reconnects. An HA-level ping
 // every 30s, and a read deadline, notice a dead connection.
 func (c *Client) Subscribe(ctx context.Context, fn func(State)) error {
+	return c.SubscribeSynced(ctx, nil, fn)
+}
+
+// SubscribeSynced is Subscribe, and calls synced (in its own goroutine)
+// once HA has confirmed the subscription: from then on no change is
+// missed, so that is the moment to read what changed while away.
+func (c *Client) SubscribeSynced(ctx context.Context, synced func(), fn func(State)) error {
 	w, err := c.dial(ctx)
 	if err != nil {
 		return err
 	}
 	defer w.close()
 	defer w.closeOn(ctx)()
-	if _, err := w.send(map[string]any{"type": "subscribe_events", "event_type": "state_changed"}); err != nil {
+	subID, err := w.send(map[string]any{"type": "subscribe_events", "event_type": "state_changed"})
+	if err != nil {
 		return err
 	}
 	ping := time.NewTicker(30 * time.Second)
@@ -358,6 +366,7 @@ func (c *Client) Subscribe(ctx context.Context, fn func(State)) error {
 	for {
 		w.nc.SetReadDeadline(time.Now().Add(90 * time.Second))
 		var m struct {
+			ID      int    `json:"id"`
 			Type    string `json:"type"`
 			Success *bool  `json:"success"`
 			Event   struct {
@@ -374,8 +383,10 @@ func (c *Client) Subscribe(ctx context.Context, fn func(State)) error {
 			return err
 		}
 		switch {
-		case m.Type == "result" && m.Success != nil && !*m.Success:
+		case m.Type == "result" && m.ID == subID && m.Success != nil && !*m.Success:
 			return errors.New("ha: subscribe_events refused")
+		case m.Type == "result" && m.ID == subID && m.Success != nil && synced != nil:
+			go synced()
 		case m.Type == "event" && m.Event.Data.NewState != nil:
 			s := *m.Event.Data.NewState
 			if s.EntityID == "" {
