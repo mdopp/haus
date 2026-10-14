@@ -8,6 +8,9 @@ const (
 	// AppScheme is the app's deep-link scheme: <scheme>://pair#token=… opens
 	// the app, <scheme>://setup?server=…&token=… is what its QR scanner reads.
 	AppScheme = "cloud.dopp.solaris"
+	// AppPackage is the app's Android package id, which its assetlinks
+	// statement names; it equals the scheme.
+	AppPackage = "cloud.dopp.solaris"
 	// TokenPrefix is what the app checks before it stores a device token.
 	TokenPrefix = "sol_device_"
 	// NapiPrefix is where the app's widgets read the box: home, services,
