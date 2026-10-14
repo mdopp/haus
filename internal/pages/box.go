@@ -29,7 +29,7 @@ func head(title string) string {
 	if g := House.Greet("de"); g != "" {
 		greet = "<span class=gruss>" + html.EscapeString(g) + "</span>"
 	}
-	return "<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><title>" + html.EscapeString(title) + " · " + html.EscapeString(House.Display) + "</title>" + style +
+	return "<!doctype html><html lang=de><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><title>" + html.EscapeString(title) + " · " + html.EscapeString(House.Display) + "</title>" + style +
 		"<style>header{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin:-1.2rem -1.2rem 1rem;padding:.6rem 1.2rem;background:" + House.Ground() + ";color:" + House.Accent() + "}header b{font-size:1.05rem}header .gruss{opacity:.85}</style>" +
 		"<header>" + icon + "<b>" + html.EscapeString(House.Display) + "</b>" + greet + "</header>"
 }
@@ -76,7 +76,7 @@ func Box(c *laib.Client, laibURL string) http.HandlerFunc {
 			return
 		}
 		// the three guarantees, for everyone in the family (haus#2)
-		b.WriteString(guarantees(ready, rows, strings.Contains(","+r.Header.Get("Remote-Groups")+",", ",admins,"), laibURL))
+		b.WriteString(guarantees(ready, rows, isAdmin(r), laibURL))
 		fmt.Fprintf(&b, "<h1>Box · <span class=%s>%s</span> <span class=k>· %d Dienste · %d grün · %d gelb · %d rot · Drift %d</span></h1>",
 			readyClass(ready), html.EscapeString(ready.State), ready.Services, ready.Green, ready.Yellow, ready.Red, ready.Drift)
 		fmt.Fprintf(&b, "<p>Operator: <span class=%s>%s</span></p>", operatorClass(ready.Operator), html.EscapeString(ready.Operator))
