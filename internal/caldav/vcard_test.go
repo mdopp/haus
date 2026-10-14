@@ -21,7 +21,7 @@ func TestVCardEscapingAndRoundTrip(t *testing.T) {
 			t.Fatalf("vCard lacks %q:\n%s", want, vcf)
 		}
 	}
-	if strings.Count(vcf, "BEGIN:VCARD") != 1 || strings.Count(vcf, "\r\nEND:VCARD\r\n") != 1 || !strings.HasSuffix(vcf, "END:VCARD\r\n") {
+	if !strings.HasPrefix(vcf, "BEGIN:VCARD\r\n") || strings.Count(vcf, "\r\nBEGIN:VCARD\r\n") != 0 || strings.Count(vcf, "\r\nEND:VCARD\r\n") != 1 || !strings.HasSuffix(vcf, "\r\nEND:VCARD\r\n") {
 		t.Fatalf("one card:\n%s", vcf)
 	}
 	for _, l := range strings.Split(strings.TrimSuffix(vcf, "\r\n"), "\r\n") {
