@@ -177,6 +177,9 @@ func home(c *cards.Card, states []ha.State) {
 	type playing struct{ name, what string }
 	var plays []playing
 	for _, s := range states {
+		if _, group := s.Attributes["entity_id"].([]any); group {
+			continue // a group (light groups too) is not a lamp; its members count
+		}
 		domain, _, _ := strings.Cut(s.EntityID, ".")
 		switch {
 		case domain == "person":

@@ -65,6 +65,9 @@ func Box(c *laib.Client, laibURL string) http.HandlerFunc {
 			http.Error(w, "Haus entscheidet nichts: Freigeben und Ablehnen gibt es nur auf der Laib-Seite", http.StatusForbidden)
 			return
 		}
+		if !adminOnly(w, r) {
+			return
+		}
 		ready, rows, err := c.Status(ctx)
 		var b strings.Builder
 		b.WriteString(head("Box"))
@@ -127,6 +130,17 @@ func Box(c *laib.Client, laibURL string) http.HandlerFunc {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Write([]byte(b.String()))
 	}
+}
+
+// adminOnly lets admins through and sends everyone else to Start (303):
+// Box is the admins' page (laib DEKONSTRUKTION). It says who sees the
+// page, it decides nothing.
+func adminOnly(w http.ResponseWriter, r *http.Request) bool {
+	if isAdmin(r) {
+		return true
+	}
+	http.Redirect(w, r, "/start", http.StatusSeeOther)
+	return false
 }
 
 func operatorClass(s string) string {
