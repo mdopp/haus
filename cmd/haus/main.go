@@ -19,6 +19,7 @@ import (
 	"github.com/mdopp/haus/internal/napi"
 	"github.com/mdopp/haus/internal/pages"
 	"github.com/mdopp/haus/internal/persona"
+	"github.com/mdopp/haus/internal/werkstatt"
 )
 
 var Version = "dev"
@@ -80,10 +81,11 @@ func main() {
 	pagesMux := http.NewServeMux()
 	// the family's page (haus#12): each card only from a backend that is set
 	pagesMux.HandleFunc("/start", pages.Start(pages.StartConfig{Laib: ops, LaibURL: laibURL, HA: cfg.HA, Calendar: hh.Calendar, Notes: hh.Notes, Loc: hh.Loc}))
-	pagesMux.HandleFunc("/box", pages.Box(ops, laibURL))
+	tickets := werkstatt.FromEnv() // haus#15: the Werkstatt card; HAUS_WERKSTATT_REPOS unset, no card
+	pagesMux.HandleFunc("/box", pages.BoxWith(ops, laibURL, tickets))
 	pagesMux.HandleFunc("/box/geraete", pages.Geraete(store, os.Getenv("HAUS_PUBLIC_URL")))
 	pagesMux.HandleFunc("/pair-device", pages.PairDevice(store)) // the app's own pairing path (haus#6)
-	pagesMux.HandleFunc("/box/", pages.Box(ops, laibURL))
+	pagesMux.HandleFunc("/box/", pages.BoxWith(ops, laibURL, tickets))
 	pagesMux.HandleFunc("/persona/icon.svg", pages.Icon())
 	pagesMux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
 	pagesMux.HandleFunc("/", pages.ToStart()) // "/", the app's /#/p/… routes and every path not served land on Start

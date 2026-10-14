@@ -125,6 +125,11 @@ Not yet: Start's *Meine Favoriten* and *Häufig genutzt*; Räume, Energie,
 Medien, Notizen, Kalender; the `Sprechen` field to the Bote. Those come with the Home Assistant
 and Solaris deconstruction (laib#21).
 
+- The Box page's Werkstatt card (haus#15): the open tickets of the repos in
+  `HAUS_WERKSTATT_REPOS` (owner/name, comma-separated), what pi works
+  (`pi:ready`) and what waits for Claude (`needs-claude`), read-only and
+  linked. Public GitHub API, no token, cached for 5 minutes. Unset: no card.
+
 ## Run
 
 ```
