@@ -4,7 +4,7 @@
 // token, the house paths, the event stream and the camera from Home
 // Assistant (home.go, live.go, camera.go), the tool widgets from the
 // Haushalt source (tools.go), the capture upload (upload.go) and the house
-// persona. Every other /napi path is 404.
+// persona. Every other /napi path is a JSON 404 (noSuchPath).
 package napi
 
 import (
@@ -72,7 +72,7 @@ func Handler(c Config) http.Handler {
 	}))
 	mux.HandleFunc("GET /napi/persona/icon.svg", auth(func(w http.ResponseWriter, r *http.Request) {
 		if len(c.House.Icon) == 0 {
-			http.NotFound(w, r)
+			noSuchPath(w, r)
 			return
 		}
 		w.Header().Set("Content-Type", "image/svg+xml")
@@ -189,7 +189,14 @@ func Handler(c Config) http.Handler {
 	if c.UploadDir != "" { // the camera capture into the consume folder
 		newUploads(c.UploadDir).routes(mux, auth)
 	}
-	return mux // every other /napi path: 404, passed on to nobody
+	mux.HandleFunc("/napi/", noSuchPath) // every other /napi path, passed on to nobody
+	return mux
+}
+
+// noSuchPath is the one 404 of /napi: a path Haus does not serve, or whose
+// backend is not set. JSON, as every refusal the app parses.
+func noSuchPath(w http.ResponseWriter, r *http.Request) {
+	answer(w, http.StatusNotFound, map[string]any{"ok": false, "reason": "not_found"})
 }
 
 func serviceOf(files []string) string {
