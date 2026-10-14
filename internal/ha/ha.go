@@ -155,3 +155,46 @@ func (c *Client) History(ctx context.Context, entityID string, start, end time.T
 	}
 	return out[0], nil
 }
+
+// cameraTypes are the frames Camera passes on; anything else (an SVG, an
+// error page) is not an image the app may draw.
+var cameraTypes = map[string]bool{"image/jpeg": true, "image/png": true, "image/gif": true, "image/webp": true}
+
+// ErrTooLarge is a frame larger than the caller's cap.
+var ErrTooLarge = errors.New("ha: camera frame too large")
+
+// Camera reads a camera's current frame (GET /api/camera_proxy/<entity>):
+// at most max bytes, and only a JPEG, PNG, GIF or WebP. ErrNotFound when HA
+// does not know the camera.
+func (c *Client) Camera(ctx context.Context, entityID string, max int64) ([]byte, string, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", strings.TrimRight(c.URL, "/")+"/api/camera_proxy/"+url.PathEscape(entityID), nil)
+	if err != nil {
+		return nil, "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.Token)
+	resp, err := c.http().Do(req)
+	if err != nil {
+		return nil, "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, "", ErrNotFound
+	}
+	if resp.StatusCode >= 400 {
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, 200))
+		return nil, "", &Error{Status: resp.StatusCode, Detail: strings.TrimSpace(string(b))}
+	}
+	ctype, _, _ := strings.Cut(resp.Header.Get("Content-Type"), ";")
+	ctype = strings.ToLower(strings.TrimSpace(ctype))
+	if !cameraTypes[ctype] {
+		return nil, "", fmt.Errorf("ha: camera answered %q, not an image", ctype)
+	}
+	b, err := io.ReadAll(io.LimitReader(resp.Body, max+1))
+	if err != nil {
+		return nil, "", err
+	}
+	if int64(len(b)) > max {
+		return nil, "", ErrTooLarge
+	}
+	return b, ctype, nil
+}

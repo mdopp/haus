@@ -1,5 +1,6 @@
 // Package hafake is a fake Home Assistant for tests: the REST calls Haus
-// makes (/api/states, /api/services, /api/history/period) and the WebSocket
+// makes (/api/states, /api/services, /api/history/period,
+// /api/camera_proxy) and the WebSocket
 // (/api/websocket: auth, subscribe_events, the three registries). Its frame
 // code is written for the server side on purpose, so it shares nothing with
 // the client it tests. Never a live box.
@@ -48,6 +49,22 @@ type HA struct {
 	regsDown bool
 	tempUnit string // /api/config's unit_system.temperature; "" makes /api/config fail
 	subs     []*conn
+	cameras  map[string]camera
+}
+
+type camera struct {
+	ctype string
+	body  []byte
+}
+
+// SetCamera makes GET /api/camera_proxy/<entityID> answer body as ctype.
+func (h *HA) SetCamera(entityID, ctype string, body []byte) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.cameras == nil {
+		h.cameras = map[string]camera{}
+	}
+	h.cameras[entityID] = camera{ctype, body}
 }
 
 // New starts a fake HA that accepts Bearer token.
@@ -240,6 +257,15 @@ func (h *HA) serve(w http.ResponseWriter, r *http.Request) {
 		json.NewDecoder(r.Body).Decode(&data)
 		h.calls = append(h.calls, Call{Domain: parts[0], Service: parts[1], Data: data})
 		w.Write([]byte(`[]`))
+	case r.Method == "GET" && strings.HasPrefix(r.URL.Path, "/api/camera_proxy/"):
+		c, ok := h.cameras[strings.TrimPrefix(r.URL.Path, "/api/camera_proxy/")]
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
+			w.Write([]byte(`{"message":"Entity not found."}`))
+			return
+		}
+		w.Header().Set("Content-Type", c.ctype)
+		w.Write(c.body)
 	case r.Method == "GET" && strings.HasPrefix(r.URL.Path, "/api/history/period/"):
 		h.starts = append(h.starts, strings.TrimPrefix(r.URL.Path, "/api/history/period/"))
 		h.queries = append(h.queries, r.URL.Query())

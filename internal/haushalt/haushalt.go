@@ -20,6 +20,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/mdopp/haus/internal/caldav"
@@ -705,3 +706,29 @@ func dokumenteSuchen(ctx context.Context, d *paperless.Client, a map[string]any)
 	}
 	return strings.TrimRight(b.String(), "\n"), nil
 }
+
+// ErrBadUID is a reminder id that cannot be one: empty, too long, or with
+// control characters.
+var ErrBadUID = errors.New("Erinnerung: keine gültige Kennung")
+
+// maxUID caps a reminder's id; phones write 36 to a little over 100 bytes.
+const maxUID = 512
+
+// ReminderDone ticks the reminder with that UID off in Radicale, the widget's
+// one row action (haus#10): it changes what the family's phones show, so it
+// goes through here, checked, like every write of the Haushalt source.
+func ReminderDone(ctx context.Context, c *caldav.Client, uid string) error {
+	if uid == "" || len(uid) > maxUID || strings.IndexFunc(uid, unicode.IsControl) >= 0 || !utf8.ValidString(uid) {
+		return ErrBadUID
+	}
+	return c.CompleteTodo(ctx, uid)
+}
+
+// Day is a date as the family reads it: "Do 15.10.2026".
+func Day(t time.Time) string { return day(t) }
+
+// DayTime is Day with the time: "Do 15.10.2026 18:00".
+func DayTime(t time.Time) string { return dayTime(t) }
+
+// BirthdayText shows JJJJ-MM-TT as TT.MM.JJJJ and --MM-TT as TT.MM.
+func BirthdayText(b string) string { return birthdayDay(b) }

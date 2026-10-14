@@ -95,6 +95,17 @@ func (c *Client) scrub(err error) error {
 // Search finds documents by full text, the best first: at most max, and
 // the total Paperless counted.
 func (c *Client) Search(ctx context.Context, q string, max int) ([]Doc, int, error) {
+	return c.list(ctx, url.Values{"query": {q}}, max)
+}
+
+// Recent lists the max newest documents, by the date they were created.
+func (c *Client) Recent(ctx context.Context, max int) ([]Doc, error) {
+	docs, _, err := c.list(ctx, url.Values{"ordering": {"-created"}}, max)
+	return docs, err
+}
+
+// list asks for documents with q (a search or an order), at most max.
+func (c *Client) list(ctx context.Context, q url.Values, max int) ([]Doc, int, error) {
 	var page struct {
 		Count   int `json:"count"`
 		Results []struct {
@@ -105,13 +116,10 @@ func (c *Client) Search(ctx context.Context, q string, max int) ([]Doc, int, err
 			CreatedDate   string `json:"created_date"`
 		} `json:"results"`
 	}
-	err := c.get(ctx, "/api/documents/", url.Values{
-		"query":            {q},
-		"page_size":        {strconv.Itoa(max)},
-		"fields":           {"id,title,correspondent,created,created_date"}, // not the OCR text
-		"truncate_content": {"true"},
-	}, &page)
-	if err != nil {
+	q.Set("page_size", strconv.Itoa(max))
+	q.Set("fields", "id,title,correspondent,created,created_date") // not the OCR text
+	q.Set("truncate_content", "true")
+	if err := c.get(ctx, "/api/documents/", q, &page); err != nil {
 		return nil, 0, err
 	}
 	if len(page.Results) > max {

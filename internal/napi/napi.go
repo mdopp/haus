@@ -1,8 +1,10 @@
 // Package napi is the companion API the Android widgets speak (the app's
 // SbApiClient.kt and ApiClient.kt): the four box keys under
 // legacy.NapiPrefix served from Laib, operate and verdicts behind the right
-// token, the house paths from Home Assistant (home.go, live.go, haus#10),
-// and every other /napi path passed through the migration bridge
+// token, the house paths and the camera from Home Assistant (home.go,
+// live.go, camera.go, haus#10), the tool widgets from the Haushalt source
+// (tools.go), the capture upload (upload.go), and every other /napi path
+// passed through the migration bridge
 // (bridge.go) until Haus serves it (laib#28).
 package napi
 
@@ -17,6 +19,7 @@ import (
 	"time"
 
 	"github.com/mdopp/haus/internal/ha"
+	"github.com/mdopp/haus/internal/haushalt"
 	"github.com/mdopp/haus/internal/laib"
 	"github.com/mdopp/haus/internal/legacy"
 	"github.com/mdopp/haus/internal/persona"
@@ -41,6 +44,11 @@ type Config struct {
 	// SensorEvery: a sensor's card_state at most this often; 0 = 10s
 	SensorEvery time.Duration
 	Energy      EnergyMap // the energy entities (energy.go); empty = by friendly name
+	// Haushalt: the backends of the tool widgets (tools.go); none set = the bridge's
+	Haushalt haushalt.Config
+	// UploadDir: where /napi/upload stores (upload.go), the share's Paperless
+	// consume folder; "" = the bridge's
+	UploadDir string
 }
 
 // Handler serves /napi/*.
@@ -190,6 +198,15 @@ func Handler(c Config) http.Handler {
 		if c.Bridge == nil { // the app's one stream also carries notices and approvals only the bridge has (live.go)
 			newLive(c.HA, c.Ping, c.SensorEvery).routes(mux, auth)
 		}
+	}
+	if t := newTools(c.Haushalt); t != nil { // the tool widgets from the Haushalt source
+		if c.Bridge != nil { // the bridge keeps its catalog and the actions Haus does not know (tools.go)
+			t.bridge = httputil.NewSingleHostReverseProxy(c.Bridge)
+		}
+		t.routes(mux, auth)
+	}
+	if c.UploadDir != "" { // the camera capture into the consume folder
+		newUploads(c.UploadDir).routes(mux, auth)
 	}
 	if c.Bridge != nil {
 		proxy := httputil.NewSingleHostReverseProxy(c.Bridge)

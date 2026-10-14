@@ -270,6 +270,7 @@ type Todo struct {
 	Due       time.Time // zero: no due date
 	DueAllDay bool      // due on a day (DUE;VALUE=DATE), not at a time: Due is that day's midnight
 	Status    string
+	Completed time.Time // when it was ticked off; zero: not, or unknown
 }
 
 // Open is a reminder nobody has ticked off.
@@ -360,8 +361,9 @@ func Todos(root *Component, loc *time.Location) []Todo {
 			return
 		}
 		t := Todo{UID: c.Text("UID"), Summary: c.Text("SUMMARY"), Status: c.Text("STATUS")}
-		if _, done := c.Get("COMPLETED"); done { // ticked off, whatever STATUS still says
+		if p, done := c.Get("COMPLETED"); done { // ticked off, whatever STATUS still says
 			t.Status = "COMPLETED"
+			t.Completed, _, _ = When(p, loc)
 		}
 		if p, ok := c.Get("DUE"); ok {
 			t.Due, t.DueAllDay, _ = When(p, loc)
