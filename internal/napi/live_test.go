@@ -38,7 +38,7 @@ func TestActiveSetNotToAnExpiredWatch(t *testing.T) {
 	l.watches["quiet"] = watchSet{until: now.Add(time.Hour)}
 	l.watches["here"] = watchSet{active: true, until: now.Add(time.Hour)}
 	l.subs[gone], l.subs[quiet], l.subs[here] = true, true, true
-	l.on["light.flur"] = true
+	l.on["light.flur"], l.onKnown = true, true // as after a resync
 	l.activeOut()
 	l.mu.Unlock()
 	if len(gone.ch) != 0 || len(quiet.ch) != 0 {

@@ -23,7 +23,7 @@ func Erinnerung(cfg StartConfig) http.HandlerFunc {
 			toStart(w, r)
 			return
 		}
-		uid := strings.TrimSpace(itemRef(r, cards.ReminderPages))
+		uid := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, cards.ReminderPages))
 		var todos []caldav.Todo
 		var err error
 		if uid != "" {
@@ -31,7 +31,7 @@ func Erinnerung(cfg StartConfig) http.HandlerFunc {
 		}
 		if err != nil {
 			log.Printf("haus: erinnerung page: %q: %v", uid, err)
-			notThere(w, r, cfg, http.StatusServiceUnavailable, "Die Erinnerungen lassen sich gerade nicht lesen.", "Kalender", "/kalender", "Kalender")
+			missing{http.StatusServiceUnavailable, "Die Erinnerungen lassen sich gerade nicht lesen.", "Kalender", "/kalender", "Kalender"}.write(w, r, cfg)
 			return
 		}
 		for _, t := range todos {
@@ -64,6 +64,6 @@ func Erinnerung(cfg StartConfig) http.HandlerFunc {
 			writePage(w, http.StatusOK, b)
 			return
 		}
-		notThere(w, r, cfg, http.StatusNotFound, "Diese Erinnerung gibt es nicht.", "Kalender", "/kalender", "Kalender")
+		missing{http.StatusNotFound, "Diese Erinnerung gibt es nicht.", "Kalender", "/kalender", "Kalender"}.write(w, r, cfg)
 	}
 }

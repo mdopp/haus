@@ -61,11 +61,14 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     rendering, never markup from the file. Outside the folder, hidden or
     missing is a 404.
   - The item pages (haus#28), what a widget opens on a tap: `/raeume/<entity_id>`
-    (a thing: its state in words, since when, its room),
+    (a thing: its state in words, since when, its room; only an entity of
+    a card domain, `cards.Domains`, that HA does not hide — a person, a
+    tracker, a hidden entity are a 404; until the registry is read, 503),
     `/kalender/erinnerung/<uid>` (a reminder: open and due, done, or
     cancelled), `/kontakte/<uid>` (a contact: numbers and addresses to tap,
     the birthday), `/dokumente/<id>` (a 302 to the document's page in
-    Paperless, `HAUS_PAPERLESS_PUBLIC_URL`), and a note's `/notizen/<file>`.
+    Paperless, `HAUS_PAPERLESS_PUBLIC_URL`; without it a 404), and a note's
+    `/notizen/<file>`.
     Something not there is a 404 that says so, with the way back. Their
     paths are `internal/cards/pages.go`, one place for the routes and the
     rows.
@@ -83,7 +86,8 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
 - `/napi/box/{home,services,approvals,upgrades}` — the four Box keys the
   widgets read, from `laib status`, `laib inbox`. `pendingUpdates` and
   `upgrades` are the open proposals of kind `template-update` (`laib
-  template sync --propose` files one per update); each is an approval too. `POST …/services/{name}/operate`
+  template sync --propose` files one per update); `pendingApprovals` and
+  `approvals` are the others. An update is counted once, as an update. `POST …/services/{name}/operate`
   (restart). `POST …/approvals/{id}/approve|deny` answers 403: Haus decides
   nothing (haus#1); approvals reach the admin through the relay (laib ADR 0012).
 
@@ -132,9 +136,11 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   (laib ADR 0022 §2): `card_state`, a frame for each entity the device
   watches, the current cards again after every (re)subscribe, a sensor at
   most every 10s; and `active_set` (`{entity_ids}`, haus#28) for a device
-  whose watch says `active: true`, when the set of things that are on or
-  open changes, whichever entity it was: once after every (re)subscribe,
-  then at most every 10s, the latest set always. `: ping` every 90s, at
+  whose watch says `active: true`: at once to each of its streams when it
+  opens or the watch turns active (once the set is known), then when the
+  set of things that are on or open changes, whichever entity it was, at
+  most every 10s, the latest set always, and only to a stream that has
+  another. `: ping` every 90s, at
   most three streams per device; watch answers 503 while HA does not. The
   app holds it only while the screen is on.
 - The camera widget, from Home Assistant too (haus#10):

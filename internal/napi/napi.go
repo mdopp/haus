@@ -102,7 +102,7 @@ func Handler(c Config) http.Handler {
 		}
 		writeJSON(w, map[string]any{
 			"servicesUp": up, "servicesFailed": failed, "servicesDown": down,
-			"pendingApprovals": len(open), "pendingUpdates": len(updates(open)),
+			"pendingApprovals": len(open) - len(updates(open)), "pendingUpdates": len(updates(open)),
 			"state": ready.State, "drift": ready.Drift, "lastHeard": ready.LastHeard, "operator": ready.Operator,
 		})
 	}))
@@ -133,6 +133,9 @@ func Handler(c Config) http.Handler {
 		}
 		out := []map[string]any{}
 		for _, p := range ps {
+			if isUpdate(p) {
+				continue // listed under upgrades
+			}
 			row := proposalRow(p)
 			row["status"] = "pending"
 			out = append(out, row)
@@ -213,14 +216,18 @@ func noSuchPath(w http.ResponseWriter, r *http.Request) {
 	answer(w, http.StatusNotFound, map[string]any{"ok": false, "reason": "not_found"})
 }
 
-// updates are the template updates among the open proposals (haus#28):
-// `laib template sync --propose` files one per update, its kind
-// template-update whatever class the dial gave it. Each waits in Laib's
-// inbox like any proposal; Haus only counts and lists them (haus#1).
+// isUpdate: a template update (haus#28). `laib template sync --propose`
+// files one proposal per update, its kind template-update whatever class
+// the dial gave it. It waits in Laib's inbox like any proposal, but the Box
+// counts and lists it as an update only, never as an approval too; Haus
+// decides neither (haus#1).
+func isUpdate(p laib.Proposal) bool { return p.Kind == "template-update" }
+
+// updates are the template updates among the open proposals.
 func updates(ps []laib.Proposal) []laib.Proposal {
 	var out []laib.Proposal
 	for _, p := range ps {
-		if p.Kind == "template-update" {
+		if isUpdate(p) {
 			out = append(out, p)
 		}
 	}

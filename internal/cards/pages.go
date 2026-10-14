@@ -18,6 +18,12 @@ const (
 	NotePages     = "/notizen/"
 )
 
+// Domains are the Home Assistant domains Haus draws as a card: what a
+// widget shows, and what a thing's own page may show. A person, a tracker,
+// a zone, an automation never.
+var Domains = map[string]bool{"sensor": true, "binary_sensor": true, "cover": true, "light": true, "switch": true,
+	"climate": true, "media_player": true, "lock": true}
+
 // ThingPage is a Home Assistant entity's own page.
 func ThingPage(entityID string) string { return ThingPages + url.PathEscape(entityID) }
 

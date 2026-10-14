@@ -23,7 +23,7 @@ func Kontakt(cfg StartConfig) http.HandlerFunc {
 			toStart(w, r)
 			return
 		}
-		uid := itemRef(r, cards.ContactPages)
+		uid := strings.TrimPrefix(r.URL.Path, cards.ContactPages)
 		var all []caldav.Contact
 		var err error
 		if uid != "" {
@@ -31,7 +31,7 @@ func Kontakt(cfg StartConfig) http.HandlerFunc {
 		}
 		if err != nil {
 			log.Printf("haus: kontakt page: %q: %v", uid, err)
-			notThere(w, r, cfg, http.StatusServiceUnavailable, "Die Kontakte lassen sich gerade nicht lesen.", "Kontakt", "/start", "Start")
+			missing{http.StatusServiceUnavailable, "Die Kontakte lassen sich gerade nicht lesen.", "Kontakt", "/start", "Start"}.write(w, r, cfg)
 			return
 		}
 		for _, ct := range all {
@@ -68,6 +68,6 @@ func Kontakt(cfg StartConfig) http.HandlerFunc {
 			writePage(w, http.StatusOK, b)
 			return
 		}
-		notThere(w, r, cfg, http.StatusNotFound, "Diesen Kontakt gibt es nicht.", "Kontakt", "/start", "Start")
+		missing{http.StatusNotFound, "Diesen Kontakt gibt es nicht.", "Kontakt", "/start", "Start"}.write(w, r, cfg)
 	}
 }

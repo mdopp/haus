@@ -21,9 +21,10 @@ import (
 // stream (GET /napi/portal/events). While anyone listens, Haus holds one
 // state_changed subscription to HA and sends a device a card_state frame
 // for the entities it watches, and, when it shows the active devices
-// (active: true in its watch), an active_set frame when the set of things
-// that are on or open changes (haus#28). Nothing else: state changes only
-// (laib ADR 0022 §2). Messages to people go through their chat channel,
+// (active: true in its watch), an active_set frame with the set of things
+// that are on or open (haus#28): at once when its stream opens or its watch
+// turns active, then when the set changes. Nothing else: state changes
+// only (laib ADR 0022 §2). Messages to people go through their chat channel,
 // not the app (§3).
 
 const (
@@ -44,6 +45,7 @@ type listener struct {
 	seq    uint64
 	ch     chan []byte
 	kick   chan struct{} // closed when a newer stream of the device pushes this one out
+	active string        // the active set this stream got last
 }
 
 type live struct {
@@ -62,11 +64,11 @@ type live struct {
 	pending map[string]map[string]any
 
 	// the active set: the actuators that are on or open, as /napi/portal/active
-	// lists them. It goes out like a sensor: at most every l.every, the last
-	// set always.
+	// lists them. A change goes out like a sensor: at most every l.every, the
+	// last set always, to each stream that has another.
 	on        map[string]bool  // entity → on or open
 	onAt      map[string]int64 // entity → updated_at_ms of the state that said so: nothing older counts
-	onSent    string           // the set that went out last
+	onKnown   bool             // read whole since the last (re)subscribe
 	onReady   time.Time        // earliest next send
 	onPending bool             // a send waits for onReady
 }
@@ -86,7 +88,7 @@ func newLive(c *ha.Client, ping, sensorEvery time.Duration) *live {
 // reset forgets what was sent: after a (re)connect everything is new.
 func (l *live) reset() {
 	l.last, l.lastAt, l.ready, l.pending = map[string]string{}, map[string]int64{}, map[string]time.Time{}, map[string]map[string]any{}
-	l.on, l.onAt, l.onSent = map[string]bool{}, map[string]int64{}, ""
+	l.on, l.onAt, l.onKnown = map[string]bool{}, map[string]int64{}, false
 }
 
 func (l *live) routes(mux *http.ServeMux, auth func(http.HandlerFunc) http.HandlerFunc) {
@@ -121,8 +123,18 @@ func (l *live) watch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	now := time.Now()
+	dev := deviceOf(r)
 	l.mu.Lock()
-	l.watches[deviceOf(r)] = watchSet{ids: ids, active: body.Active, until: now.Add(watchTTL)}
+	was, ok := l.watches[dev]
+	l.watches[dev] = watchSet{ids: ids, active: body.Active, until: now.Add(watchTTL)}
+	if body.Active && !(ok && was.active && now.Before(was.until)) {
+		for me := range l.subs { // turned active: the set at once
+			if me.device == dev {
+				me.active = ""
+				l.activeTo(me)
+			}
+		}
+	}
 	for d, ws := range l.watches {
 		if now.After(ws.until) {
 			delete(l.watches, d)
@@ -189,6 +201,7 @@ func (l *live) join(me *listener) {
 		close(oldest.kick)
 	}
 	l.subs[me] = true
+	l.activeTo(me)
 	if l.stop == nil {
 		ctx, cancel := context.WithCancel(context.Background())
 		l.stop = cancel
@@ -236,7 +249,7 @@ func (l *live) run(ctx context.Context) {
 // resync sends the watched entities' current cards and the active set
 // once HA confirmed the subscription: what changed while Haus was not
 // listening (first connect, an HA restart) arrives, and the deduplication
-// drops the rest. The set goes out once, read whole.
+// drops the rest. Only from here on is the set known whole.
 func (l *live) resync(ctx context.Context) {
 	states, err := l.ha.States(ctx)
 	if err != nil {
@@ -245,14 +258,12 @@ func (l *live) resync(ctx context.Context) {
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	moved := false
 	for _, s := range states {
 		l.cardOf(s)
-		moved = l.activity(s) || moved
+		l.activity(s)
 	}
-	if moved || l.onSent == "" {
-		l.activeOut()
-	}
+	l.onKnown = true
+	l.activeOut()
 }
 
 // changed is one state_changed: its card, and the active set.
@@ -260,7 +271,7 @@ func (l *live) changed(s ha.State) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.cardOf(s)
-	if l.activity(s) {
+	if l.activity(s) && l.onKnown {
 		l.activeOut()
 	}
 }
@@ -338,9 +349,9 @@ func (l *live) activity(s ha.State) bool {
 	return true
 }
 
-// activeOut sends the active set to the devices that asked, unless it is
-// the one that went out last; within l.every of the last send it waits,
-// and then the latest set goes (l.mu held).
+// activeOut sends the active set to each stream that asked for it and has
+// another; within l.every of the last send it waits, and then the latest
+// set goes (l.mu held).
 func (l *live) activeOut() {
 	now := time.Now()
 	if now.Before(l.onReady) {
@@ -350,24 +361,38 @@ func (l *live) activeOut() {
 		}
 		return
 	}
+	sent := false
+	for me := range l.subs {
+		sent = l.activeTo(me) || sent
+	}
+	if sent {
+		l.onReady = now.Add(l.every)
+	}
+}
+
+// activeTo sends the set to one stream, if its device asked for it, the set
+// is known and the stream has another; a stream too slow to take it keeps
+// the set it had (l.mu held).
+func (l *live) activeTo(me *listener) bool {
+	ws, ok := l.watches[me.device]
+	if !ok || !ws.active || !time.Now().Before(ws.until) || !l.onKnown {
+		return false
+	}
 	ids := make([]string, 0, len(l.on))
 	for id := range l.on {
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)
 	data, _ := json.Marshal(map[string]any{"entity_ids": ids})
-	if string(data) == l.onSent {
-		return
+	if string(data) == me.active {
+		return false
 	}
-	l.onSent, l.onReady = string(data), now.Add(l.every)
-	frame := []byte("event: active_set\ndata: " + string(data) + "\n\n")
-	for me := range l.subs {
-		if ws, ok := l.watches[me.device]; ok && ws.active && now.Before(ws.until) {
-			select {
-			case me.ch <- frame:
-			default:
-			}
-		}
+	select {
+	case me.ch <- []byte("event: active_set\ndata: " + string(data) + "\n\n"):
+		me.active = string(data)
+		return true
+	default:
+		return false
 	}
 }
 

@@ -120,22 +120,22 @@ func writePage(w http.ResponseWriter, code int, b *strings.Builder) {
 	w.Write([]byte(b.String()))
 }
 
-// notThere is an item's page for something that is not there, or cannot be
+// missing is an item's page for something that is not there, or cannot be
 // read now (haus#28): one plain sentence and the way back, never Start
 // pretending all is well.
-func notThere(w http.ResponseWriter, r *http.Request, cfg StartConfig, code int, say, current, back, backText string) {
-	b := familyHead(r, cfg, current, current)
-	b.WriteString("<h1 class=sr>" + html.EscapeString(current) + "</h1><p>" + html.EscapeString(say) + "</p>")
-	if back != "" {
-		b.WriteString("<p><a href=" + back + ">" + html.EscapeString(backText) + "</a></p>")
-	}
-	writePage(w, code, b)
+type missing struct {
+	code     int
+	say      string // the one sentence
+	page     string // the page's name, and the nav entry it marks
+	back     string // where back leads
+	backText string
 }
 
-// itemRef is the item an item page names: the path after prefix, "" for
-// none.
-func itemRef(r *http.Request, prefix string) string {
-	return strings.TrimPrefix(r.URL.Path, prefix)
+func (m missing) write(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
+	b := familyHead(r, cfg, m.page, m.page)
+	b.WriteString("<h1 class=sr>" + html.EscapeString(m.page) + "</h1><p>" + html.EscapeString(m.say) + "</p>")
+	b.WriteString("<p><a href=" + m.back + ">" + html.EscapeString(m.backText) + "</a></p>")
+	writePage(w, m.code, b)
 }
 
 // more closes a cut list: how many were left out.
