@@ -37,8 +37,10 @@ type toolsAPI struct {
 	loc *time.Location
 	// bridge, when set, keeps the catalog and every action Haus does not
 	// know: Haus's catalog would hide the tools only the bridge has (photo,
-	// model, home, energy). Its catalog names the same row paths, so its
-	// widgets read Haus's rows wherever a backend is set.
+	// model, home, energy). Of its row paths only the reminders' is one
+	// Haus serves (/portal/tasks?done=1); its contacts and documents defs
+	// name paths of their own (/portal/persons, /portal/documents/search),
+	// which stay on the bridge.
 	bridge http.Handler
 }
 
@@ -127,27 +129,51 @@ func first(vs []string) string {
 	return ""
 }
 
-// GET /napi/portal/tasks → {ok, tasks:[{id, title, due?}]}: the open
-// reminders, the soonest first, those without a date last.
+// GET /napi/portal/tasks[?done=1] → {ok, tasks:[{id?, title, status, due?}]}:
+// the open reminders, the soonest first, those without a date last; with
+// done=1 (what the bridge's task def asks for) the ticked-off and cancelled
+// ones after them, the latest first. status is the bridge's word: open,
+// done, dismissed. id is the UID trimmed, as the app trims what it sends.
 func (t *toolsAPI) tasks(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), rowsTimeout)
 	defer cancel()
-	todos, err := t.hh.Calendar.OpenTodos(ctx)
+	var todos []caldav.Todo
+	var err error
+	if r.URL.Query().Get("done") == "1" {
+		todos, err = t.hh.Calendar.Todos(ctx)
+	} else {
+		todos, err = t.hh.Calendar.OpenTodos(ctx)
+	}
 	if err != nil {
 		rowsFailed(w, "tasks", err)
 		return
 	}
-	out := []map[string]any{}
+	var open, closed []caldav.Todo
 	for _, td := range todos {
+		if td.Open() {
+			open = append(open, td)
+		} else {
+			closed = append(closed, td)
+		}
+	}
+	sort.SliceStable(closed, func(i, j int) bool { return closed[i].Completed.After(closed[j].Completed) })
+	out := []map[string]any{}
+	for _, td := range append(open, closed...) {
 		if len(out) == maxRows {
 			break
 		}
-		row := map[string]any{"title": oneLine(td.Summary)}
+		row := map[string]any{"title": oneLine(td.Summary), "status": "open"}
 		if row["title"] == "" {
 			row["title"] = "–"
 		}
-		if td.UID != "" {
-			row["id"] = td.UID
+		if !td.Open() {
+			row["status"] = "done"
+			if strings.EqualFold(td.Status, "CANCELLED") {
+				row["status"] = "dismissed"
+			}
+		}
+		if id := strings.TrimSpace(td.UID); id != "" {
+			row["id"] = id
 		}
 		switch {
 		case td.Due.IsZero():
@@ -255,16 +281,24 @@ func refuseAction(w http.ResponseWriter, code int, reason string) {
 }
 
 // POST /napi/action-callback {action_id, params, confirmed?} → {ok}; refusals
-// carry the reason ApiClient.actionOutcome reads.
+// carry the reason ApiClient.actionOutcome reads. A body over 64 KB is 413
+// too_large before anything else, never cut and passed on.
 func (t *toolsAPI) action(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		ActionID any            `json:"action_id"`
 		Params   map[string]any `json:"params"`
 	}
-	raw, err := io.ReadAll(io.LimitReader(r.Body, 64<<10))
-	if err == nil {
-		err = json.Unmarshal(raw, &body)
+	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 64<<10))
+	if err != nil { // nothing of a cut body is handled or forwarded
+		var mbe *http.MaxBytesError
+		if errors.As(err, &mbe) {
+			refuseAction(w, http.StatusRequestEntityTooLarge, "too_large")
+		} else {
+			refuseAction(w, http.StatusBadRequest, "invalid_json")
+		}
+		return
 	}
+	err = json.Unmarshal(raw, &body)
 	id, _ := body.ActionID.(string)
 	if (err != nil || id != actionDone || t.hh.Calendar == nil) && t.bridge != nil {
 		r.Body, r.ContentLength = io.NopCloser(bytes.NewReader(raw)), int64(len(raw))
@@ -300,8 +334,10 @@ func (t *toolsAPI) action(w http.ResponseWriter, r *http.Request) {
 		answer(w, http.StatusOK, map[string]any{"ok": true})
 	case errors.Is(err, haushalt.ErrBadUID):
 		refuseAction(w, http.StatusBadRequest, "bad_params")
-	case errors.Is(err, caldav.ErrNoTodo):
-		refuseAction(w, http.StatusNotFound, "not_found")
+	case errors.Is(err, caldav.ErrNoTodo): // not 404: the app reads that as an unknown action
+		refuseAction(w, http.StatusGone, "not_found")
+	case errors.Is(err, caldav.ErrCancelled):
+		refuseAction(w, http.StatusConflict, "cancelled")
 	case errors.Is(err, caldav.ErrRecurring):
 		refuseAction(w, http.StatusConflict, "recurring")
 	case errors.Is(err, caldav.ErrChanged):

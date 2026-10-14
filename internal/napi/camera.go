@@ -1,6 +1,7 @@
 package napi
 
 import (
+	"context"
 	"errors"
 	"log"
 	"net/http"
@@ -29,7 +30,9 @@ func (h *homeAPI) snapshot(w http.ResponseWriter, r *http.Request) {
 		refuse(w, http.StatusBadRequest, "invalid entity_id")
 		return
 	}
-	img, ctype, err := h.ha.Camera(r.Context(), id, snapshotMax)
+	ctx, cancel := context.WithTimeout(r.Context(), rowsTimeout)
+	defer cancel()
+	img, ctype, err := h.ha.Camera(ctx, id, snapshotMax)
 	switch {
 	case errors.Is(err, ha.ErrNotFound):
 		refuse(w, http.StatusNotFound, "unknown_entity")

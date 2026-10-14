@@ -497,6 +497,21 @@ func (c *Client) Events(ctx context.Context, from, to time.Time) ([]Event, error
 // that holds them, the soonest first,
 // those without a due date last.
 func (c *Client) OpenTodos(ctx context.Context) ([]Todo, error) {
+	ts, err := c.todos(ctx, `<C:prop-filter name="COMPLETED"><C:is-not-defined/></C:prop-filter>`)
+	var out []Todo
+	for _, t := range ts {
+		if t.Open() {
+			out = append(out, t)
+		}
+	}
+	return out, err
+}
+
+// Todos lists every reminder, the ticked-off ones too (with Completed),
+// in the same order as OpenTodos.
+func (c *Client) Todos(ctx context.Context) ([]Todo, error) { return c.todos(ctx, "") }
+
+func (c *Client) todos(ctx context.Context, filter string) ([]Todo, error) {
 	cols, err := c.readable(ctx, c.calendars(), "VTODO")
 	if err != nil {
 		return nil, err
@@ -504,7 +519,7 @@ func (c *Client) OpenTodos(ctx context.Context) ([]Todo, error) {
 	body := `<?xml version="1.0" encoding="utf-8"?>
 <C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
   <D:prop><D:getetag/><C:calendar-data/></D:prop>
-  <C:filter><C:comp-filter name="VCALENDAR"><C:comp-filter name="VTODO"><C:prop-filter name="COMPLETED"><C:is-not-defined/></C:prop-filter></C:comp-filter></C:comp-filter></C:filter>
+  <C:filter><C:comp-filter name="VCALENDAR"><C:comp-filter name="VTODO">` + filter + `</C:comp-filter></C:comp-filter></C:filter>
 </C:calendar-query>`
 	roots, err := c.reportAll(ctx, cols, body)
 	if err != nil {
@@ -512,11 +527,7 @@ func (c *Client) OpenTodos(ctx context.Context) ([]Todo, error) {
 	}
 	var out []Todo
 	for _, r := range roots {
-		for _, t := range Todos(r, c.loc()) {
-			if t.Open() {
-				out = append(out, t)
-			}
-		}
+		out = append(out, Todos(r, c.loc())...)
 	}
 	sort.SliceStable(out, func(i, j int) bool {
 		a, b := out[i].Due, out[j].Due
@@ -533,16 +544,20 @@ var (
 	ErrNoTodo    = errors.New("Kalender: keine solche Erinnerung")
 	ErrRecurring = errors.New("Kalender: eine wiederkehrende Erinnerung hakt Haus nicht ab, das Telefon schon")
 	ErrChanged   = errors.New("Kalender: die Erinnerung hat sich inzwischen geändert")
+	ErrCancelled = errors.New("Kalender: die Erinnerung ist abgesagt, nicht offen")
 )
 
 // CompleteTodo ticks off the reminder whose UID is exactly uid, in whichever
 // calendar holds it. The object is written back as it was plus STATUS,
 // COMPLETED, PERCENT-COMPLETE (and a fresh DTSTAMP, LAST-MODIFIED), only if
 // its ETag is still the one read (If-Match), so a phone's edit in between is
-// never overwritten. A reminder ticked off already is no error. A series
+// never overwritten. A reminder ticked off already is no error; a
+// cancelled one is ErrCancelled. The UID matches trimmed, as the app
+// trims a row's id. A series
 // (RRULE, RDATE or an override) is refused: completing its master would end
 // every later occurrence.
 func (c *Client) CompleteTodo(ctx context.Context, uid string) error {
+	uid = strings.TrimSpace(uid)
 	cols, err := c.readable(ctx, c.calendars(), "VTODO")
 	if err != nil {
 		return err
@@ -570,7 +585,7 @@ func (c *Client) CompleteTodo(ctx context.Context, uid string) error {
 			}
 			var mine []*Component
 			root.Walk(func(t *Component) {
-				if t.Name == "VTODO" && t.Text("UID") == uid { // the server matches in part; the UID is whole
+				if t.Name == "VTODO" && strings.TrimSpace(t.Text("UID")) == uid { // the server matches in part; the UID is whole
 					mine = append(mine, t)
 				}
 			})
@@ -580,11 +595,14 @@ func (c *Client) CompleteTodo(ctx context.Context, uid string) error {
 			if len(mine) > 1 || recurring(mine[0]) {
 				return ErrRecurring
 			}
-			if !(Todo{Status: mine[0].Text("STATUS")}).Open() {
-				return nil
-			}
 			if _, done := mine[0].Get("COMPLETED"); done {
 				return nil
+			}
+			switch strings.ToUpper(mine[0].Text("STATUS")) {
+			case "COMPLETED":
+				return nil
+			case "CANCELLED":
+				return ErrCancelled
 			}
 			if o.etag == "" {
 				return errors.New("Kalender: Radicale nennt kein ETag; ohne schreibt Haus nicht zurück")
@@ -687,7 +705,7 @@ func ownUID(block []string, uid string) bool {
 		case p.Name == "END":
 			depth--
 		case depth == 0 && p.Name == "UID":
-			return UnescapeText(p.Value) == uid
+			return strings.TrimSpace(UnescapeText(p.Value)) == uid
 		}
 	}
 	return false

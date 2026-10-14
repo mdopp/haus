@@ -265,11 +265,12 @@ type Event struct {
 
 // Todo is one VTODO: a reminder.
 type Todo struct {
-	UID     string
-	Summary string
-	Due     time.Time // zero: no due date
-	AllDay  bool      // Due is a day, not a moment
-	Status  string
+	UID       string
+	Summary   string
+	Due       time.Time // zero: no due date
+	AllDay    bool      // Due is a day, not a moment
+	Status    string
+	Completed time.Time // when it was ticked off; zero: not, or unknown
 }
 
 // Open is a reminder nobody has ticked off.
@@ -360,8 +361,9 @@ func Todos(root *Component, loc *time.Location) []Todo {
 			return
 		}
 		t := Todo{UID: c.Text("UID"), Summary: c.Text("SUMMARY"), Status: c.Text("STATUS")}
-		if _, done := c.Get("COMPLETED"); done { // ticked off, whatever STATUS still says
+		if p, done := c.Get("COMPLETED"); done { // ticked off, whatever STATUS still says
 			t.Status = "COMPLETED"
+			t.Completed, _, _ = When(p, loc)
 		}
 		if p, ok := c.Get("DUE"); ok {
 			t.Due, t.AllDay, _ = When(p, loc)
