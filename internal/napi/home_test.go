@@ -3,10 +3,8 @@ package napi
 import (
 	"bufio"
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -17,8 +15,8 @@ import (
 )
 
 // haus#10: Haus serves the house paths itself, from Home Assistant, in the
-// shapes the app parses (solaris-android data/ApiClient.kt, RealtimeProtocol.kt)
-// and with the companion contract's two structural rules for /napi/ha/call.
+// shapes the app parses (the app's data/ApiClient.kt, RealtimeProtocol.kt)
+// and with the two structural rules for /napi/ha/call.
 
 func house(t *testing.T) (*hafake.HA, http.Handler) {
 	t.Helper()
@@ -489,33 +487,23 @@ func sawPing(lines <-chan string, d time.Duration) bool {
 	}
 }
 
-// Without HAUS_HA_URL nothing changes: the house paths still go to the bridge.
-func TestWithoutHATheHousePathsGoThroughTheBridge(t *testing.T) {
+// Without HAUS_HA_URL the house paths and the event stream are 404, passed
+// on to nobody (haus#26).
+func TestWithoutHATheHousePathsAre404(t *testing.T) {
 	var calls []string
 	lb := fakeLaib(t, &calls)
 	defer lb.Close()
-	var got []string
-	bridge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		b, _ := io.ReadAll(r.Body)
-		got = append(got, r.Method+" "+r.URL.RequestURI()+" "+string(b))
-		w.Write([]byte(`{"ok":true,"via":"bridge"}`))
-	}))
-	defer bridge.Close()
-	u, _ := url.Parse(bridge.URL)
-	h := Handler(Config{Laib: &laib.Client{URL: lb.URL, Token: "ops"}, Validate: StaticValidator([]string{"dev1"}), Bridge: u})
+	h := Handler(Config{Laib: &laib.Client{URL: lb.URL, Token: "ops"}, Validate: StaticValidator([]string{"dev1"})})
 	for _, p := range []struct{ method, path, body string }{
 		{"POST", "/napi/ha/call", `{"entity_id":"lock.haustuer","service":"lock.unlock"}`},
 		{"GET", "/napi/portal/state?entity_id=light.kueche", ""},
 		{"GET", "/napi/portal/energy", ""},
 		{"GET", "/napi/portal/active", ""},
 		{"POST", "/napi/portal/watch", `{"entity_ids":[]}`},
+		{"GET", "/napi/portal/events", ""},
 	} {
-		if code, body := raw(t, h, p.method, p.path, "dev1", p.body); code != 200 || !strings.Contains(body, "bridge") {
-			t.Errorf("%s %s → %d %s, want the bridge", p.method, p.path, code, body)
-		}
-	}
-	if len(got) != 5 || !strings.Contains(got[0], "lock.unlock") {
-		t.Fatalf("bridge saw: %v", got)
+		code, body := raw(t, h, p.method, p.path, "dev1", p.body)
+		notFound(t, p.method+" "+p.path, code, body)
 	}
 }
 
@@ -614,44 +602,6 @@ func TestWatchWhenHAIsDown(t *testing.T) {
 	fake.Down(true)
 	if code, body := raw(t, h, "POST", "/napi/portal/watch", "dev1", `{"entity_ids":["light.kueche"]}`); code != 503 || !strings.Contains(body, `"ok":false`) {
 		t.Fatalf("watch with HA down → %d %s, want 503", code, body)
-	}
-}
-
-// The app holds ONE stream (RealtimeService.kt): it carries card_state,
-// notices (ha) and approvals (servicebay). While the bridge is set, Haus
-// cannot produce the other two, so the stream and the watch-set stay on the
-// bridge; the rest of the house paths are Haus's.
-func TestWithABridgeTheStreamStaysOnTheBridge(t *testing.T) {
-	bridge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/napi/portal/events":
-			w.Header().Set("Content-Type", "text/event-stream")
-			w.Write([]byte("event: ha\ndata: {\"kind\":\"ha\",\"title\":\"Fenster offen\"}\n\n"))
-			w.(http.Flusher).Flush()
-			<-r.Context().Done()
-		default:
-			w.Write([]byte(`{"ok":true,"via":"bridge"}`))
-		}
-	}))
-	defer bridge.Close()
-	u, _ := url.Parse(bridge.URL)
-	fake, h := houseWith(t, func(c *Config) { c.Bridge = u })
-	srv := httptest.NewServer(h)
-	defer srv.Close()
-	resp, lines := stream(t, srv.URL, "dev1")
-	defer resp.Body.Close()
-	f := readFrames(t, lines, 1, 2*time.Second)
-	if len(f) != 1 || f[0].event != "ha" || !strings.Contains(f[0].data, "Fenster offen") {
-		t.Fatalf("the bridge's notice must reach the phone: %+v", f)
-	}
-	if code, body := raw(t, h, "POST", "/napi/portal/watch", "dev1", `{"entity_ids":["light.kueche"]}`); code != 200 || !strings.Contains(body, "bridge") {
-		t.Fatalf("watch → %d %s, want the bridge", code, body)
-	}
-	if fake.Subscribed() != 0 {
-		t.Fatal("Haus subscribed to HA although the stream is the bridge's")
-	}
-	if code, _ := raw(t, h, "POST", "/napi/ha/call", "dev1", `{"entity_id":"light.kueche","service":"light.toggle"}`); code != 200 || len(fake.Calls()) != 1 {
-		t.Fatalf("ha/call stays Haus's: %d, calls %d", code, len(fake.Calls()))
 	}
 }
 

@@ -1,11 +1,16 @@
 # Haus
 
 **Haus** is the family's surface for the box that [Laib](https://github.com/mdopp/laib)
-runs: pages for people, cards, and the companion API the Android widgets
-speak. Haus renders and decides nothing; Laib acts; the Bote is who you
-talk to (laib ADR 0014, 0016). Names follow laib ADR 0021: the family sees
-the house persona, and the old Solaris and ServiceBay names live only in
-`internal/legacy` (the installed app's contract) and the migration bridge.
+runs: pages for people, cards, and `/napi`, the API the widgets of the Haus
+app ([mdopp/haus-android](https://github.com/mdopp/haus-android)) speak.
+Haus renders and decides nothing; Laib acts; the Bote is who you talk to,
+and messages to people go through their chat channel, not the app (laib ADR
+0014, 0016, 0022). The family sees the house persona (laib ADR 0021). The
+app's names (scheme `cloud.dopp.haus`, token prefix
+`haus_device_`, the Box keys under `/napi/box`) live in `internal/app`; a
+`/napi` path wants a paired device (`Authorization: Bearer haus_device_…`,
+else 401, the unknown paths too); one Haus does not serve, or whose backend
+is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
 
 ## This cut (laib#28)
 
@@ -21,11 +26,7 @@ the house persona, and the old Solaris and ServiceBay names live only in
   page shows and changes nothing (haus#1). Cards are one renderer,
   `internal/cards` (title, rows, optional link), for the pages and later
   the widgets' JSON. `/` and every page path Haus does not serve redirect
-  to `/start`: the app's hash routes (`/#/p/start`, `/#/p/energy`,
-  `/#/p/device/<id>`, `/#/p/camera[/<id>]`,
-  `/#/p/servicebay/approvals/<id>`, `/#/p/<tool>/item/<id>`,
-  `/#/?tool=<id>`, `/#/?ask=<text>`) arrive as `/` and all land on Start
-  until their pages exist; so does `/download`.
+  to `/start`.
   Each card row and card links to the page behind it: *Jetzt* to Räume,
   an appointment or reminder to Kalender, a note to its own page.
 - `GET /raeume`, `/kalender`, `/notizen` — the family's other pages
@@ -68,25 +69,22 @@ the house persona, and the old Solaris and ServiceBay names live only in
   carry `X-Haus-Proxy: <HAUS_PROXY_SECRET>`, which only Caddy adds; the
   loopback port is shared with every host-network container, so without
   the secret nobody is anybody.
-- `/napi/servicebay/{home,services,approvals,upgrades}` — the four keys the
+- `/napi/box/{home,services,approvals,upgrades}` — the four Box keys the
   widgets read, from `laib status`, `laib inbox`. `POST …/services/{name}/operate`
   (restart). `POST …/approvals/{id}/approve|deny` answers 403: Haus decides
-  nothing (haus#1); phones decide, if ever, through the Signal relay.
-- The migration bridge (`internal/napi/bridge.go`, set by `SOLARIS_URL`):
-  every other `/napi/*` path is passed through to the retired Solaris, and
-  a device token is also valid when Solaris says so (`GET /napi/whoami`),
-  so a phone paired there keeps working. It ends when every phone is paired
-  through Haus and Haus serves every path the app uses (haus#5).
+  nothing (haus#1); approvals reach the admin through the relay (laib ADR 0012).
 
 - Pairing: in the app, enter `https://haus.<domain>`. The app opens
   `/pair-device` in a Custom Tab, Authelia logs the person in, they confirm,
-  and Haus redirects to `<scheme>://pair#token=…&id=…`, the token in the
-  fragment (haus#6). `GET /box/geraete` lists the devices, revocable, and can
-  mint a token whose setup URI (`<scheme>://setup?server=…&token=…`) goes into
-  a QR code the app scans. That URI is QR content, not a link: the app only
-  opens `…://pair`. Tokens live hashed in `HAUS_DATA/devices.json`;
-  `/napi/whoami` answers for them. The scheme, the token prefix and the
-  `/napi/servicebay` paths are the app's names (`internal/legacy`).
+  and Haus redirects to `cloud.dopp.haus://pair#token=haus_device_…&id=…`,
+  the token in the fragment (haus#6). `GET /box/geraete` lists the devices,
+  revocable, and can mint a token whose setup URI
+  (`cloud.dopp.haus://setup?server=…&token=…`) goes into a QR code the app
+  scans. That URI is QR content, not a link: the app only opens `…://pair`.
+  Tokens live hashed in `HAUS_DATA/devices.json`; `/napi/whoami` answers for
+  them. Only a bearer with `haus_device_` is a device: a phone paired before
+  the Haus app is not migrated, it pairs again (an old entry stays listed
+  under Geräte until revoked).
 
 - The house persona (laib ADR 0020): Laib mounts `render/persona` at
   `/persona` and sets `HAUS_PERSONA`. Pages carry its name in the title,
@@ -96,7 +94,7 @@ the house persona, and the old Solaris and ServiceBay names live only in
   Without a persona Haus is plain Haus; internally it is always `haus`.
 
 - The house paths, from Home Assistant (haus#10, set by `HAUS_HA_URL` +
-  `HAUS_HA_TOKEN`, a long-lived token; unset, they stay on the bridge):
+  `HAUS_HA_TOKEN`, a long-lived token; unset, they are 404):
   `POST /napi/ha/call` (`{entity_id, service, data?, confirmed?}`; only
   `light|switch|cover|climate|lock`, else 400; the service's domain is the
   entity's; `data` cannot name another target; any `lock`, and on a
@@ -106,20 +104,19 @@ the house persona, and the old Solaris and ServiceBay names live only in
   `confirmed:true`; HA refusing the call is 400, HA in trouble is 502
   `ha_unavailable`, HA's detail stays in Haus's log) and
   `GET /napi/portal/{state,energy,entity-history,active}`. Every one wants
-  a paired device. The shapes are `ApiClient.kt`'s; no JSON `null` goes out
+  a paired device. The shapes are the ones the app's `data/ApiClient.kt` parses; no JSON `null` goes out
   (Android reads it as `"null"`).
 - The energy picture reads the entities `HAUS_ENERGY_FLOW`
   (`pv=sensor.…,house=sensor.…,grid=sensor.…,battery=sensor.…`, any subset)
   and `HAUS_ENERGY_TOTALS` (`<Label>=sensor.…,…`, in that order) name;
   every other power sensor is a circuit. Unset, it falls back to matching
   one house's German friendly names (`Aktuell erzeugter PV-Strom`, …).
-- The realtime pair `POST /napi/portal/watch` + `GET /napi/portal/events`
-  (SSE: a `card_state` frame for each entity the device watches, the
+- The realtime pair `POST /napi/portal/watch` + `GET /napi/portal/events`,
+  from Home Assistant too. The stream is SSE and carries only `card_state`
+  (laib ADR 0022 §2): a frame for each entity the device watches, the
   current cards again after every (re)subscribe, a sensor at most every
   10s, `: ping` every 90s, at most three streams per device; watch answers
-  503 while HA does not) is Haus's **only when no bridge is set**: the app
-  holds one stream, and notices and approval frames still come from the
-  bridge's.
+  503 while HA does not. The app holds it only while the screen is on.
 - The camera widget, from Home Assistant too (haus#10):
   `GET /napi/portal/camera/{entity_id}/snapshot` passes HA's
   `camera_proxy` frame for a `camera.*` entity only (anything else 400,
@@ -131,16 +128,10 @@ the house persona, and the old Solaris and ServiceBay names live only in
   name, domain, state, device_class?}]}], automations:[]}`, rooms by
   name, the room-less last.
 - The tool widgets, from the Haushalt source's backends (haus#10, the
-  same variables as below; none set, they stay on the bridge):
-  `GET /napi/defs/tool` is Haus's **only when no bridge is set**: with
-  one, Haus's catalog would hide the tools only the bridge has (photo,
-  model, home, energy). Of the bridge's row paths only the reminders'
-  (`/portal/tasks?done=1`) is one Haus serves; its contacts and documents
-  defs name `/portal/persons` and `/portal/documents/search`, which stay
-  on the bridge. Haus's catalog lists a tool per backend that is set,
-  under the ids widgets placed through the bridge already carry: `task`
-  (*Erinnerungen*, `HAUS_RADICALE_*`), `contacts`, `doc`
-  (`HAUS_PAPERLESS_*`), `note` (`HAUS_NOTES_DIR`). Each def names its
+  same variables as below; none set, they are 404): `GET /napi/defs/tool`
+  lists a tool per backend that is set: `task` (*Erinnerungen*,
+  `HAUS_RADICALE_*`), `contacts`, `doc` (`HAUS_PAPERLESS_*`), `note`
+  (`HAUS_NOTES_DIR`). Each def names its
   row path (`/napi/portal/tasks|contacts|documents|notes`: the open
   reminders, soonest first, due in house time, each with `status` and
   its UID trimmed as `id`, and with `?done=1` the done (`done`) and
@@ -149,10 +140,9 @@ the house persona, and the old Solaris and ServiceBay names live only in
   documents; the newest notes; at most 40 rows, no JSON `null`, a
   backend in trouble 502). No def names a create or item page: Haus has
   none, and a guessed route lands on Start. A path whose backend is not
-  set stays on the bridge.
-  `POST /napi/action-callback` (at most 64 KB, else 413 `too_large`,
-  nothing forwarded) knows one action of Haus's; any other id goes to
-  the bridge while one is set, else 404 `unknown_action`.
+  set is 404.
+  `POST /napi/action-callback` (at most 64 KB, else 413 `too_large`)
+  knows one action; any other id is 404 `unknown_action`.
   `task.set_status` with `{entity_id: <the reminder's UID>, status:
   "done"}` ticks the reminder off in Radicale (`haushalt.ReminderDone`:
   found by its UID, trimmed, in every calendar, written back as it was
@@ -167,7 +157,7 @@ the house persona, and the old Solaris and ServiceBay names live only in
   changes nothing else from a row.
 - The camera capture: `POST /napi/upload` (multipart, `file` parts, an
   optional `filename`) stores into `HAUS_UPLOAD_DIR`, the share's folder
-  Paperless consumes; unset, the bridge's. JPEG and PDF as the contract
+  Paperless consumes; unset, 404. JPEG and PDF as the contract
   has them, and PNG, GIF and WebP beyond it (Paperless takes them), each
   only when its first bytes say so (else 415); 25 MB a file (413), 64 MB
   and 20 files a request. The name is the phone's, made plain (no
@@ -182,11 +172,7 @@ the house persona, and the old Solaris and ServiceBay names live only in
   several, with no `url` (Haus serves no file back). Limits: 507 when the
   share has less than 128 MB free or runs full, 429 while two uploads
   run, 408 when a body stalls past two minutes; a disk error is 500
-  `store_failed`, not the phone's fault. Notifications and the event
-  stream with a bridge set stay on the bridge (a later slice).
-- `GET /.well-known/assetlinks.json` — the app's signing fingerprints from
-  `HAUS_ANDROID_FINGERPRINTS` (comma-separated, public), so the app opens
-  Haus's pages without a URL bar. `[]` without them.
+  `store_failed`, not the phone's fault.
 
 - The Haushalt MCP source (laib ADR 0017, haus#11): `POST /mcp/haushalt`,
   laib's MCP shape (JSON-RPC over POST: `initialize`, `tools/list`,
@@ -238,8 +224,7 @@ the house persona, and the old Solaris and ServiceBay names live only in
 
 Not yet: Start's *Meine Favoriten* and *Häufig genutzt*; switching in
 Räume; Energie, Medien; Paperless and dictation in Notizen, timers in
-Kalender; the `Sprechen` field to the Bote. Those come with the Home Assistant
-and Solaris deconstruction (laib#21).
+Kalender; the `Sprechen` field to the Bote (laib#21).
 
 - The Box page's Werkstatt card (haus#15): the open tickets of the repos in
   `HAUS_WERKSTATT_REPOS` (owner/name, comma-separated), what pi works
@@ -251,9 +236,8 @@ and Solaris deconstruction (laib#21).
 ```
 LAIB_URL=http://host.containers.internal:5900 LAIB_TOKEN=<the haus hand's token, minted on laib add haus> \
 HAUS_PROXY_SECRET=<what Caddy sends as X-Haus-Proxy> LAIB_PUBLIC_URL=https://laib.<domain> \
-SOLARIS_URL=http://host.containers.internal:8787 HAUS_LISTEN=0.0.0.0:8650 \
+HAUS_LISTEN=0.0.0.0:8650 \
 HAUS_HA_URL=http://host.containers.internal:8123 HAUS_HA_TOKEN=<a long-lived HA token> \
-HAUS_ANDROID_FINGERPRINTS=<the app's SHA-256 signing fingerprints> \
 HAUS_ENERGY_FLOW=pv=sensor.…,house=sensor.…,grid=sensor.…,battery=sensor.… HAUS_ENERGY_TOTALS=PV-Erzeugung=sensor.…,… \
 HAUS_HAUSHALT_TOKEN=<the Bote's bearer> TZ=Europe/Berlin \
 HAUS_RADICALE_URL=http://host.containers.internal:5232 HAUS_RADICALE_USER=<service account> HAUS_RADICALE_PASSWORD=<its password> \
@@ -265,15 +249,16 @@ HAUS_UPLOAD_DIR=/consume ./haus
 `HAUS_DATA` (default `/data`) holds `devices.json`; `HAUS_PUBLIC_URL` is the
 origin the setup link carries (default `https://<Host>`). Haus's Laib token is the `haus` hand: status, inbox, journal, restart —
 nothing else (no exec, no write). There are no static device tokens. Image: `ghcr.io/mdopp/haus`. Laib template: `haus` (route `haus.<domain>`,
-`bypass: [/napi/]`; assetlinks needs `/.well-known/` there too; the
+`bypass: [/napi/]`; the
 upload needs the share's consume folder mounted writable at
 `HAUS_UPLOAD_DIR`, on a file system with hard links, and Caddy letting a
 request of 64 MB through).
 
 ## Tests
 
-`go test ./...` — a fake Laib MCP, a fake Solaris, a fake Home
-Assistant (`internal/ha/hafake`, REST and WebSocket), a fake Radicale
+`go test ./...` — a fake Laib MCP, a fake Home Assistant
+(`internal/ha/hafake`, REST and WebSocket), a fake Radicale
 (`internal/caldav/davfake`, calendars and address books), a fake Paperless
-(`internal/paperless/paperlessfake`) and a temp folder for the notes; the shapes are
-pinned to `SbApiClient.kt` and `ApiClient.kt` in solaris-android.
+(`internal/paperless/paperlessfake`) and a temp folder for the notes; the
+shapes are pinned to the app's `data/*.kt` parsers in mdopp/haus-android.
+No Go file names the old app or its names (`internal/app/names_test.go`).

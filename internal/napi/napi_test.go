@@ -1,16 +1,22 @@
 package napi
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
+	"github.com/mdopp/haus/internal/caldav"
+	"github.com/mdopp/haus/internal/ha"
+	"github.com/mdopp/haus/internal/haushalt"
 	"github.com/mdopp/haus/internal/laib"
+	"github.com/mdopp/haus/internal/notes"
+	"github.com/mdopp/haus/internal/paperless"
 	"github.com/mdopp/haus/internal/persona"
 )
 
@@ -65,15 +71,10 @@ func get(t *testing.T, h http.Handler, method, path, bearer, body string) (int, 
 	return rec.Code, out
 }
 
-// haus#17: the app (solaris-android#174) reads /napi/box first and falls
-// back to the legacy /napi/servicebay; both answer the same, with the same rules.
-func TestCompanionKeysFromLaib(t *testing.T) {
-	for _, prefix := range []string{"/napi/servicebay", "/napi/box"} {
-		t.Run(prefix, func(t *testing.T) { companionKeys(t, prefix) })
-	}
-}
-
-func companionKeys(t *testing.T, prefix string) {
+// The Box keys the app's widgets read, under their one name /napi/box
+// (haus#26, laib ADR 0022 §4).
+func TestBoxKeysFromLaib(t *testing.T) {
+	const prefix = "/napi/box"
 	var calls []string
 	srv := fakeLaib(t, &calls)
 	defer srv.Close()
@@ -125,49 +126,31 @@ func TestDenyIsNotHausEither(t *testing.T) {
 	srv := fakeLaib(t, &calls)
 	defer srv.Close()
 	h := Handler(Config{Laib: &laib.Client{URL: srv.URL, Token: "ops"}, Validate: StaticValidator([]string{"dev1"})})
-	if code, _ := get(t, h, "POST", "/napi/servicebay/approvals/7/deny", "dev1", ""); code != 403 {
+	if code, _ := get(t, h, "POST", "/napi/box/approvals/7/deny", "dev1", ""); code != 403 {
 		t.Fatalf("deny from a phone → %d, want 403", code)
 	}
 }
 
-func TestSolarisValidatorAndProxy(t *testing.T) {
+// haus#26, laib ADR 0022 §4: the old app's Box keys are gone, and a /napi
+// path Haus does not serve is 404, passed on to nobody — even with a paired
+// device's token. The 404 is JSON, as every refusal the app parses.
+func TestTheOldPathsAreGone(t *testing.T) {
 	var calls []string
 	lb := fakeLaib(t, &calls)
 	defer lb.Close()
-	whoami := 0
-	solaris := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/napi/whoami":
-			whoami++
-			if r.Header.Get("Authorization") == "Bearer sol_device_ok" {
-				w.Write([]byte(`{"uid":"mdopp"}`))
-			} else {
-				w.WriteHeader(401)
-			}
-		case "/napi/portal/energy":
-			w.Write([]byte(`{"pv":1234}`))
-		default:
-			w.WriteHeader(404)
-		}
-	}))
-	defer solaris.Close()
-	u, _ := url.Parse(solaris.URL)
-	h := Handler(Config{Laib: &laib.Client{URL: lb.URL, Token: "ops"}, Validate: SolarisValidator(u, nil), Bridge: u})
-	if code, _ := get(t, h, "GET", "/napi/servicebay/home", "sol_device_ok", ""); code != 200 {
-		t.Fatalf("solaris-paired device → %d", code)
+	h := Handler(Config{Laib: &laib.Client{URL: lb.URL, Token: "ops"}, Validate: StaticValidator([]string{"dev1"})})
+	old := "/napi/" + "service" + "bay"
+	for _, p := range []struct{ method, path string }{
+		{"GET", old + "/home"}, {"GET", old + "/services"}, {"GET", old + "/approvals"}, {"GET", old + "/upgrades"},
+		{"POST", old + "/services/media/operate"}, {"POST", old + "/approvals/7/deny"},
+		{"GET", "/napi/portal/nothing-here"}, {"GET", "/napi/defs/model"}, {"POST", "/napi/notifications/ack"},
+	} {
+		code, body := raw(t, h, p.method, p.path, "dev1", `{"action":"restart"}`)
+		notFound(t, p.method+" "+p.path, code, body)
 	}
-	get(t, h, "GET", "/napi/servicebay/home", "sol_device_ok", "")
-	if whoami != 1 {
-		t.Fatalf("whoami asked %d times, want 1 (cached)", whoami)
+	if len(calls) != 0 {
+		t.Fatalf("Laib was asked: %v", calls)
 	}
-	if code, _ := get(t, h, "GET", "/napi/servicebay/home", "sol_device_no", ""); code != 401 {
-		t.Fatalf("unknown device → %d", code)
-	}
-	code, energy := get(t, h, "GET", "/napi/portal/energy", "sol_device_ok", "")
-	if code != 200 || energy["pv"] != 1234.0 {
-		t.Fatalf("proxy: %d %v", code, energy)
-	}
-	_ = context.Background()
 }
 
 func TestWhoamiFromHausDevices(t *testing.T) {
@@ -175,22 +158,22 @@ func TestWhoamiFromHausDevices(t *testing.T) {
 	lb := fakeLaib(t, &calls)
 	defer lb.Close()
 	h := Handler(Config{Laib: &laib.Client{URL: lb.URL, Token: "ops"},
-		Validate: Chain(StaticValidator([]string{"sol_device_haus"})),
+		Validate: StaticValidator([]string{"haus_device_a"}),
 		Whoami: func(b string) (string, bool) {
-			if b == "sol_device_haus" {
+			if b == "haus_device_a" {
 				return "mdopp", true
 			}
 			return "", false
 		}})
-	code, who := get(t, h, "GET", "/napi/whoami", "sol_device_haus", "")
+	code, who := get(t, h, "GET", "/napi/whoami", "haus_device_a", "")
 	if code != 200 || who["uid"] != "mdopp" {
 		t.Fatalf("whoami: %d %v", code, who)
 	}
-	if code, _ := get(t, h, "GET", "/napi/whoami", "sol_device_other", ""); code != 401 {
-		t.Fatalf("unknown device without Solaris → %d, want 401", code)
+	if code, _ := get(t, h, "GET", "/napi/whoami", "haus_device_other", ""); code != 401 {
+		t.Fatalf("unknown device → %d, want 401", code)
 	}
-	if code, _ := get(t, h, "GET", "/napi/portal/energy", "sol_device_haus", ""); code != 404 {
-		t.Fatalf("portal without Solaris → %d, want 404", code)
+	if code, _ := get(t, h, "GET", "/napi/portal/energy", "haus_device_a", ""); code != 404 {
+		t.Fatalf("portal without HA → %d, want 404", code)
 	}
 }
 
@@ -208,5 +191,121 @@ func TestTheAppReadsTheHousePersona(t *testing.T) {
 	}
 	if code, _ := get(t, h, "GET", "/napi/persona", "", ""); code != 401 {
 		t.Fatalf("without a token: %d", code)
+	}
+}
+
+// notFound: an unknown or unconfigured /napi path answers the one JSON 404
+// (haus#26): the app parses JSON errors.
+func notFound(t *testing.T, what string, code int, body string) {
+	t.Helper()
+	if code != 404 || strings.TrimSpace(body) != `{"ok":false,"reason":"not_found"}` {
+		t.Errorf("%s → %d %q, want 404 {\"ok\":false,\"reason\":\"not_found\"}", what, code, body)
+	}
+}
+
+// Auth comes before the 404: without a paired device every /napi path is
+// 401, so a stranger learns nothing about which backends are set. With
+// one, a path Haus does not serve is the JSON 404.
+func TestUnknownNapiPathWantsADeviceFirst(t *testing.T) {
+	var calls []string
+	lb := fakeLaib(t, &calls)
+	defer lb.Close()
+	h := Handler(Config{Laib: &laib.Client{URL: lb.URL, Token: "ops"}, Validate: StaticValidator([]string{"dev1"})})
+	for _, p := range []string{"/napi/gibtsnicht", "/napi/portal/energy", "/napi/defs/tool", "/napi/upload"} {
+		for _, bearer := range []string{"", "wrong"} {
+			if code, body := raw(t, h, "GET", p, bearer, ""); code != 401 {
+				t.Errorf("GET %s with %q → %d %s, want 401", p, bearer, code, body)
+			}
+		}
+		code, body := raw(t, h, "GET", p, "dev1", "")
+		notFound(t, "GET "+p, code, body)
+	}
+	code, body := raw(t, h, "GET", "/napi/persona/icon.svg", "dev1", "")
+	notFound(t, "the persona icon without an icon", code, body)
+}
+
+// A device token counts only after the literal "Bearer ": a bare token, or
+// another scheme, is no device.
+func TestTheTokenWantsTheBearerScheme(t *testing.T) {
+	var calls []string
+	lb := fakeLaib(t, &calls)
+	defer lb.Close()
+	h := Handler(Config{Laib: &laib.Client{URL: lb.URL, Token: "ops"}, Validate: StaticValidator([]string{"dev1"}),
+		Whoami: func(b string) (string, bool) { return "anna", b == "dev1" }})
+	for _, auth := range []string{"dev1", "Basic dev1", "Bearerdev1", "bearer dev1"} {
+		for _, p := range []string{"/napi/box/home", "/napi/whoami", "/napi/gibtsnicht"} {
+			req := httptest.NewRequest("GET", p, nil)
+			req.Header.Set("Authorization", auth)
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, req)
+			if rec.Code != 401 {
+				t.Errorf("GET %s with Authorization %q → %d, want 401", p, auth, rec.Code)
+			}
+		}
+	}
+	if code, _ := raw(t, h, "GET", "/napi/whoami", "dev1", ""); code != 200 {
+		t.Fatalf("whoami with Bearer dev1 → %d", code)
+	}
+}
+
+// Every route Haus registers under /napi wants a paired device: built with
+// every backend set, each one answers 401 without a token and with a wrong
+// one. The routes are read from the source, so a new route without a row
+// here fails too.
+func TestEveryNapiRouteWantsADevice(t *testing.T) {
+	var calls []string
+	lb := fakeLaib(t, &calls)
+	defer lb.Close()
+	nd, err := notes.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	dead := "http://127.0.0.1:1"
+	dav := &caldav.Client{URL: dead, User: "u", Password: "p"}
+	h := Handler(Config{Laib: &laib.Client{URL: lb.URL, Token: "ops"}, Validate: StaticValidator([]string{"dev1"}),
+		HA:        &ha.Client{URL: dead, Token: "ha"},
+		Haushalt:  haushalt.Config{Calendar: dav, Contacts: dav, Documents: &paperless.Client{URL: dead, Token: "pl"}, Notes: nd},
+		UploadDir: t.TempDir(),
+		House:     persona.Persona{Display: "Haus", Icon: []byte("<svg/>")}})
+	routes := map[string]bool{
+		"GET /napi/persona": true, "GET /napi/persona/icon.svg": true, "GET /napi/whoami": true,
+		"GET /napi/box/home": true, "GET /napi/box/services": true, "GET /napi/box/approvals": true, "GET /napi/box/upgrades": true,
+		"POST /napi/box/services/{name}/operate": true, "POST /napi/box/approvals/{id}/approve": true, "POST /napi/box/approvals/{id}/deny": true,
+		"POST /napi/ha/call": true, "GET /napi/portal/state": true, "GET /napi/portal/energy": true, "GET /napi/portal/entity-history": true,
+		"GET /napi/portal/active": true, "GET /napi/portal/camera/{entity_id}/snapshot": true, "GET /napi/portal/start/addable": true,
+		"POST /napi/portal/watch": true, "GET /napi/portal/events": true,
+		"GET /napi/defs/tool": true, "POST /napi/action-callback": true, "GET /napi/portal/tasks": true, "GET /napi/portal/contacts": true,
+		"GET /napi/portal/documents": true, "GET /napi/portal/notes": true, "POST /napi/upload": true,
+	}
+	// what the source registers: "METHOD /napi/…" and "METHOD "+prefix+"/…" (prefix is /napi/box)
+	re := regexp.MustCompile(`HandleFunc\("([A-Z]+) (?:(/napi/[^"]*)"|"\+prefix\+"([^"]*)")`)
+	files, _ := filepath.Glob("*.go")
+	for _, f := range files {
+		if strings.HasSuffix(f, "_test.go") {
+			continue
+		}
+		b, _ := os.ReadFile(f)
+		for _, m := range re.FindAllStringSubmatch(string(b), -1) {
+			p := m[2]
+			if p == "" {
+				p = "/napi/box" + m[3]
+			}
+			if !routes[m[1]+" "+p] {
+				t.Errorf("%s registers %s %s, which this table does not cover", f, m[1], p)
+			}
+		}
+	}
+	fill := strings.NewReplacer("{name}", "media", "{id}", "7", "{entity_id}", "camera.einfahrt")
+	for route := range routes {
+		method, path, _ := strings.Cut(route, " ")
+		path = fill.Replace(path)
+		for _, bearer := range []string{"", "wrong"} {
+			if code, body := raw(t, h, method, path, bearer, "{}"); code != 401 {
+				t.Errorf("%s %s with %q → %d %s, want 401", method, path, bearer, code, body)
+			}
+		}
+	}
+	if len(calls) != 0 {
+		t.Fatalf("Laib was asked without a device: %v", calls)
 	}
 }

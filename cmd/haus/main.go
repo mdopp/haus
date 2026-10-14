@@ -1,7 +1,7 @@
 // Command haus is the family's surface for the Laib box (laib ADR 0014):
-// pages for people, the companion API for the Android widgets. The box keys
-// come from Laib; every other /napi path, and phones paired before Haus, go
-// through the migration bridge (internal/napi/bridge.go) while it is set.
+// pages for people, the API the Haus app's widgets speak (laib ADR 0022).
+// The Box keys come from Laib, the house from Home Assistant, the tools from
+// the Haushalt source.
 package main
 
 import (
@@ -31,6 +31,47 @@ func env(k, def string) string {
 	return def
 }
 
+// site is what the routes are built from; main reads it from the environment.
+type site struct {
+	napi        napi.Config
+	hh          haushalt.Config
+	store       *devices.Store
+	ops         *laib.Client
+	proxySecret string
+	laibURL     string
+	publicURL   string
+	tickets     *werkstatt.Tickets // haus#15: the Werkstatt card; nil, no card
+}
+
+// routes is Haus's whole surface: /napi for the app, /mcp/haushalt for the
+// Bote, and the pages behind the proxy secret.
+func routes(s site) http.Handler {
+	mux := http.NewServeMux()
+	mux.Handle("/napi/", napi.Handler(s.napi))
+	// the Bote's bearer, not the proxy secret: the Bote calls the host port from its pod
+	// (laib ADR 0012 §4; the template publishes 8650 lan:false, the firewall keeps
+	// the LAN out). Not through Caddy: the route has no /mcp/ bypass.
+	mux.Handle("/mcp/haushalt", haushalt.Handler(s.hh))
+	pagesMux := http.NewServeMux()
+	// the family's pages (haus#12): each card only from a backend that is set; a
+	// page whose backend is not set lands on Start
+	family := pages.StartConfig{Laib: s.ops, LaibURL: s.laibURL, HA: s.napi.HA, Calendar: s.hh.Calendar, Notes: s.hh.Notes, Loc: s.hh.Loc}
+	pagesMux.HandleFunc("/start", pages.Start(family))
+	pagesMux.HandleFunc("/raeume", pages.Raeume(family))
+	pagesMux.HandleFunc("/kalender", pages.Kalender(family))
+	pagesMux.HandleFunc("/notizen", pages.Notizen(family))
+	pagesMux.HandleFunc("/notizen/", pages.Notizen(family)) // a note's own page
+	pagesMux.HandleFunc("/box", pages.BoxWith(s.ops, s.laibURL, s.tickets))
+	pagesMux.HandleFunc("/box/geraete", pages.Geraete(s.store, s.publicURL))
+	pagesMux.HandleFunc("/pair-device", pages.PairDevice(s.store)) // the app's own pairing path (haus#6)
+	pagesMux.HandleFunc("/box/", pages.BoxWith(s.ops, s.laibURL, s.tickets))
+	pagesMux.HandleFunc("/persona/icon.svg", pages.Icon())
+	pagesMux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
+	pagesMux.HandleFunc("/", pages.ToStart()) // "/" and every path not served land on Start
+	mux.Handle("/", pages.RequireProxy(s.proxySecret, pagesMux))
+	return mux
+}
+
 func main() {
 	ops := &laib.Client{URL: env("LAIB_URL", "http://host.containers.internal:5900"), Token: os.Getenv("LAIB_TOKEN")}
 	if ops.Token == "" {
@@ -46,31 +87,26 @@ func main() {
 	}
 	pages.House = persona.Load(env("HAUS_PERSONA_DIR", "/persona"), os.Getenv("HAUS_PERSONA")) // laib ADR 0020; plain Haus without it
 	cfg := napi.Config{Laib: ops, House: pages.House}
-	own := func(ctx context.Context, b string) bool { _, ok := store.Lookup(b); return ok }
 	cfg.Whoami = func(b string) (string, bool) {
 		d, ok := store.Lookup(b)
 		return d.UID, ok
 	}
-	bridge, paired, err := napi.BridgeFromEnv()
-	if err != nil {
-		log.Fatalf("haus: %v", err)
-	}
-	cfg.Bridge = bridge
-	if cfg.HA, err = ha.FromEnv(); err != nil { // haus#10: the house paths from HA; unset, they stay on the bridge
+	// only phones paired through Haus; nothing old is carried (laib ADR 0022 §4)
+	cfg.Validate = func(_ context.Context, b string) bool { _, ok := store.Lookup(b); return ok }
+	if cfg.HA, err = ha.FromEnv(); err != nil { // the house paths and the event stream from HA; unset, 404
 		log.Fatalf("haus: %v", err)
 	}
 	if cfg.Energy, err = napi.EnergyFromEnv(); err != nil {
 		log.Fatalf("haus: %v", err)
 	}
-	cfg.Validate = napi.Chain(own, paired) // phones paired before Haus keep working through the bridge
 	// laib ADR 0017: the Haushalt MCP source; a tool only when its backend is set
 	hh, err := haushalt.FromEnv()
 	if err != nil {
 		log.Fatalf("haus: %v", err)
 	}
 	hh.Version = Version
-	cfg.Haushalt = hh // haus#10: the tool widgets from the same backends; none set, they stay on the bridge
-	// haus#10: the camera capture into the share's Paperless consume folder; unset, the bridge's
+	cfg.Haushalt = hh // haus#10: the tool widgets from the same backends; none set, 404
+	// haus#10: the camera capture into the share's Paperless consume folder; unset, 404
 	if cfg.UploadDir = os.Getenv("HAUS_UPLOAD_DIR"); cfg.UploadDir != "" {
 		if fi, err := os.Stat(cfg.UploadDir); err != nil || !fi.IsDir() {
 			log.Printf("haus: HAUS_UPLOAD_DIR %s is not a folder (yet): uploads answer 503 until it is", cfg.UploadDir)
@@ -78,35 +114,10 @@ func main() {
 			log.Printf("haus: HAUS_UPLOAD_DIR: sweeping staged parts: %v", err)
 		}
 	}
-	mux := http.NewServeMux()
-	mux.Handle("/napi/", napi.Handler(cfg))
-	// the Bote's bearer, not the proxy secret: Hermes calls the host port from its pod
-	// (laib ADR 0012 §4; the template publishes 8650 lan:false, the firewall keeps
-	// the LAN out). Not through Caddy: the route has no /mcp/ bypass.
-	mux.Handle("/mcp/haushalt", haushalt.Handler(hh))
-	// public, like /napi: the app's verifier fetches it without a login (the route bypasses Authelia for /.well-known/)
-	mux.Handle("GET /.well-known/assetlinks.json", napi.AssetLinks(os.Getenv("HAUS_ANDROID_FINGERPRINTS")))
 	laibURL := env("LAIB_PUBLIC_URL", "https://laib."+env("LAIB_DOMAIN", "example"))
-	pagesMux := http.NewServeMux()
-	// the family's pages (haus#12): each card only from a backend that is set; a
-	// page whose backend is not set lands on Start
-	family := pages.StartConfig{Laib: ops, LaibURL: laibURL, HA: cfg.HA, Calendar: hh.Calendar, Notes: hh.Notes, Loc: hh.Loc}
-	pagesMux.HandleFunc("/start", pages.Start(family))
-	pagesMux.HandleFunc("/raeume", pages.Raeume(family))
-	pagesMux.HandleFunc("/kalender", pages.Kalender(family))
-	pagesMux.HandleFunc("/notizen", pages.Notizen(family))
-	pagesMux.HandleFunc("/notizen/", pages.Notizen(family)) // a note's own page
-
-	tickets := werkstatt.FromEnv() // haus#15: the Werkstatt card; HAUS_WERKSTATT_REPOS unset, no card
-	pagesMux.HandleFunc("/box", pages.BoxWith(ops, laibURL, tickets))
-	pagesMux.HandleFunc("/box/geraete", pages.Geraete(store, os.Getenv("HAUS_PUBLIC_URL")))
-	pagesMux.HandleFunc("/pair-device", pages.PairDevice(store)) // the app's own pairing path (haus#6)
-	pagesMux.HandleFunc("/box/", pages.BoxWith(ops, laibURL, tickets))
-	pagesMux.HandleFunc("/persona/icon.svg", pages.Icon())
-	pagesMux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
-	pagesMux.HandleFunc("/", pages.ToStart()) // "/", the app's /#/p/… routes and every path not served land on Start
-	mux.Handle("/", pages.RequireProxy(proxySecret, pagesMux))
+	mux := routes(site{napi: cfg, hh: hh, store: store, ops: ops, proxySecret: proxySecret, laibURL: laibURL,
+		publicURL: os.Getenv("HAUS_PUBLIC_URL"), tickets: werkstatt.FromEnv()})
 	addr := env("HAUS_LISTEN", "127.0.0.1:8650")
-	log.Printf("haus %s: listening on %s as %s, laib %s, migration bridge %v, home assistant %v, haushalt %d tools, uploads %q, pages only behind the proxy secret", Version, addr, pages.House.Display, ops.URL, bridge, cfg.HA != nil, len(haushalt.Tools(hh)), cfg.UploadDir)
+	log.Printf("haus %s: listening on %s as %s, laib %s, home assistant %v, haushalt %d tools, uploads %q, pages only behind the proxy secret", Version, addr, pages.House.Display, ops.URL, cfg.HA != nil, len(haushalt.Tools(hh)), cfg.UploadDir)
 	log.Fatal((&http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}).ListenAndServe())
 }

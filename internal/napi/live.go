@@ -8,7 +8,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
@@ -19,11 +18,9 @@ import (
 // entities its widgets show (POST /napi/portal/watch) and holds one SSE
 // stream (GET /napi/portal/events). While anyone listens, Haus holds one
 // state_changed subscription to HA and sends a device a card_state frame
-// for the entities it watches, and nothing else.
-//
-// The app holds one stream for everything: card_state, notices (ha) and
-// approvals. Haus produces only the first, so while the bridge
-// is set the stream and the watch-set stay on the bridge (napi.go).
+// for the entities it watches, and nothing else: the stream carries only
+// card_state (laib ADR 0022 §2). Messages to people go through their chat
+// channel, not the app (§3).
 
 const (
 	watchTTL           = time.Hour        // the app re-posts while widgets exist
@@ -84,7 +81,8 @@ func (l *live) routes(mux *http.ServeMux, auth func(http.HandlerFunc) http.Handl
 
 // a device is its token; Haus keeps only a digest of it in memory
 func deviceOf(r *http.Request) string {
-	sum := sha256.Sum256([]byte(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")))
+	b, _ := bearerOf(r)
+	sum := sha256.Sum256([]byte(b))
 	return hex.EncodeToString(sum[:])
 }
 

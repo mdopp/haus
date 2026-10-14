@@ -3,10 +3,7 @@ package napi
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
-	"net/http/httptest"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -22,10 +19,10 @@ import (
 	"github.com/mdopp/haus/internal/paperless/paperlessfake"
 )
 
-// haus#10, slice 2: the tool widgets (solaris-android ToolDefs.kt, ToolCells.kt,
+// haus#10, slice 2: the tool widgets (the app's ToolDefs.kt, ToolCells.kt,
 // ToolWidgetProvider.kt). Haus lists a tool only when its Haushalt backend is
 // set; each def names the row path the app then calls; the one row action is
-// ticking a reminder off. With no backend set, all of it stays on the bridge.
+// ticking a reminder off. With no backend set, the tool paths are 404.
 
 type tools struct {
 	h     http.Handler
@@ -59,7 +56,7 @@ const (
 		"DUE:20261016T050000Z\r\nRRULE:FREQ=WEEKLY\r\nEND:VTODO\r\nEND:VCALENDAR\r\n"
 )
 
-func toolsWith(t *testing.T, w which, bridge *url.URL) tools {
+func toolsWith(t *testing.T, w which) tools {
 	t.Helper()
 	var calls []string
 	lb := fakeLaib(t, &calls)
@@ -110,12 +107,12 @@ func toolsWith(t *testing.T, w which, bridge *url.URL) tools {
 		}
 		hh.Notes = d
 	}
-	s.h = Handler(Config{Laib: &laib.Client{URL: lb.URL, Token: "ops"}, Validate: StaticValidator([]string{"dev1"}), Bridge: bridge, Haushalt: hh})
+	s.h = Handler(Config{Laib: &laib.Client{URL: lb.URL, Token: "ops"}, Validate: StaticValidator([]string{"dev1"}), Haushalt: hh})
 	return s
 }
 
 func allTools(t *testing.T) tools {
-	return toolsWith(t, which{cal: true, contacts: true, docs: true, notes: true}, nil)
+	return toolsWith(t, which{cal: true, contacts: true, docs: true, notes: true})
 }
 
 // noNull walks a decoded JSON value: Android's optString reads null as "null".
@@ -232,76 +229,34 @@ func TestToolCatalog(t *testing.T) {
 }
 
 func TestToolCatalogListsOnlyWhatIsSet(t *testing.T) {
-	s := toolsWith(t, which{notes: true}, nil)
+	s := toolsWith(t, which{notes: true})
 	code, body := raw(t, s.h, "GET", "/napi/defs/tool", "dev1", "")
 	out := decode(t, body)
 	defs, _ := out["defs"].([]any)
 	if code != 200 || len(defs) != 1 || defs[0].(map[string]any)["tool-id"] != "note" {
 		t.Fatalf("notes only: %d %s", code, body)
 	}
-	// without a bridge the actions are all Haus's: one it does not know is 404
+	// one Haus does not know is 404, passed on to nobody
 	if code, body := raw(t, s.h, "POST", "/napi/action-callback", "dev1", `{"action_id":"task.set_status","params":{"entity_id":"x","status":"done"}}`); code != 404 || !strings.Contains(body, "unknown_action") {
 		t.Fatalf("set_status without a calendar: %d %s", code, body)
 	}
 }
 
-// While the bridge is set, its catalog stays (Haus's would hide the tools
-// only the bridge has: photo, model, home, energy), and so do the actions
-// Haus does not know. The rows of a backend that is set are Haus's: the
-// bridge's catalog names the same paths, so its widgets show Haus's data,
-// and ticking one of those reminders off is Haus's too.
-func TestWithABridgeTheCatalogStaysOnTheBridge(t *testing.T) {
-	var got []string
-	bridge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		b, _ := io.ReadAll(r.Body)
-		got = append(got, r.Method+" "+r.URL.Path+" "+string(b))
-		w.Write([]byte(`{"ok":true,"via":"bridge","defs":[{"tool-id":"photo"}]}`))
-	}))
-	defer bridge.Close()
-	u, _ := url.Parse(bridge.URL)
-
-	s := toolsWith(t, which{cal: true, notes: true}, u)
-	if code, body := raw(t, s.h, "GET", "/napi/defs/tool", "dev1", ""); code != 200 || !strings.Contains(body, "photo") {
-		t.Fatalf("defs with a bridge: %d %s", code, body)
-	}
-	// the rows of a backend that is set are Haus's
-	if rs := rows(t, s.h, "/napi/portal/tasks?done=1", "tasks"); len(rs) == 0 || rs[0]["id"] != "milch-1" {
-		t.Fatalf("tasks with a bridge: %v", rs)
-	}
-	// one whose backend is not set stays on the bridge
-	if code, body := raw(t, s.h, "GET", "/napi/portal/contacts", "dev1", ""); code != 200 || !strings.Contains(body, "bridge") {
-		t.Fatalf("contacts without an address book: %d %s", code, body)
-	}
-	// an action Haus knows is Haus's
-	if code, out := callback(t, s.h, `{"action_id":"task.set_status","params":{"entity_id":"milch-1","status":"done"}}`); code != 200 || out["ok"] != true || out["via"] != nil {
-		t.Fatalf("set_status with a bridge: %d %v", code, out)
-	}
-	if !strings.Contains(s.dav.Objects()["/bote/familie/milch-1.ics"], "STATUS:COMPLETED") {
-		t.Fatal("Haus did not tick it off")
-	}
-	// one it does not know goes to the bridge, body and all
-	unknown := `{"action_id":"model.release","params":{"x":"y"}}`
-	if code, out := callback(t, s.h, unknown); code != 200 || out["via"] != "bridge" {
-		t.Fatalf("unknown action with a bridge: %d %v", code, out)
-	}
-	if len(got) == 0 || got[len(got)-1] != "POST /napi/action-callback "+unknown {
-		t.Fatalf("bridge saw: %v", got)
-	}
-	// Haus's own refusals of an action it knows stay Haus's
-	if code, out := callback(t, s.h, `{"action_id":"task.set_status","params":{"entity_id":"milch-1","status":"open"}}`); code != 400 || out["reason"] != "bad_params" {
-		t.Fatalf("bad params with a bridge: %d %v", code, out)
-	}
-
-	none := toolsWith(t, which{}, u)
+// haus#26: without a backend the tool paths are 404, and a row path whose
+// backend is not set is 404 next to the ones that are; nothing is passed on.
+func TestWithoutABackendTheToolPathsAre404(t *testing.T) {
+	none := toolsWith(t, which{})
 	for _, p := range []struct{ method, path, body string }{
 		{"GET", "/napi/defs/tool", ""},
 		{"GET", "/napi/portal/tasks", ""},
 		{"POST", "/napi/action-callback", `{"action_id":"task.set_status"}`},
 	} {
-		if code, body := raw(t, none.h, p.method, p.path, "dev1", p.body); code != 200 || !strings.Contains(body, "bridge") {
-			t.Errorf("no backend: %s %s → %d %s, want the bridge", p.method, p.path, code, body)
-		}
+		code, body := raw(t, none.h, p.method, p.path, "dev1", p.body)
+		notFound(t, "no backend: "+p.method+" "+p.path, code, body)
 	}
+	s := toolsWith(t, which{cal: true})
+	code, body := raw(t, s.h, "GET", "/napi/portal/contacts", "dev1", "")
+	notFound(t, "contacts without an address book", code, body)
 }
 
 func rows(t *testing.T, h http.Handler, path, key string) []map[string]any {
@@ -447,7 +402,7 @@ func TestReminderActionRules(t *testing.T) {
 		{`{"params":{}}`, 400, "no_action_id", "no action id"},
 		{`{"action_id":"task.add","params":{"title":"x"}}`, 404, "unknown_action", "Haus adds nothing from a row"},
 		{`{"action_id":"doc.classify","params":{}}`, 404, "unknown_action", "nor classifies"},
-		{`{"action_id":"model.release","params":{}}`, 404, "unknown_action", "nor anything of Solaris's"},
+		{`{"action_id":"model.release","params":{}}`, 404, "unknown_action", "nor anything Haus does not know"},
 		{`{"action_id":"task.set_status","params":{"entity_id":"milch-1","status":"dismissed"}}`, 400, "bad_params", "done only"},
 		{`{"action_id":"task.set_status","params":{"entity_id":"milch-1","status":"open"}}`, 400, "bad_params", "no reopening"},
 		{`{"action_id":"task.set_status","params":{"status":"done"}}`, 400, "bad_params", "which one"},
@@ -480,30 +435,16 @@ func TestReminderActionWhenRadicaleFails(t *testing.T) {
 	}
 }
 
-// Review of slice 2: the action body, the bridge, the answers the app can tell apart.
+// Review of slice 2: the action body, the answers the app can tell apart.
 func TestActionBodyIsCappedBeforeAnythingElse(t *testing.T) {
-	var got []string
-	bridge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		b, _ := io.ReadAll(r.Body)
-		got = append(got, r.Header.Get("Authorization")+" "+string(b))
-		w.Write([]byte(`{"ok":true,"via":"bridge"}`))
-	}))
-	defer bridge.Close()
-	u, _ := url.Parse(bridge.URL)
-	big := `{"action_id":"model.release","params":{"x":"` + strings.Repeat("a", 71<<10) + `"}}`
-	for _, b := range []*url.URL{u, nil} {
-		s := toolsWith(t, which{cal: true}, b)
-		if code, out := callback(t, s.h, big); code != 413 || out["reason"] != "too_large" || out["ok"] != false {
-			t.Errorf("bridge %v: %d %v", b != nil, code, out)
-		}
+	big := `{"action_id":"task.set_status","params":{"entity_id":"` + strings.Repeat("a", 71<<10) + `","status":"done"}}`
+	s := toolsWith(t, which{cal: true})
+	before := s.dav.Objects()
+	if code, out := callback(t, s.h, big); code != 413 || out["reason"] != "too_large" || out["ok"] != false {
+		t.Fatalf("a body over 64 KB: %d %v", code, out)
 	}
-	if len(got) != 0 {
-		t.Fatalf("a cut body reached the bridge: %d", len(got))
-	}
-	// a forwarded action carries the device's token to the bridge
-	s := toolsWith(t, which{cal: true}, u)
-	if code, _ := callback(t, s.h, `{"action_id":"model.release","params":{}}`); code != 200 || len(got) != 1 || !strings.HasPrefix(got[0], "Bearer dev1 ") {
-		t.Fatalf("forwarded: %d %v", code, got)
+	if len(s.dav.Objects()) != len(before) {
+		t.Fatal("a cut body changed the calendar")
 	}
 }
 
@@ -549,7 +490,7 @@ func TestTaskRowsCapTrimAndDone(t *testing.T) {
 	if code, _ := callback(t, s.h, `{"action_id":"task.set_status","params":{"entity_id":"spaced","status":"done"}}`); code != 200 {
 		t.Fatalf("the trimmed id ticks it off: %d", code)
 	}
-	// done=1 (the bridge's catalog asks so): the ticked-off ones too, after the open ones
+	// done=1: the ticked-off ones too, after the open ones
 	all := rows(t, s.h, "/napi/portal/tasks?done=1", "tasks")
 	var tail []string
 	for _, r := range all[len(open)-1:] {

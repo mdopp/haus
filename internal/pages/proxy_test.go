@@ -56,7 +56,7 @@ func TestBoxDecidesNothing(t *testing.T) {
 	}
 }
 
-// haus#5: the family pairs "the app", never "Solaris".
+// haus#5: the family pairs "the app".
 func TestPairingPageSaysApp(t *testing.T) {
 	store, err := devices.Open(t.TempDir())
 	if err != nil {
@@ -68,7 +68,7 @@ func TestPairingPageSaysApp(t *testing.T) {
 	req.Header.Set("Remote-Groups", "admins")
 	rec := httptest.NewRecorder()
 	Geraete(store, "https://haus.example").ServeHTTP(rec, req)
-	if body := rec.Body.String(); strings.Contains(strings.ToLower(body), "solaris-app") || !strings.Contains(body, "In der App") {
-		t.Fatalf("the pairing page names Solaris:\n%s", body)
+	if body := rec.Body.String(); !strings.Contains(body, "In der App") {
+		t.Fatalf("the pairing page names the app:\n%s", body)
 	}
 }

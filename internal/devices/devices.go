@@ -1,11 +1,12 @@
 // Package devices is Haus's own pairing: a phone gets a bearer with the prefix
-// the app expects (legacy.TokenPrefix), stored hashed in one JSON file. Pairing is a
+// the app expects (app.TokenPrefix), stored hashed in one JSON file. Pairing is a
 // page behind Authelia; the person who pairs is the device's uid.
 package devices
 
 import (
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -17,7 +18,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mdopp/haus/internal/legacy"
+	"github.com/mdopp/haus/internal/app"
 )
 
 // Device is one paired phone.
@@ -74,7 +75,7 @@ func (s *Store) Mint(name, uid string) (Device, string, error) {
 	if _, err := rand.Read(raw); err != nil {
 		return Device{}, "", err
 	}
-	token := legacy.TokenPrefix + base64.RawURLEncoding.EncodeToString(raw)
+	token := app.TokenPrefix + base64.RawURLEncoding.EncodeToString(raw)
 	id := make([]byte, 6)
 	rand.Read(id)
 	d := Device{ID: hex.EncodeToString(id), Name: strings.TrimSpace(name), UID: uid, Hash: hash(token), Created: time.Now().UTC()}
@@ -88,12 +89,17 @@ func (s *Store) Mint(name, uid string) (Device, string, error) {
 }
 
 // Lookup returns the device behind a bearer and notes the sighting.
+// A bearer without app.TokenPrefix is no device, whatever devices.json holds:
+// a phone paired before the new app pairs again (laib ADR 0022 §4).
 func (s *Store) Lookup(bearer string) (Device, bool) {
+	if !strings.HasPrefix(bearer, app.TokenPrefix) {
+		return Device{}, false
+	}
 	h := hash(bearer)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for i := range s.list {
-		if s.list[i].Hash == h {
+		if subtle.ConstantTimeCompare([]byte(s.list[i].Hash), []byte(h)) == 1 {
 			if time.Since(s.list[i].LastSeen) > time.Hour {
 				s.list[i].LastSeen = time.Now().UTC()
 				s.save()

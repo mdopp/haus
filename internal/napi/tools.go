@@ -1,7 +1,6 @@
 package napi
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -21,10 +20,9 @@ import (
 // names, maps them through the def's cell schema, and sends a row's action
 // to POST /napi/action-callback (the app's ToolDefs.kt, ToolCells.kt).
 // Haus's catalog is the Haushalt source's backends that are set: reminders,
-// contacts, documents, notes. The ids are the ones widgets placed through
-// the bridge carry, so they keep their tool. Haus has no page for creating or
-// opening an item, so no def names one (tool-compose-path,
-// tool-item-id-field): a guessed route would land on Start.
+// contacts, documents, notes. Haus has no page for creating or opening an
+// item, so no def names one (tool-compose-path, tool-item-id-field): a
+// guessed route would land on Start.
 
 // maxRows is what a widget shows at most (ToolDefs.MAX_ROWS).
 const maxRows = 40
@@ -35,13 +33,6 @@ const rowsTimeout = 12 * time.Second
 type toolsAPI struct {
 	hh  haushalt.Config
 	loc *time.Location
-	// bridge, when set, keeps the catalog and every action Haus does not
-	// know: Haus's catalog would hide the tools only the bridge has (photo,
-	// model, home, energy). Of its row paths only the reminders' is one
-	// Haus serves (/portal/tasks?done=1); its contacts and documents defs
-	// name paths of their own (/portal/persons, /portal/documents/search),
-	// which stay on the bridge.
-	bridge http.Handler
 }
 
 func newTools(hh haushalt.Config) *toolsAPI {
@@ -56,11 +47,8 @@ func newTools(hh haushalt.Config) *toolsAPI {
 }
 
 func (t *toolsAPI) routes(mux *http.ServeMux, auth func(http.HandlerFunc) http.HandlerFunc) {
-	if t.bridge == nil {
-		mux.HandleFunc("GET /napi/defs/tool", auth(t.defs))
-	}
-	// Haus answers the actions it knows (on the rows it draws, whoever's
-	// catalog named them); the rest is the bridge's, or 404 without one.
+	mux.HandleFunc("GET /napi/defs/tool", auth(t.defs))
+	// Haus answers the actions it knows; any other is 404 unknown_action.
 	mux.HandleFunc("POST /napi/action-callback", auth(t.action))
 	if t.hh.Calendar != nil {
 		mux.HandleFunc("GET /napi/portal/tasks", auth(t.tasks))
@@ -131,8 +119,8 @@ func first(vs []string) string {
 
 // GET /napi/portal/tasks[?done=1] → {ok, tasks:[{id?, title, status, due?}]}:
 // the open reminders, the soonest first, those without a date last; with
-// done=1 (what the bridge's task def asks for) the ticked-off and cancelled
-// ones after them, the latest first. status is the bridge's word: open,
+// done=1 the ticked-off and cancelled ones after them, the latest first.
+// status is the app's word: open,
 // done, dismissed. id is the UID trimmed, as the app trims what it sends.
 func (t *toolsAPI) tasks(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), rowsTimeout)
@@ -282,14 +270,14 @@ func refuseAction(w http.ResponseWriter, code int, reason string) {
 
 // POST /napi/action-callback {action_id, params, confirmed?} → {ok}; refusals
 // carry the reason ApiClient.actionOutcome reads. A body over 64 KB is 413
-// too_large before anything else, never cut and passed on.
+// too_large before anything else, never cut and handled.
 func (t *toolsAPI) action(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		ActionID any            `json:"action_id"`
 		Params   map[string]any `json:"params"`
 	}
 	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 64<<10))
-	if err != nil { // nothing of a cut body is handled or forwarded
+	if err != nil { // nothing of a cut body is handled
 		var mbe *http.MaxBytesError
 		if errors.As(err, &mbe) {
 			refuseAction(w, http.StatusRequestEntityTooLarge, "too_large")
@@ -298,17 +286,11 @@ func (t *toolsAPI) action(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	err = json.Unmarshal(raw, &body)
-	id, _ := body.ActionID.(string)
-	if (err != nil || id != actionDone || t.hh.Calendar == nil) && t.bridge != nil {
-		r.Body, r.ContentLength = io.NopCloser(bytes.NewReader(raw)), int64(len(raw))
-		t.bridge.ServeHTTP(w, r)
-		return
-	}
-	if err != nil {
+	if err := json.Unmarshal(raw, &body); err != nil {
 		refuseAction(w, http.StatusBadRequest, "invalid_json")
 		return
 	}
+	id, _ := body.ActionID.(string)
 	if id == "" {
 		refuseAction(w, http.StatusBadRequest, "no_action_id")
 		return
