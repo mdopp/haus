@@ -25,8 +25,8 @@ const noRoom = "Ohne Raum"
 
 // Raeume is one card per Home Assistant area (haus#12): its lights,
 // heating, covers and media, the area the entity's own or else its
-// device's; what has none in one "Ohne Raum" card at the end. Read-only in
-// this cut: switching comes with the decision where actions live. HA not
+// device's; what has none in one "Ohne Raum" card at the end. A thing is
+// switched and pinned on its own page (haus#35). HA not
 // answering, or its rooms not readable yet, leaves the cards out for one
 // plain line (haus#33): a card that put every lamp in "Ohne Raum" because
 // the registry failed would be wrong, not just short.
@@ -53,7 +53,7 @@ func Raeume(cfg StartConfig) http.HandlerFunc {
 			log.Printf("haus: räume page: home assistant's rooms are not known yet; the cards are left out")
 		}
 		b := familyHead(r, cfg, "Räume", "Räume")
-		b.WriteString("<h1 class=sr>Räume</h1>")
+		b.WriteString("<h1>Räume</h1>")
 		switch {
 		case haErr != nil:
 			b.WriteString("<p class=k>" + saysNoHouse + "</p>")
@@ -151,12 +151,7 @@ func roomDetail(domain string, s ha.State, houseUnit string) string {
 			return "aus"
 		}
 	case "climate":
-		unit := "°C"
-		if u, _ := s.Attributes["temperature_unit"].(string); trimRunes(oneLine(u), 8) != "" {
-			unit = trimRunes(oneLine(u), 8)
-		} else if houseUnit != "" {
-			unit = trimRunes(oneLine(houseUnit), 8)
-		}
+		unit := tempUnit(s, houseUnit)
 		var parts []string
 		if s.State == "off" {
 			parts = append(parts, "aus")
@@ -224,6 +219,18 @@ func roomDetail(domain string, s ha.State, houseUnit string) string {
 		}
 	}
 	return trimRunes(oneLine(s.State), 40)
+}
+
+// tempUnit is a heating's temperature unit: its own temperature_unit,
+// else the house's (HA's unit system), °C as the last resort.
+func tempUnit(s ha.State, houseUnit string) string {
+	if u, _ := s.Attributes["temperature_unit"].(string); trimRunes(oneLine(u), 8) != "" {
+		return trimRunes(oneLine(u), 8)
+	}
+	if houseUnit != "" {
+		return trimRunes(oneLine(houseUnit), 8)
+	}
+	return "°C"
 }
 
 // openings are the binary sensors that say open or closed, not on or off.

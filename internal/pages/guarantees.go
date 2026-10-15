@@ -3,6 +3,7 @@ package pages
 import (
 	"fmt"
 	"html"
+	"strconv"
 	"strings"
 	"time"
 
@@ -96,4 +97,90 @@ func when(t time.Time) string {
 		return "gestern " + t.Format("15:04")
 	}
 	return t.Format("02.01. 15:04")
+}
+
+// familyBox is the box in the family's words on Start (haus#35, owner
+// decision 2026-10-15): one calm line at the bottom when all is well —
+// "Alles in Ordnung · eure Daten sind von gestern Abend gesichert". When
+// a service is down or the data is not backed up, it is on top instead,
+// saying what it means for the family and that someone is on it — amber
+// (selbst) when the box mends it itself, red (hilfe) only when a person is
+// needed: nobody automatic is on it, or the data is not backed up; the
+// admin's words (services, places, the Operator) stay on /box. Laib not
+// answering is #34's plain line, at the bottom. "Alles in Ordnung" only
+// when quiet: no part of the page said something does not answer.
+func familyBox(ready laib.Readiness, rows []laib.Service, err error, quiet bool, now time.Time, loc *time.Location) (top, bottom string) {
+	if err != nil {
+		return "", "<p class=ruhig><span class=\"punkt grau\"></span>Wie es der Box geht, lässt sich gerade nicht sagen.</p>"
+	}
+	var wrong []string
+	var down []string
+	for _, s := range rows {
+		if s.State == "rot" {
+			down = append(down, familyName(s.Name))
+		}
+	}
+	if len(down) > 0 {
+		wrong = append(wrong, "Gerade nicht erreichbar: "+andList(down)+".")
+	}
+	at, _ := time.Parse(time.RFC3339, ready.LastBackup.At)
+	saved, unsaved := "", false
+	switch {
+	case !ready.LastBackup.OK || ready.LastBackup.Repos < 1 || at.IsZero():
+		wrong, unsaved = append(wrong, "Eure Daten sind noch nicht gesichert."), true
+	case now.Sub(at) > 72*time.Hour:
+		wrong, unsaved = append(wrong, "Eure Daten sind seit "+strconv.Itoa(int(now.Sub(at)/(24*time.Hour)))+" Tagen nicht gesichert."), true
+	default:
+		saved = "eure Daten sind " + backupWords(at, now, loc) + " gesichert"
+	}
+	switch {
+	case len(wrong) == 0 && quiet:
+		return "", "<p class=ruhig><span class=punkt></span>Alles in Ordnung · " + saved + "</p>"
+	case len(wrong) == 0:
+		return "", "<p class=ruhig><span class=punkt></span>E" + saved[1:] + "</p>"
+	}
+	who, kind := "Wer die Box betreut, weiß Bescheid.", "hilfe"
+	if ready.Operator == "läuft" || ready.Operator == "startet" {
+		who = "Die Box versucht, das selbst zu beheben."
+		if !unsaved {
+			kind = "selbst"
+		}
+	}
+	var b strings.Builder
+	b.WriteString("<section class=\"achtung " + kind + "\" role=status aria-label=\"Die Box\"><p>" + html.EscapeString(strings.Join(wrong, " ")) + "</p><p>" + who + "</p>")
+	if saved != "" {
+		b.WriteString("<p>E" + saved[1:] + ".</p>")
+	}
+	b.WriteString("</section>")
+	return b.String(), ""
+}
+
+// backupWords says when the last backup was, the way the family says it:
+// von heute Nacht, von gestern Abend, von Samstagabend, vom 1. Oktober.
+func backupWords(at, now time.Time, loc *time.Location) string {
+	at = at.In(loc)
+	part := "Abend"
+	switch h := at.Hour(); {
+	case h < 5, h >= 23:
+		part = "Nacht"
+	case h < 10:
+		part = "Morgen"
+	case h < 12:
+		part = "Vormittag"
+	case h < 14:
+		part = "Mittag"
+	case h < 18:
+		part = "Nachmittag"
+	}
+	switch d := daysAgo(at, now, loc); {
+	case d <= 0:
+		return "von heute " + part
+	case d == 1:
+		return "von gestern " + part
+	case d == 2:
+		return "von vorgestern " + part
+	case d <= 6:
+		return "von " + weekdays[at.Weekday()] + strings.ToLower(part)
+	}
+	return "vom " + strconv.Itoa(at.Day()) + ". " + months[at.Month()-1]
 }

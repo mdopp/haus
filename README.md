@@ -14,39 +14,69 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
 
 ## This cut (laib#28)
 
-- `GET /start` — the family's page behind Authelia (haus#12): the
-  persona's header, the three guarantees, then the cards *Jetzt* (who is
-  home from `person.*`, the lamps that are on with their names (a group,
-  any entity with an `entity_id` list, is not counted), what
-  plays on a `media_player`, the next appointment within 14 days),
-  *Meine Favoriten* and *Haushalt* (the next three open reminders, the
-  three newest notes).
-  *Meine Favoriten* is the person's own things (laib ADR 0017: favorites
-  go to Haus): `HAUS_DATA/favoriten.json`, `{"<Remote-User>":
-  ["light.buero", "cover.wohnzimmer", …]}`, read on each page load, in
-  the person's order, at most twelve, each with its state in words and
-  leading to its own page; what that page would not show (not a card
-  domain, unknown to HA, hidden by HA) is left out. Nothing in Haus writes
-  the file yet: the pin ("auf meine Startseite") comes with the Sprechen
-  field. No file, no list or no `Remote-User`: no card.
+- `GET /start` — the family's page behind Authelia (haus#12, haus#35):
+  *Zuhause* and the day, then one part per question a family member has.
+  *Im Haus*: who is home (`person.*`: "Anna und Ben sind da"), the lamps
+  that are on with their names and one button (*Aus* for one, *Alle aus*
+  for several; a group, any entity with an `entity_id` list, is not a
+  lamp), what plays on a `media_player` with *Pause* when it can pause.
+  *Meine Geräte*: the person's own things as tiles like the phone widget
+  (laib ADR 0017: favorites go to Haus): `HAUS_DATA/favoriten.json`,
+  `{"<Remote-User>": ["light.buero", "cover.wohnzimmer", …]}`, read on each
+  page load, in the person's order, at most twelve, the state in a word
+  and a bar, a lamp's or a switch's switch on the tile; what a thing's page
+  would not show (not a card domain, unknown to HA, hidden by HA) is left
+  out. None says how to get one (*Tippe in Räume bei einem Gerät auf ☆,
+  dann erscheint es hier.*); no `Remote-User`, no store: no part.
+  *Heute und demnächst*: appointments and open reminders of the next 14
+  days together, by time (overdue first, one without a date last,
+  *offen*), at most six, each leading to its page; none says so and how it
+  fills. Notes are not on Start: they have their tab.
+  The box is one calm line at the bottom (*Alles in Ordnung · eure Daten
+  sind von gestern Abend gesichert*; without *Alles in Ordnung* when a part
+  of the page does not answer); a service down or the data not backed up
+  for three days moves it to the top, saying what it means (*Gerade nicht
+  erreichbar: Fotos.*, *Eure Daten sind seit 3 Tagen nicht gesichert.*) and
+  who is on it: amber when the box mends it itself, red only when a person
+  is needed (nobody automatic on it, or the data not backed up). The admin's words (services, places, the last change,
+  Rückgängig) are /box's.
   Each part only when its backend is set (`HAUS_HA_URL` + `HAUS_HA_TOKEN`,
-  `HAUS_RADICALE_*`, `HAUS_NOTES_DIR`); one not set is not mentioned. One
-  not answering within 4s is one plain line where its rows would be
-  (*Licht und Geräte antworten gerade nicht.*, *Der Kalender antwortet
-  gerade nicht.* once, *Die Notizen lassen sich gerade nicht lesen.*, and
-  a line in *Meine Favoriten* when its file or HA does not), never its name or
-  its error, which go to Haus's log; Laib not answering is *Wie es der
-  Box geht, lässt sich gerade nicht sagen.* The page is always a 200. The
-  page shows and changes nothing (haus#1). Cards are one renderer,
-  `internal/cards` (title, rows, optional link), for the pages and later
-  the widgets' JSON. `/` and every page path Haus does not serve redirect
-  to `/start`.
-  Each card row and card links to the page behind it: *Jetzt* to Räume,
-  an appointment or reminder to Kalender, a note to its own page.
+  `HAUS_RADICALE_*`); one not set is not mentioned. One not
+  answering within 4s is one plain line where its rows would be (*Licht
+  und Geräte antworten gerade nicht. Schalten geht im Moment nicht.*, *Der
+  Kalender antwortet gerade nicht.* once, a line in *Meine Geräte* when its
+  file or HA does not), never its name or its error, which go to Haus's
+  log; Laib not answering is *Wie es der Box geht, lässt sich gerade nicht
+  sagen.* at the bottom. The page is always a 200. Cards are one renderer,
+  `internal/cards` (title, rows, optional link; a list, boxes, tiles or a
+  time column; a row may carry one button), for the pages and later the
+  widgets' JSON. `/` and every page path Haus does not serve redirect to
+  `/start`.
+- The family's page frame (haus#35): the house palette (the chat's tokens
+  and haus-android's `colors.xml`: ground `#070709`, cards `#14141A`,
+  orange `#F97316` for what you can do, amber `#FFC107` for what is on,
+  green and red only for a state, never alone), dark or light as the phone
+  is, Geist served by Haus itself at `/schrift/…woff2` (OFL, vendored in
+  `internal/pages/schrift`; no request to Google, the phone's own font
+  when it does not load), a tab bar with icons at the bottom of every
+  family page (Start · Räume · Kalender · Notizen, Box for admins). No
+  persona on the family's pages: it speaks where you talk to it.
+- `POST /schalten` — a family page's button (haus#35): `geraet`, `tun`
+  (`light|switch.turn_on|turn_off`, `media_player.media_pause`, or
+  `alle-lichter-aus`: every lamp *Im Haus* counts) and `zurueck` (Start or
+  a thing's page; anything else is Start). Each call passes the widgets'
+  own rule (`internal/schalter`, below); nothing else in the form rides
+  along. Only with `Remote-User` and from Haus's own page
+  (`Sec-Fetch-Site: same-origin`, or, from an older browser, an `Origin`
+  of Haus's host; neither header is a 403 too), else 403; then 303 back. HA not answering is one plain
+  line and the way back. No script: a plain form.
+- `POST /raeume/<id>` `stern=an|aus` — the ☆ on a thing's own page pins it
+  to the person's *Meine Geräte* or takes it off (`favoriten.json`, their
+  own list only, at most 50, the file replaced whole, a file that does not
+  read never written over); same guards as `/schalten`, then 303 back.
 - `GET /raeume`, `/kalender`, `/notizen` — the family's other pages
-  (haus#12), read-only, from the same cards, under the persona's header and
-  one nav (Start · Räume · Kalender · Notizen, each only when its backend is
-  set; Box for admins). A page whose backend is not set lands on Start; one
+  (haus#12), from the same cards, in the family's frame. A page whose
+  backend is not set lands on Start; one
   not answering within 4s is Start's plain line where its rows would be,
   once, never its name or error, which go to the log; the page is a 200
   (haus#33). Anything but GET/HEAD is 405.
@@ -62,8 +92,9 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     kept 5 minutes (the rooms shared with `/napi/portal/active`), refreshed
     in the background whoever asked; until the registries have been read,
     the page says it is reading them rather than put everything in Ohne
-    Raum. HA not answering: *Licht und Geräte antworten gerade nicht.* Switching comes later, with where actions live. Each thing links
-    to its own page.
+    Raum. HA not answering: *Licht und Geräte antworten gerade nicht.* Each
+    thing links to its own page, where a lamp or a switch is switched and
+    the ☆ pins it to Start.
   - *Kalender*: *Heute* (the day's appointments with time and place),
     *Nächste 14 Tage*, *Erinnerungen* (open reminders, overdue said so; one
     due on a day, not at a time, shows the day and is overdue the day after),
@@ -127,9 +158,9 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   under Geräte until revoked).
 
 - The house persona (laib ADR 0020): Laib mounts `render/persona` at
-  `/persona` and sets `HAUS_PERSONA`. Pages carry its name in the title,
-  a header with its icon, name and greeting in its colours, and
-  `/persona/icon.svg`. The app reads `GET /napi/persona` (display, greeting,
+  `/persona` and sets `HAUS_PERSONA`. The admin's pages (/box) carry its
+  name in the title, a header with its icon, name and greeting in its
+  colours, and `/persona/icon.svg`; the family's pages do not (haus#35). The app reads `GET /napi/persona` (display, greeting,
   accent, ground, icon) and `/napi/persona/icon.png` with its device token:
   PNG, which a phone draws without a library (haus#28). It is the persona's
   `icon.png` (laib#191); a persona without one has no icon on the phone.
@@ -138,7 +169,9 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
 - The house paths, from Home Assistant (haus#10, set by `HAUS_HA_URL` +
   `HAUS_HA_TOKEN`, a long-lived token; unset, they are 404):
   `POST /napi/ha/call` (`{entity_id, service, data?, confirmed?}`; only
-  `light|switch|cover|climate|lock`, else 400; the service's domain is the
+  `light|switch|cover|climate|lock`, and `media_player.media_pause` (haus#35;
+  any other player service is 400 `unsupported_service`), else 400; the
+  rule is `internal/schalter`, the family's pages' too; the service's domain is the
   entity's; `data` cannot name another target; any `lock`, and on a
   garage/door/gate cover — or one whose `device_class` cannot be read —
   anything but `close_cover`, `stop_cover`, `close_cover_tilt`,
@@ -288,8 +321,8 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   reads the files, there is no second index. Identity per person (the
   person's own calendar, laib ADR 0017 §3) comes next.
 
-Not yet: Start's *Häufig genutzt* and writing favorites; switching in
-Räume; Energie, Medien; Paperless and dictation in Notizen, timers in
+Not yet: Start's *Häufig genutzt*; switching in the Räume list (a thing's
+own page switches); Energie, Medien; Paperless and dictation in Notizen, timers in
 Kalender; the `Sprechen` field to the Bote (laib#21).
 
 - The Box page's Werkstatt card (haus#15): the open tickets of the repos in

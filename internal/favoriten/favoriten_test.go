@@ -1,9 +1,11 @@
 package favoriten
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -108,5 +110,86 @@ func TestForReadsTheFileEachTime(t *testing.T) {
 	}
 	if got, _ := s.For("anna"); !reflect.DeepEqual(got, []string{"light.flur"}) {
 		t.Fatalf("after the change: %v", got)
+	}
+}
+
+// haus#35: the ☆ on a thing's own page pins it to the person's Start and
+// takes it off again: at the end of their list, once, and nobody else's
+// list changes. The file stays the family's alone (0600).
+func TestSetPinsAndUnpins(t *testing.T) {
+	dir := t.TempDir()
+	s := Open(dir)
+	for _, step := range []struct {
+		person, id string
+		on         bool
+	}{{"anna", "light.buero", true}, {"anna", "cover.wohnzimmer", true}, {"ben", "light.flur", true}, {"anna", "light.buero", true}} {
+		if err := s.Set(step.person, step.id, step.on); err != nil {
+			t.Fatalf("%+v: %v", step, err)
+		}
+	}
+	if got, _ := s.For("anna"); !reflect.DeepEqual(got, []string{"light.buero", "cover.wohnzimmer"}) {
+		t.Fatalf("anna: %v", got)
+	}
+	if err := s.Set("anna", "light.buero", false); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Set("anna", "light.nie", false); err != nil {
+		t.Fatalf("taking off what is not there: %v", err)
+	}
+	if got, _ := s.For("anna"); !reflect.DeepEqual(got, []string{"cover.wohnzimmer"}) {
+		t.Fatalf("anna after unpinning: %v", got)
+	}
+	if got, _ := s.For("ben"); !reflect.DeepEqual(got, []string{"light.flur"}) {
+		t.Fatalf("ben: %v", got)
+	}
+	fi, err := os.Stat(filepath.Join(dir, File))
+	if err != nil || fi.Mode().Perm() != 0o600 {
+		t.Fatalf("the file: %v %v", fi, err)
+	}
+	if left, _ := filepath.Glob(filepath.Join(dir, "*")); len(left) != 1 {
+		t.Fatalf("a write left more than the file behind: %v", left)
+	}
+}
+
+// What is not a person or not an entity id is refused, and a file that
+// does not read is never written over: the family's lists stay as they
+// were.
+func TestSetRefusesAndNeverClobbers(t *testing.T) {
+	s := store(t, `{"anna": ["light.buero"]}`)
+	for _, c := range []struct{ person, id string }{{"", "light.buero"}, {"anna", "Light.Buero"}, {"anna", "../x"}, {"anna", ""}} {
+		if err := s.Set(c.person, c.id, true); err == nil {
+			t.Errorf("%q %q: pinned", c.person, c.id)
+		}
+	}
+	if got, _ := s.For("anna"); !reflect.DeepEqual(got, []string{"light.buero"}) {
+		t.Fatalf("anna: %v", got)
+	}
+	dir := t.TempDir()
+	p := filepath.Join(dir, File)
+	broken := `{"anna": ["light.buero"`
+	if err := os.WriteFile(p, []byte(broken), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := Open(dir).Set("anna", "light.flur", true); err == nil {
+		t.Fatal("pinned into a file that does not read")
+	}
+	if b, _ := os.ReadFile(p); string(b) != broken {
+		t.Fatalf("the broken file was written over: %q", b)
+	}
+}
+
+// A person's list has an end: past MaxPerPerson, pinning says so.
+func TestSetHasAnEnd(t *testing.T) {
+	s := Open(t.TempDir())
+	for i := 0; i < MaxPerPerson; i++ {
+		if err := s.Set("anna", "light.l"+strconv.Itoa(i), true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.Set("anna", "light.zuviel", true); !errors.Is(err, ErrFull) {
+		t.Fatalf("%v, want ErrFull", err)
+	}
+	if err := s.Set("anna", "light.l0", true); err != nil {
+		t.Fatalf("pinning what is there again: %v", err)
 	}
 }

@@ -44,9 +44,9 @@ func Notizen(cfg StartConfig) http.HandlerFunc {
 		}
 
 		b := familyHead(r, cfg, "Notizen", "Notizen")
-		b.WriteString("<h1 class=sr>Notizen</h1>")
-		b.WriteString(`<form method=get action=/notizen role=search><label for=q class=sr>Notizen durchsuchen</label>` +
-			`<input type=search id=q name=q value="` + html.EscapeString(q) + `" placeholder="Notizen durchsuchen"> <button>Suchen</button></form>`)
+		b.WriteString("<h1>Notizen</h1>")
+		b.WriteString(`<form method=get action=/notizen role=search>` +
+			`<input type=search name=q value="` + html.EscapeString(q) + `" placeholder="Notizen durchsuchen" aria-label="Notizen durchsuchen"> <button>Suchen</button></form>`)
 
 		if q != "" {
 			var res notes.Result

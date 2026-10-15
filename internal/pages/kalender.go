@@ -47,7 +47,7 @@ func Kalender(cfg StartConfig) http.HandlerFunc {
 		logErrs("kalender", map[string]error{"calendar": evErr, "reminders": todoErr})
 
 		b := familyHead(r, cfg, "Kalender", "Kalender")
-		b.WriteString("<h1 class=sr>Kalender</h1>")
+		b.WriteString("<h1>Kalender</h1>")
 		if evErr != nil {
 			b.WriteString("<p class=k>" + saysNoCalendar + "</p>")
 		} else {

@@ -7,15 +7,38 @@ package cards
 import (
 	"encoding/json"
 	"html"
+	"strconv"
 	"strings"
 )
 
 // Row is one line: what it is, a quieter detail, and where it leads, if
-// anywhere (a note's page, the calendar).
+// anywhere (a note's page, the calendar). A row in a time card has its
+// When; a tile has its State in a word, whether that is on or off, and a
+// level for its bar; any row may carry one Action.
 type Row struct {
-	Text   string `json:"text"`
-	Detail string `json:"detail"`
-	Href   string `json:"href,omitempty"`
+	Text   string  `json:"text"`
+	Detail string  `json:"detail"`
+	Href   string  `json:"href,omitempty"`
+	When   string  `json:"when,omitempty"`
+	State  string  `json:"state,omitempty"`
+	On     bool    `json:"on,omitempty"`
+	Off    bool    `json:"off,omitempty"`
+	Level  int     `json:"level,omitempty"` // 1–100: a lamp's brightness, a cover's position; 0, no bar
+	Action *Action `json:"action,omitempty"`
+}
+
+// Action is a row's one button (haus#35): a form that POSTs to
+// SwitchPath — no script needed. Do is the HA service ("light.turn_off")
+// or a page's own word ("alle-lichter-aus"); Back is where the page
+// lands after. A Switch is drawn as a switch, On its state, Label its
+// name for a screen reader; else Label is the button's words.
+type Action struct {
+	Label  string `json:"label"`
+	Entity string `json:"entity,omitempty"`
+	Do     string `json:"do"`
+	Back   string `json:"back"`
+	Switch bool   `json:"switch,omitempty"`
+	On     bool   `json:"on,omitempty"`
 }
 
 // Link is where the card leads.
@@ -24,11 +47,21 @@ type Link struct {
 	Text string `json:"text"`
 }
 
+// How a card draws its rows: a list in one box (the default), each row a
+// box of its own, the phone widget's tiles, or a time column first.
+const (
+	List  = ""
+	Boxes = "einzeln"
+	Tiles = "kacheln"
+	Times = "zeiten"
+)
+
 // Card is one card.
 type Card struct {
 	Title string `json:"title"`
 	Rows  []Row  `json:"rows"`
 	Link  *Link  `json:"link,omitempty"`
+	Look  string `json:"look,omitempty"`
 }
 
 // Empty is a card with nothing to say.
@@ -74,23 +107,39 @@ func (c Card) ID() string {
 }
 
 // HTML renders the card as a labelled section; "" when it has no rows.
+// Whatever a row says is text, never markup.
 func (c Card) HTML() string {
 	if c.Empty() {
 		return ""
 	}
 	id := c.ID()
 	var b strings.Builder
-	b.WriteString("<section class=karte aria-labelledby=" + id + "><h2 id=" + id + ">" + html.EscapeString(c.Title) + "</h2><ul>")
+	class := "karte"
+	if c.Look != List {
+		class = `"karte ` + html.EscapeString(c.Look) + `"`
+	}
+	b.WriteString("<section class=" + class + " aria-labelledby=" + id + "><h2 id=" + id + ">" + html.EscapeString(c.Title) + "</h2><ul>")
 	for _, r := range c.Rows {
-		if r.Href != "" {
-			b.WriteString(`<li><a href="` + html.EscapeString(r.Href) + `">` + html.EscapeString(r.Text) + "</a>")
-		} else {
-			b.WriteString("<li>" + html.EscapeString(r.Text))
+		switch {
+		case c.Look == Tiles && r.State != "":
+			tile(&b, r)
+		case c.Look == Times && r.When != "":
+			b.WriteString("<li><time>" + html.EscapeString(r.When) + "</time><div>")
+			what(&b, r)
+			b.WriteString("</div></li>")
+		case r.Action != nil:
+			b.WriteString("<li class=tu><div>")
+			what(&b, r)
+			b.WriteString("</div>" + r.Action.form() + "</li>")
+		case c.Look == Tiles || c.Look == Times: // a line across, not a tile or a time
+			b.WriteString("<li class=voll>")
+			what(&b, r)
+			b.WriteString("</li>")
+		default:
+			b.WriteString("<li>")
+			what(&b, r)
+			b.WriteString("</li>")
 		}
-		if r.Detail != "" {
-			b.WriteString(" <span class=k>" + html.EscapeString(r.Detail) + "</span>")
-		}
-		b.WriteString("</li>")
 	}
 	b.WriteString("</ul>")
 	if c.Link != nil && c.Link.Href != "" {
@@ -100,7 +149,86 @@ func (c Card) HTML() string {
 	return b.String()
 }
 
-// Style is the cards' CSS, for a page's head.
-const Style = `<style>.karte{background:#fff;border:1px solid #e6e2d8;border-radius:.6rem;padding:.4rem 1rem .6rem;margin:1rem 0}
-.karte h2{margin:.4rem 0}.karte ul{list-style:none;margin:0;padding:0}.karte li{padding:.3rem 0;border-bottom:1px solid #f0ede5;overflow-wrap:anywhere}.karte li:last-child{border-bottom:0}
-.karte li a{display:block;padding:.2rem 0}</style>`
+// what is a row's text, leading where it leads, and its detail.
+func what(b *strings.Builder, r Row) {
+	if r.Href != "" {
+		b.WriteString(`<a href="` + html.EscapeString(r.Href) + `">` + html.EscapeString(r.Text) + "</a>")
+	} else {
+		b.WriteString(html.EscapeString(r.Text))
+	}
+	if r.Detail != "" {
+		b.WriteString(" <span class=k>" + html.EscapeString(r.Detail) + "</span>")
+	}
+}
+
+// tile is one thing as the phone widget draws it: its name (and switch),
+// its state in a word (colour is never the only sign), and a bar.
+func tile(b *strings.Builder, r Row) {
+	class := "kachel"
+	switch {
+	case r.On:
+		class = `"kachel an"`
+	case r.Off:
+		class = `"kachel aus"`
+	}
+	b.WriteString("<li class=" + class + "><div class=kopf>")
+	if r.Href != "" {
+		b.WriteString(`<a href="` + html.EscapeString(r.Href) + `">` + html.EscapeString(r.Text) + "</a>")
+	} else {
+		b.WriteString("<span>" + html.EscapeString(r.Text) + "</span>")
+	}
+	if r.Action != nil {
+		b.WriteString(r.Action.form())
+	}
+	b.WriteString("</div><p><b class=zustand>" + html.EscapeString(r.State) + "</b>")
+	if r.Detail != "" {
+		b.WriteString(" <span class=k>" + html.EscapeString(r.Detail) + "</span>")
+	}
+	b.WriteString("</p>")
+	if r.Level > 0 {
+		b.WriteString("<span class=balken><i style=\"width:" + strconv.Itoa(min(r.Level, 100)) + "%\"></i></span>")
+	}
+	b.WriteString("</li>")
+}
+
+// form is the action's button: a POST to SwitchPath with what to do.
+func (a *Action) form() string {
+	var b strings.Builder
+	b.WriteString("<form method=post action=" + SwitchPath + ">")
+	if a.Entity != "" {
+		b.WriteString(`<input type=hidden name=geraet value="` + html.EscapeString(a.Entity) + `">`)
+	}
+	b.WriteString(`<input type=hidden name=tun value="` + html.EscapeString(a.Do) + `">`)
+	b.WriteString(`<input type=hidden name=zurueck value="` + html.EscapeString(a.Back) + `">`)
+	if a.Switch {
+		b.WriteString(`<button class=schalter role=switch aria-checked=` + strconv.FormatBool(a.On) + ` aria-label="` + html.EscapeString(a.Label) + `"></button>`)
+	} else {
+		b.WriteString("<button>" + html.EscapeString(a.Label) + "</button>")
+	}
+	b.WriteString("</form>")
+	return b.String()
+}
+
+// Style is the cards' CSS, for a page's head: the house palette's
+// variables (the page frame sets them), a row a finger hits as a whole.
+const Style = `<style>.karte{margin:22px 0 0}
+.karte h2{font-size:.72rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:0 0 8px}
+.karte ul{list-style:none;margin:0;padding:0;background:var(--card);border:1px solid var(--edge);border-radius:14px}
+.karte li{position:relative;padding:11px 14px;border-top:1px solid var(--line);overflow-wrap:anywhere;min-height:44px}.karte li:first-child{border-top:0}
+.karte li a{display:block;color:inherit;text-decoration:none}.karte li a::after{content:"";position:absolute;inset:0}
+.karte li .k{display:block;font-size:.82rem;margin-top:1px}
+.karte li.tu{display:flex;align-items:center;justify-content:space-between;gap:12px}.karte form{position:relative;z-index:1;flex:none;display:flex}
+.einzeln ul{background:none;border:0;border-radius:0;display:grid;gap:6px}.einzeln li,.einzeln li:first-child{background:var(--card);border:1px solid var(--edge);border-radius:14px}
+.kacheln ul{background:none;border:0;border-radius:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.kacheln li,.kacheln li:first-child{background:var(--tile);border:1px solid var(--edge);border-radius:20px;padding:10px 12px 12px;display:grid;gap:4px;align-content:start;min-width:0}
+.kacheln .kopf{display:flex;justify-content:space-between;align-items:center;gap:6px;min-height:40px;color:var(--muted);font-size:.85rem}
+.kacheln p{margin:0}.kacheln .zustand{font-size:1.15rem;font-weight:700;color:var(--ink)}.kacheln .an .zustand{color:var(--state)}.kacheln .aus .zustand{color:var(--faint)}
+.kacheln p .k{display:inline;margin-left:4px}
+.balken{display:block;height:6px;border-radius:3px;background:var(--track);overflow:hidden;margin-top:4px}.balken i{display:block;height:100%;border-radius:3px;background:var(--state)}
+.schalter{position:relative;width:52px;min-height:40px;padding:0;margin-right:-6px;background:none;border-radius:20px}
+.schalter::before{content:"";position:absolute;left:8px;top:10px;width:36px;height:20px;border-radius:10px;background:var(--track)}
+.schalter::after{content:"";position:absolute;left:11px;top:13px;width:14px;height:14px;border-radius:50%;background:#fff}
+.schalter[aria-checked=true]::before{background:var(--state)}.schalter[aria-checked=true]::after{left:27px}
+.zeiten li{display:grid;grid-template-columns:6.4rem 1fr;gap:10px;align-items:baseline}
+.zeiten time{font-size:.8rem;color:var(--muted);font-variant-numeric:tabular-nums}.zeiten li.voll{display:block}
+.kacheln li.voll,.kacheln li.voll:first-child{grid-column:1/-1;display:block;background:none;border:1px dashed var(--edge);border-radius:14px;padding:12px 14px;color:var(--muted);font-size:.9rem}</style>`

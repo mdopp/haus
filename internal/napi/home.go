@@ -7,37 +7,21 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"regexp"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/mdopp/haus/internal/cards"
 	"github.com/mdopp/haus/internal/ha"
+	"github.com/mdopp/haus/internal/schalter"
 )
 
 // The house paths (haus#10), served from Home Assistant once HAUS_HA_URL is
-// set. The shapes are the app's (data/ApiClient.kt); the two rules for
-// /napi/ha/call (only actuator domains, sensitive actions want confirmed)
-// are structural here.
+// set. The shapes are the app's (data/ApiClient.kt); what /napi/ha/call
+// may switch is package schalter's one rule, the family's pages' too
+// (haus#35).
 
 var (
-	nameRE = regexp.MustCompile(`^[a-z_][a-z0-9_]*$`)
-
-	// what a card may switch. `button` stays off on purpose: a door opener's
-	// press unlatches the door and no confirm rule covers it.
-	callDomains = set("light", "switch", "cover", "climate", "lock")
-	// sensitive: these need confirmed:true, or the call is a 403
-	sensitiveDomains      = set("lock", "alarm_control_panel")
-	sensitiveServices     = set("open", "unlock", "alarm_disarm")
-	sensitiveCoverClasses = set("garage", "door", "gate")
-	// on a garage/door/gate cover (or one whose class is unknown) only these
-	// are free; everything else, toggles and tilts and future services
-	// included, needs confirmed
-	coverFreeServices = set("close_cover", "stop_cover", "close_cover_tilt", "stop_cover_tilt")
-	// a call names its one entity; data may not widen it to another target
-	targetKeys = set("entity_id", "device_id", "area_id", "floor_id", "label_id", "target")
-
 	actuatorDomains = set("light", "switch", "cover", "climate", "media_player", "lock")
 	// the attributes the app's controls read off a card
 	controlAttrs = []string{"supported_features", "brightness", "color_temp", "rgb_color", "color_mode", "supported_color_modes",
@@ -93,40 +77,14 @@ func (h *homeAPI) call(w http.ResponseWriter, r *http.Request) {
 		refuse(w, http.StatusBadRequest, "bad_json")
 		return
 	}
-	domain, _, _ := strings.Cut(body.EntityID, ".")
-	if !callDomains[domain] {
-		refuse(w, http.StatusBadRequest, "unsupported_domain")
-		return
-	}
-	if !ha.EntityRE.MatchString(body.EntityID) {
-		refuse(w, http.StatusBadRequest, "invalid entity_id")
-		return
-	}
-	sdomain, action, dotted := strings.Cut(body.Service, ".")
-	if !dotted || !nameRE.MatchString(sdomain) || !nameRE.MatchString(action) {
-		refuse(w, http.StatusBadRequest, "invalid service")
-		return
-	}
-	if sdomain != domain {
-		refuse(w, http.StatusBadRequest, "service domain does not match entity")
-		return
-	}
-	for k := range body.Data {
-		if targetKeys[k] {
-			refuse(w, http.StatusBadRequest, "data may not name a target")
-			return
-		}
-	}
-	if !body.Confirmed && h.sensitive(r.Context(), body.EntityID, domain, action) {
-		refuse(w, http.StatusForbidden, "sensitive_action")
-		return
-	}
-	payload := map[string]any{}
-	for k, v := range body.Data {
-		payload[k] = v
-	}
-	payload["entity_id"] = body.EntityID
-	if err := h.ha.Call(r.Context(), domain, action, payload); err != nil {
+	err := schalter.Do(r.Context(), h.ha, body.EntityID, body.Service, body.Data, body.Confirmed)
+	var no *schalter.Refusal
+	switch {
+	case err == nil:
+		answer(w, http.StatusOK, map[string]any{"ok": true})
+	case errors.As(err, &no):
+		refuse(w, no.Code, no.Reason)
+	default:
 		log.Printf("haus: ha/call %s on %s: %v", body.Service, body.EntityID, err) // HA's detail stays here
 		var he *ha.Error
 		if errors.As(err, &he) && he.Status == http.StatusBadRequest {
@@ -134,31 +92,7 @@ func (h *homeAPI) call(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		refuse(w, http.StatusBadGateway, "ha_unavailable")
-		return
 	}
-	answer(w, http.StatusOK, map[string]any{"ok": true})
-}
-
-// sensitive: any lock, an unlock or open anywhere, and on a cover whose
-// device_class is garage, door or gate anything but closing and stopping.
-// A cover whose class cannot be read (HA down, unknown entity, no class)
-// counts as such a cover: fail closed.
-func (h *homeAPI) sensitive(ctx context.Context, entityID, domain, action string) bool {
-	if sensitiveDomains[domain] || sensitiveServices[action] {
-		return true
-	}
-	if domain != "cover" || coverFreeServices[action] {
-		return false
-	}
-	s, err := h.ha.State(ctx, entityID)
-	if err != nil {
-		return true
-	}
-	dc, _ := s.Attributes["device_class"].(string)
-	if dc == "" {
-		return true
-	}
-	return sensitiveCoverClasses[strings.ToLower(dc)]
 }
 
 // card is one entity as the app's widgets draw it (ApiClient.parseCardJson),

@@ -16,6 +16,8 @@ const (
 	ContactPages  = "/kontakte/"
 	DocumentPages = "/dokumente/"
 	NotePages     = "/notizen/"
+	// SwitchPath is where a row's Action posts (haus#35)
+	SwitchPath = "/schalten"
 )
 
 // Domains are the Home Assistant domains Haus draws as a card: what a

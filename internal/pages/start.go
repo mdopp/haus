@@ -3,10 +3,14 @@ package pages
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/mdopp/haus/internal/caldav"
 	"github.com/mdopp/haus/internal/cards"
@@ -28,7 +32,7 @@ type StartConfig struct {
 	Contacts  *caldav.Client // a contact's page (haus#28)
 	Notes     *notes.Dir
 	Docs      *paperless.Client // a document's page sends on to Paperless (haus#28)
-	Favorites *favoriten.Store  // each person's favorites on Start (laib ADR 0017)
+	Favorites *favoriten.Store  // each person's things on Start (laib ADR 0017), pinned with ☆ (haus#35)
 	Loc       *time.Location    // the house's time zone; default time.Local
 	Now       func() time.Time  // for the tests; default time.Now
 }
@@ -38,18 +42,30 @@ type StartConfig struct {
 var backendWait = 4 * time.Second
 
 const (
-	maxNames     = 5  // light names in the Jetzt row
-	maxPlaying   = 3  // media players in Jetzt
-	maxHaushalt  = 3  // reminders, and notes, in Haushalt
-	maxFavoriten = 12 // things in Meine Favoriten
-	horizon      = 14 // days ahead for the next appointment
+	maxNames   = 5  // lamp names in the lights' row
+	maxPlaying = 3  // media players in Im Haus
+	maxGeraete = 12 // tiles in Meine Geräte
+	maxAgenda  = 6  // rows in Heute und demnächst
+	horizon    = 14 // days ahead for appointments and reminders
 )
 
-// Start is the family's page (haus#12, laib DEKONSTRUKTION): the persona's
-// greeting, the three guarantees, then Jetzt, Meine Favoriten and
-// Haushalt. It shows and changes nothing (haus#1). A backend that is not
-// configured is not mentioned; one not answering is one plain line where
-// its rows would be, its error in the log, not on the page.
+// What Start says when a part cannot do its job, or is empty: then how it
+// fills (haus#35, "leer heißt erklären").
+const (
+	saysNoSwitching = "Schalten geht im Moment nicht."
+	saysPinHow      = "Tippe in Räume bei einem Gerät auf ☆, dann erscheint es hier."
+	saysNothingDue  = "Nichts in den nächsten zwei Wochen."
+	saysAgendaHow   = "Termine und Erinnerungen aus dem Kalender stehen hier."
+)
+
+// Start is the family's page (haus#12, haus#35): "Zuhause" and the day,
+// then each part answering one question a family member has — who is
+// home and what is on (Im Haus, one action a row), my own things (Meine
+// Geräte, switched in place), what comes up (Heute und demnächst) — and
+// the box in one calm line at the bottom, at the top when something is
+// wrong. A backend that is not configured is not mentioned; one not
+// answering is one plain line where its rows would be, its error in the
+// log, not on the page.
 func Start(cfg StartConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !showOnly(w, r, "Die Startseite") {
@@ -68,8 +84,6 @@ func Start(cfg StartConfig) http.HandlerFunc {
 			evErr    error
 			todos    []caldav.Todo
 			todoErr  error
-			recent   []notes.Entry
-			notesErr error
 			favs     []string
 			favErr   error
 			reads    []func(context.Context)
@@ -89,95 +103,166 @@ func Start(cfg StartConfig) http.HandlerFunc {
 				func(ctx context.Context) { events, evErr = cfg.Calendar.Events(ctx, now, now.AddDate(0, 0, horizon)) },
 				func(ctx context.Context) { todos, todoErr = cfg.Calendar.OpenTodos(ctx) })
 		}
-		if cfg.Notes != nil {
-			reads = append(reads, func(ctx context.Context) { recent, notesErr = cfg.Notes.Recent(ctx, maxHaushalt) })
-		}
-		if cfg.Favorites != nil && cfg.HA != nil && person != "" {
+		pins := cfg.Favorites != nil && cfg.HA != nil && person != ""
+		if pins {
 			reads = append(reads, func(context.Context) { favs, favErr = cfg.Favorites.For(person) })
 		}
 		fetch(r, reads...)
-		logErrs("start", map[string]error{"laib": laibErr, "home assistant": haErr, "calendar": evErr, "reminders": todoErr, "notes": notesErr, "favorites": favErr})
+		logErrs("start", map[string]error{"laib": laibErr, "home assistant": haErr, "calendar": evErr, "reminders": todoErr, "favorites": favErr})
 
-		b := familyHead(r, cfg, "Start", "Start")
-		b.WriteString("<h1 class=sr>Start</h1>")
-		switch {
-		case cfg.Laib == nil:
-		case laibErr != nil:
-			b.WriteString("<p class=k>Wie es der Box geht, lässt sich gerade nicht sagen.</p>")
-		default:
-			b.WriteString(guarantees(ready, services, isAdmin(r), cfg.LaibURL))
+		b := familyHead(r, cfg, "Zuhause", "Start")
+		b.WriteString("<h1>Zuhause</h1><p class=datum>" + dateWords(now, loc) + "</p>")
+		var top, bottom string
+		if cfg.Laib != nil {
+			quiet := haErr == nil && evErr == nil && todoErr == nil && favErr == nil
+			top, bottom = familyBox(ready, services, laibErr, quiet, now, loc)
 		}
-
-		jetzt := cards.Card{Title: "Jetzt"}
-		switch {
-		case cfg.HA == nil:
-		case haErr != nil:
-			jetzt.Add(saysNoHouse, "")
-		default:
-			home(&jetzt, states, reg.Hidden)
-			jetzt.Link = &cards.Link{Href: "/raeume", Text: "Alle Räume"}
+		b.WriteString(top)
+		if cfg.HA != nil {
+			b.WriteString(imHaus(states, haErr, reg.Hidden).HTML())
 		}
-		switch {
-		case cfg.Calendar == nil:
-		case evErr != nil:
-			jetzt.Add(saysNoCalendar, "")
-		case len(events) > 0:
-			e := events[0]
-			jetzt.AddLink("Nächster Termin: "+summary(e.Summary), eventWhen(e, now, loc), "/kalender")
+		if pins {
+			b.WriteString(meineGeraete(favs, favErr, states, haErr, reg).HTML())
 		}
-		b.WriteString(jetzt.HTML())
-
-		b.WriteString(favoriteCard(favs, favErr, states, haErr, reg).HTML())
-
-		haushalt := cards.Card{Title: "Haushalt"}
-		switch {
-		case cfg.Calendar == nil:
-		case todoErr != nil:
-			if evErr == nil { // the calendar is said once
-				haushalt.Add(saysNoCalendar, "")
-			}
-		default:
-			for i, t := range todos {
-				if i == maxHaushalt {
-					break
-				}
-				d := "Erinnerung"
-				if w := dueWords(t, now, loc); w != "" {
-					d += " · " + w
-				}
-				haushalt.AddLink(summary(t.Summary), d, "/kalender")
-			}
+		if cfg.Calendar != nil {
+			b.WriteString(agenda(events, evErr, todos, todoErr, now, loc).HTML())
 		}
-		switch {
-		case cfg.Notes == nil:
-		case notesErr != nil:
-			haushalt.Add(saysNoNotes, "")
-		default:
-			for _, n := range recent {
-				haushalt.AddLink(summary(n.Title), "Notiz · geändert "+dayWord(n.Changed, now, loc)+" "+n.Changed.In(loc).Format("15:04"), cards.NotePage(n.Name))
-			}
-			haushalt.Link = &cards.Link{Href: "/notizen", Text: "Alle Notizen"}
-		}
-		b.WriteString(haushalt.HTML())
+		b.WriteString(bottom)
 		writePage(w, http.StatusOK, b)
 	}
 }
 
-// favoriteCard is Meine Favoriten (laib DEKONSTRUKTION, ADR 0017): the
-// person's things in their order, each with its state in words and leading
-// to its own page. Only what that page shows: a thing of a card domain
-// that HA knows and does not hide. Nothing to show, no card.
-func favoriteCard(ids []string, err error, states []ha.State, haErr error, reg ha.Registry) cards.Card {
-	c := cards.Card{Title: "Meine Favoriten"}
+// imHaus answers "who is home, and what is on?": the people at home, the
+// lamps that are on with one button to turn them off, what plays with
+// Pause. What HA hides is left out; a group is not a lamp.
+func imHaus(states []ha.State, haErr error, hidden map[string]bool) cards.Card {
+	c := cards.Card{Title: "Im Haus", Look: cards.Boxes}
+	if haErr != nil {
+		c.Add(saysNoHouse+" "+saysNoSwitching, "")
+		return c
+	}
+	persons := 0
+	var home []string
+	type playing struct {
+		id, name, what string
+		pause          bool
+	}
+	var plays []playing
+	for _, s := range states {
+		if !shown(s, hidden) {
+			continue
+		}
+		domain, _, _ := strings.Cut(s.EntityID, ".")
+		switch {
+		case domain == "person":
+			persons++
+			if s.State == "home" {
+				home = append(home, friendly(s))
+			}
+		case domain == "media_player" && s.State == "playing":
+			title, _ := s.Attributes["media_title"].(string)
+			artist, _ := s.Attributes["media_artist"].(string)
+			what := trimRunes(oneLine(title), 80)
+			if a := trimRunes(oneLine(artist), 60); a != "" {
+				if what != "" {
+					what += " · "
+				}
+				what += a
+			}
+			f, _ := number(s.Attributes["supported_features"])
+			plays = append(plays, playing{s.EntityID, friendly(s), what, int64(f)&pauseFeature != 0})
+		}
+	}
+	if persons > 0 {
+		sort.Strings(home)
+		switch len(home) {
+		case 0:
+			c.Add("Niemand ist zu Hause", "")
+		case 1:
+			c.Add(home[0]+" ist da", "")
+		default:
+			c.Add(andList(home)+" sind da", "")
+		}
+	}
+	lamps := litLamps(states, hidden)
+	switch len(lamps) {
+	case 0:
+		c.Add("Alle Lichter sind aus", "")
+	case 1:
+		c.Rows = append(c.Rows, cards.Row{Text: "1 Licht an", Detail: friendly(lamps[0]),
+			Action: &cards.Action{Label: "Aus", Entity: lamps[0].EntityID, Do: "light.turn_off", Back: "/start"}})
+	default:
+		names := make([]string, len(lamps))
+		for i, l := range lamps {
+			names[i] = friendly(l)
+		}
+		sort.Strings(names)
+		list := strings.Join(names[:min(len(names), maxNames)], ", ")
+		if len(names) > maxNames {
+			list += fmt.Sprintf(" und %d weitere", len(names)-maxNames)
+		}
+		c.Rows = append(c.Rows, cards.Row{Text: fmt.Sprintf("%d Lichter an", len(lamps)), Detail: list,
+			Action: &cards.Action{Label: "Alle aus", Do: allLightsOff, Back: "/start"}})
+	}
+	sort.SliceStable(plays, func(i, j int) bool { return plays[i].name < plays[j].name })
+	for i, p := range plays {
+		if i == maxPlaying {
+			break
+		}
+		row := cards.Row{Text: p.name + " spielt", Detail: p.what}
+		if p.pause {
+			row.Action = &cards.Action{Label: "Pause", Entity: p.id, Do: "media_player.media_pause", Back: "/start"}
+		}
+		c.Rows = append(c.Rows, row)
+	}
+	return c
+}
+
+// pauseFeature is HA's MediaPlayerEntityFeature.PAUSE.
+const pauseFeature = 1
+
+// shown: not a group (an entity carrying an entity_id list, light groups
+// too: its members count), and not hidden by HA.
+func shown(s ha.State, hidden map[string]bool) bool {
+	_, group := s.Attributes["entity_id"].([]any)
+	return !group && !hidden[s.EntityID]
+}
+
+// litLamps are the lamps that are on, as Im Haus counts them; "Alle aus"
+// turns off exactly these.
+func litLamps(states []ha.State, hidden map[string]bool) []ha.State {
+	var out []ha.State
+	for _, s := range states {
+		if strings.HasPrefix(s.EntityID, "light.") && s.State == "on" && shown(s, hidden) {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// andList is "Anna", "Anna und Ben", "Anna, Ben und Carla".
+func andList(xs []string) string {
+	if len(xs) < 2 {
+		return strings.Join(xs, "")
+	}
+	return strings.Join(xs[:len(xs)-1], ", ") + " und " + xs[len(xs)-1]
+}
+
+// meineGeraete answers "where are my things?": the person's own, in their
+// order, as tiles like the phone widget, a lamp's or a switch's switch
+// right there. Only what a thing's page shows: a thing of a card domain
+// that HA knows and does not hide. None says how to get one.
+func meineGeraete(ids []string, err error, states []ha.State, haErr error, reg ha.Registry) cards.Card {
+	c := cards.Card{Title: "Meine Geräte", Look: cards.Tiles}
 	switch {
 	case err != nil:
 		c.Add(saysNoFavorites, "")
 		return c
-	case len(ids) == 0:
-		return c
-	case haErr != nil:
+	case haErr != nil && len(ids) > 0:
 		c.Add(saysFavsUnseen, "")
 		return c
+	case haErr != nil:
+		return c // Im Haus says the house does not answer; how to pin can wait
 	}
 	byID := make(map[string]ha.State, len(states))
 	for _, s := range states {
@@ -190,11 +275,164 @@ func favoriteCard(ids []string, err error, states []ha.State, haErr error, reg h
 		if !ok || !cards.Domains[domain] || reg.Hidden[id] {
 			continue
 		}
-		if n++; n <= maxFavoriten {
-			c.AddLink(friendly(s), roomDetail(domain, s, reg.TempUnit), cards.ThingPage(id))
+		if n++; n <= maxGeraete {
+			c.Rows = append(c.Rows, tile(domain, s, reg.TempUnit, "/start"))
 		}
 	}
-	more(&c, n-maxFavoriten)
+	more(&c, n-maxGeraete)
+	if n == 0 {
+		c.AddLink(saysPinHow, "", "/raeume")
+	}
+	return c
+}
+
+// tile is one thing as a tile: its name leading to its page, its state in
+// a word, on or off, a level for the bar, and a lamp's or a switch's
+// switch, which lands back on back.
+func tile(domain string, s ha.State, houseUnit, back string) cards.Row {
+	r := cards.Row{Text: friendly(s), Href: cards.ThingPage(s.EntityID)}
+	switch s.State {
+	case "unavailable":
+		r.State, r.Off = "Nicht erreichbar", true
+		return r
+	case "unknown", "":
+		r.State, r.Off = "Unbekannt", true
+		return r
+	}
+	switch domain {
+	case "light", "switch":
+		r.On, r.Off = s.State == "on", s.State == "off"
+		r.State = capital(roomDetail(domain, s, houseUnit))
+		if v, ok := number(s.Attributes["brightness"]); ok && r.On && domain == "light" {
+			r.State, r.Level = "An", percent(v/255*100)
+			r.Detail = strconv.Itoa(r.Level) + " %"
+		}
+		if r.On || r.Off {
+			do := domain + ".turn_on"
+			if r.On {
+				do = domain + ".turn_off"
+			}
+			r.Action = &cards.Action{Label: friendly(s), Entity: s.EntityID, Do: do, Back: back, Switch: true, On: r.On}
+		}
+	case "cover":
+		r.On, r.Off = s.State == "open" || s.State == "opening", s.State == "closed"
+		r.State = capital(map[string]string{"open": "offen", "closed": "zu", "opening": "öffnet", "closing": "schließt", "stopped": "angehalten"}[s.State])
+		if r.State == "" {
+			r.State = capital(trimRunes(oneLine(s.State), 40))
+		}
+		if v, ok := number(s.Attributes["current_position"]); ok && r.On {
+			r.Level = percent(v)
+			r.Detail = strconv.Itoa(r.Level) + " %"
+		}
+	case "climate":
+		unit := tempUnit(s, houseUnit)
+		r.On, r.Off = s.State != "off", s.State == "off"
+		cur, hasCur := number(s.Attributes["current_temperature"])
+		target, hasTarget := number(s.Attributes["temperature"])
+		switch {
+		case r.Off:
+			r.State = "Aus"
+			if hasCur {
+				r.Detail = decimal(cur) + " " + unit
+			}
+		case hasCur:
+			r.State = decimal(cur) + " " + unit
+			if hasTarget {
+				r.Detail = "→ " + decimal(target) + " " + unit
+			}
+		case hasTarget:
+			r.State = "→ " + decimal(target) + " " + unit
+		default:
+			r.State = "An"
+		}
+	case "media_player":
+		r.On, r.Off = s.State == "playing", s.State == "off" || s.State == "standby"
+		word := roomDetail(domain, s, houseUnit)
+		if head, rest, ok := strings.Cut(word, ": "); ok {
+			word, r.Detail = head, rest
+		}
+		r.State = capital(word)
+	default: // a sensor, a door, a lock: its reading
+		r.State = capital(roomDetail(domain, s, houseUnit))
+	}
+	return r
+}
+
+// percent is a share in whole percent, 1–100: what is on shows a bar.
+func percent(v float64) int {
+	return max(1, min(100, int(math.Round(v))))
+}
+
+// capital is the word with its first letter upper case: "an" → "An".
+func capital(s string) string {
+	r, n := utf8.DecodeRuneInString(s)
+	if n == 0 {
+		return s
+	}
+	return string(unicode.ToUpper(r)) + s[n:]
+}
+
+// agenda answers "what comes up?" (Heute und demnächst): appointments and
+// reminders together, by time — an overdue reminder first, one without a
+// date last, "offen" — each leading to its page. Notes are not things
+// that come; they have their own tab.
+func agenda(events []caldav.Event, evErr error, todos []caldav.Todo, todoErr error, now time.Time, loc *time.Location) cards.Card {
+	c := cards.Card{Title: "Heute und demnächst", Look: cards.Times}
+	type item struct {
+		at    time.Time
+		dated bool
+		row   cards.Row
+	}
+	var items []item
+	if evErr == nil {
+		for _, e := range events {
+			when, detail := dayWord(e.Start, now, loc)+" "+e.Start.In(loc).Format("15:04"), trimRunes(oneLine(e.Location), 80)
+			switch {
+			case e.AllDay && e.Start.Before(now):
+				when = "heute"
+			case e.AllDay:
+				when = dayWord(e.Start, now, loc)
+			case e.Start.Before(now):
+				when, detail = "jetzt", strings.TrimSuffix("bis "+e.End.In(loc).Format("15:04")+" · "+detail, " · ")
+			}
+			items = append(items, item{e.Start, true, cards.Row{Text: summary(e.Summary), Detail: detail, When: when, Href: "/kalender"}})
+		}
+	}
+	if todoErr == nil {
+		until := now.AddDate(0, 0, horizon)
+		for _, t := range todos {
+			if !t.Due.IsZero() && !t.Due.Before(until) {
+				continue
+			}
+			row := cards.Row{Text: summary(t.Summary), When: dueWords(t, now, loc), Href: "/kalender"}
+			if uid := strings.TrimSpace(t.UID); uid != "" {
+				row.Href = cards.ReminderPage(uid)
+			}
+			if t.Due.IsZero() {
+				row.When = "offen"
+			}
+			items = append(items, item{t.Due, !t.Due.IsZero(), row})
+		}
+	}
+	sort.SliceStable(items, func(i, j int) bool {
+		if items[i].dated != items[j].dated {
+			return items[i].dated
+		}
+		return items[i].at.Before(items[j].at)
+	})
+	for i, it := range items {
+		if i == maxAgenda {
+			c.AddLink("und "+strconv.Itoa(len(items)-maxAgenda)+" weitere", "", "/kalender")
+			break
+		}
+		c.Rows = append(c.Rows, it.row)
+	}
+	switch {
+	case evErr != nil || todoErr != nil:
+		c.Add(saysNoCalendar, "")
+	case len(items) == 0:
+		c.Add(saysNothingDue, saysAgendaHow)
+	}
 	return c
 }
 
@@ -209,72 +447,6 @@ func ToStart() http.HandlerFunc {
 // isAdmin reads Authelia's Remote-Groups.
 func isAdmin(r *http.Request) bool {
 	return strings.Contains(","+r.Header.Get("Remote-Groups")+",", ",admins,")
-}
-
-// home fills Jetzt from HA's states: who is home, the lights that are on,
-// what plays — in that order (laib DEKONSTRUKTION). What HA hides is left
-// out.
-func home(c *cards.Card, states []ha.State, hidden map[string]bool) {
-	var persons, homeNames, lights []string
-	type playing struct{ name, what string }
-	var plays []playing
-	for _, s := range states {
-		if _, group := s.Attributes["entity_id"].([]any); group {
-			continue // a group (light groups too) is not a lamp; its members count
-		}
-		if hidden[s.EntityID] {
-			continue
-		}
-		domain, _, _ := strings.Cut(s.EntityID, ".")
-		switch {
-		case domain == "person":
-			persons = append(persons, s.EntityID)
-			if s.State == "home" {
-				homeNames = append(homeNames, friendly(s))
-			}
-		case domain == "light" && s.State == "on":
-			lights = append(lights, friendly(s))
-		case domain == "media_player" && s.State == "playing":
-			title, _ := s.Attributes["media_title"].(string)
-			artist, _ := s.Attributes["media_artist"].(string)
-			what := oneLine(title)
-			if a := oneLine(artist); a != "" {
-				if what != "" {
-					what += " · "
-				}
-				what += a
-			}
-			plays = append(plays, playing{friendly(s), what})
-		}
-	}
-	if len(persons) > 0 {
-		if len(homeNames) == 0 {
-			c.Add("Niemand ist zu Hause", "")
-		} else {
-			sort.Strings(homeNames)
-			c.Add("Zu Hause: "+strings.Join(homeNames, ", "), "")
-		}
-	}
-	switch len(lights) {
-	case 0:
-		c.Add("Alle Lichter sind aus", "")
-	case 1:
-		c.Add("1 Licht an", lights[0])
-	default:
-		sort.Strings(lights)
-		names := strings.Join(lights[:min(len(lights), maxNames)], ", ")
-		if len(lights) > maxNames {
-			names += fmt.Sprintf(" und %d weitere", len(lights)-maxNames)
-		}
-		c.Add(fmt.Sprintf("%d Lichter an", len(lights)), names)
-	}
-	sort.SliceStable(plays, func(i, j int) bool { return plays[i].name < plays[j].name })
-	for i, p := range plays {
-		if i == maxPlaying {
-			break
-		}
-		c.Add("Läuft: "+p.name, p.what)
-	}
 }
 
 func friendly(s ha.State) string {
@@ -301,35 +473,36 @@ func summary(s string) string {
 	return trimRunes(s, 120)
 }
 
+// daysAgo is how many calendar days t lies before now, in loc: 0 today, 1
+// yesterday, -1 tomorrow.
+func daysAgo(t, now time.Time, loc *time.Location) int {
+	y, m, d := t.In(loc).Date()
+	ny, nm, nd := now.In(loc).Date()
+	return int(time.Date(ny, nm, nd, 12, 0, 0, 0, time.UTC).Sub(time.Date(y, m, d, 12, 0, 0, 0, time.UTC)).Hours() / 24)
+}
+
+var (
+	weekdays = [...]string{"Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"}
+	months   = [...]string{"Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"}
+)
+
 // dayWord says a day the family way, relative to now: heute, morgen,
 // gestern, else "Fr 16.10.".
 func dayWord(t, now time.Time, loc *time.Location) string {
-	t, now = t.In(loc), now.In(loc)
-	y, m, d := t.Date()
-	ny, nm, nd := now.Date()
-	days := int(time.Date(y, m, d, 12, 0, 0, 0, time.UTC).Sub(time.Date(ny, nm, nd, 12, 0, 0, 0, time.UTC)).Hours() / 24)
-	switch days {
+	switch daysAgo(t, now, loc) {
 	case 0:
 		return "heute"
-	case 1:
-		return "morgen"
 	case -1:
+		return "morgen"
+	case 1:
 		return "gestern"
 	}
-	return [...]string{"So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"}[t.Weekday()] + " " + t.Format("02.01.")
+	t = t.In(loc)
+	return weekdays[t.Weekday()][:2] + " " + t.Format("02.01.")
 }
 
-// eventWhen is an appointment's time: heute 15:00, morgen ganztägig,
-// jetzt bis 11:00 when it already runs.
-func eventWhen(e caldav.Event, now time.Time, loc *time.Location) string {
-	if e.AllDay {
-		if e.Start.Before(now) {
-			return "heute ganztägig"
-		}
-		return dayWord(e.Start, now, loc) + " ganztägig"
-	}
-	if e.Start.Before(now) {
-		return "jetzt, bis " + e.End.In(loc).Format("15:04")
-	}
-	return dayWord(e.Start, now, loc) + " " + e.Start.In(loc).Format("15:04")
+// dateWords is the day at the top of Start: "Mittwoch, 14. Oktober".
+func dateWords(now time.Time, loc *time.Location) string {
+	now = now.In(loc)
+	return weekdays[now.Weekday()] + ", " + strconv.Itoa(now.Day()) + ". " + months[now.Month()-1]
 }
