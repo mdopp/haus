@@ -916,8 +916,9 @@ func TestEnergyFromEnv(t *testing.T) {
 }
 
 // haus#35: the widgets and the family's pages share one rule (package
-// schalter). A media player pauses, nothing more: no URL played on the
-// speakers, no volume, no turning off.
+// schalter). A media player pauses, goes on and steps its volume (haus#12),
+// nothing more: no URL played on the speakers, no set volume, no mute, no
+// turning off.
 func TestHACallPausesAPlayerAndNothingMore(t *testing.T) {
 	fake, h := house(t)
 	fake.Set("media_player.wohnzimmer", "playing", map[string]any{"friendly_name": "Wohnzimmer", "supported_features": 1})
@@ -926,6 +927,10 @@ func TestHACallPausesAPlayerAndNothingMore(t *testing.T) {
 		want int
 	}{
 		{`{"entity_id":"media_player.wohnzimmer","service":"media_player.media_pause"}`, 200},
+		{`{"entity_id":"media_player.wohnzimmer","service":"media_player.media_play"}`, 200},
+		{`{"entity_id":"media_player.wohnzimmer","service":"media_player.volume_up"}`, 200},
+		{`{"entity_id":"media_player.wohnzimmer","service":"media_player.volume_down"}`, 200},
+		{`{"entity_id":"media_player.wohnzimmer","service":"media_player.volume_mute","data":{"is_volume_muted":true}}`, 400},
 		{`{"entity_id":"media_player.wohnzimmer","service":"media_player.play_media","data":{"media_content_id":"http://x"}}`, 400},
 		{`{"entity_id":"media_player.wohnzimmer","service":"media_player.volume_set","data":{"volume_level":1},"confirmed":true}`, 400},
 		{`{"entity_id":"media_player.wohnzimmer","service":"media_player.turn_off"}`, 400},

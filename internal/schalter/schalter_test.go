@@ -22,9 +22,10 @@ func house(t *testing.T) (*hafake.HA, *ha.Client) {
 }
 
 // haus#35: one rule for what Haus switches, for the widgets' /napi/ha/call
-// and the family's pages alike. A media player only pauses: Start's
-// "Pause" is the one thing the pages need from it, and playing a URL on
-// the speakers stays off the list.
+// and the family's pages alike. A media player pauses and goes on, and
+// steps its volume (Start's Pause, Medien's buttons, haus#12); playing a
+// URL on the speakers, setting a volume, muting, stopping, turning off
+// stay off the list.
 func TestOneRuleForWhatHausSwitches(t *testing.T) {
 	fake, hc := house(t)
 	for _, c := range []struct {
@@ -36,7 +37,13 @@ func TestOneRuleForWhatHausSwitches(t *testing.T) {
 	}{
 		{"light.kueche", "light.turn_off", nil, false, 0, ""},
 		{"cover.rollo", "cover.open_cover", nil, false, 0, ""},
+		{"media_player.wohnzimmer", "media_player.media_play", nil, false, 0, ""},  // Medien's Weiter (haus#12)
+		{"media_player.wohnzimmer", "media_player.volume_up", nil, false, 0, ""},   // Medien's Lauter
+		{"media_player.wohnzimmer", "media_player.volume_down", nil, false, 0, ""}, // Medien's Leiser
 		{"media_player.wohnzimmer", "media_player.media_pause", nil, false, 0, ""},
+		{"media_player.wohnzimmer", "media_player.volume_mute", map[string]any{"is_volume_muted": true}, true, 400, "unsupported_service"},
+		{"media_player.wohnzimmer", "media_player.media_stop", nil, true, 400, "unsupported_service"},
+		{"media_player.wohnzimmer", "media_player.select_source", map[string]any{"source": "x"}, true, 400, "unsupported_service"},
 		{"media_player.wohnzimmer", "media_player.play_media", map[string]any{"media_content_id": "http://x"}, false, 400, "unsupported_service"},
 		{"media_player.wohnzimmer", "media_player.turn_off", nil, false, 400, "unsupported_service"},
 		{"media_player.wohnzimmer", "media_player.volume_set", map[string]any{"volume_level": 1}, true, 400, "unsupported_service"},

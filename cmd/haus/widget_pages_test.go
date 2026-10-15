@@ -419,3 +419,13 @@ func TestPinAndSwitchThroughTheRoutes(t *testing.T) {
 		t.Fatalf("the font → %d %q", rec.Code, rec.Header().Get("Content-Type"))
 	}
 }
+
+// haus#12: Haus serves Medien.
+func TestMedienPageServed(t *testing.T) {
+	s, fake, _ := fullSite(t)
+	fake.Set("media_player.wz", "playing", map[string]any{"friendly_name": "Sonos", "media_title": "Abbey Road", "supported_features": 1})
+	rec := page(routes(s), "/medien")
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `<a href="/raeume/media_player.wz">Sonos</a> <span class=k>Abbey Road</span>`) {
+		t.Fatalf("/medien → %d:\n%s", rec.Code, rec.Body.String())
+	}
+}
