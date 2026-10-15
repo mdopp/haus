@@ -338,7 +338,9 @@ const tableNote = "# Handwerker\n\n| Gewerk | Firma | Telefon | Notiz |\n|---|--
 const listNote = "# Packliste Ski\n\n- Skischuhe\n* Helm\n+ Brille\n- [ ] Schneeketten\n- [x] Skipass\n## Für die Kinder\n> **Wichtig**: `Sonnencreme`\n1. Mütze\n"
 
 // A passage is shown as plain text (haus#13): no table header or
-// separator row, a table row as its cells joined by " · ", no list dash,
+// separator row, a table row as each value after its column's header
+// ("Strom 41.230"; a column without a header: the value alone), joined
+// by " · ", no list dash,
 // checkbox, quote mark, emphasis or heading hash; the note's "# " title
 // is the hit's title, not a line. A passage that is only a table's header
 // is the note's first lines with real content. At most n lines, each cut
@@ -352,15 +354,19 @@ func TestPassage(t *testing.T) {
 		want string
 	}{
 		{"only the header", []string{"# Handwerker", "| Gewerk | Firma | Telefon | Notiz |"}, tableNote, 3,
-			"Heizung · Huber GmbH · 089 111 · Wartung im Herbst|Dach · Schmid · 089 222"},
-		{"separator and a row", []string{"|---|---|:---:|---|", "| Dach | Schmid | 089 222 | |"}, tableNote, 3, "Dach · Schmid · 089 222"},
+			"Gewerk Heizung · Firma Huber GmbH · Telefon 089 111 · Notiz Wartung im Herbst|Gewerk Dach · Firma Schmid · Telefon 089 222"},
+		{"separator and a row", []string{"|---|---|:---:|---|", "| Dach | Schmid | 089 222 | |"}, tableNote, 3, "Gewerk Dach · Firma Schmid · Telefon 089 222"},
 		{"header with its separator", []string{"| Gewerk | Firma | Telefon | Notiz |", "|---|---|:---:|---|", "| Heizung | Huber GmbH | 089 111 | Wartung im Herbst |"}, tableNote, 3,
-			"Heizung · Huber GmbH · 089 111 · Wartung im Herbst"},
+			"Gewerk Heizung · Firma Huber GmbH · Telefon 089 111 · Notiz Wartung im Herbst"},
 		{"a list", nil, listNote, 10, "Skischuhe|Helm|Brille|Schneeketten|Skipass|Für die Kinder|Wichtig: Sonnencreme|1. Mütze"},
 		{"a list passage", []string{"- Skischuhe", "* Helm"}, listNote, 3, "Skischuhe|Helm"},
 		{"at most n", nil, listNote, 2, "Skischuhe|Helm"},
 		{"qmd's lines first", []string{"- [ ] Schneeketten"}, listNote, 3, "Schneeketten"},
 		{"nothing but markup", []string{"|---|"}, "# Leer\n\n|---|\n", 3, ""},
+		{"a column without a header", nil, "# Putzplan\n\n| | Montag | Dienstag |\n|---|---|---|\n| Anna | Bad | |\n", 3, "Anna · Montag Bad"},
+		{"meter readings", []string{"| 31.12.2024 | 41.230 | 18.442 | 812 |"}, "# Zählerstände\n\n| Datum | Strom | Gas | Wasser |\n|---|---|---|---|\n| 31.12.2024 | 41.230 | 18.442 | 812 |\n", 3,
+			"Datum 31.12.2024 · Strom 41.230 · Gas 18.442 · Wasser 812"},
+		{"a row of no known table", []string{"| a | b |"}, "", 3, "a · b"},
 	} {
 		got := strings.Join(Passage(c.raw, c.body, c.n), "|")
 		if got != c.want {
@@ -379,7 +385,7 @@ func TestSearchLinesArePlain(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "handwerker.md"), []byte(tableNote), 0o644)
 	os.WriteFile(filepath.Join(dir, "packliste.md"), []byte(listNote), 0o644)
 	res, err := d.Search(bg, "Heizung", 10)
-	if err != nil || len(res.Hits) != 1 || strings.Join(res.Hits[0].Lines, "|") != "Heizung · Huber GmbH · 089 111 · Wartung im Herbst|Dach · Schmid · 089 222" {
+	if err != nil || len(res.Hits) != 1 || strings.Join(res.Hits[0].Lines, "|") != "Gewerk Heizung · Firma Huber GmbH · Telefon 089 111 · Notiz Wartung im Herbst|Gewerk Dach · Firma Schmid · Telefon 089 222" {
 		t.Fatalf("%+v %v", res, err)
 	}
 	res, _ = d.Search(bg, "Helm", 10)
@@ -420,8 +426,7 @@ func TestSearchAnyWord(t *testing.T) {
 	}
 }
 
-// Words are the query's meaningful words as written, each once; the
-// longest is the hint's example (haus#13).
+// Words are the query's meaningful words as written, each once (haus#13).
 func TestWords(t *testing.T) {
 	for q, want := range map[string]string{
 		"Wann kommt der Schornsteinfeger?": "Schornsteinfeger",
@@ -433,8 +438,5 @@ func TestWords(t *testing.T) {
 		if got := strings.Join(Words(q), ","); got != want {
 			t.Errorf("%q: %q, want %q", q, got, want)
 		}
-	}
-	if Longest(Words("Wo liegt der Reisepass von Ben")) != "Reisepass" || Longest(nil) != "" {
-		t.Fatal("longest")
 	}
 }
