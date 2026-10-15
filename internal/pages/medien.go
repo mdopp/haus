@@ -34,7 +34,8 @@ const (
 // buttons it can take — Pause or Weiter, Leiser and Lauter — through
 // /schalten, back to Medien; Gerade still, the other players and their
 // state. A group is not a player, what HA hides is not shown. No players
-// is one plain line; HA not answering is one plain line.
+// is one plain line; HA not answering is one plain line. A path under
+// /medien/ is a 404 with the way back.
 func Medien(cfg StartConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !showOnly(w, r, "Medien") {
@@ -42,6 +43,10 @@ func Medien(cfg StartConfig) http.HandlerFunc {
 		}
 		if cfg.HA == nil {
 			toStart(w, r)
+			return
+		}
+		if r.URL.Path != medienPath {
+			missing{http.StatusNotFound, "Diese Seite gibt es nicht.", "Medien", medienPath, "Medien"}.write(w, r, cfg)
 			return
 		}
 		var (
