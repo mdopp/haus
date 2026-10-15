@@ -734,6 +734,33 @@ func (c *Client) PutTodo(ctx context.Context, t Todo) (Collection, error) {
 	return c.put(ctx, c.calendars(), "VTODO", t.UID+".ics", "text/calendar", t.ICS(c.now()))
 }
 
+// ErrExists is an import whose name is taken: the entry is there already.
+var ErrExists = errors.New("Radicale: schon da")
+
+// ImportObject writes one calendar object as it came (an import,
+// haus#13) into the write calendar, named after its UID; one already
+// there is ErrExists, never replaced. comp is the component the calendar
+// must take (VEVENT, VTODO).
+func (c *Client) ImportObject(ctx context.Context, comp, uid, ics string) error {
+	_, err := c.put(ctx, c.calendars(), comp, uid+".ics", "text/calendar", ics)
+	return exists(err)
+}
+
+// ImportCard writes one card as it came into the write address book,
+// named after its UID; one already there is ErrExists, never replaced.
+func (c *Client) ImportCard(ctx context.Context, uid, vcf string) error {
+	_, err := c.put(ctx, c.books(), "", strings.TrimPrefix(uid, "urn:uuid:")+".vcf", "text/vcard", vcf)
+	return exists(err)
+}
+
+func exists(err error) error {
+	var st *ErrStatus
+	if errors.As(err, &st) && st.Code == http.StatusPreconditionFailed {
+		return ErrExists
+	}
+	return err
+}
+
 // put writes a new object named name into the kind's write collection.
 func (c *Client) put(ctx context.Context, k kind, comp, name, ctype, body string) (Collection, error) {
 	col, err := c.target(ctx, k, comp)
