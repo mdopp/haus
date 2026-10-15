@@ -1,3 +1,0 @@
-event: message
-data: {"result":{"content":[{"type":"text","text":"QMD Index Status:\n  Total documents: 46\n  Needs embedding: 46\n  Vector index: no\n  Collections: 1\n    - notizen: /notes (46 docs)"}],"structuredContent":{"totalDocuments":46,"needsEmbedding":46,"hasVectorIndex":false,"collections":[{"name":"notizen","path":"/notes","pattern":"**/*.md","documents":46,"lastUpdated":"2026-10-15T09:05:23.566Z"}]}},"jsonrpc":"2.0","id":2}
-

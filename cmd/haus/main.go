@@ -59,7 +59,7 @@ func routes(s site) http.Handler {
 	// the family's pages (haus#12): each card only from a backend that is set; a
 	// page whose backend is not set lands on Start
 	family := pages.StartConfig{Laib: s.ops, LaibURL: s.laibURL, HA: s.napi.HA, Calendar: s.hh.Calendar, Contacts: s.hh.Contacts,
-		Notes: s.hh.Notes, Library: s.hh.Library, Docs: s.hh.Documents, Loc: s.hh.Loc, Favorites: s.favorites}
+		Notes: s.hh.Notes, Library: s.hh.Library, Judge: s.hh.Judge, Docs: s.hh.Documents, Loc: s.hh.Loc, Favorites: s.favorites}
 	pagesMux.HandleFunc("/start", pages.Start(family))
 	pagesMux.HandleFunc("/raeume", pages.Raeume(family))
 	pagesMux.HandleFunc("/kalender", pages.Kalender(family))
@@ -130,6 +130,6 @@ func main() {
 	mux := routes(site{napi: cfg, hh: hh, store: store, ops: ops, proxySecret: proxySecret, laibURL: laibURL,
 		publicURL: os.Getenv("HAUS_PUBLIC_URL"), tickets: werkstatt.FromEnv(), favorites: favoriten.Open(dataDir)})
 	addr := env("HAUS_LISTEN", "127.0.0.1:8650")
-	log.Printf("haus %s: listening on %s as %s, laib %s, home assistant %v, haushalt %d tools, memory library %v, uploads %q, pages only behind the proxy secret", Version, addr, pages.House.Display, ops.URL, cfg.HA != nil, len(haushalt.Tools(hh)), hh.Library != nil, cfg.UploadDir)
+	log.Printf("haus %s: listening on %s as %s, laib %s, home assistant %v, haushalt %d tools, memory library %v (tidy-up %v), uploads %q, pages only behind the proxy secret", Version, addr, pages.House.Display, ops.URL, cfg.HA != nil, len(haushalt.Tools(hh)), hh.Library != nil, hh.Judge != nil, cfg.UploadDir)
 	log.Fatal((&http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}).ListenAndServe())
 }

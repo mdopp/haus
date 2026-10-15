@@ -53,10 +53,28 @@ func Notizen(cfg StartConfig) http.HandlerFunc {
 		if q != "" {
 			var res library.Found
 			var err error
-			fetch(r, func(ctx context.Context) { res, err = library.Find(ctx, cfg.Library, cfg.Notes, q, maxHits) })
+			fetch(r, func(ctx context.Context) {
+				res, err = library.Find(ctx, cfg.Library, library.Tidy{Judge: cfg.Judge, Wait: library.PageTidy}, cfg.Notes, q, maxHits)
+			})
 			logErrs("notizen", map[string]error{"search": err})
 			if err != nil {
 				b.WriteString("<p class=k>" + saysNoNotes + "</p>")
+			} else if res.NoMatch {
+				// the library answered, nothing is close: said so, and the
+				// notes that only hold a word of it named as such
+				b.WriteString("<p class=k>" + saysNoMatch + "</p>")
+				if len(res.Hits) > 0 {
+					c := cards.Card{Title: byWordsTitle}
+					for _, h := range res.Hits {
+						first := ""
+						if len(h.Lines) > 0 {
+							first = h.Lines[0]
+						}
+						c.AddLink(summary(h.Title), first, cards.NotePage(h.Name))
+					}
+					more(&c, res.Total-len(res.Hits))
+					b.WriteString(c.HTML())
+				}
 			} else {
 				if res.Reduced {
 					b.WriteString("<p class=k>" + saysWordsOnly + "</p>")

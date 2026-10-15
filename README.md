@@ -104,7 +104,11 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     *Erinnerungen* when only the reminders fail.
   - *Notizen*: a search field (`GET /notizen?q=…`, the memory library
     below: 20 hits, by meaning) and the ten newest notes. When the library
-    is not set, does not answer, or is still indexing, the field searches
+    answers but no note is close to the question, the page says *Keine
+    Notiz passt wirklich zu deiner Frage.* and shows what the words find
+    under *Notizen mit Wörtern aus deiner Frage* (nothing more when they
+    find nothing). When the library is not set, does not answer, or is
+    still indexing, the field searches
     by words (the notes search above, its caps) and says so in one line
     above the hits: *Die Suche nach Bedeutung geht gerade nicht; gesucht
     wird nur nach den Wörtern.* By words, a sentence needs only one of its
@@ -330,8 +334,9 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   - The memory library (haus#13), `HAUS_QMD_URL` with the notes folder:
     `notizen_finden(text)`, the notes by meaning, eight at most, each with
     its title, file, a passage and, with `HAUS_PUBLIC_URL`, its page
-    `<HAUS_PUBLIC_URL>/notizen/<file>`; reduced to words the same way as
-    the page, and the answer's first line says so.
+    `<HAUS_PUBLIC_URL>/notizen/<file>`; the same cut and tidy-up as the
+    page (the tidy-up may take 3 s here: the Bote waits anyway), reduced
+    to words the same way, and the answer's first line says so.
   Times are local (`TZ`, e.g. `Europe/Berlin`): `JJJJ-MM-TT` or
   `JJJJ-MM-TTTHH:MM`. Haus keeps nothing of it (ADR 0017 §3): a note is a
   file the family syncs, a reminder an entry on their phones; the one
@@ -342,18 +347,40 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
 - The memory library (haus#13, laib ADR 0017 §3): one search by meaning
   over the notes, for the Notizen page and the Haushalt alike. It is qmd
   (github.com/tobi/qmd), which Laib runs in Haus's pod (laib#195) with its
-  own small embedding model on the CPU, refreshed by a timer. Haus reads
-  its address from `HAUS_QMD_URL` (`http://127.0.0.1:<port>`: qmd has no
-  auth and only answers a loopback Host, so it must listen on 127.0.0.1)
-  and the notes' collection from `HAUS_QMD_COLLECTION` (default
-  `notizen`). Haus sends only typed searches, words and meaning, with
-  rerank off (a plain query pulls in a 1.7B model and the reranker, the
-  slow path), and asks qmd's status tool whether the vectors are there;
+  own small embedding model on the CPU, refreshed by a timer, behind the
+  Vermittler (laib#198), a small server on qmd's SDK that adds each hit's
+  cosine. Haus reads its address from `HAUS_QMD_URL`
+  (`http://127.0.0.1:<port>`: it has no auth, so it must listen on
+  127.0.0.1) and the notes' collection from `HAUS_QMD_COLLECTION`
+  (default `notizen`). Haus sends only typed searches, words and meaning,
+  with rerank off (a plain query pulls in a 1.7B model and the reranker,
+  the slow path), and asks `GET /status` whether the vectors are there;
   qmd gets 2.5 s of a search, the word search the rest. A hit is a note
   only when its path is a plain file name inside the notes folder; what
   qmd names elsewhere, hidden, linked out or deleted is left out. Without
   the notes folder there is no library. Paperless documents come in a
   second step.
+  - **The cut.** qmd ranks some note first for any question, nonsense
+    too, so a hit by meaning is shown only when its cosine is at least
+    0.30 and at least 0.75 of the best hit's, in qmd's order (measured on
+    44 questions and 10 nonsense ones: 42/44 found, 9/10 nonsense
+    emptied). Nothing over the cut: the word search, said as "no note
+    fits", not as the search being down (page and Haushalt alike).
+  - **The tidy-up**, optional and never blocking: with more than one hit
+    left and `HAUS_LLM_URL` (the model proxy's OpenAI base, `…/v1`),
+    `HAUS_LLM_MODEL` (the house model, `gemma-4-e4b`) and `HAUS_LLM_KEY`
+    all set, Haus reads the lease (`GET /api/model-lease`, no key) and
+    asks the house model which hits answer — only when the lease says
+    that model is ready, or no window is held and it is the default
+    (nobody holds the card; not loaded yet only runs out the budget),
+    never taking the lease, never naming
+    another model, so it never makes the card swap. One call,
+    temperature 0, the answer held to `{"ids":[…]}`, each hit as its
+    title and about 700 characters of the note; at most 1.2 s on the
+    page, 3 s in the Haushalt. A refusal, no answer in time, an answer
+    that is not one, or an empty list keeps the cut's hits: the cut
+    already let only close notes through, and the model said "none" when
+    a passage missed the answer, not when the note did.
 
 Not yet: Start's *Häufig genutzt*; switching in the Räume list (a thing's
 own page switches); Energie, Medien; Paperless in the memory library and dictation in Notizen, timers in
@@ -376,7 +403,8 @@ HAUS_HAUSHALT_TOKEN=<the Bote's bearer> TZ=Europe/Berlin \
 HAUS_RADICALE_URL=http://host.containers.internal:5232 HAUS_RADICALE_USER=<service account> HAUS_RADICALE_PASSWORD=<its password> \
 HAUS_PAPERLESS_URL=http://host.containers.internal:8000 HAUS_PAPERLESS_TOKEN=<a Paperless API token> \
 HAUS_PAPERLESS_PUBLIC_URL=https://paperless.<domain> HAUS_NOTES_DIR=/notes \
-HAUS_QMD_URL=http://127.0.0.1:8181 HAUS_UPLOAD_DIR=/consume ./haus
+HAUS_QMD_URL=http://127.0.0.1:8181 HAUS_UPLOAD_DIR=/consume \
+HAUS_LLM_URL=http://host.containers.internal:11435/v1 HAUS_LLM_MODEL=gemma-4-e4b HAUS_LLM_KEY=<the model key> ./haus
 ```
 
 `HAUS_DATA` (default `/data`) holds `devices.json` and `favoriten.json`; `HAUS_PUBLIC_URL` is the
@@ -392,9 +420,10 @@ request of 64 MB through).
 `go test ./...` — a fake Laib MCP, a fake Home Assistant
 (`internal/ha/hafake`, REST and WebSocket), a fake Radicale
 (`internal/caldav/davfake`, calendars and address books), a fake Paperless
-(`internal/paperless/paperlessfake`), a fake qmd (`internal/qmd/qmdfake`,
-built from a real qmd 2.8.3's answers in `internal/qmd/testdata`) and a
-temp folder for the notes; the shapes are pinned to the app's `data/*.kt`
+(`internal/paperless/paperlessfake`), a fake Vermittler in front of qmd
+(`internal/qmd/qmdfake`, built from the prototype's answers on qmd
+2.8.3 in `internal/qmd/testdata`), a fake model proxy
+(`internal/judge/proxyfake`) and a temp folder for the notes; the shapes are pinned to the app's `data/*.kt`
 parsers in mdopp/haus-android. `HAUS_QMD_REAL=<a running qmd>
 HAUS_QMD_REAL_NOTES=<its notes folder> go test ./internal/library -run Real`
 checks against a real qmd by hand; CI never does.

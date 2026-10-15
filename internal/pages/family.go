@@ -33,6 +33,8 @@ const (
 	saysNoContacts = "Die Kontakte lassen sich gerade nicht lesen."
 	saysNoNotes    = "Die Notizen lassen sich gerade nicht lesen."
 	saysWordsOnly  = "Die Suche nach Bedeutung geht gerade nicht; gesucht wird nur nach den Wörtern."
+	saysNoMatch    = "Keine Notiz passt wirklich zu deiner Frage."
+	byWordsTitle   = "Notizen mit Wörtern aus deiner Frage"
 	// what to do when a search finds nothing (haus#13): no example word,
 	// since every word of the query has just failed
 	saysTryAnother  = "Versuch es mit einem anderen Wort, das in der Notiz stehen könnte."

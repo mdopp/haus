@@ -3,6 +3,7 @@ package notes
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -438,5 +439,37 @@ func TestWords(t *testing.T) {
 		if got := strings.Join(Words(q), ","); got != want {
 			t.Errorf("%q: %q, want %q", q, got, want)
 		}
+	}
+}
+
+// Excerpt is what the house model reads of a hit (haus#13): the note
+// plain and whole when it fits; else from a little before the passage's
+// line (the answer is often just above it), cut at n.
+func TestExcerpt(t *testing.T) {
+	short := "# Gastherme\n\nWartungsvertrag mit Huber.\n\n| Gewerk | Firma |\n|---|---|\n| Heizung | Huber |\n- Störung: **Huber** anrufen.\n"
+	if got := Excerpt(short, 7, 700); got != "Wartungsvertrag mit Huber. Gewerk Heizung · Firma Huber Störung: Huber anrufen." {
+		t.Fatalf("whole: %q", got)
+	}
+	var b strings.Builder
+	b.WriteString("# Lang\n")
+	for i := 1; i <= 40; i++ {
+		fmt.Fprintf(&b, "Zeile %02d mit etwas Text darin.\n", i) // 30 characters each
+	}
+	long := b.String()
+	// line 21 is "Zeile 20": from a quarter of 200 (50 characters) before it, one line
+	got := Excerpt(long, 21, 200)
+	if !strings.HasPrefix(got, "Zeile 19 mit") || !strings.HasSuffix(got, "…") || len([]rune(got)) != 201 {
+		t.Fatalf("from the passage: %q (%d)", got, len([]rune(got)))
+	}
+	// at the top, or past the end: from the start
+	for _, from := range []int{0, 1, 99} {
+		if got := Excerpt(long, from, 200); !strings.HasPrefix(got, "Zeile 01 mit") {
+			t.Fatalf("from %d: %q", from, got)
+		}
+	}
+	// a long line is not cut at the page's 120
+	line := strings.Repeat("x", 300)
+	if got := Excerpt("# T\n\n"+line+"\n", 1, 700); got != line {
+		t.Fatalf("long line: %d", len(got))
 	}
 }

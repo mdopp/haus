@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mdopp/haus/internal/judge"
+	"github.com/mdopp/haus/internal/judge/proxyfake"
 	"github.com/mdopp/haus/internal/library"
 	"github.com/mdopp/haus/internal/notes"
 	"github.com/mdopp/haus/internal/qmd"
@@ -335,5 +337,77 @@ func TestNotizenWordsFromASentence(t *testing.T) {
 		_, body, _ := familyPage(t, Notizen, StartConfig{Notes: nd}, "GET", "/notizen?q="+url.QueryEscape(q), "")
 		mustContain(t, body, "Nichts gefunden.", "Versuch es mit einem anderen Wort, das in der Notiz stehen könnte.")
 		mustNotContain(t, body, "z. B.", "„Schornsteinfeger“.", "„Reisepass“", "einzelnen Wort")
+	}
+}
+
+// haus#13: a hit by meaning is shown only when it is close to the
+// question. When the library answered but nothing is close, the page says
+// so — not that the search is down — and shows what the words find under
+// a label that says what they are; with no word hit, only the sentence.
+func TestNotizenNothingClose(t *testing.T) {
+	const noMatch, byWords = "Keine Notiz passt wirklich zu deiner Frage.", "Notizen mit Wörtern aus deiner Frage"
+	dir, nd := shelf(t)
+	f := qmdfake.New("notizen")
+	defer f.Close()
+	read := func(name string) string { b, _ := os.ReadFile(filepath.Join(dir, name)); return string(b) }
+	f.Add(qmdfake.Doc{Path: "einkaufsliste.md", Title: "Einkaufsliste", Body: read("einkaufsliste.md"), Means: []string{"lebensmittel", "apfel"}, Vec: 0.29},
+		qmdfake.Doc{Path: "packliste.md", Title: "Packliste", Body: read("packliste.md"), Means: []string{"lebensmittel", "apfel"}, Vec: 0.2})
+	cfg := StartConfig{Notes: nd, Library: &qmd.Client{URL: f.URL, Collection: "notizen"}}
+	// no word hit either: the sentence alone
+	code, body, _ := familyPage(t, Notizen, cfg, "GET", "/notizen?q=Lebensmittel", "")
+	if code != 200 || strings.Count(body, "<p class=k>"+noMatch+"</p>") != 1 {
+		t.Fatalf("status %d, the sentence not once:\n%s", code, body)
+	}
+	mustNotContain(t, body, saysWordsOnly, "Bedeutung", "Nichts gefunden", "Treffer", byWords, "Einkaufsliste", "Packliste")
+	before(t, body, "</form>", noMatch)
+	// the words find something: under the label, never as "Treffer"
+	_, body, _ = familyPage(t, Notizen, cfg, "GET", "/notizen?q=Apfel", "")
+	if strings.Count(body, "<p class=k>"+noMatch+"</p>") != 1 {
+		t.Fatalf("the sentence not once:\n%s", body)
+	}
+	mustContain(t, body, byWords, `<a href="/notizen/rezepte/apfelkuchen.md">Apfelkuchen</a>`)
+	mustNotContain(t, body, saysWordsOnly, "Bedeutung", "Treffer", "Nichts gefunden", "Einkaufsliste", "Packliste", "Geheim")
+	before(t, body, noMatch, byWords)
+	before(t, body, byWords, "Apfelkuchen")
+	mustNotLeak(t, body, f.URL, "qmd", "Vektor", "Kosinus", "embed")
+	// the library down is the other sentence, as before
+	f.Status = 500
+	_, body, _ = familyPage(t, Notizen, cfg, "GET", "/notizen?q=Apfel", "")
+	mustContain(t, body, saysWordsOnly, "Treffer für „Apfel“")
+	mustNotContain(t, body, noMatch, byWords)
+}
+
+// The house model tidies the page's hits (haus#13) when it is loaded: the
+// page shows only those it keeps. It never waits for it longer than its
+// budget, and nothing about it is on the page.
+func TestNotizenTidyUp(t *testing.T) {
+	dir, nd := shelf(t)
+	f := library13(t, dir)
+	p := proxyfake.New("gemma-4-e4b")
+	defer p.Close()
+	cfg := StartConfig{Notes: nd, Library: &qmd.Client{URL: f.URL, Collection: "notizen"},
+		Judge: &judge.Client{URL: p.Base(), Model: "gemma-4-e4b", Key: "model-key"}}
+	p.Content = `{"ids":[1]}`
+	_, body, _ := familyPage(t, Notizen, cfg, "GET", "/notizen?q=Lebensmittel", "")
+	mustContain(t, body, `<a href="/notizen/einkaufsliste.md">Einkaufsliste</a>`)
+	mustNotContain(t, body, "Apfelkuchen", "Schräger Titel", saysWordsOnly, "Nichts gefunden")
+	mustNotLeak(t, body, p.URL, "gemma", "Modell", "KI", "aufgeräumt", "sortiert")
+	if n := len(p.Chats()); n != 1 {
+		t.Fatalf("%d chats", n)
+	}
+	// a house model too slow for the page: the cut's hits, within the budget
+	p.Hang = 5 * time.Second
+	start := time.Now()
+	code, body, _ := familyPage(t, Notizen, cfg, "GET", "/notizen?q=Lebensmittel", "")
+	if took := time.Since(start); code != 200 || took > library.PageTidy+800*time.Millisecond {
+		t.Fatalf("status %d after %v; the page waits at most %v for the tidy-up", code, took, library.PageTidy)
+	}
+	mustContain(t, body, `<a href="/notizen/einkaufsliste.md">Einkaufsliste</a>`, `<a href="/notizen/rezepte/apfelkuchen.md">Apfelkuchen</a>`)
+	mustNotContain(t, body, saysWordsOnly, "Nichts gefunden")
+	mustNotLeak(t, body, p.URL, "gemma", "Modell", "KI")
+	for _, r := range p.Seen() {
+		if r.Path == "/api/model-lease" && r.Method != "GET" {
+			t.Fatalf("the page took the lease: %s", r.Method)
+		}
 	}
 }

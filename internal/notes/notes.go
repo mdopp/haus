@@ -254,6 +254,11 @@ var listMark = []string{"- [ ] ", "- [x] ", "- [X] ", "* [ ] ", "* [x] ", "- ", 
 // list dash, a checkbox, a quote mark, a heading's hashes and emphasis
 // go. Cut at 120 characters.
 func plain(l string, t tables) string {
+	return cut(plainWhole(l, t), 120)
+}
+
+// plainWhole is plain without the cut.
+func plainWhole(l string, t tables) string {
 	l = strings.TrimSpace(l)
 	if l == "" || strings.HasPrefix(l, "# ") || l == "#" {
 		return ""
@@ -289,7 +294,7 @@ func plain(l string, t tables) string {
 		}
 	}
 	l = strings.NewReplacer("**", "", "__", "", "`", "").Replace(l)
-	return cut(strings.TrimSpace(l), 120)
+	return strings.TrimSpace(l)
 }
 
 // Passage is what a hit shows of a note (haus#13): raw, the lines a
@@ -316,6 +321,47 @@ func Passage(raw []string, body string, n int) []string {
 		add(strings.Split(body, "\n"))
 	}
 	return out
+}
+
+// Excerpt is a longer passage of a note, for reading rather than showing
+// (the tidy-up's, haus#13): its lines made plain and whole, joined by
+// spaces, at most n characters. All of the note when it fits; else from a
+// little before line from (at most a quarter of n), where a search's best
+// passage starts, on — a line before it often holds the answer.
+func Excerpt(body string, from, n int) string {
+	t := readTables(body)
+	type line struct {
+		no   int
+		text string
+	}
+	var ls []line
+	whole := 0
+	for i, l := range strings.Split(body, "\n") {
+		if p := plainWhole(l, t); p != "" {
+			ls = append(ls, line{i + 1, p})
+			whole += len([]rune(p)) + 1
+		}
+	}
+	at := 0
+	if whole-1 > n {
+		for at < len(ls) && ls[at].no < from {
+			at++
+		}
+		if at == len(ls) {
+			at = 0
+		}
+		for back := 0; at > 0; at-- {
+			back += len([]rune(ls[at-1].text)) + 1
+			if back > n/4 {
+				break
+			}
+		}
+	}
+	parts := make([]string, 0, len(ls)-at)
+	for _, l := range ls[at:] {
+		parts = append(parts, l.text)
+	}
+	return cut(strings.Join(parts, " "), n)
 }
 
 // errStop ends a walk early when a cap is reached.
