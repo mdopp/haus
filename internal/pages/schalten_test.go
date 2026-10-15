@@ -344,6 +344,12 @@ func TestDingPinSaysABrokenFilePlainly(t *testing.T) {
 	if _, err := cfg.Favorites.For("anna"); err == nil {
 		t.Fatal("the broken file was written over")
 	}
+	// from Räume, the way back is to the room (haus#12)
+	rec = post(t, Ding(cfg), "/raeume/light.buero", url.Values{"stern": {"an"}, "zurueck": {"/raeume#karte-buero"}}, "anna", nil)
+	mustContain(t, rec.Body.String(), "Deine Favoriten lassen sich gerade nicht lesen.", "<p><a href=/raeume#karte-buero>Zurück zu den Räumen</a></p>")
+	if _, err := cfg.Favorites.For("anna"); err == nil {
+		t.Fatal("the broken file was written over")
+	}
 }
 
 // familyPageAs is familyPage for one person ("" for nobody).
