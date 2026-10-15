@@ -128,7 +128,8 @@ func jetztCard(legs []energie.Leg) cards.Card {
 // heuteCard is what each counter added today, and first what the house
 // used, when the fallback's counters say it: made + drawn − fed in +
 // from the battery − into it. A counter without today's history is left
-// out, and so is what needs it.
+// out, and so is Verbraucht: a sum missing one of the house's counters
+// would be wrong, not just short.
 func heuteCard(counters []energie.Counter, today map[string]float64, err error) cards.Card {
 	c := cards.Card{Title: "Heute", Look: cards.Tiles}
 	if err != nil {
@@ -136,8 +137,11 @@ func heuteCard(counters []energie.Counter, today map[string]float64, err error) 
 		return c
 	}
 	byName := map[string]float64{}
+	every := true // each of the house's counters has today's value
 	for _, k := range counters {
-		if v, ok := today[k.State.EntityID]; ok && k.Fallback != "" {
+		v, ok := today[k.State.EntityID]
+		every = every && ok
+		if ok && k.Fallback != "" {
 			byName[k.Fallback] = v
 		}
 	}
@@ -146,7 +150,7 @@ func heuteCard(counters []energie.Counter, today map[string]float64, err error) 
 	fed, ok3 := byName["Netzeinspeisung"]
 	in, okIn := byName["Batterie laden"]
 	out, okOut := byName["Batterie entladen"]
-	if ok1 && ok2 && ok3 && okIn == okOut {
+	if every && ok1 && ok2 && ok3 && okIn == okOut {
 		if used := pv + drawn - fed + out - in; used >= 0 {
 			c.Rows = append(c.Rows, cards.Row{Text: "Verbraucht", State: energyWords(used)})
 		}
@@ -168,9 +172,11 @@ func heuteCard(counters []energie.Counter, today map[string]float64, err error) 
 }
 
 // addedSince is what each counter added since start, in kWh, from HA's
-// history and its state now: every rise counts, a fall is the counter
-// starting over and counts from zero. A counter without history since
-// start is left out; any history read failing is the error.
+// history and its state now: every rise counts; a fall below newMeter of
+// the count is the counter starting over and counts from zero, a smaller
+// dip is noise (HA's own rule for a total_increasing sensor). A counter
+// without a reading in its history since start is left out; any history
+// read failing is the error.
 func addedSince(r *http.Request, c *ha.Client, counters []energie.Counter, start, now time.Time) (map[string]float64, error) {
 	var (
 		mu   sync.Mutex
@@ -189,22 +195,25 @@ func addedSince(r *http.Request, c *ha.Client, counters []energie.Counter, start
 			}
 			scale := kwhScale(k.State)
 			var sum float64
-			prev, seen := 0.0, false
-			for _, p := range append(points, k.State) {
+			prev, seen, read := 0.0, false, false
+			for i, p := range append(points, k.State) {
 				v, err := strconv.ParseFloat(strings.TrimSpace(p.State), 64)
 				if err != nil || math.IsNaN(v) || math.IsInf(v, 0) {
 					continue
 				}
 				switch {
 				case !seen:
+					prev = v
 				case v >= prev:
 					sum += v - prev
-				default:
+					prev = v
+				case v < newMeter*prev: // started over: counts from zero
 					sum += v
-				}
-				prev, seen = v, true
+					prev = v
+				} // a smaller dip is noise: the count stands where it stood
+				seen, read = true, read || i < len(points)
 			}
-			if len(points) > 0 && seen {
+			if read {
 				out[k.State.EntityID] = sum * scale
 			}
 		})
@@ -212,6 +221,10 @@ func addedSince(r *http.Request, c *ha.Client, counters []energie.Counter, start
 	fetch(r, reads...)
 	return out, errs
 }
+
+// newMeter: a counter falling below this share of its count started over
+// (a new meter, a reset); HA's recorder draws the line at 10 %.
+const newMeter = 0.9
 
 // watts is a power sensor's reading in W, from W, kW or MW.
 func watts(s ha.State) (float64, bool) {
