@@ -18,6 +18,7 @@ import (
 	"github.com/mdopp/haus/internal/ha"
 	"github.com/mdopp/haus/internal/ha/hafake"
 	"github.com/mdopp/haus/internal/haushalt"
+	"github.com/mdopp/haus/internal/napi"
 	"github.com/mdopp/haus/internal/notes"
 	"github.com/mdopp/haus/internal/pages"
 	"github.com/mdopp/haus/internal/paperless"
@@ -417,5 +418,17 @@ func TestPinAndSwitchThroughTheRoutes(t *testing.T) {
 	}
 	if rec := page(h, pages.FontPath); rec.Code != 200 || rec.Header().Get("Content-Type") != "font/woff2" {
 		t.Fatalf("the font → %d %q", rec.Code, rec.Header().Get("Content-Type"))
+	}
+}
+
+// haus#12: Haus serves Energie from the same choice of sensors as the
+// widgets' energy picture (the template's HAUS_ENERGY_*).
+func TestEnergiePageServedFromTheWidgetsSensors(t *testing.T) {
+	s, fake, _ := fullSite(t)
+	fake.Set("sensor.inverter", "2500", map[string]any{"friendly_name": "Inverter", "device_class": "power", "unit_of_measurement": "W"})
+	s.napi.Energy = napi.EnergyMap{Flow: map[string]string{"pv": "sensor.inverter"}}
+	rec := page(routes(s), "/energie")
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "<b class=zustand>2,5 kW</b> <span class=k>erzeugt</span>") {
+		t.Fatalf("/energie → %d:\n%s", rec.Code, rec.Body.String())
 	}
 }
