@@ -157,8 +157,8 @@ func TestSchaltenRefusesWhatAPageDoesNotSwitch(t *testing.T) {
 }
 
 // Only Haus's own page switches: a POST from another site (Sec-Fetch-Site,
-// or an Origin that is not Haus), without a person, or not a POST, is
-// refused and HA hears nothing.
+// or an Origin that is not Haus, or neither), without a person, or not a
+// POST, is refused and HA hears nothing.
 func TestSchaltenOnlyFromHausItself(t *testing.T) {
 	fake, cfg := switchHouse(t)
 	h := Schalten(cfg)
@@ -172,6 +172,7 @@ func TestSchaltenOnlyFromHausItself(t *testing.T) {
 		{"anna", map[string]string{"Sec-Fetch-Site": "none"}},
 		{"anna", map[string]string{"Sec-Fetch-Site": "", "Origin": "https://boese.example"}},
 		{"anna", map[string]string{"Sec-Fetch-Site": "", "Origin": "null"}},
+		{"anna", map[string]string{"Sec-Fetch-Site": ""}}, // neither header: Haus's own form always sends one
 		{"", nil},
 	} {
 		if rec := post(t, h, "/schalten", f, c.user, c.hdr); rec.Code != http.StatusForbidden {
@@ -300,6 +301,7 @@ func TestDingPinIsGuarded(t *testing.T) {
 		{"/raeume/light.buero", url.Values{"stern": {"an"}}, "", nil, http.StatusForbidden},
 		{"/raeume/light.buero", url.Values{"stern": {"an"}}, "anna", map[string]string{"Sec-Fetch-Site": "cross-site"}, http.StatusForbidden},
 		{"/raeume/light.buero", url.Values{"stern": {"an"}}, "anna", map[string]string{"Sec-Fetch-Site": "", "Origin": "https://boese.example"}, http.StatusForbidden},
+		{"/raeume/light.buero", url.Values{"stern": {"an"}}, "anna", map[string]string{"Sec-Fetch-Site": ""}, http.StatusForbidden},
 		{"/raeume/person.anna", url.Values{"stern": {"an"}}, "anna", nil, http.StatusNotFound},
 		{"/raeume/Light.Buero", url.Values{"stern": {"an"}}, "anna", nil, http.StatusNotFound},
 		{"/raeume/light.buero", url.Values{"stern": {"ja"}}, "anna", nil, http.StatusBadRequest},

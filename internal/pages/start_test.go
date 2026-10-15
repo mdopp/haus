@@ -458,7 +458,8 @@ func TestStartHeuteUndDemnaechstEmptySaysHow(t *testing.T) {
 // haus#35, owner decision 2026-10-15: the box is one calm line at the
 // bottom, in the family's words. When something is wrong it moves to the
 // top and says what it means for the family; the admin's words stay on
-// /box.
+// /box. Amber when the box mends it itself, red only when a person is
+// needed: nobody automatic on it, or the data not backed up for days.
 func TestStartBoxLine(t *testing.T) {
 	loc := berlin(t)
 	ok := []map[string]any{{"name": "immich", "state": "grün"}, {"name": "paperless", "state": "grün"}}
@@ -469,17 +470,18 @@ func TestStartBoxLine(t *testing.T) {
 		rows  []map[string]any
 		top   []string // in the banner above Im Haus
 		calm  string   // the line at the bottom; "" for none
+		kind  string   // the banner's: selbst (amber, the box mends it) or hilfe (red, a person is needed)
 	}{
-		{"all well", allGreen(t), ok, nil, "Alles in Ordnung · eure Daten sind von gestern Abend gesichert"},
-		{"backed up tonight", readyAt(t, time.Date(2026, 10, 14, 3, 12, 0, 0, loc), "läuft"), ok, nil, "Alles in Ordnung · eure Daten sind von heute Nacht gesichert"},
+		{"all well", allGreen(t), ok, nil, "Alles in Ordnung · eure Daten sind von gestern Abend gesichert", ""},
+		{"backed up tonight", readyAt(t, time.Date(2026, 10, 14, 3, 12, 0, 0, loc), "läuft"), ok, nil, "Alles in Ordnung · eure Daten sind von heute Nacht gesichert", ""},
 		{"two down, the box on it", allGreen(t), down,
-			[]string{"Gerade nicht erreichbar: Fotos und Dokumente.", "Die Box versucht, das selbst zu beheben.", "Eure Daten sind von gestern Abend gesichert."}, ""},
+			[]string{"Gerade nicht erreichbar: Fotos und Dokumente.", "Die Box versucht, das selbst zu beheben.", "Eure Daten sind von gestern Abend gesichert."}, "", "selbst"},
 		{"down, nobody automatic", readyAt(t, time.Date(2026, 10, 13, 21, 31, 0, 0, loc), "aus"), down[:1],
-			[]string{"Gerade nicht erreichbar: Fotos.", "Wer die Box betreut, weiß Bescheid."}, ""},
+			[]string{"Gerade nicht erreichbar: Fotos.", "Wer die Box betreut, weiß Bescheid."}, "", "hilfe"},
 		{"no backup for days", readyAt(t, time.Date(2026, 10, 10, 21, 0, 0, 0, loc), "läuft"), ok,
-			[]string{"Eure Daten sind seit 3 Tagen nicht gesichert.", "Die Box versucht, das selbst zu beheben."}, ""},
+			[]string{"Eure Daten sind seit 3 Tagen nicht gesichert.", "Die Box versucht, das selbst zu beheben."}, "", "hilfe"},
 		{"never backed up", readyAt(t, time.Time{}, "fehlt"), ok,
-			[]string{"Eure Daten sind noch nicht gesichert.", "Wer die Box betreut, weiß Bescheid."}, ""},
+			[]string{"Eure Daten sind noch nicht gesichert.", "Wer die Box betreut, weiß Bescheid."}, "", "hilfe"},
 	} {
 		fake, hc := house(t)
 		fake.Set("light.flur", "on", map[string]any{"friendly_name": "Flur"})
@@ -494,9 +496,12 @@ func TestStartBoxLine(t *testing.T) {
 		if c.calm != "" {
 			mustContain(t, body, "class=ruhig", c.calm)
 			before(t, body, "karte-im-haus", c.calm)
-			mustNotContain(t, body, "class=achtung")
+			mustNotContain(t, body, `class="achtung`)
 		} else {
-			mustContain(t, body, "class=achtung")
+			other := map[string]string{"selbst": "hilfe", "hilfe": "selbst"}[c.kind]
+			if !strings.Contains(body, `<section class="achtung `+c.kind+`"`) || strings.Contains(body, `class="achtung `+other+`"`) {
+				t.Errorf("%s: the banner is not %s:\n%s", c.name, c.kind, body)
+			}
 			mustNotContain(t, body, "class=ruhig", "Alles in Ordnung")
 		}
 		mustNotContain(t, body, "Alles läuft", "Letzte Sicherung", "Orten", "Operator", "Admin", "Letzte Änderung", "Rückgängig",
@@ -508,17 +513,17 @@ func TestStartBoxLine(t *testing.T) {
 	fake.Down(true)
 	_, body := startPage(t, StartConfig{Laib: fakeLaib(t, allGreen(t), ok), HA: hc}, "family")
 	mustContain(t, body, "class=ruhig", "Eure Daten sind von gestern Abend gesichert", "Licht und Geräte antworten gerade nicht.")
-	mustNotContain(t, body, "Alles in Ordnung", "class=achtung")
+	mustNotContain(t, body, "Alles in Ordnung", `class="achtung`)
 	// Laib not answering: #34's line, at the bottom, without its error
 	code, body := startPage(t, StartConfig{Laib: brokenLaib(t)}, "")
 	if code != 200 {
 		t.Fatalf("status %d", code)
 	}
 	mustContain(t, body, "class=ruhig", "Wie es der Box geht, lässt sich gerade nicht sagen.")
-	mustNotContain(t, body, "Alles in Ordnung", "class=achtung", "connection refused", "500", "boom")
+	mustNotContain(t, body, "Alles in Ordnung", `class="achtung`, "connection refused", "500", "boom")
 	// no Laib configured: not a word
 	_, body = startPage(t, StartConfig{}, "")
-	mustNotContain(t, body, "class=ruhig", "class=achtung", "Box geht", "Die Box", "gesichert", "Alles in Ordnung")
+	mustNotContain(t, body, "class=ruhig", `class="achtung`, "Box geht", "Die Box", "gesichert", "Alles in Ordnung")
 }
 
 // How long ago the backup was, the way the family says it.
