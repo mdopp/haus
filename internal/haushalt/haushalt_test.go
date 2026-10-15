@@ -1036,7 +1036,7 @@ func TestFindNotesByMeaning(t *testing.T) {
 	s2 := newSetup(t, want{notes: true, library: true, noPublic: true})
 	os.WriteFile(filepath.Join(s2.notes, "kaminkehrer.md"), []byte("# Kaminkehrer\n\nHerr Brandl\n"), 0o644)
 	s2.qmd.Add(qmdfake.Doc{Path: "kaminkehrer.md", Title: "Kaminkehrer", Body: "# Kaminkehrer\n\nHerr Brandl\n", Means: []string{"schornsteinfeger"}})
-	if text, _ := call(t, s2.h, "notizen_finden", map[string]any{"text": "Schornsteinfeger"}); !strings.Contains(text, "(kaminkehrer.md)") || strings.Contains(text, "http") {
+	if text, _ := call(t, s2.h, "notizen_finden", map[string]any{"text": "Schornsteinfeger"}); !strings.Contains(text, "(kaminkehrer.md)") || strings.Contains(text, "http") || strings.Contains(text, "/notizen/") {
 		t.Fatalf("no public URL: %q", text)
 	}
 	// a blank search asks back, as the word search does

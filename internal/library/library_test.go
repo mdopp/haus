@@ -95,6 +95,13 @@ func TestFindsByMeaning(t *testing.T) {
 	if !strings.Contains(string(last.Body), `"limit":1`) {
 		t.Fatalf("limit not asked of qmd: %s", last.Body)
 	}
+	// a qmd that answers more than it was asked for is cut at max
+	f.Results = `{"results":[` + strings.Repeat(`{"docid":"#a","file":"qmd://notizen/kaminkehrer.md","title":"K","score":1,"context":null,"line":1,"snippet":"1: x"},`, 4) +
+		`{"docid":"#b","file":"qmd://notizen/heizung.md","title":"H","score":1,"context":null,"line":1,"snippet":"1: y"}]}`
+	if got, _ := Find(bg, c, d, "Schornsteinfeger", 2); len(got.Hits) != 2 || got.Total != 2 {
+		t.Fatalf("cut at max: %+v", got)
+	}
+	f.Results = ""
 }
 
 // What qmd names is checked against the folder: a path out of it, a link

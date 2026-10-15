@@ -249,7 +249,8 @@ func TestStatusFromRealAnswers(t *testing.T) {
 	}
 	// a JSON-RPC error, or a tool error, is an error
 	for _, body := range []string{`{"jsonrpc":"2.0","id":1,"error":{"code":-32601,"message":"nope"}}`,
-		`{"jsonrpc":"2.0","id":1,"result":{"isError":true,"content":[{"type":"text","text":"kaputt"}]}}`, `event: message\ndata: nicht json\n\n`} {
+		`{"jsonrpc":"2.0","id":1,"result":{"isError":true,"content":[{"type":"text","text":"kaputt"}]}}`,
+		`{"jsonrpc":"2.0","id":1,"result":{"isError":true,"structuredContent":{"totalDocuments":3,"needsEmbedding":0,"hasVectorIndex":true,"collections":[{"name":"notizen","documents":3}]}}}`, `event: message\ndata: nicht json\n\n`} {
 		e := verbatim(t, "application/json", body)
 		if _, err := (&Client{URL: e.URL, Collection: "notizen"}).Status(ctx); err == nil {
 			t.Fatalf("%s: want an error", body)
@@ -356,5 +357,11 @@ func TestAnswerIsBounded(t *testing.T) {
 	c := &Client{URL: verbatim(t, "application/json", big).URL, Collection: "notizen"}
 	if _, err := c.Search(context.Background(), "x", 3); err == nil {
 		t.Fatal("an answer over the cap is an error")
+	}
+	// even when what fits under the cap would read as an answer
+	padded := `{"results":[{"docid":"#1","file":"qmd://notizen/a.md","title":"A","score":1,"context":null,"line":1,"snippet":""}]}` + strings.Repeat(" ", 5<<20)
+	c = &Client{URL: verbatim(t, "application/json", padded).URL, Collection: "notizen"}
+	if hits, err := c.Search(context.Background(), "x", 3); err == nil {
+		t.Fatalf("an answer over the cap is an error, not %v", hits)
 	}
 }

@@ -308,6 +308,8 @@ func TestLookupIsExact(t *testing.T) {
 		os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644)
 	}
 	os.Symlink(filepath.Join(dir, "..", "draussen.md"), filepath.Join(dir, "link.md"))
+	// a file over the size the word search reads is no note here either
+	os.WriteFile(filepath.Join(dir, "riesig.md"), append([]byte("# Riesig\n\n"), make([]byte, maxBytes)...), 0o644)
 	for name, want := range map[string]string{"kaminkehrer.md": "Kaminkehrer", "rezepte/pfannkuchen.md": "Pfannkuchen", "Größen Kinder.md": "Größen Kinder"} {
 		e, err := d.Lookup(bg, name)
 		if err != nil || e.Name != name || e.Title != want || e.Changed.IsZero() {
@@ -315,7 +317,7 @@ func TestLookupIsExact(t *testing.T) {
 		}
 	}
 	for name, want := range map[string]error{
-		"Kaminkehrer": ErrNotFound, "kaminkehrer": ErrNotFound, "gibtsnicht.md": ErrNotFound, "rechnung.pdf": ErrNotFound,
+		"Kaminkehrer": ErrNotFound, "kaminkehrer": ErrNotFound, "riesig.md": ErrNotFound, "gibtsnicht.md": ErrNotFound, "rechnung.pdf": ErrNotFound,
 		"rezepte/ordner.md": ErrNotFound, "rezepte": ErrNotFound,
 		"../draussen.md": ErrOutside, "/etc/passwd": ErrOutside, "rezepte/../../draussen.md": ErrOutside, `..\draussen.md`: ErrOutside,
 		"link.md": ErrOutside, ".stversions/alt.md": ErrHidden, "": ErrNotFound,
