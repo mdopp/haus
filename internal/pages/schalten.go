@@ -12,10 +12,11 @@ import (
 )
 
 // pageDoes is what a family page may ask Home Assistant to do (haus#35):
-// a lamp or a switch on and off, a player's pause — narrower than package
-// schalter's rule, which every call still passes, never wider.
+// a lamp or a switch on and off, a player's pause, and on Medien
+// (haus#12) its going on and its volume a step down or up — narrower than
+// package schalter's rule, which every call still passes, never wider.
 var pageDoes = map[string]bool{"light.turn_on": true, "light.turn_off": true, "switch.turn_on": true, "switch.turn_off": true,
-	"media_player.media_pause": true}
+	"media_player.media_pause": true, "media_player.media_play": true, "media_player.volume_down": true, "media_player.volume_up": true}
 
 // allLightsOff is Im Haus's "Alle aus": every lamp Start counted as on.
 const allLightsOff = "alle-lichter-aus"
@@ -77,7 +78,10 @@ func Schalten(cfg StartConfig) http.HandlerFunc {
 		}
 		log.Printf("haus: schalten %q on %q: %v", do, id, err)
 		m := missing{http.StatusOK, saysSwitchFailed, "Zuhause", back, "Zurück"}
-		if back != "/start" {
+		switch {
+		case back == medienPath:
+			m.page = "Medien"
+		case back != "/start":
 			m.page = "Räume"
 		}
 		var no *schalter.Refusal
@@ -88,9 +92,12 @@ func Schalten(cfg StartConfig) http.HandlerFunc {
 	}
 }
 
-// backTo is where a switch lands: Start, or the page of a thing that has
-// one; anything else is Start.
+// backTo is where a switch lands: Start, Medien, or the page of a thing
+// that has one; anything else is Start.
 func backTo(path string) string {
+	if path == medienPath {
+		return path
+	}
 	if id, ok := strings.CutPrefix(path, cards.ThingPages); ok && ha.EntityRE.MatchString(id) {
 		if domain, _, _ := strings.Cut(id, "."); cards.Domains[domain] {
 			return cards.ThingPage(id)
