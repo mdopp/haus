@@ -20,7 +20,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"path"
 	"strings"
 )
 
@@ -135,8 +134,8 @@ func (c *Client) Search(ctx context.Context, text string, limit int) ([]Hit, err
 
 // local turns qmd://<collection>/<segments, each percent-encoded> into
 // the plain path inside the collection, or says it is none: another
-// collection, an empty or hidden segment, a step out, a segment that
-// decodes to a separator or a NUL.
+// collection, an empty or hidden segment (".." included: a step out), a
+// segment that decodes to a separator or a NUL.
 func (c *Client) local(file string) (string, bool) {
 	rest, ok := strings.CutPrefix(file, "qmd://"+c.Collection+"/")
 	if !ok || rest == "" {
@@ -150,11 +149,7 @@ func (c *Client) local(file string) (string, bool) {
 		}
 		segs[i] = d
 	}
-	p := strings.Join(segs, "/")
-	if path.Clean(p) != p {
-		return "", false
-	}
-	return p, true
+	return strings.Join(segs, "/"), true
 }
 
 // maxLines and maxLine bound a passage: a few lines to recognise a note
