@@ -13,7 +13,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/mdopp/haus/internal/ha"
 )
@@ -32,7 +31,7 @@ type Store struct{ path string }
 func Open(dir string) *Store { return &Store{path: filepath.Join(dir, File)} }
 
 // For is one person's favorites: Home Assistant entity ids, in their
-// order, each once. No file, or no list for the person, is none; a file
+// order, each once; anything else in the list is left out. No file, or no list for the person, is none; a file
 // that does not read is an error, never "none".
 func (s *Store) For(person string) ([]string, error) {
 	if person == "" {
@@ -60,7 +59,6 @@ func (s *Store) For(person string) ([]string, error) {
 	var out []string
 	seen := map[string]bool{}
 	for _, id := range all[person] {
-		id = strings.TrimSpace(id)
 		if ha.EntityRE.MatchString(id) && !seen[id] {
 			seen[id] = true
 			out = append(out, id)
