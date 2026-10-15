@@ -777,8 +777,9 @@ func TestContactRead(t *testing.T) {
 	}
 	// an id wins over a name that is the same text
 	s.fake.Put("/bote/kontakte/x.vcf", "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:Eva\r\nFN:Jemand Anders\r\nEND:VCARD\r\n")
-	if text, _ := call(t, s.h, "kontakt_lesen", map[string]any{"kontakt": "Eva"}); !strings.Contains(text, "Jemand Anders") {
-		t.Fatalf("the id first: %q", text)
+	if text, _ := call(t, s.h, "kontakt_lesen", map[string]any{"kontakt": "Eva"}); !strings.Contains(text, "Jemand Anders") ||
+		strings.HasPrefix(text, "Mehrere") || strings.Contains(text, "0170 3") {
+		t.Fatalf("the id first, and only the id: %q", text)
 	}
 	if text, isErr := call(t, s.h, "kontakt_lesen", map[string]any{"kontakt": "niemand"}); isErr || text != "Kein Kontakt passt zu „niemand“." {
 		t.Fatalf("none: %q %v", text, isErr)
@@ -940,5 +941,36 @@ func TestFromEnvPublicURL(t *testing.T) {
 		if cfg, err := FromEnv(); err != nil || cfg.PublicURL != want {
 			t.Fatalf("%q: %q %v", v, cfg.PublicURL, err)
 		}
+	}
+}
+
+// A read the address book cut short (too many cards, or too slow) says so
+// when nothing was found, so "no such contact" is never claimed on half
+// the cards.
+func TestContactReadPartial(t *testing.T) {
+	fake := davfake.New("bote", "pw")
+	t.Cleanup(fake.Close)
+	fake.AddAddressBook("/bote/kontakte/", "Haushalt")
+	fake.Put("/bote/kontakte/a.vcf", "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:a\r\nFN:Anna\r\nEND:VCARD\r\n")
+	fake.Put("/bote/kontakte/b.vcf", "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:b\r\nFN:Bert\r\nEND:VCARD\r\n")
+	fake.StallAfter = 1
+	dav := &caldav.Client{URL: fake.URL, User: "bote", Password: "pw", HTTP: &http.Client{Timeout: 300 * time.Millisecond}}
+	h := Handler(Config{Token: tok, Loc: berlin(t), Contacts: dav})
+	text, isErr := call(t, h, "kontakt_lesen", map[string]any{"kontakt": "niemand"})
+	if isErr || !strings.HasPrefix(text, "Kein Kontakt passt") || !strings.Contains(text, "Nur ein Teil des Adressbuchs") {
+		t.Fatalf("%q %v", text, isErr)
+	}
+}
+
+// A tag without a name is no tag: not shown, not counted.
+func TestDocumentBlankTags(t *testing.T) {
+	s := newSetup(t, want{docs: true, noPublic: true})
+	for i := 1; i <= 6; i++ {
+		s.docs.Tag(i, fmt.Sprintf("T%d", i))
+	}
+	s.docs.Tag(9, "  ")
+	s.docs.Add(paperlessfake.Doc{ID: 5, Title: "Brief", Tags: []int{9, 1, 2, 3, 4, 5}})
+	if text, _ := call(t, s.h, "dokumente_suchen", map[string]any{"text": "brief"}); text != "Brief · Schlagworte: T1, T2, T3, T4, T5" {
+		t.Fatalf("%q", text)
 	}
 }
