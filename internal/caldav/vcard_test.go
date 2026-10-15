@@ -142,3 +142,37 @@ func TestBirthdayYearZero(t *testing.T) {
 		t.Fatal("year 0000 written")
 	}
 }
+
+// A postal address (ADR: post box; extended; street; locality; region;
+// code; country) reads as one line the way it is written on a letter:
+// street, "code locality", region, country; empty parts left out, an
+// escaped comma or semicolon kept inside its part, a group prefix dropped.
+func TestAddresses(t *testing.T) {
+	card := "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:a\r\nFN:Anna\r\n" +
+		"ADR;TYPE=HOME:;;Hauptstraße 1;Stuttgart;;70173;Deutschland\r\n" +
+		"item2.ADR:PF 12;c/o Firma;Industriestr. 5\\, Halle 3\\;hinten;Esslingen;BW;73728;\r\n" +
+		"ADR:;;;;;;\r\n" +
+		"ADR;LABEL=\"Am Markt 2\":;;Am Markt 2\\nHinterhaus;Ulm\r\n" +
+		"END:VCARD\r\n"
+	root, err := Parse(card)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cs := Contacts(root)
+	if len(cs) != 1 {
+		t.Fatalf("%+v", cs)
+	}
+	want := []string{
+		"Hauptstraße 1, 70173 Stuttgart, Deutschland",
+		"PF 12, c/o Firma, Industriestr. 5, Halle 3;hinten, 73728 Esslingen, BW",
+		"Am Markt 2 Hinterhaus, Ulm",
+	}
+	if strings.Join(cs[0].Addresses, "|") != strings.Join(want, "|") {
+		t.Fatalf("addresses:\n%q\nwant\n%q", cs[0].Addresses, want)
+	}
+	// a structured ORG still reads as before
+	root, _ = Parse("BEGIN:VCARD\r\nVERSION:4.0\r\nFN:x\r\nORG:Stadtwerke\\, GmbH;;Kundendienst\r\nEND:VCARD\r\n")
+	if org := Contacts(root)[0].Org; org != "Stadtwerke, GmbH, Kundendienst" {
+		t.Fatalf("org: %q", org)
+	}
+}

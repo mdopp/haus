@@ -34,6 +34,7 @@ type Doc struct {
 	Correspondent string    // "": none, or not readable
 	Created       time.Time // zero: unknown
 	Link          string    // Paperless's own page for it; "" without PublicURL
+	Tags          []string  // the tags' names, as the document lists them
 }
 
 // ErrStatus is an answer the client did not expect.

@@ -1,7 +1,7 @@
 // Package paperlessfake is a fake Paperless-ngx REST API for tests:
 // "Authorization: Token …", GET /api/documents/ with query, page_size,
-// fields and ordering (-created only), GET /api/correspondents/ with
-// id__in. A query matches title and content, case-insensitively, the way
+// fields and ordering (-created only), GET /api/correspondents/ and
+// GET /api/tags/ with id__in. A query matches title and content, case-insensitively, the way
 // a full-text hit would look.
 package paperlessfake
 
@@ -22,6 +22,7 @@ type Doc struct {
 	Content       string
 	Correspondent int    // 0: none
 	Created       string // as the API answers it: "2025-03-14" or an RFC 3339 time
+	Tags          []int  // tag ids, as the API lists them
 }
 
 // Server is the fake.
@@ -32,6 +33,7 @@ type Server struct {
 	mu             sync.Mutex
 	docs           []Doc
 	correspondents map[int]string
+	tags           map[int]string
 	Requests       []*http.Request // every request, in order (headers and URL)
 
 	// Status, when set, is every answer's status, with a body that echoes
@@ -39,6 +41,8 @@ type Server struct {
 	Status int
 	// Redirect, when set, answers every request with a 302 to it.
 	Redirect string
+	// FailPath, when set, answers that path (e.g. /api/tags/) with a 500.
+	FailPath string
 	// IgnorePageSize answers with every hit, as a server that does not
 	// honour page_size would.
 	IgnorePageSize bool
@@ -46,7 +50,7 @@ type Server struct {
 
 // New starts a fake that accepts token.
 func New(token string) *Server {
-	s := &Server{Token: token, correspondents: map[int]string{}}
+	s := &Server{Token: token, correspondents: map[int]string{}, tags: map[int]string{}}
 	s.Server = httptest.NewServer(http.HandlerFunc(s.serve))
 	return s
 }
@@ -63,6 +67,13 @@ func (s *Server) Correspondent(id int, name string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.correspondents[id] = name
+}
+
+// Tag names a tag.
+func (s *Server) Tag(id int, name string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.tags[id] = name
 }
 
 // Seen returns the requests so far.
@@ -83,6 +94,10 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	if s.Status != 0 {
 		w.WriteHeader(s.Status)
 		w.Write([]byte(`{"detail":"broken, you sent ` + r.Header.Get("Authorization") + `"}`))
+		return
+	}
+	if s.FailPath != "" && r.URL.Path == s.FailPath {
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	if r.Header.Get("Authorization") != "Token "+s.Token {
@@ -127,7 +142,8 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 			if i == size {
 				break
 			}
-			m := map[string]any{"id": d.ID, "title": d.Title, "content": d.Content, "created": d.Created, "correspondent": nil}
+			tags := append([]int{}, d.Tags...)
+			m := map[string]any{"id": d.ID, "title": d.Title, "content": d.Content, "created": d.Created, "correspondent": nil, "tags": tags}
 			if d.Correspondent != 0 {
 				m["correspondent"] = d.Correspondent
 			}
@@ -141,11 +157,15 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 			results = append(results, m)
 		}
 		json.NewEncoder(w).Encode(map[string]any{"count": len(hits), "next": nil, "previous": nil, "results": results})
-	case "/api/correspondents/":
+	case "/api/correspondents/", "/api/tags/":
+		names := s.correspondents
+		if r.URL.Path == "/api/tags/" {
+			names = s.tags
+		}
 		results := []map[string]any{}
 		for _, x := range strings.Split(q.Get("id__in"), ",") {
 			id, err := strconv.Atoi(x)
-			if name, ok := s.correspondents[id]; err == nil && ok {
+			if name, ok := names[id]; err == nil && ok {
 				results = append(results, map[string]any{"id": id, "name": name})
 			}
 		}

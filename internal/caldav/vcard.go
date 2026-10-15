@@ -23,6 +23,8 @@ type Contact struct {
 	// Birthday is JJJJ-MM-TT, or --MM-TT without a year; a card's
 	// birthday in another form is kept as its text.
 	Birthday string
+	// Addresses are the postal addresses (ADR), each one line.
+	Addresses []string
 }
 
 // NewUUID is a random urn:uuid (RFC 4122 version 4), a card's UID.

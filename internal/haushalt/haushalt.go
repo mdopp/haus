@@ -40,7 +40,10 @@ type Config struct {
 	// PhoneCountry is the house's calling code (HAUS_PHONE_COUNTRY, default
 	// 49): a national number 0170 … is +49 170 … when numbers are compared.
 	PhoneCountry string
-	Version      string
+	// PublicURL is Haus's own origin (HAUS_PUBLIC_URL): an answer links a
+	// contact or a document to its page on Haus; "": no links.
+	PublicURL string
+	Version   string
 }
 
 const defaultCountry = "49"

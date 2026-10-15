@@ -45,12 +45,14 @@ func fullSite(t *testing.T) (site, *hafake.HA, *davfake.Server) {
 	dav.Put("/bote/familie/milch-1.ics", "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VTODO\r\nUID:milch-1\r\nDTSTAMP:20261010T080000Z\r\n"+
 		"SUMMARY:Milch kaufen\r\nDUE:20261015T160000Z\r\nSTATUS:NEEDS-ACTION\r\nEND:VTODO\r\nEND:VCALENDAR\r\n")
 	dav.AddAddressBook("/bote/kontakte/", "Haushalt")
-	dav.Put("/bote/kontakte/b.vcf", "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:urn:uuid:b\r\nFN:Bernd Bauer\r\nTEL:0170 1234567\r\nEMAIL:bernd@example.org\r\nBDAY:--0314\r\nEND:VCARD\r\n")
+	dav.Put("/bote/kontakte/b.vcf", "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:urn:uuid:b\r\nFN:Bernd Bauer\r\nTEL:0170 1234567\r\nEMAIL:bernd@example.org\r\nBDAY:--0314\r\n"+
+		"ADR;TYPE=HOME:;;Hauptstraße 1;Stuttgart;;70173;\r\nEND:VCARD\r\n")
 	cal := &caldav.Client{URL: dav.URL, User: "bote", Password: "pw", Loc: loc}
 
 	docs := paperlessfake.New("pl-token")
 	t.Cleanup(docs.Close)
-	docs.Add(paperlessfake.Doc{ID: 2, Title: "Stromrechnung", Created: "2026-09-30"})
+	docs.Add(paperlessfake.Doc{ID: 2, Title: "Stromrechnung", Created: "2026-09-30", Tags: []int{4}})
+	docs.Tag(4, "Strom")
 
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "einkauf.md"), []byte("# Einkauf\n\nMilch"), 0o644); err != nil {
@@ -61,7 +63,7 @@ func fullSite(t *testing.T) (site, *hafake.HA, *davfake.Server) {
 		t.Fatal(err)
 	}
 
-	s.hh = haushalt.Config{Calendar: cal, Contacts: cal, Notes: nd, Loc: loc,
+	s.hh = haushalt.Config{Token: "bote", PublicURL: "https://haus.example", Calendar: cal, Contacts: cal, Notes: nd, Loc: loc,
 		Documents: &paperless.Client{URL: docs.URL, Token: "pl-token", PublicURL: "https://paperless.example"}}
 	s.napi.HA = &ha.Client{URL: fake.URL, Token: "ha-token"}
 	s.napi.Haushalt = s.hh
@@ -317,5 +319,55 @@ func TestStartShowsTheFavoritesFromTheDataFolder(t *testing.T) {
 		if rec := page(h, p); rec.Code != 200 {
 			t.Errorf("%s → %d", p, rec.Code)
 		}
+	}
+}
+
+// haushalt answers the Bote with the same pages the widgets hand out
+// (haus#11, haus#28): a contact's link is its page on Haus, which shows its
+// numbers and postal address; a document's is Haus's page, which leads on
+// to Paperless.
+func TestHaushaltLinksAreHausPages(t *testing.T) {
+	s, _, _ := fullSite(t)
+	h := routes(s)
+	tool := func(name string, args map[string]any) string {
+		body, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": map[string]any{"name": name, "arguments": args}})
+		req := httptest.NewRequest("POST", "/mcp/haushalt", strings.NewReader(string(body)))
+		req.Header.Set("Authorization", "Bearer bote")
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		var out struct {
+			Result struct {
+				Content []struct{ Text string } `json:"content"`
+				IsError bool                    `json:"isError"`
+			} `json:"result"`
+		}
+		if json.Unmarshal(rec.Body.Bytes(), &out) != nil || out.Result.IsError || len(out.Result.Content) != 1 {
+			t.Fatalf("%s: %d %s", name, rec.Code, rec.Body.String())
+		}
+		return out.Result.Content[0].Text
+	}
+	link := func(text string) string {
+		i := strings.Index(text, "https://haus.example/")
+		if i < 0 {
+			t.Fatalf("no link to Haus: %q", text)
+		}
+		return strings.Fields(text[i+len("https://haus.example"):])[0]
+	}
+	text := tool("kontakt_lesen", map[string]any{"kontakt": "Bernd"})
+	if !strings.Contains(text, "Hauptstraße 1, 70173 Stuttgart") {
+		t.Fatalf("kontakt_lesen: %q", text)
+	}
+	rec := page(h, link(text))
+	if rec.Code != 200 {
+		t.Fatalf("contact page %s → %d", link(text), rec.Code)
+	}
+	for _, w := range []string{"Bernd Bauer", "0170 1234567", "bernd@example.org", "Hauptstraße 1, 70173 Stuttgart"} {
+		if !strings.Contains(rec.Body.String(), w) {
+			t.Fatalf("the contact page lacks %q:\n%s", w, rec.Body.String())
+		}
+	}
+	text = tool("dokumente_suchen", map[string]any{"text": "strom"})
+	if rec := page(h, link(text)); rec.Code != http.StatusFound || rec.Header().Get("Location") != "https://paperless.example/documents/2/details" {
+		t.Fatalf("document page %q → %d %q", link(text), rec.Code, rec.Header().Get("Location"))
 	}
 }

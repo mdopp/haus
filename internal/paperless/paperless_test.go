@@ -189,3 +189,49 @@ func TestRecent(t *testing.T) {
 		t.Fatalf("request: %s", fake.Seen()[0].URL)
 	}
 }
+
+// A document's tags are named in one more request, only when a hit has
+// any; an id Paperless does not name is left out, and tags Paperless will
+// not name leave the search whole, nameless.
+func TestTags(t *testing.T) {
+	fake := paperlessfake.New(token)
+	defer fake.Close()
+	fake.Tag(1, "Rechnung")
+	fake.Tag(2, "Strom")
+	fake.Add(
+		paperlessfake.Doc{ID: 12, Title: "Rechnung März", Tags: []int{2, 1, 7}},
+		paperlessfake.Doc{ID: 13, Title: "Rechnung April", Tags: []int{2}},
+		paperlessfake.Doc{ID: 14, Title: "Rechnung Mai"},
+	)
+	c := &Client{URL: fake.URL, Token: token}
+	docs, _, err := c.Search(context.Background(), "rechnung", 20)
+	if err != nil || len(docs) != 3 {
+		t.Fatalf("%+v %v", docs, err)
+	}
+	if strings.Join(docs[0].Tags, ",") != "Strom,Rechnung" || strings.Join(docs[1].Tags, ",") != "Strom" || len(docs[2].Tags) != 0 {
+		t.Fatalf("tags: %q %q %q", docs[0].Tags, docs[1].Tags, docs[2].Tags)
+	}
+	var tagReqs []string
+	for _, r := range fake.Seen() {
+		if r.URL.Path == "/api/tags/" {
+			tagReqs = append(tagReqs, r.URL.Query().Get("id__in")+"/"+r.URL.Query().Get("page_size"))
+		}
+		if r.URL.Path == "/api/documents/" && !strings.Contains(r.URL.Query().Get("fields"), "tags") {
+			t.Fatalf("fields: %s", r.URL)
+		}
+	}
+	if strings.Join(tagReqs, " ") != "1,2,7/3" {
+		t.Fatalf("one tag request for every id: %q", tagReqs)
+	}
+
+	before := len(fake.Seen())
+	if docs, _, _ := c.Search(context.Background(), "mai", 20); len(docs) != 1 || len(fake.Seen()) != before+1 {
+		t.Fatalf("no tags, no tag request: %+v, %d requests", docs, len(fake.Seen())-before)
+	}
+
+	fake.FailPath = "/api/tags/"
+	docs, _, err = c.Search(context.Background(), "rechnung", 20)
+	if err != nil || len(docs) != 3 || len(docs[0].Tags) != 0 || docs[0].Title != "Rechnung März" {
+		t.Fatalf("tags unreadable: %+v %v", docs, err)
+	}
+}
