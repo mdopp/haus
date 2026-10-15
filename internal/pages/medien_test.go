@@ -186,3 +186,18 @@ func TestMedienEscapes(t *testing.T) {
 	mustContain(t, body, "&lt;b&gt;Box&lt;/b&gt;", "&lt;img src=x")
 	mustNotContain(t, body, "<b>Box", "<img src=x")
 }
+
+// A path under Medien that Haus does not serve is a 404 with the way
+// back, never Start pretending all is well (haus#12).
+func TestMedienUnknownPathIsA404(t *testing.T) {
+	fake, hc := house(t)
+	players(t, fake)
+	for _, p := range []string{"/medien/", "/medien/radio", "/medien/x/y"} {
+		code, body, _ := familyPage(t, Medien, StartConfig{HA: hc}, "GET", p, "family")
+		if code != 404 {
+			t.Fatalf("%s → %d, want 404", p, code)
+		}
+		mustContain(t, body, "<p>Diese Seite gibt es nicht.</p>", "<p><a href=/medien>Medien</a></p>", "href=/medien aria-current=page>")
+		mustNotContain(t, body, "karte-", "<form")
+	}
+}

@@ -429,3 +429,11 @@ func TestMedienPageServed(t *testing.T) {
 		t.Fatalf("/medien → %d:\n%s", rec.Code, rec.Body.String())
 	}
 }
+
+// A path under Medien that Haus does not serve is a 404 with the way back.
+func TestMedienSubpathIsA404(t *testing.T) {
+	s, _, _ := fullSite(t)
+	if rec := page(routes(s), "/medien/radio"); rec.Code != http.StatusNotFound || !strings.Contains(rec.Body.String(), "<a href=/medien>Medien</a>") {
+		t.Fatalf("/medien/radio → %d:\n%s", rec.Code, rec.Body.String())
+	}
+}
