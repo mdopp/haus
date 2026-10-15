@@ -1,9 +1,18 @@
 package pages
 
 import (
+	"bytes"
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"net/http/httputil"
+	"net/url"
 	"strings"
 	"testing"
+
+	"github.com/mdopp/haus/internal/caldav"
+	"github.com/mdopp/haus/internal/caldav/davfake"
 )
 
 func allDay(uid, day, next, summary string) string {
@@ -137,8 +146,9 @@ func TestKalenderReminderDueOnADay(t *testing.T) {
 	mustNotContain(t, body, "00:00")
 }
 
-// Radicale in trouble is left out without a word on the page.
-func TestKalenderHidesBrokenBackends(t *testing.T) {
+// Radicale in trouble leaves the cards out and says so in Start's one
+// plain line, once, never its error (haus#33).
+func TestKalenderSaysPlainlyWhatDoesNotAnswer(t *testing.T) {
 	_, cal := calendar(t)
 	cal.Password = "falsch"
 	code, body, _ := familyPage(t, Kalender, StartConfig{Calendar: cal}, "GET", "/kalender", "")
@@ -147,4 +157,63 @@ func TestKalenderHidesBrokenBackends(t *testing.T) {
 	}
 	mustNotContain(t, body, "karte-", "Anmeldung abgelehnt", "HTTP", "401", "class=rot", "keine Termine", "Keine")
 	mustContain(t, body, "<h1")
+	if n := strings.Count(body, "<p class=k>Der Kalender antwortet gerade nicht.</p>"); n != 1 {
+		t.Fatalf("the calendar said %d times, want once:\n%s", n, body)
+	}
+	mustNotLeak(t, body, host(cal.URL))
+}
+
+// calendarFailing puts a front in front of the Radicale fake whose
+// REPORT for comp ("VEVENT", "VTODO") answers 500; the rest passes.
+func calendarFailing(t *testing.T, comp string) (*davfake.Server, *caldav.Client) {
+	t.Helper()
+	dav, cal := calendar(t)
+	front := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		if r.Method == "REPORT" && strings.Contains(string(body), `name="`+comp+`"`) {
+			http.Error(w, "REPORT 500", http.StatusInternalServerError)
+			return
+		}
+		r.Body = io.NopCloser(bytes.NewReader(body))
+		httputil.NewSingleHostReverseProxy(must(url.Parse(dav.URL))).ServeHTTP(w, r)
+	}))
+	t.Cleanup(front.Close)
+	cal.URL = front.URL
+	return dav, cal
+}
+
+// Only the reminders failing: the appointments come, and the line stands
+// where the reminders would be, in their card. Only the appointments
+// failing: the line stands where they would be, the reminders come.
+func TestKalenderSaysWhichPartDoesNotAnswer(t *testing.T) {
+	dav, cal := calendarFailing(t, "VTODO")
+	dav.Put("/haus/familie/1.ics", event("1", "20261015T130000Z", "20261015T140000Z", "Zahnarzt"))
+	dav.Put("/haus/familie/a.ics", todo("a", "Müll rausbringen", ""))
+	code, body, _ := familyPage(t, Kalender, StartConfig{Calendar: cal}, "GET", "/kalender", "")
+	if code != 200 {
+		t.Fatalf("status %d", code)
+	}
+	mustContain(t, body, "karte-heute", "Zahnarzt", "<h2 id=karte-erinnerungen>Erinnerungen</h2>")
+	mustNotContain(t, body, "Müll rausbringen", "Keine offenen Erinnerungen", "REPORT")
+	mustNotLeak(t, body, host(cal.URL))
+	if n := strings.Count(body, "Der Kalender antwortet gerade nicht."); n != 1 {
+		t.Fatalf("the calendar said %d times, want once:\n%s", n, body)
+	}
+	before(t, body, "karte-naechste-14-tage", "karte-erinnerungen")
+	before(t, body, "karte-erinnerungen", "Der Kalender antwortet gerade nicht.")
+
+	dav, cal = calendarFailing(t, "VEVENT")
+	dav.Put("/haus/familie/1.ics", event("1", "20261015T130000Z", "20261015T140000Z", "Zahnarzt"))
+	dav.Put("/haus/familie/a.ics", todo("a", "Müll rausbringen", ""))
+	code, body, _ = familyPage(t, Kalender, StartConfig{Calendar: cal}, "GET", "/kalender", "")
+	if code != 200 {
+		t.Fatalf("status %d", code)
+	}
+	mustContain(t, body, "<h2 id=karte-erinnerungen>Erinnerungen</h2>", "Müll rausbringen")
+	mustNotContain(t, body, "karte-heute", "karte-naechste", "Zahnarzt", "Heute keine Termine", "REPORT")
+	mustNotLeak(t, body, host(cal.URL))
+	if n := strings.Count(body, "<p class=k>Der Kalender antwortet gerade nicht.</p>"); n != 1 {
+		t.Fatalf("the calendar said %d times, want once:\n%s", n, body)
+	}
+	before(t, body, "Der Kalender antwortet gerade nicht.", "karte-erinnerungen")
 }
