@@ -45,49 +45,56 @@ func Notizen(cfg StartConfig) http.HandlerFunc {
 			q = string(rs[:maxQuery])
 		}
 
+		docs := cfg.Library != nil && cfg.Library.Documents != "" && cfg.Docs != nil
+		field := "Notizen durchsuchen"
+		if docs {
+			field = "Notizen und Dokumente durchsuchen"
+		}
 		b := familyHead(r, cfg, "Notizen", "Notizen")
 		b.WriteString("<h1>Notizen</h1>")
 		b.WriteString(`<form method=get action=/notizen role=search>` +
-			`<input type=search name=q value="` + html.EscapeString(q) + `" placeholder="Notizen durchsuchen" aria-label="Notizen durchsuchen"> <button>Suchen</button></form>`)
+			`<input type=search name=q value="` + html.EscapeString(q) + `" placeholder="` + field + `" aria-label="` + field + `"> <button>Suchen</button></form>`)
 
 		if q != "" {
 			var res library.Found
 			var err error
 			fetch(r, func(ctx context.Context) {
-				res, err = library.Find(ctx, cfg.Library, library.Tidy{Judge: cfg.Judge, Wait: library.PageTidy}, cfg.Notes, q, maxHits)
+				res, err = library.Find(ctx, cfg.Library, library.Tidy{Judge: cfg.Judge, Wait: library.PageTidy}, cfg.Notes, cfg.Docs, q, maxHits)
 			})
 			logErrs("notizen", map[string]error{"search": err})
 			if err != nil {
 				b.WriteString("<p class=k>" + saysNoNotes + "</p>")
-			} else if res.NoMatch {
-				// the library answered, nothing is close: said so, and the
-				// notes that only hold a word of it named as such
-				b.WriteString("<p class=k>" + saysNoMatch + "</p>")
+				writePage(w, http.StatusOK, b)
+				return
+			}
+			if res.NoMatch {
+				// the library answered, nothing is close: said so, and what
+				// only holds a word of it named as such
+				if docs {
+					b.WriteString("<p class=k>" + saysNothingMatches + "</p>")
+				} else {
+					b.WriteString("<p class=k>" + saysNoMatch + "</p>")
+				}
 				if len(res.Hits) > 0 {
 					c := cards.Card{Title: byWordsTitle}
-					for _, h := range res.Hits {
-						first := ""
-						if len(h.Lines) > 0 {
-							first = h.Lines[0]
-						}
-						c.AddLink(summary(h.Title), first, cards.NotePage(h.Name))
-					}
-					more(&c, res.Total-len(res.Hits))
+					noteRows(&c, res)
 					b.WriteString(c.HTML())
 				}
-			} else {
-				if res.Reduced {
-					b.WriteString("<p class=k>" + saysWordsOnly + "</p>")
-				}
-				c := cards.Card{Title: "Treffer für „" + q + "“"}
-				for _, h := range res.Hits {
-					first := ""
-					if len(h.Lines) > 0 {
-						first = h.Lines[0]
-					}
-					c.AddLink(summary(h.Title), first, cards.NotePage(h.Name))
-				}
-				more(&c, res.Total-len(res.Hits))
+				docCard(b, res, docsByWordsTitle)
+				writePage(w, http.StatusOK, b)
+				return
+			}
+			if res.Reduced {
+				b.WriteString("<p class=k>" + saysWordsOnly + "</p>")
+			}
+			title, docsTitle := "Treffer für „"+q+"“", "Dokumente zu „"+q+"“"
+			if docs {
+				title = "Notizen zu „" + q + "“"
+			}
+			// a search that found documents only shows no empty notes card
+			if res.Total > 0 || len(res.Docs) == 0 || res.Partial {
+				c := cards.Card{Title: title}
+				noteRows(&c, res)
 				if res.Total == 0 {
 					c.Add("Nichts gefunden.", saysTryAnother)
 				}
@@ -96,6 +103,7 @@ func Notizen(cfg StartConfig) http.HandlerFunc {
 				}
 				b.WriteString(c.HTML())
 			}
+			docCard(b, res, docsTitle)
 			writePage(w, http.StatusOK, b)
 			return
 		}
@@ -118,6 +126,51 @@ func Notizen(cfg StartConfig) http.HandlerFunc {
 		}
 		writePage(w, http.StatusOK, b)
 	}
+}
+
+// noteRows are the notes found: title, the first line of the passage,
+// the note's page; and how many more.
+func noteRows(c *cards.Card, res library.Found) {
+	for _, h := range res.Hits {
+		first := ""
+		if len(h.Lines) > 0 {
+			first = h.Lines[0]
+		}
+		c.AddLink(summary(h.Title), first, cards.NotePage(h.Name))
+	}
+	more(c, res.Total-len(res.Hits))
+}
+
+// docCard is the documents found (haus#13): each with its date, sender and
+// the first line of the passage, leading to its page, which sends the
+// person on to Paperless — only when Paperless's public address is set.
+// Paperless not answering is one plain line where they would be.
+func docCard(b *strings.Builder, res library.Found, title string) {
+	if res.DocsDown {
+		b.WriteString("<p class=k>" + saysNoDocuments + "</p>")
+		return
+	}
+	c := cards.Card{Title: title}
+	for _, d := range res.Docs {
+		var parts []string
+		if !d.Created.IsZero() {
+			parts = append(parts, d.Created.Format("02.01.2006"))
+		}
+		if from := oneLine(d.Correspondent); from != "" {
+			parts = append(parts, trimRunes(from, 60))
+		}
+		if len(d.Lines) > 0 {
+			parts = append(parts, d.Lines[0])
+		}
+		detail := strings.Join(parts, " · ")
+		if d.Link != "" {
+			c.AddLink(summary(d.Title), detail, cards.DocumentPage(d.ID))
+		} else {
+			c.Add(summary(d.Title), detail)
+		}
+	}
+	more(&c, res.DocsMore)
+	b.WriteString(c.HTML())
 }
 
 // notePage is one note: its title, then its text as paragraphs. A name

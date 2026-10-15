@@ -35,6 +35,9 @@ type Doc struct {
 	Created       time.Time // zero: unknown
 	Link          string    // Paperless's own page for it; "" without PublicURL
 	Tags          []string  // the tags' names, as the document lists them
+	// Start is the beginning of its text as Paperless lists it (it cuts
+	// at 550 characters); only ByIDs reads it.
+	Start string
 }
 
 // ErrStatus is an answer the client did not expect.
@@ -58,6 +61,11 @@ const maxBody = 4 << 20
 
 // get fetches one API path into v.
 func (c *Client) get(ctx context.Context, p string, q url.Values, v any) error {
+	return c.getN(ctx, p, q, v, maxBody)
+}
+
+// getN is get reading at most limit bytes of the answer.
+func (c *Client) getN(ctx context.Context, p string, q url.Values, v any, limit int64) error {
 	u := strings.TrimRight(c.URL, "/") + p + "?" + q.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
@@ -79,7 +87,7 @@ func (c *Client) get(ctx context.Context, p string, q url.Values, v any) error {
 	if resp.StatusCode != http.StatusOK {
 		return &ErrStatus{resp.StatusCode} // the body stays here: it may echo what we sent
 	}
-	if err := json.NewDecoder(io.LimitReader(resp.Body, maxBody)).Decode(v); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, limit)).Decode(v); err != nil {
 		return c.scrub(fmt.Errorf("Paperless: Antwort unlesbar: %w", err))
 	}
 	return nil
@@ -96,30 +104,40 @@ func (c *Client) scrub(err error) error {
 // Search finds documents by full text, the best first: at most max, and
 // the total Paperless counted.
 func (c *Client) Search(ctx context.Context, q string, max int) ([]Doc, int, error) {
-	return c.list(ctx, url.Values{"query": {q}}, max)
+	return c.list(ctx, url.Values{"query": {q}}, max, shown)
 }
 
 // Recent lists the max newest documents, by the date they were created.
 func (c *Client) Recent(ctx context.Context, max int) ([]Doc, error) {
-	docs, _, err := c.list(ctx, url.Values{"ordering": {"-created"}}, max)
+	docs, _, err := c.list(ctx, url.Values{"ordering": {"-created"}}, max, shown)
 	return docs, err
 }
 
-// list asks for documents with q (a search or an order), at most max.
-func (c *Client) list(ctx context.Context, q url.Values, max int) ([]Doc, int, error) {
+// apiDoc is a document as the API lists it; content and modified only
+// when asked for.
+type apiDoc struct {
+	ID            int    `json:"id"`
+	Title         string `json:"title"`
+	Correspondent *int   `json:"correspondent"`
+	Created       string `json:"created"`
+	CreatedDate   string `json:"created_date"`
+	Tags          []int  `json:"tags"`
+	Content       string `json:"content"`
+	Modified      string `json:"modified"`
+}
+
+// shown are the fields a hit shows: not the OCR text
+const shown = "id,title,correspondent,created,created_date,tags"
+
+// list asks for documents with q (a search or an order), at most max;
+// fields is what it reads of each.
+func (c *Client) list(ctx context.Context, q url.Values, max int, fields string) ([]Doc, int, error) {
 	var page struct {
-		Count   int `json:"count"`
-		Results []struct {
-			ID            int    `json:"id"`
-			Title         string `json:"title"`
-			Correspondent *int   `json:"correspondent"`
-			Created       string `json:"created"`
-			CreatedDate   string `json:"created_date"`
-			Tags          []int  `json:"tags"`
-		} `json:"results"`
+		Count   int      `json:"count"`
+		Results []apiDoc `json:"results"`
 	}
 	q.Set("page_size", strconv.Itoa(max))
-	q.Set("fields", "id,title,correspondent,created,created_date,tags") // not the OCR text
+	q.Set("fields", fields)
 	q.Set("truncate_content", "true")
 	if err := c.get(ctx, "/api/documents/", q, &page); err != nil {
 		return nil, 0, err
@@ -127,8 +145,14 @@ func (c *Client) list(ctx context.Context, q url.Values, max int) ([]Doc, int, e
 	if len(page.Results) > max {
 		page.Results = page.Results[:max]
 	}
+	return c.named(ctx, page.Results), page.Count, nil
+}
+
+// named turns what the API listed into Docs, the correspondents and tags
+// by name (one request each).
+func (c *Client) named(ctx context.Context, rs []apiDoc) []Doc {
 	ids, tagIDs := map[int]bool{}, map[int]bool{}
-	for _, r := range page.Results {
+	for _, r := range rs {
 		if r.Correspondent != nil {
 			ids[*r.Correspondent] = true
 		}
@@ -138,9 +162,9 @@ func (c *Client) list(ctx context.Context, q url.Values, max int) ([]Doc, int, e
 	}
 	names := c.names(ctx, "/api/correspondents/", ids)
 	tags := c.names(ctx, "/api/tags/", tagIDs)
-	out := make([]Doc, 0, len(page.Results))
-	for _, r := range page.Results {
-		d := Doc{ID: r.ID, Title: r.Title}
+	out := make([]Doc, 0, len(rs))
+	for _, r := range rs {
+		d := Doc{ID: r.ID, Title: r.Title, Start: r.Content}
 		if r.Correspondent != nil {
 			d.Correspondent = names[*r.Correspondent]
 		}
@@ -160,7 +184,112 @@ func (c *Client) list(ctx context.Context, q url.Values, max int) ([]Doc, int, e
 		d.Link = c.Page(r.ID)
 		out = append(out, d)
 	}
-	return out, page.Count, nil
+	return out
+}
+
+// idList is ids as Paperless's id__in takes them.
+func idList(ids []int) string {
+	strs := make([]string, len(ids))
+	for i, id := range ids {
+		strs[i] = strconv.Itoa(id)
+	}
+	return strings.Join(strs, ",")
+}
+
+// ByIDs reads the documents with these ids, in one request, each with the
+// start of its text: those Paperless still has and lets this user see.
+// One deleted or hidden since is not in the answer (haus#13: a hit of the
+// memory library is checked here, as a note is against its folder).
+func (c *Client) ByIDs(ctx context.Context, ids []int) ([]Doc, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	docs, _, err := c.list(ctx, url.Values{"id__in": {idList(ids)}}, len(ids), shown+",content")
+	return docs, err
+}
+
+// Stamp is a document's id and when Paperless last changed it (zero: not
+// said).
+type Stamp struct {
+	ID       int
+	Modified time.Time
+}
+
+// pageSize is a listing's page; maxPages bounds the listing.
+const (
+	pageSize = 100
+	maxPages = 2000
+)
+
+// Stamps lists every document this user may see, id and last change, page
+// by page in id order. It is all of them or an error, never a part: what
+// it leaves out, a mirror would delete.
+func (c *Client) Stamps(ctx context.Context) ([]Stamp, error) {
+	var out []Stamp
+	for page := 1; ; page++ {
+		if page > maxPages {
+			return nil, fmt.Errorf("Paperless: mehr als %d Seiten Dokumente", maxPages)
+		}
+		var p struct {
+			Count   int      `json:"count"`
+			Next    *string  `json:"next"`
+			Results []apiDoc `json:"results"`
+		}
+		q := url.Values{"fields": {"id,modified"}, "page_size": {strconv.Itoa(pageSize)}, "page": {strconv.Itoa(page)}, "ordering": {"id"}}
+		if err := c.get(ctx, "/api/documents/", q, &p); err != nil {
+			return nil, err
+		}
+		for _, r := range p.Results {
+			out = append(out, Stamp{ID: r.ID, Modified: modified(r.Modified)})
+		}
+		if p.Next == nil || len(p.Results) == 0 {
+			if len(out) < p.Count {
+				return nil, fmt.Errorf("Paperless: %d von %d Dokumenten gelistet", len(out), p.Count)
+			}
+			return out, nil
+		}
+	}
+}
+
+func modified(s string) time.Time {
+	t, err := time.Parse(time.RFC3339Nano, s)
+	if err != nil {
+		return time.Time{}
+	}
+	return t
+}
+
+// Text is one document whole, as the memory library indexes it: what a
+// hit shows, its OCR text and its last change.
+type Text struct {
+	Doc
+	Content  string
+	Modified time.Time
+}
+
+// maxTexts caps one answer with OCR text: a few long documents.
+const maxTexts = 64 << 20
+
+// Texts reads the documents with these ids with their OCR text, in one
+// request: those Paperless still has.
+func (c *Client) Texts(ctx context.Context, ids []int) ([]Text, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	var page struct {
+		Results []apiDoc `json:"results"`
+	}
+	q := url.Values{"id__in": {idList(ids)}, "page_size": {strconv.Itoa(len(ids))}, "fields": {shown + ",content,modified"}}
+	if err := c.getN(ctx, "/api/documents/", q, &page, maxTexts); err != nil {
+		return nil, err
+	}
+	docs := c.named(ctx, page.Results)
+	out := make([]Text, len(docs))
+	for i, d := range docs {
+		d.Start = ""
+		out[i] = Text{Doc: d, Content: page.Results[i].Content, Modified: modified(page.Results[i].Modified)}
+	}
+	return out, nil
 }
 
 // Page is Paperless's own page for a document; "" without PublicURL.

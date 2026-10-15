@@ -24,26 +24,32 @@ import (
 	"strings"
 )
 
-// Client is one qmd, and the collection that holds the notes.
+// Client is one qmd, and the collections that hold the notes and the
+// documents.
 type Client struct {
 	URL        string // http://127.0.0.1:<port>, no trailing slash
 	Collection string // the notes' collection in qmd's index.yml
-	HTTP       *http.Client
+	// Documents is the collection of Paperless's documents, each <id>.md
+	// (internal/dokumente); "": the library holds no documents.
+	Documents string
+	HTTP      *http.Client
 }
 
 // maxAnswer caps what Haus reads of one answer.
 const maxAnswer = 4 << 20
 
-// Hit is one document qmd found: its path inside the collection, decoded
-// and plain (no step out, nothing hidden), qmd's title, the lines of its
-// best passage and the note's line that passage starts at (0: not said),
-// and its cosine to the question (0: outside qmd's list by meaning).
+// Hit is one document qmd found: its collection (the notes' or the
+// documents'), its path inside it, decoded and plain (no step out, nothing
+// hidden), qmd's title, the lines of its best passage and the file's line
+// that passage starts at (0: not said), and its cosine to the question (0:
+// outside qmd's list by meaning).
 type Hit struct {
-	Path  string
-	Title string
-	Lines []string
-	Start int
-	Vec   float64
+	Collection string
+	Path       string
+	Title      string
+	Lines      []string
+	Start      int
+	Vec        float64
 }
 
 var noRedirects = &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
@@ -105,9 +111,10 @@ type query struct {
 	Collections []string `json:"collections"`
 }
 
-// Search asks qmd for the notes that fit text, by words and by meaning,
-// at most limit of them, best first. What qmd names outside the notes'
-// collection, or not as a plain path inside it, is left out.
+// Search asks qmd for the notes (and the documents, when the client has
+// their collection) that fit text, by words and by meaning, at most limit
+// of them, best first. What qmd names outside those collections, or not as
+// a plain path inside one, is left out.
 func (c *Client) Search(ctx context.Context, text string, limit int) ([]Hit, error) {
 	text = strings.TrimSpace(text)
 	if text == "" {
@@ -117,7 +124,7 @@ func (c *Client) Search(ctx context.Context, text string, limit int) ([]Hit, err
 		Searches:    []search{{Type: "lex", Query: text}, {Type: "vec", Query: text}},
 		Limit:       limit,
 		Rerank:      false,
-		Collections: []string{c.Collection},
+		Collections: c.collections(),
 	}
 	raw, err := c.call(ctx, "/query", body)
 	if err != nil {
@@ -136,33 +143,45 @@ func (c *Client) Search(ctx context.Context, text string, limit int) ([]Hit, err
 	}
 	hits := []Hit{}
 	for _, r := range ans.Results {
-		p, ok := c.local(r.File)
+		coll, p, ok := c.local(r.File)
 		if !ok {
 			continue
 		}
-		hits = append(hits, Hit{Path: p, Title: r.Title, Lines: Lines(r.Snippet), Start: start(r.Snippet), Vec: r.Vec})
+		hits = append(hits, Hit{Collection: coll, Path: p, Title: r.Title, Lines: Lines(r.Snippet), Start: start(r.Snippet), Vec: r.Vec})
 	}
 	return hits, nil
 }
 
+// collections are the collections a search covers: the notes', and the
+// documents' when set.
+func (c *Client) collections() []string {
+	if c.Documents != "" && c.Documents != c.Collection {
+		return []string{c.Collection, c.Documents}
+	}
+	return []string{c.Collection}
+}
+
 // local turns qmd://<collection>/<segments, each percent-encoded> into
-// the plain path inside the collection, or says it is none: another
-// collection, an empty or hidden segment (".." included: a step out), a
-// segment that decodes to a separator or a NUL.
-func (c *Client) local(file string) (string, bool) {
-	rest, ok := strings.CutPrefix(file, "qmd://"+c.Collection+"/")
-	if !ok || rest == "" {
-		return "", false
-	}
-	segs := strings.Split(rest, "/")
-	for i, s := range segs {
-		d, err := url.PathUnescape(s)
-		if err != nil || d == "" || strings.HasPrefix(d, ".") || strings.ContainsAny(d, "/\\\x00") {
-			return "", false
+// the collection and the plain path inside it, or says it is none:
+// another collection, an empty or hidden segment (".." included: a step
+// out), a segment that decodes to a separator or a NUL.
+func (c *Client) local(file string) (string, string, bool) {
+	for _, coll := range c.collections() {
+		rest, ok := strings.CutPrefix(file, "qmd://"+coll+"/")
+		if !ok || rest == "" {
+			continue
 		}
-		segs[i] = d
+		segs := strings.Split(rest, "/")
+		for i, s := range segs {
+			d, err := url.PathUnescape(s)
+			if err != nil || d == "" || strings.HasPrefix(d, ".") || strings.ContainsAny(d, "/\\\x00") {
+				return "", "", false
+			}
+			segs[i] = d
+		}
+		return coll, strings.Join(segs, "/"), true
 	}
-	return strings.Join(segs, "/"), true
+	return "", "", false
 }
 
 // maxLines bounds a passage: qmd's snippets are a few lines.
@@ -234,11 +253,18 @@ func (s Status) Ready() bool {
 	return s.Documents > 0 && s.Embedded > 0
 }
 
-// Status asks the Vermittler's GET /status.
+// Status asks the Vermittler's GET /status for the notes' collection.
 func (c *Client) Status(ctx context.Context) (Status, error) {
+	notes, _, err := c.Statuses(ctx)
+	return notes, err
+}
+
+// Statuses asks the Vermittler's GET /status for the notes' collection
+// and the documents' (zero without one).
+func (c *Client) Statuses(ctx context.Context) (notes, docs Status, err error) {
 	raw, err := c.call(ctx, "/status", nil)
 	if err != nil {
-		return Status{}, err
+		return Status{}, Status{}, err
 	}
 	var ans struct {
 		Collections *[]struct {
@@ -248,15 +274,19 @@ func (c *Client) Status(ctx context.Context) (Status, error) {
 		} `json:"collections"`
 	}
 	if err := json.Unmarshal(raw, &ans); err != nil {
-		return Status{}, fmt.Errorf("qmd status: %w", err)
+		return Status{}, Status{}, fmt.Errorf("qmd status: %w", err)
 	}
 	if ans.Collections == nil {
-		return Status{}, errors.New("qmd status: no collections in the answer")
+		return Status{}, Status{}, errors.New("qmd status: no collections in the answer")
 	}
 	for _, col := range *ans.Collections {
-		if col.Name == c.Collection {
-			return Status{Documents: col.Documents, Embedded: col.Embedded}, nil
+		st := Status{Documents: col.Documents, Embedded: col.Embedded}
+		switch {
+		case col.Name == c.Collection:
+			notes = st
+		case c.Documents != "" && col.Name == c.Documents:
+			docs = st
 		}
 	}
-	return Status{}, nil
+	return notes, docs, nil
 }

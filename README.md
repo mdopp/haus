@@ -119,7 +119,15 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     are plain text: a table row as each value after its column's header
     (`Datum 31.12.2024 · Strom 41.230`; a column without one, the value
     alone), no header row, pipes, list dashes or heading hashes, here and
-    in the Haushalt's answers. `/notizen/<file>` (the
+    in the Haushalt's answers. With the documents in the library (below)
+    the field says *Notizen und Dokumente durchsuchen* and finds both: the
+    notes under *Notizen zu „…“*, the documents under *Dokumente zu „…“*,
+    each with its date, sender and the passage that matched, leading to
+    its page `/dokumente/<id>` (only with Paperless's public address); a
+    search only documents answer shows no empty notes card. Nothing close
+    is then *Keine Notiz und kein Dokument passt wirklich zu deiner
+    Frage.* Paperless not answering is one line, *Die Dokumente antworten
+    gerade nicht.*, and the notes are found as ever. `/notizen/<file>` (the
     note's file name, e.g. `einkaufsliste.md`; a slug or title works too)
     shows the note as text: paragraphs and line breaks, no Markdown
     rendering, never markup from the file. Outside the folder, hidden or
@@ -336,7 +344,12 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     its title, file, a passage and, with `HAUS_PUBLIC_URL`, its page
     `<HAUS_PUBLIC_URL>/notizen/<file>`; the same cut and tidy-up as the
     page (the tidy-up may take 3 s here: the Bote waits anyway), reduced
-    to words the same way, and the answer's first line says so.
+    to words the same way, and the answer's first line says so. With the
+    documents in the library it finds documents too, in the same eight,
+    each as `## Dokument: Titel (Datum, Absender)`, a passage and its page
+    `<HAUS_PUBLIC_URL>/dokumente/<id>`; Paperless not answering is the
+    answer's first line (*Die Dokumente antworten gerade nicht; gesucht
+    wurde nur in den Notizen.*), the notes follow.
   Times are local (`TZ`, e.g. `Europe/Berlin`): `JJJJ-MM-TT` or
   `JJJJ-MM-TTTHH:MM`. Haus keeps nothing of it (ADR 0017 §3): a note is a
   file the family syncs, a reminder an entry on their phones; the one
@@ -358,8 +371,29 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   qmd gets 2.5 s of a search, the word search the rest. A hit is a note
   only when its path is a plain file name inside the notes folder; what
   qmd names elsewhere, hidden, linked out or deleted is left out. Without
-  the notes folder there is no library. Paperless documents come in a
-  second step.
+  the notes folder there is no library.
+  - **The documents.** Paperless has read every document already (its
+    OCR); Haus feeds that text into qmd as its own collection,
+    `HAUS_QMD_DOCUMENTS` (e.g. `dokumente`, never the notes' own), which
+    counts only with Paperless set. `haus export-documents`, a one-shot
+    command the refresh timer runs before `qmd update`, mirrors what
+    Haus's Paperless user sees into `HAUS_DOCUMENTS_DIR`: one
+    `<id>.md` per document, `# Titel`, then `Datum:`, `Von:` and
+    `Schlagworte:`, then the text (at most 2 MB). A file whose time is
+    the document's last change is not read again; a document deleted in
+    Paperless (or no longer shown to Haus's user) is deleted from the
+    folder; Paperless failing leaves the folder as it was and is not the
+    refresh's failure (only a folder Haus cannot write is). A search asks
+    qmd for both collections; every document it names is checked against
+    Paperless in one request (`id__in`, at most 1.5 s, the start of its
+    text with it): one deleted since is left out and sets no bar, and
+    what a hit shows (title, date, sender, its page) is Paperless's as it
+    is now. The cut and the tidy-up cover notes and documents together,
+    at most the caller's number of hits in all. When the search by
+    meaning cannot answer, or nothing is close, the documents come from
+    Paperless's own full text search, any meaningful word of the question
+    (`Wort OR Wort`). Paperless not answering leaves the documents out and
+    says so; the notes' answer stands.
   - **The cut.** qmd ranks some note first for any question, nonsense
     too, so a hit by meaning is shown only when its cosine is at least
     0.30 and at least 0.75 of the best hit's, in qmd's order (measured on
@@ -383,7 +417,7 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     a passage missed the answer, not when the note did.
 
 Not yet: Start's *Häufig genutzt*; switching in the Räume list (a thing's
-own page switches); Energie, Medien; Paperless in the memory library and dictation in Notizen, timers in
+own page switches); Energie, Medien; dictation in Notizen, timers in
 Kalender; the `Sprechen` field to the Bote (laib#21).
 
 - The Box page's Werkstatt card (haus#15): the open tickets of the repos in
@@ -403,7 +437,7 @@ HAUS_HAUSHALT_TOKEN=<the Bote's bearer> TZ=Europe/Berlin \
 HAUS_RADICALE_URL=http://host.containers.internal:5232 HAUS_RADICALE_USER=<service account> HAUS_RADICALE_PASSWORD=<its password> \
 HAUS_PAPERLESS_URL=http://host.containers.internal:8000 HAUS_PAPERLESS_TOKEN=<a Paperless API token> \
 HAUS_PAPERLESS_PUBLIC_URL=https://paperless.<domain> HAUS_NOTES_DIR=/notes \
-HAUS_QMD_URL=http://127.0.0.1:8181 HAUS_UPLOAD_DIR=/consume \
+HAUS_QMD_URL=http://127.0.0.1:8181 HAUS_QMD_DOCUMENTS=dokumente HAUS_DOCUMENTS_DIR=/dokumente HAUS_UPLOAD_DIR=/consume \
 HAUS_LLM_URL=http://host.containers.internal:11435/v1 HAUS_LLM_MODEL=gemma-4-e4b HAUS_LLM_KEY=<the model key> ./haus
 ```
 
@@ -414,6 +448,12 @@ nothing else (no exec, no write). There are no static device tokens. Image: `ghc
 upload needs the share's consume folder mounted writable at
 `HAUS_UPLOAD_DIR`, on a file system with hard links, and Caddy letting a
 request of 64 MB through).
+
+`haus export-documents` runs once instead of the server and exits (the
+refresh timer runs it in Haus's container, `podman exec systemd-haus
+/haus export-documents`, before `qmd update`): it reads
+`HAUS_PAPERLESS_URL`, `HAUS_PAPERLESS_TOKEN` and `HAUS_DOCUMENTS_DIR`,
+does nothing without them, and exits 1 only when the folder fails.
 
 ## Tests
 

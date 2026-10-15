@@ -84,6 +84,9 @@ func routes(s site) http.Handler {
 }
 
 func main() {
+	if len(os.Args) > 1 { // a one-shot command, not the server
+		os.Exit(command(context.Background(), os.Args[1:], os.Getenv, os.Stdout, os.Stderr))
+	}
 	ops := &laib.Client{URL: env("LAIB_URL", "http://host.containers.internal:5900"), Token: os.Getenv("LAIB_TOKEN")}
 	if ops.Token == "" {
 		log.Fatal("haus: LAIB_TOKEN is required (minted on laib add haus as the haus hand)")
