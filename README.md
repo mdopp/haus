@@ -18,11 +18,25 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   persona's header, the three guarantees, then the cards *Jetzt* (who is
   home from `person.*`, the lamps that are on with their names (a group,
   any entity with an `entity_id` list, is not counted), what
-  plays on a `media_player`, the next appointment within 14 days) and
-  *Haushalt* (the next three open reminders, the three newest notes).
+  plays on a `media_player`, the next appointment within 14 days),
+  *Meine Favoriten* and *Haushalt* (the next three open reminders, the
+  three newest notes).
+  *Meine Favoriten* is the person's own things (laib ADR 0017: favorites
+  go to Haus): `HAUS_DATA/favoriten.json`, `{"<Remote-User>":
+  ["light.buero", "cover.wohnzimmer", …]}`, read on each page load, in
+  the person's order, at most twelve, each with its state in words and
+  leading to its own page; what that page would not show (not a card
+  domain, unknown to HA, hidden by HA) is left out. Nothing in Haus writes
+  the file yet: the pin ("auf meine Startseite") comes with the Sprechen
+  field. No file, no list or no `Remote-User`: no card.
   Each part only when its backend is set (`HAUS_HA_URL` + `HAUS_HA_TOKEN`,
-  `HAUS_RADICALE_*`, `HAUS_NOTES_DIR`); one not set, or not answering
-  within 4s, is left out without a word, its error in Haus's log. The
+  `HAUS_RADICALE_*`, `HAUS_NOTES_DIR`); one not set is not mentioned. One
+  not answering within 4s is one plain line where its rows would be
+  (*Licht und Geräte antworten gerade nicht.*, *Der Kalender antwortet
+  gerade nicht.* once, *Die Notizen lassen sich gerade nicht lesen.*, and
+  a line in *Meine Favoriten* when its file or HA does not), never its name or
+  its error, which go to Haus's log; Laib not answering is *Wie es der
+  Box geht, lässt sich gerade nicht sagen.* The page is always a 200. The
   page shows and changes nothing (haus#1). Cards are one renderer,
   `internal/cards` (title, rows, optional link), for the pages and later
   the widgets' JSON. `/` and every page path Haus does not serve redirect
@@ -249,7 +263,7 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   reads the files, there is no second index. Identity per person (the
   person's own calendar, laib ADR 0017 §3) comes next.
 
-Not yet: Start's *Meine Favoriten* and *Häufig genutzt*; switching in
+Not yet: Start's *Häufig genutzt* and writing favorites; switching in
 Räume; Energie, Medien; Paperless and dictation in Notizen, timers in
 Kalender; the `Sprechen` field to the Bote (laib#21).
 
@@ -273,7 +287,7 @@ HAUS_PAPERLESS_PUBLIC_URL=https://paperless.<domain> HAUS_NOTES_DIR=/notes \
 HAUS_UPLOAD_DIR=/consume ./haus
 ```
 
-`HAUS_DATA` (default `/data`) holds `devices.json`; `HAUS_PUBLIC_URL` is the
+`HAUS_DATA` (default `/data`) holds `devices.json` and `favoriten.json`; `HAUS_PUBLIC_URL` is the
 origin the setup link carries (default `https://<Host>`). Haus's Laib token is the `haus` hand: status, inbox, journal, restart —
 nothing else (no exec, no write). There are no static device tokens. Image: `ghcr.io/mdopp/haus`. Laib template: `haus` (route `haus.<domain>`,
 `bypass: [/napi/]`; the

@@ -102,4 +102,5 @@ func (c Card) HTML() string {
 
 // Style is the cards' CSS, for a page's head.
 const Style = `<style>.karte{background:#fff;border:1px solid #e6e2d8;border-radius:.6rem;padding:.4rem 1rem .6rem;margin:1rem 0}
-.karte h2{margin:.4rem 0}.karte ul{list-style:none;margin:0;padding:0}.karte li{padding:.3rem 0;border-bottom:1px solid #f0ede5}.karte li:last-child{border-bottom:0}</style>`
+.karte h2{margin:.4rem 0}.karte ul{list-style:none;margin:0;padding:0}.karte li{padding:.3rem 0;border-bottom:1px solid #f0ede5;overflow-wrap:anywhere}.karte li:last-child{border-bottom:0}
+.karte li a{display:block;padding:.2rem 0}</style>`

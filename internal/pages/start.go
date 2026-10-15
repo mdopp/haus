@@ -38,16 +38,29 @@ type StartConfig struct {
 var backendWait = 4 * time.Second
 
 const (
-	maxNames    = 5  // light names in the Jetzt row
-	maxPlaying  = 3  // media players in Jetzt
-	maxHaushalt = 3  // reminders, and notes, in Haushalt
-	horizon     = 14 // days ahead for the next appointment
+	maxNames     = 5  // light names in the Jetzt row
+	maxPlaying   = 3  // media players in Jetzt
+	maxHaushalt  = 3  // reminders, and notes, in Haushalt
+	maxFavoriten = 12 // things in Meine Favoriten
+	horizon      = 14 // days ahead for the next appointment
+)
+
+// What Start says, in one plain line where a card's rows would be, when
+// a backend does not answer (haus#12): what is missing, in the family's
+// words, never the backend's name or its error (laib ADR 0021).
+const (
+	saysNoHouse     = "Licht und Geräte antworten gerade nicht."
+	saysNoCalendar  = "Der Kalender antwortet gerade nicht."
+	saysNoNotes     = "Die Notizen lassen sich gerade nicht lesen."
+	saysNoFavorites = "Deine Favoriten lassen sich gerade nicht lesen."
+	saysFavsUnseen  = "Deine Favoriten sind gerade nicht zu sehen."
 )
 
 // Start is the family's page (haus#12, laib DEKONSTRUKTION): the persona's
-// greeting, the three guarantees, then Jetzt and Haushalt. It shows and
-// changes nothing (haus#1). A backend that is not configured or not
-// answering is left out; its error goes to the log, not to the family.
+// greeting, the three guarantees, then Jetzt, Meine Favoriten and
+// Haushalt. It shows and changes nothing (haus#1). A backend that is not
+// configured is not mentioned; one not answering is one plain line where
+// its rows would be, its error in the log, not on the page.
 func Start(cfg StartConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !showOnly(w, r, "Die Startseite") {
@@ -68,8 +81,11 @@ func Start(cfg StartConfig) http.HandlerFunc {
 			todoErr  error
 			recent   []notes.Entry
 			notesErr error
+			favs     []string
+			favErr   error
 			reads    []func(context.Context)
 		)
+		person := r.Header.Get("Remote-User")
 		if cfg.Laib != nil {
 			reads = append(reads, func(ctx context.Context) { ready, services, laibErr = cfg.Laib.Status(ctx) })
 		}
@@ -87,8 +103,11 @@ func Start(cfg StartConfig) http.HandlerFunc {
 		if cfg.Notes != nil {
 			reads = append(reads, func(ctx context.Context) { recent, notesErr = cfg.Notes.Recent(ctx, maxHaushalt) })
 		}
+		if cfg.Favorites != nil && cfg.HA != nil && person != "" {
+			reads = append(reads, func(context.Context) { favs, favErr = cfg.Favorites.For(person) })
+		}
 		fetch(r, reads...)
-		logErrs("start", map[string]error{"laib": laibErr, "home assistant": haErr, "calendar": evErr, "reminders": todoErr, "notes": notesErr})
+		logErrs("start", map[string]error{"laib": laibErr, "home assistant": haErr, "calendar": evErr, "reminders": todoErr, "notes": notesErr, "favorites": favErr})
 
 		b := familyHead(r, cfg, "Start", "Start")
 		b.WriteString("<h1 class=sr>Start</h1>")
@@ -101,18 +120,34 @@ func Start(cfg StartConfig) http.HandlerFunc {
 		}
 
 		jetzt := cards.Card{Title: "Jetzt"}
-		if cfg.HA != nil && haErr == nil {
+		switch {
+		case cfg.HA == nil:
+		case haErr != nil:
+			jetzt.Add(saysNoHouse, "")
+		default:
 			home(&jetzt, states, reg.Hidden)
 			jetzt.Link = &cards.Link{Href: "/raeume", Text: "Alle Räume"}
 		}
-		if cfg.Calendar != nil && evErr == nil && len(events) > 0 {
+		switch {
+		case cfg.Calendar == nil:
+		case evErr != nil:
+			jetzt.Add(saysNoCalendar, "")
+		case len(events) > 0:
 			e := events[0]
 			jetzt.AddLink("Nächster Termin: "+summary(e.Summary), eventWhen(e, now, loc), "/kalender")
 		}
 		b.WriteString(jetzt.HTML())
 
+		b.WriteString(favoriteCard(favs, favErr, states, haErr, reg).HTML())
+
 		haushalt := cards.Card{Title: "Haushalt"}
-		if cfg.Calendar != nil && todoErr == nil {
+		switch {
+		case cfg.Calendar == nil:
+		case todoErr != nil:
+			if evErr == nil { // the calendar is said once
+				haushalt.Add(saysNoCalendar, "")
+			}
+		default:
 			for i, t := range todos {
 				if i == maxHaushalt {
 					break
@@ -124,7 +159,11 @@ func Start(cfg StartConfig) http.HandlerFunc {
 				haushalt.AddLink(summary(t.Summary), d, "/kalender")
 			}
 		}
-		if cfg.Notes != nil && notesErr == nil {
+		switch {
+		case cfg.Notes == nil:
+		case notesErr != nil:
+			haushalt.Add(saysNoNotes, "")
+		default:
 			for _, n := range recent {
 				haushalt.AddLink(summary(n.Title), "Notiz · geändert "+dayWord(n.Changed, now, loc)+" "+n.Changed.In(loc).Format("15:04"), cards.NotePage(n.Name))
 			}
@@ -133,6 +172,41 @@ func Start(cfg StartConfig) http.HandlerFunc {
 		b.WriteString(haushalt.HTML())
 		writePage(w, http.StatusOK, b)
 	}
+}
+
+// favoriteCard is Meine Favoriten (laib DEKONSTRUKTION, ADR 0017): the
+// person's things in their order, each with its state in words and leading
+// to its own page. Only what that page shows: a thing of a card domain
+// that HA knows and does not hide. Nothing to show, no card.
+func favoriteCard(ids []string, err error, states []ha.State, haErr error, reg ha.Registry) cards.Card {
+	c := cards.Card{Title: "Meine Favoriten"}
+	switch {
+	case err != nil:
+		c.Add(saysNoFavorites, "")
+		return c
+	case len(ids) == 0:
+		return c
+	case haErr != nil:
+		c.Add(saysFavsUnseen, "")
+		return c
+	}
+	byID := make(map[string]ha.State, len(states))
+	for _, s := range states {
+		byID[s.EntityID] = s
+	}
+	n := 0
+	for _, id := range ids {
+		s, ok := byID[id]
+		domain, _, _ := strings.Cut(id, ".")
+		if !ok || !cards.Domains[domain] || reg.Hidden[id] {
+			continue
+		}
+		if n++; n <= maxFavoriten {
+			c.AddLink(friendly(s), roomDetail(domain, s, reg.TempUnit), cards.ThingPage(id))
+		}
+	}
+	more(&c, n-maxFavoriten)
+	return c
 }
 
 // ToStart sends every page path Haus does not serve to Start (haus#12): an

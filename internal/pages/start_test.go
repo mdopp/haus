@@ -484,7 +484,8 @@ func TestStartShowsMyFavorites(t *testing.T) {
 	// what is not there, not a card's thing, or hidden by HA is left out; Ben's are Ben's
 	mustNotContain(t, body, "light.weg", "/raeume/person.ben", "Alte Lampe", "Flurlicht")
 	fav0 := strings.Index(body, "karte-meine-favoriten")
-	if strings.Index(body, "Rollladen Wohnzimmer") > strings.Index(body, "Bürolicht") || strings.Index(body, "Bürolicht") > strings.Index(body, "Heizung Bad") {
+	favs := body[fav0:] // Jetzt names the lamp that is on, too
+	if strings.Index(favs, "Rollladen Wohnzimmer") > strings.Index(favs, "Bürolicht") || strings.Index(favs, "Bürolicht") > strings.Index(favs, "Heizung Bad") {
 		t.Fatal("the favorites keep the person's order")
 	}
 	if !(strings.Index(body, "karte-jetzt") < fav0 && fav0 < strings.Index(body, "karte-haushalt")) {
@@ -493,7 +494,7 @@ func TestStartShowsMyFavorites(t *testing.T) {
 
 	_, body = startPageAs(t, StartConfig{HA: hc, Favorites: fav}, "ben", "family")
 	mustContain(t, body, `<a href="/raeume/light.flur">Flurlicht</a> <span class=k>aus</span>`)
-	mustNotContain(t, body, "Bürolicht", "Rollladen")
+	mustNotContain(t, body, `href="/raeume/light.buero"`, "Rollladen") // Jetzt still names the lamp that is on
 }
 
 // Without a person (no Remote-User), without favorites or without a store
