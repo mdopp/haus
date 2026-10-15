@@ -41,7 +41,8 @@ var counterOrder = map[string]int{"PV Erzeugung": 1, "Netzbezug": 2, "Netzeinspe
 // Heute, what each counter added since midnight, and what the house used
 // from them. The sensors are package energie's choice, the widgets'
 // energy picture's too. None found is one plain line; HA not answering is
-// one plain line; its history alone not answering keeps Jetzt.
+// one plain line; its history alone not answering keeps Jetzt. A path
+// under /energie/ is a 404 with the way back.
 func Energie(cfg StartConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !showOnly(w, r, "Energie") {
@@ -49,6 +50,10 @@ func Energie(cfg StartConfig) http.HandlerFunc {
 		}
 		if cfg.HA == nil {
 			toStart(w, r)
+			return
+		}
+		if r.URL.Path != "/energie" {
+			missing{http.StatusNotFound, "Diese Seite gibt es nicht.", "Energie", "/energie", "Energie"}.write(w, r, cfg)
 			return
 		}
 		var (
