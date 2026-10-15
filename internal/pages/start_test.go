@@ -521,8 +521,16 @@ func TestStartWithoutFavoritesSaysNothing(t *testing.T) {
 			t.Errorf("%s: the page talks about favorites:\n%s", name, body)
 		}
 	}
-	// favorites without the house configured: nothing to draw them from, nothing said
-	_, body := startPage(t, StartConfig{Favorites: favorites(t, `{"anna": ["light.buero"]}`)}, "")
+	// favorites without the house configured: nothing to draw them from, nothing said,
+	// not even about a file that does not read
+	for _, content := range []string{`{"anna": ["light.buero"]}`, `{"anna": [`} {
+		_, body := startPage(t, StartConfig{Favorites: favorites(t, content)}, "")
+		mustNotContain(t, body, "Favoriten")
+	}
+	// the house down and no favorites: Jetzt says so, and no card for favorites there are not
+	fake.Down(true)
+	_, body := startPage(t, StartConfig{HA: hc, Favorites: favorites(t, `{"ben": ["light.buero"]}`)}, "")
+	mustContain(t, body, "Licht und Geräte antworten gerade nicht.")
 	mustNotContain(t, body, "Favoriten")
 }
 

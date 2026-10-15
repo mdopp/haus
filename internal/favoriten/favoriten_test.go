@@ -50,9 +50,9 @@ func TestNoFileIsNoFavorites(t *testing.T) {
 }
 
 // Only entity ids are favorites; the rest of a hand-edited file is left
-// out, each id once, trimmed.
+// out (a padded id too: Haus does not guess), each id once.
 func TestForKeepsOnlyEntityIDsOnce(t *testing.T) {
-	s := store(t, `{"anna": ["light.buero", " light.buero ", "light.flur", "Light.Bad", "light", ".x", "light.a b", "", "../etc/passwd", "light.büro", "cover.tor"]}`)
+	s := store(t, `{"anna": ["light.buero", " light.bad ", "light.buero", "light.flur", "Light.Bad", "light", ".x", "light.a b", "", "../etc/passwd", "light.büro", "cover.tor"]}`)
 	got, err := s.For("anna")
 	if err != nil {
 		t.Fatal(err)
@@ -84,6 +84,11 @@ func TestAHugeFileIsAnError(t *testing.T) {
 	big := `{"anna": ["light.buero"], "x": "` + strings.Repeat("a", maxBytes) + `"}`
 	if _, err := store(t, big).For("anna"); err == nil {
 		t.Fatal("a file over the limit was read")
+	}
+	// valid JSON whose tail past the limit is only blanks is over the limit too
+	padded := `{"anna": ["light.buero"]}` + strings.Repeat(" ", maxBytes)
+	if _, err := store(t, padded).For("anna"); err == nil {
+		t.Fatal("a file over the limit was read because its cut still parsed")
 	}
 }
 
