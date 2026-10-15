@@ -309,11 +309,11 @@ func TestStartMeineGeraete(t *testing.T) {
 	g := section(t, body, "karte-meine-geraete")
 	mustContain(t, g,
 		`<a href="/raeume/light.buero">Bürolicht</a>`, `<b class=zustand>An</b>`, "50 %",
-		`name=geraet value="light.buero"`, `name=tun value="light.turn_off"`, `role=switch aria-checked=true aria-label="Bürolicht"`,
+		`name=geraet value="light.buero"><input type=hidden name=tun value="light.turn_off"><input type=hidden name=zurueck value="/start"><button class=schalter role=switch aria-checked=true aria-label="Bürolicht">`,
 		`<a href="/raeume/cover.wohnzimmer">Rollladen Wohnzimmer</a>`, `<b class=zustand>Offen</b>`, "40 %",
 		`<a href="/raeume/climate.bad">Heizung Bad</a>`, `<b class=zustand>21,5 °C</b>`, "→ 23 °C",
 		`<a href="/raeume/light.flur">Flurlicht</a>`, `<b class=zustand>Aus</b>`,
-		`name=geraet value="light.flur"`, `name=tun value="light.turn_on"`, `role=switch aria-checked=false aria-label="Flurlicht"`)
+		`name=geraet value="light.flur"><input type=hidden name=tun value="light.turn_on"><input type=hidden name=zurueck value="/start"><button class=schalter role=switch aria-checked=false aria-label="Flurlicht">`)
 	mustNotContain(t, g, `value="cover.wohnzimmer"`, `value="climate.bad"`, "Küche")
 	before(t, g, "Bürolicht", "Rollladen Wohnzimmer")
 	before(t, g, "Rollladen Wohnzimmer", "Heizung Bad")
@@ -366,6 +366,12 @@ func TestStartMeineGeraeteEmptySaysHow(t *testing.T) {
 		mustNotContain(t, body, "Meine Geräte", "☆", "Favoriten")
 		_ = name
 	}
+	// the house not answering and nothing pinned: Im Haus says it; how to
+	// pin, through a Räume that does not answer either, can wait
+	fake.Down(true)
+	_, body := startPage(t, StartConfig{HA: hc, Favorites: favorites(t, `{"ben": ["light.buero"]}`)}, "")
+	mustContain(t, body, "Licht und Geräte antworten gerade nicht.")
+	mustNotContain(t, body, "karte-meine-geraete", "Tippe in Räume", "Favoriten")
 	// favorites without the house configured: nothing to draw them from, nothing said
 	for _, content := range []string{`{"anna": ["light.buero"]}`, `{"anna": [`} {
 		_, body := startPage(t, StartConfig{Favorites: favorites(t, content)}, "")

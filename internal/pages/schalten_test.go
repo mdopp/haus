@@ -146,6 +146,14 @@ func TestSchaltenRefusesWhatAPageDoesNotSwitch(t *testing.T) {
 	if d := fake.Calls()[0].Data; len(d) != 1 {
 		t.Fatalf("HA got data %v", d)
 	}
+	// were a page ever to offer a sensitive action, its form still could not
+	// confirm it: a page never says confirmed, the widgets' rule refuses
+	pageDoes["lock.unlock"] = true
+	defer delete(pageDoes, "lock.unlock")
+	rec = post(t, h, "/schalten", url.Values{"geraet": {"lock.haustuer"}, "tun": {"lock.unlock"}, "confirmed": {"true"}}, "anna", nil)
+	if rec.Code != http.StatusForbidden || len(fake.Calls()) != 1 {
+		t.Fatalf("a confirmed from the form → %d, HA got %v", rec.Code, calls(fake))
+	}
 }
 
 // Only Haus's own page switches: a POST from another site (Sec-Fetch-Site,
@@ -193,7 +201,8 @@ func TestSchaltenOnlyFromHausItself(t *testing.T) {
 func TestSchaltenGoesBackOnlyToHaus(t *testing.T) {
 	_, cfg := switchHouse(t)
 	h := Schalten(cfg)
-	for _, back := range []string{"https://boese.example/", "//boese.example", "/raeume/../box", "/box", "/raeume/lock.haustuer?x", "javascript:alert(1)", "/start#x"} {
+	for _, back := range []string{"https://boese.example/", "//boese.example", "/raeume/../box", "/box", "/raeume/lock.haustuer?x", "javascript:alert(1)", "/start#x",
+		"/raeume/person.anna", "/raeume/automation.alles", "/raeume/", "/raeume"} {
 		rec := post(t, h, "/schalten", url.Values{"geraet": {"light.buero"}, "tun": {"light.turn_off"}, "zurueck": {back}}, "anna", nil)
 		if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/start" {
 			t.Errorf("zurueck %q → %d %q, want /start", back, rec.Code, rec.Header().Get("Location"))
