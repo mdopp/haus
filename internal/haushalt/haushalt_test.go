@@ -974,3 +974,14 @@ func TestDocumentBlankTags(t *testing.T) {
 		t.Fatalf("%q", text)
 	}
 }
+
+// The link names the card's UID exactly as the page matches it, padding
+// and all; the lookup reads the UID as the query is read, one line.
+func TestContactLinkIsTheExactUID(t *testing.T) {
+	s := newSetup(t, want{contacts: true})
+	s.fake.Put("/bote/kontakte/p.vcf", "BEGIN:VCARD\r\nVERSION:4.0\r\nUID: ab  cd \r\nFN:Paula\r\nEND:VCARD\r\n")
+	text, _ := call(t, s.h, "kontakt_lesen", map[string]any{"kontakt": "ab cd"})
+	if !strings.Contains(text, "Paula") || !strings.Contains(text, hausPublic+"/kontakte/%20ab%20%20cd%20") {
+		t.Fatalf("%q", text)
+	}
+}
