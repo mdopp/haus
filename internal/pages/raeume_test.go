@@ -102,6 +102,10 @@ func TestRaeumeEscapes(t *testing.T) {
 	_, body, _ := familyPage(t, Raeume, StartConfig{HA: hc}, "GET", "/raeume", "")
 	mustContain(t, body, "&lt;b&gt;Saal&lt;/b&gt;", "&lt;img src=x")
 	mustNotContain(t, body, "<b>Saal", "<img src=x")
+	// the ☆'s label for a screen reader too (haus#12)
+	_, body, _ = familyPageAs(t, Raeume, StartConfig{HA: hc, Favorites: favorites(t, "")}, "GET", "/raeume", "anna", "family")
+	mustContain(t, body, `aria-label="&lt;img src=x onerror=alert(1)&gt; auf Start zeigen"`)
+	mustNotContain(t, body, "<b>Saal", "<img src=x")
 }
 
 // A big room without a name is cut, the count is not.
@@ -258,7 +262,8 @@ func TestRaeumePinsFromTheList(t *testing.T) {
 	}
 	// back leads only to Räume or the thing's own page
 	for _, back := range []string{"https://boese.example/", "//boese.example", "/box", "/raeume/../box", "/raeume#x", `/raeume#karte-"><b>`,
-		"/raeume?x", "/raeume/light.keller", "javascript:alert(1)"} {
+		"/raeume?x", "/raeume/light.keller", "javascript:alert(1)",
+		"https://boese.example/raeume", "//boese.example/raeume#karte-kueche", `/\boese.example/raeume`, "javascript:/raeume"} {
 		rec := post(t, Ding(cfg), "/raeume/light.kueche_decke", url.Values{"stern": {"an"}, "zurueck": {back}}, "anna", nil)
 		if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/raeume/light.kueche_decke" {
 			t.Errorf("zurueck %q → %d %q, want the thing's page", back, rec.Code, rec.Header().Get("Location"))

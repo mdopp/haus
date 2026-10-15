@@ -206,7 +206,8 @@ func TestSchaltenGoesBackOnlyToHaus(t *testing.T) {
 	h := Schalten(cfg)
 	for _, back := range []string{"https://boese.example/", "//boese.example", "/raeume/../box", "/box", "/raeume/lock.haustuer?x", "javascript:alert(1)", "/start#x",
 		"/raeume/person.anna", "/raeume/automation.alles", "/raeume/", "/raeume#x", "/raeume#karte-", `/raeume#karte-"><b>`, "/raeume#karte-K",
-		"/raeume?x", "/raeume/#karte-kueche", "/raeume#karte-kueche#x", "/raeume#karte-kueche/../box"} {
+		"/raeume?x", "/raeume/#karte-kueche", "/raeume#karte-kueche#x", "/raeume#karte-kueche/../box",
+		"https://boese.example/raeume", "//boese.example/raeume#karte-kueche", `/\boese.example/raeume`, "/%2F/boese.example/raeume", " /raeume", "/raeume\n"} {
 		rec := post(t, h, "/schalten", url.Values{"geraet": {"light.buero"}, "tun": {"light.turn_off"}, "zurueck": {back}}, "anna", nil)
 		if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/start" {
 			t.Errorf("zurueck %q → %d %q, want /start", back, rec.Code, rec.Header().Get("Location"))
