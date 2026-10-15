@@ -11,7 +11,9 @@
 // Means words: the fake's stand-in for search by meaning, so a test can
 // find a note by a word it does not contain. The order is the order the
 // documents were added; the score is qmd's fused rank, 1/rank; vec is the
-// document's Vec.
+// document's Vec. Like the Vermittler it refuses with 400 a field it does
+// not take (minScore, intent, a plain query), rerank on, and a search that
+// is not lex or vec.
 package qmdfake
 
 import (
@@ -190,7 +192,42 @@ func snippet(body string) (int, string) {
 	return 1, b.String()
 }
 
+// taken is what the Vermittler's POST /query takes (laib qmd/vermittler.mjs).
+var taken = map[string]bool{"searches": true, "limit": true, "collections": true, "rerank": true}
+
+// refused says why the Vermittler would answer 400, or "".
+func refused(body []byte) string {
+	var raw map[string]json.RawMessage
+	if json.Unmarshal(body, &raw) != nil {
+		return ""
+	}
+	for k := range raw {
+		if !taken[k] {
+			return k + " is not taken: typed lex/vec searches only, no plain or expanded query"
+		}
+	}
+	if r, ok := raw["rerank"]; ok && string(r) != "false" {
+		return "rerank is always off"
+	}
+	var p struct {
+		Searches []search `json:"searches"`
+	}
+	json.Unmarshal(body, &p)
+	for _, q := range p.Searches {
+		if (q.Type != "lex" && q.Type != "vec") || strings.TrimSpace(q.Query) == "" {
+			return `each search is {type: "lex"|"vec", query}`
+		}
+	}
+	return ""
+}
+
 func (s *Server) query(w http.ResponseWriter, body []byte) {
+	if why := refused(body); why != "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": why})
+		return
+	}
 	var p struct {
 		Searches    []search `json:"searches"`
 		Limit       *float64 `json:"limit"`

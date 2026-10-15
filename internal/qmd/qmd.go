@@ -95,11 +95,12 @@ type search struct {
 }
 
 // query is the whole body Haus sends: nothing qmd would fill with its
-// defaults (rerank on, a plain query expanded by the LLM, an intent).
+// defaults (rerank on, a plain query expanded by the LLM, an intent), and
+// nothing the Vermittler does not take — it answers any other field,
+// minScore too, with 400 (it sets minScore 0 itself).
 type query struct {
 	Searches    []search `json:"searches"`
 	Limit       int      `json:"limit"`
-	MinScore    float64  `json:"minScore"`
 	Rerank      bool     `json:"rerank"`
 	Collections []string `json:"collections"`
 }
