@@ -47,8 +47,9 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   (haus#12), read-only, from the same cards, under the persona's header and
   one nav (Start · Räume · Kalender · Notizen, each only when its backend is
   set; Box for admins). A page whose backend is not set lands on Start; one
-  not answering within 4s is left out, its error in the log. Anything but
-  GET/HEAD is 405.
+  not answering within 4s is Start's plain line where its rows would be,
+  once, never its name or error, which go to the log; the page is a 200
+  (haus#33). Anything but GET/HEAD is 405.
   - *Räume*: one card per Home Assistant area (the entity's own, else its
     device's), rooms by name: lights (on/off, brightness), heating (current
     and target temperature), covers (open/closed, position), media (what
@@ -61,29 +62,37 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     kept 5 minutes (the rooms shared with `/napi/portal/active`), refreshed
     in the background whoever asked; until the registries have been read,
     the page says it is reading them rather than put everything in Ohne
-    Raum. Switching comes later, with where actions live. Each thing links
+    Raum. HA not answering: *Licht und Geräte antworten gerade nicht.* Switching comes later, with where actions live. Each thing links
     to its own page.
   - *Kalender*: *Heute* (the day's appointments with time and place),
     *Nächste 14 Tage*, *Erinnerungen* (open reminders, overdue said so; one
     due on a day, not at a time, shows the day and is overdue the day after),
     every calendar of the Radicale account, at most 50 rows a card. Each
-    reminder links to its own page.
+    reminder links to its own page. Radicale not answering: *Der Kalender
+    antwortet gerade nicht.* once, where the appointments would be, or in
+    *Erinnerungen* when only the reminders fail.
   - *Notizen*: a search field (`GET /notizen?q=…`, the notes search above:
     20 hits, its caps) and the ten newest notes. `/notizen/<file>` (the
     note's file name, e.g. `einkaufsliste.md`; a slug or title works too)
     shows the note as text: paragraphs and line breaks, no Markdown
     rendering, never markup from the file. Outside the folder, hidden or
-    missing is a 404.
+    missing is a 404. A folder that cannot be read: *Die Notizen lassen
+    sich gerade nicht lesen.*, for the list, a search and a note alike.
   - The item pages (haus#28), what a widget opens on a tap: `/raeume/<entity_id>`
     (a thing: its state in words, since when, its room; only an entity of
     a card domain, `cards.Domains`, that HA does not hide — a person, a
-    tracker, a hidden entity are a 404; until the registry is read, 503),
+    tracker, a hidden entity are a 404),
     `/kalender/erinnerung/<uid>` (a reminder: open and due, done, or
     cancelled), `/kontakte/<uid>` (a contact: numbers and email addresses to
     tap, the birthday, the postal addresses), `/dokumente/<id>` (a 302 to the document's page in
     Paperless, `HAUS_PAPERLESS_PUBLIC_URL`; without it a 404), and a note's
     `/notizen/<file>`.
-    Something not there is a 404 that says so, with the way back. Their
+    Something not there is a 404 that says so, with the way back. A
+    backend that does not answer is a 200 with that page's plain line and
+    the way back, never "gibt es nicht" (haus#33): HA's line, or Räume's
+    while HA's registry is not read yet; the calendar's; *Die Kontakte
+    lassen sich gerade nicht lesen.*; the notes'. A document's page reads
+    nothing from Paperless, so Paperless's own page answers for it. Their
     paths are `internal/cards/pages.go`, one place for the routes and the
     rows.
 - `GET /box` — the admins' page behind Authelia, linked from Start for

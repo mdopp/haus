@@ -11,7 +11,9 @@ import (
 // Dokument is a document's page (haus#28), the page a documents widget row
 // opens: Paperless's own, behind its own login. Haus only sends the tap on.
 // Without Paperless's public address there is nowhere to send it, and no
-// row names this page: a 404, like an id that is none.
+// row names this page: a 404, like an id that is none. Haus reads nothing
+// from Paperless here, so there is nothing to say when it does not answer:
+// Paperless's own page says that (haus#33).
 func Dokument(cfg StartConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !showOnly(w, r, "Das Dokument") {

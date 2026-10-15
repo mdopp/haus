@@ -45,17 +45,6 @@ const (
 	horizon      = 14 // days ahead for the next appointment
 )
 
-// What Start says, in one plain line where a card's rows would be, when
-// a backend does not answer (haus#12): what is missing, in the family's
-// words, never the backend's name or its error (laib ADR 0021).
-const (
-	saysNoHouse     = "Licht und Geräte antworten gerade nicht."
-	saysNoCalendar  = "Der Kalender antwortet gerade nicht."
-	saysNoNotes     = "Die Notizen lassen sich gerade nicht lesen."
-	saysNoFavorites = "Deine Favoriten lassen sich gerade nicht lesen."
-	saysFavsUnseen  = "Deine Favoriten sind gerade nicht zu sehen."
-)
-
 // Start is the family's page (haus#12, laib DEKONSTRUKTION): the persona's
 // greeting, the three guarantees, then Jetzt, Meine Favoriten and
 // Haushalt. It shows and changes nothing (haus#1). A backend that is not

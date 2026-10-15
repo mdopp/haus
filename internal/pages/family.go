@@ -18,6 +18,23 @@ import (
 // show without changing anything (haus#1). A page whose backend is not set
 // is not served: it lands on Start, like every path Haus does not serve.
 
+// What a family page says, in one plain line where the rows would be,
+// when a backend does not answer (haus#12, haus#33): what is missing, in
+// the family's words, never the backend's name or its error (laib ADR
+// 0021), which go to the log; once a page, and the page a 200. Inside a
+// card when the card has other rows or names what is missing (Start's
+// Jetzt and Haushalt, Kalender's Erinnerungen), else on its own where the
+// cards would be; an item page is the line and the way back (missing).
+const (
+	saysNoHouse     = "Licht und Geräte antworten gerade nicht."
+	saysNoRooms     = "Die Räume werden gerade gelesen — gleich nochmal versuchen."
+	saysNoCalendar  = "Der Kalender antwortet gerade nicht."
+	saysNoContacts  = "Die Kontakte lassen sich gerade nicht lesen."
+	saysNoNotes     = "Die Notizen lassen sich gerade nicht lesen."
+	saysNoFavorites = "Deine Favoriten lassen sich gerade nicht lesen."
+	saysFavsUnseen  = "Deine Favoriten sind gerade nicht zu sehen."
+)
+
 // familyNav is Start · Räume · Kalender · Notizen, each only when its
 // backend is set, and Box for admins; the page itself is marked.
 func familyNav(r *http.Request, cfg StartConfig, current string) string {
@@ -120,9 +137,10 @@ func writePage(w http.ResponseWriter, code int, b *strings.Builder) {
 	w.Write([]byte(b.String()))
 }
 
-// missing is an item's page for something that is not there, or cannot be
-// read now (haus#28): one plain sentence and the way back, never Start
-// pretending all is well.
+// missing is an item's page for something that is not there (404), or
+// whose backend does not answer (haus#28, haus#33: a 200 with the page's
+// plain line, like Start): one plain sentence and the way back, never
+// Start pretending all is well.
 type missing struct {
 	code     int
 	say      string // the one sentence

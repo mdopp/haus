@@ -15,8 +15,10 @@ const maxCalendarRows = 50
 
 // Kalender is today, the next 14 days and the open reminders, from the
 // household's Radicale account (haus#12, laib ADR 0017) — every calendar
-// it can read, like the Bote's tools. Radicale not answering leaves the
-// cards out; its error goes to the log.
+// it can read, like the Bote's tools. Radicale not answering is Start's
+// plain line, once (haus#33): for the appointments where their cards
+// would be, for the reminders alone in their card; its error goes to the
+// log.
 func Kalender(cfg StartConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !showOnly(w, r, "Der Kalender") {
@@ -46,7 +48,9 @@ func Kalender(cfg StartConfig) http.HandlerFunc {
 
 		b := familyHead(r, cfg, "Kalender", "Kalender")
 		b.WriteString("<h1 class=sr>Kalender</h1>")
-		if evErr == nil {
+		if evErr != nil {
+			b.WriteString("<p class=k>" + saysNoCalendar + "</p>")
+		} else {
 			heute := cards.Card{Title: "Heute"}
 			next := cards.Card{Title: "Nächste 14 Tage"}
 			nToday, nNext := 0, 0
@@ -76,7 +80,12 @@ func Kalender(cfg StartConfig) http.HandlerFunc {
 			b.WriteString(heute.HTML())
 			b.WriteString(next.HTML())
 		}
-		if todoErr == nil {
+		switch {
+		case todoErr != nil && evErr == nil: // the calendar is said once
+			rem := cards.Card{Title: "Erinnerungen"}
+			rem.Add(saysNoCalendar, "")
+			b.WriteString(rem.HTML())
+		case todoErr == nil:
 			rem := cards.Card{Title: "Erinnerungen"}
 			for i, t := range todos {
 				if i == maxCalendarRows {
