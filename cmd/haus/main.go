@@ -14,6 +14,7 @@ import (
 
 	"github.com/mdopp/haus/internal/cards"
 	"github.com/mdopp/haus/internal/devices"
+	"github.com/mdopp/haus/internal/favoriten"
 	"github.com/mdopp/haus/internal/ha"
 	"github.com/mdopp/haus/internal/haushalt"
 	"github.com/mdopp/haus/internal/laib"
@@ -42,6 +43,7 @@ type site struct {
 	laibURL     string
 	publicURL   string
 	tickets     *werkstatt.Tickets // haus#15: the Werkstatt card; nil, no card
+	favorites   *favoriten.Store   // haus#12: each person's favorites on Start
 }
 
 // routes is Haus's whole surface: /napi for the app, /mcp/haushalt for the
@@ -57,7 +59,7 @@ func routes(s site) http.Handler {
 	// the family's pages (haus#12): each card only from a backend that is set; a
 	// page whose backend is not set lands on Start
 	family := pages.StartConfig{Laib: s.ops, LaibURL: s.laibURL, HA: s.napi.HA, Calendar: s.hh.Calendar, Contacts: s.hh.Contacts,
-		Notes: s.hh.Notes, Docs: s.hh.Documents, Loc: s.hh.Loc}
+		Notes: s.hh.Notes, Docs: s.hh.Documents, Loc: s.hh.Loc, Favorites: s.favorites}
 	pagesMux.HandleFunc("/start", pages.Start(family))
 	pagesMux.HandleFunc("/raeume", pages.Raeume(family))
 	pagesMux.HandleFunc("/kalender", pages.Kalender(family))
@@ -88,7 +90,8 @@ func main() {
 	if proxySecret == "" {
 		log.Fatal("haus: HAUS_PROXY_SECRET is required — Caddy sends it as X-Haus-Proxy, nothing else may reach the pages (ADR 0012 §3)")
 	}
-	store, err := devices.Open(env("HAUS_DATA", "/data"))
+	dataDir := env("HAUS_DATA", "/data")
+	store, err := devices.Open(dataDir)
 	if err != nil {
 		log.Fatalf("haus: devices: %v", err)
 	}
@@ -123,7 +126,7 @@ func main() {
 	}
 	laibURL := env("LAIB_PUBLIC_URL", "https://laib."+env("LAIB_DOMAIN", "example"))
 	mux := routes(site{napi: cfg, hh: hh, store: store, ops: ops, proxySecret: proxySecret, laibURL: laibURL,
-		publicURL: os.Getenv("HAUS_PUBLIC_URL"), tickets: werkstatt.FromEnv()})
+		publicURL: os.Getenv("HAUS_PUBLIC_URL"), tickets: werkstatt.FromEnv(), favorites: favoriten.Open(dataDir)})
 	addr := env("HAUS_LISTEN", "127.0.0.1:8650")
 	log.Printf("haus %s: listening on %s as %s, laib %s, home assistant %v, haushalt %d tools, uploads %q, pages only behind the proxy secret", Version, addr, pages.House.Display, ops.URL, cfg.HA != nil, len(haushalt.Tools(hh)), cfg.UploadDir)
 	log.Fatal((&http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}).ListenAndServe())
