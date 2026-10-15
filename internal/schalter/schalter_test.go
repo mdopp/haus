@@ -89,3 +89,31 @@ func TestHATroubleIsNotARefusal(t *testing.T) {
 		t.Fatalf("%v, want HA's error", err)
 	}
 }
+
+// haus#12: a media player does exactly four things — pause, go on, a
+// volume step down and up. Every other service HA has for a player is
+// refused and HA hears nothing; a new one is refused until it is named.
+func TestAPlayerDoesExactlyFourThings(t *testing.T) {
+	fake, hc := house(t)
+	allowed := set("media_pause", "media_play", "volume_down", "volume_up")
+	for _, s := range []string{"turn_on", "turn_off", "toggle", "volume_up", "volume_down", "volume_set", "volume_mute",
+		"media_play_pause", "media_play", "media_pause", "media_stop", "media_next_track", "media_previous_track", "media_seek",
+		"play_media", "select_source", "select_sound_mode", "clear_playlist", "shuffle_set", "repeat_set", "join", "unjoin",
+		"browse_media", "search_media", "reload", "some_future_service"} {
+		before := len(fake.Calls())
+		err := Do(context.Background(), hc, "media_player.wohnzimmer", "media_player."+s, nil, true)
+		var r *Refusal
+		switch {
+		case allowed[s] && (err != nil || len(fake.Calls()) != before+1):
+			t.Errorf("%s: %v, want it done", s, err)
+		case !allowed[s] && (!errors.As(err, &r) || r.Reason != "unsupported_service" || len(fake.Calls()) != before):
+			t.Errorf("%s: %v, want it refused and HA hearing nothing", s, err)
+		}
+	}
+	// the player's services on anything but a player are not a player's
+	for _, e := range []string{"light.kueche", "switch.kaffee", "cover.rollo"} {
+		if err := Do(context.Background(), hc, e, "media_player.volume_up", nil, true); err == nil {
+			t.Errorf("volume_up on %s was done", e)
+		}
+	}
+}

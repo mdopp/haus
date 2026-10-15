@@ -201,3 +201,65 @@ func TestMedienUnknownPathIsA404(t *testing.T) {
 		mustNotContain(t, body, "karte-", "<form")
 	}
 }
+
+// A button only for what the player says it can do (HA's
+// MediaPlayerEntityFeature: PAUSE 1, VOLUME_SET 4, VOLUME_MUTE 8,
+// PLAY_MEDIA 512, VOLUME_STEP 1024, PLAY 16384): Leiser and Lauter with
+// either volume feature, Pause only with PAUSE, Weiter only with PLAY.
+func TestMedienButtonsFollowFeatures(t *testing.T) {
+	fake, hc := house(t)
+	for _, p := range []struct {
+		id, state string
+		features  float64
+	}{
+		{"a", "playing", 1 + 4},       // Pause, Leiser, Lauter (set only)
+		{"b", "playing", 1024},        // Leiser, Lauter (step only), no Pause
+		{"c", "paused", 1 + 1024},     // no PLAY: no Weiter
+		{"d", "playing", 2 + 8 + 512}, // seek, mute, play_media: nothing
+		{"e", "paused", 16384},        // Weiter only
+	} {
+		fake.Set("media_player."+p.id, p.state, map[string]any{"friendly_name": "Spieler " + p.id, "supported_features": p.features})
+	}
+	_, body, _ := familyPage(t, Medien, StartConfig{HA: hc}, "GET", "/medien", "family")
+	wants := map[string][]string{
+		"a": {"media_player.media_pause", "media_player.volume_down", "media_player.volume_up"},
+		"b": {"media_player.volume_down", "media_player.volume_up"},
+		"c": {"media_player.volume_down", "media_player.volume_up"},
+		"d": nil,
+		"e": {"media_player.media_play"},
+	}
+	for _, li := range strings.Split(section(t, body, "karte-laeuft-gerade"), "<li")[1:] {
+		i := strings.Index(li, ">Spieler ")
+		if i < 0 {
+			continue
+		}
+		id := li[i+len(">Spieler ") : i+len(">Spieler ")+1]
+		var got []string
+		for _, f := range strings.Split(li, "<form")[1:] {
+			j := strings.Index(f, `name=tun value="`)
+			got = append(got, strings.SplitN(f[j+len(`name=tun value="`):], `"`, 2)[0])
+		}
+		if !reflect.DeepEqual(got, wants[id]) {
+			t.Errorf("Spieler %s: buttons %v, want %v", id, got, wants[id])
+		}
+		delete(wants, id)
+	}
+	if len(wants) != 0 {
+		t.Errorf("players not shown: %v", wants)
+	}
+}
+
+// The volume is said only when HA's level is one (0–1); a player named
+// for its room does not say the room twice.
+func TestMedienSaysVolumeAndRoomOnlyWhenTheyMeanSomething(t *testing.T) {
+	fake, hc := house(t)
+	fake.SetRegistries([]map[string]any{{"area_id": "kinder", "name": "Kinderzimmer"}}, nil,
+		[]map[string]any{{"entity_id": "media_player.kinder", "area_id": "kinder"}, {"entity_id": "media_player.laut", "area_id": "kinder"}})
+	fake.Set("media_player.kinder", "playing", map[string]any{"friendly_name": "Kinderzimmer", "media_title": "Benjamin", "volume_level": 1.0})
+	fake.Set("media_player.laut", "playing", map[string]any{"friendly_name": "Box", "media_title": "Lied", "volume_level": 1.5})
+	fake.Set("media_player.leise", "playing", map[string]any{"friendly_name": "Radio", "media_title": "Nachrichten", "volume_level": -0.2})
+	_, body, _ := familyPage(t, Medien, StartConfig{HA: hc}, "GET", "/medien", "family")
+	mustContain(t, body, "<a href=\"/raeume/media_player.kinder\">Kinderzimmer</a> <span class=k>Benjamin · Lautstärke\u00a0100\u00a0%</span>",
+		`<a href="/raeume/media_player.laut">Box</a> <span class=k>Kinderzimmer · Lied</span>`,
+		`<a href="/raeume/media_player.leise">Radio</a> <span class=k>Nachrichten</span>`)
+}
