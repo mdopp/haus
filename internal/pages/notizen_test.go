@@ -10,7 +10,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mdopp/haus/internal/library"
 	"github.com/mdopp/haus/internal/notes"
+	"github.com/mdopp/haus/internal/qmd"
+	"github.com/mdopp/haus/internal/qmd/qmdfake"
 )
 
 // a notes folder as the share has it: notes at the top and in a folder,
@@ -83,8 +86,10 @@ func TestNotizenSearch(t *testing.T) {
 	before(t, body, "Apfelkuchen", "zwiebelkuchen")
 	mustNotContain(t, body, "Geheim", "Versteckt", "Draußen", "Einkaufsliste", "karte-zuletzt")
 
+	// any word of the query finds a note now (haus#13): the shopping list
+	// holds a <script> line, which stays text
 	_, body, _ = familyPage(t, Notizen, StartConfig{Notes: nd}, "GET", "/notizen?q="+url.QueryEscape(`"><script>alert(1)</script>`), "")
-	mustContain(t, body, "Nichts gefunden", `value="&#34;&gt;&lt;script&gt;alert(1)&lt;/script&gt;"`)
+	mustContain(t, body, `value="&#34;&gt;&lt;script&gt;alert(1)&lt;/script&gt;"`, `<a href="/notizen/einkaufsliste.md">Einkaufsliste</a>`)
 	mustNotContain(t, body, "<script")
 
 	// a blank query is no search
@@ -175,5 +180,160 @@ func TestNotizenSaysPlainlyWhatDoesNotAnswer(t *testing.T) {
 		mustNotContain(t, body, "karte-", "Noch keine Notizen", "Nichts gefunden", "Treffer")
 		mustNotLeak(t, body, gone)
 		before(t, body, "</form>", "Die Notizen lassen sich gerade nicht lesen.")
+	}
+}
+
+// The memory library's index of the shelf (haus#13): qmd finds a note by
+// what it means, and names what it should not — a hidden version, a note
+// next to the folder.
+func library13(t *testing.T, dir string) *qmdfake.Server {
+	t.Helper()
+	f := qmdfake.New("notizen")
+	t.Cleanup(f.Close)
+	read := func(name string) string { b, _ := os.ReadFile(filepath.Join(dir, name)); return string(b) }
+	f.Add(
+		qmdfake.Doc{Path: "einkaufsliste.md", Title: "Einkaufsliste", Body: read("einkaufsliste.md"), Means: []string{"lebensmittel"}},
+		qmdfake.Doc{Path: ".stversions/geheim.md", Title: "Geheim", Body: read(".stversions/geheim.md"), Means: []string{"lebensmittel"}},
+		qmdfake.Doc{Path: "../draussen.md", Title: "Draußen", Body: "# Draußen\n\nApfel von draußen\n", Means: []string{"lebensmittel"}},
+		qmdfake.Doc{Path: "schraeg.md", Title: "Schräg", Body: read("schraeg.md"), Means: []string{"lebensmittel"}},
+		qmdfake.Doc{Path: "rezepte/apfelkuchen.md", Title: "Apfelkuchen", Body: read("rezepte/apfelkuchen.md"), Means: []string{"lebensmittel"}},
+	)
+	return f
+}
+
+// haus#13: the search field searches by meaning when the library answers:
+// a note found by a word it does not contain, with its title and qmd's
+// passage, leading to its page; nothing hidden or outside, nothing as
+// markup, and no line that the search is reduced.
+func TestNotizenSearchByMeaning(t *testing.T) {
+	dir, nd := shelf(t)
+	f := library13(t, dir)
+	cfg := StartConfig{Notes: nd, Library: &qmd.Client{URL: f.URL, Collection: "notizen"}}
+	code, body, _ := familyPage(t, Notizen, cfg, "GET", "/notizen?q=Lebensmittel", "")
+	if code != 200 {
+		t.Fatalf("status %d", code)
+	}
+	mustContain(t, body, "Treffer für „Lebensmittel“", `<a href="/notizen/einkaufsliste.md">Einkaufsliste</a>`, "Milch",
+		`<a href="/notizen/rezepte/apfelkuchen.md">Apfelkuchen</a>`, "&lt;i&gt;Schräger Titel&lt;/i&gt;")
+	mustNotContain(t, body, "Geheim", "Draußen", "draußen", "<i>", "<script", saysWordsOnly, "Nichts gefunden")
+	before(t, body, "Einkaufsliste", "Apfelkuchen")
+	mustNotLeak(t, body, f.URL, "qmd")
+}
+
+// When the library does not answer, is not set, or is still indexing, the
+// field still searches — by words — and says so in one plain line above
+// the hits, once; the page is a 200 and names nothing technical
+// (haus#13, like #34's lines).
+func TestNotizenSearchReducedSaysSo(t *testing.T) {
+	old := library.Wait
+	library.Wait = 150 * time.Millisecond
+	defer func() { library.Wait = old }()
+	for _, c := range []struct {
+		name string
+		set  func(*qmdfake.Server) *qmd.Client
+	}{
+		{"not set", func(*qmdfake.Server) *qmd.Client { return nil }},
+		{"down", func(f *qmdfake.Server) *qmd.Client { f.Close(); return &qmd.Client{URL: f.URL, Collection: "notizen"} }},
+		{"500", func(f *qmdfake.Server) *qmd.Client {
+			f.Status = 500
+			return &qmd.Client{URL: f.URL, Collection: "notizen"}
+		}},
+		{"indexing", func(f *qmdfake.Server) *qmd.Client {
+			f.Indexing = true
+			return &qmd.Client{URL: f.URL, Collection: "notizen"}
+		}},
+		{"slow", func(f *qmdfake.Server) *qmd.Client {
+			f.Hang = 3 * time.Second
+			return &qmd.Client{URL: f.URL, Collection: "notizen"}
+		}},
+	} {
+		dir, nd := shelf(t)
+		f := library13(t, dir)
+		cfg := StartConfig{Notes: nd, Library: c.set(f)}
+		code, body, _ := familyPage(t, Notizen, cfg, "GET", "/notizen?q=APFEL", "")
+		if code != 200 {
+			t.Fatalf("%s: status %d", c.name, code)
+		}
+		if n := strings.Count(body, "<p class=k>"+saysWordsOnly+"</p>"); n != 1 {
+			t.Fatalf("%s: the reduced search said %d times, want once:\n%s", c.name, n, body)
+		}
+		mustContain(t, body, `value="APFEL"`, "Treffer für „APFEL“", `<a href="/notizen/rezepte/apfelkuchen.md">Apfelkuchen</a>`)
+		mustNotContain(t, body, "Geheim", "Draußen", saysNoNotes)
+		mustNotLeak(t, body, f.URL, "qmd", "Vektor", "embed", "Index")
+		before(t, body, "</form>", saysWordsOnly)
+		before(t, body, saysWordsOnly, "Treffer für")
+		// nothing found by words is said too, under the line
+		_, body, _ = familyPage(t, Notizen, cfg, "GET", "/notizen?q=Lebensmittel", "")
+		mustContain(t, body, saysWordsOnly, "Nichts gefunden")
+		mustNotContain(t, body, "Einkaufsliste")
+		// the newest notes are no search: no line
+		_, body, _ = familyPage(t, Notizen, cfg, "GET", "/notizen", "")
+		mustNotContain(t, body, saysWordsOnly)
+	}
+}
+
+// A folder that cannot be read is the notes' one line, whether the
+// library answers or not; never the reduced line on top of it, never an
+// empty "Nichts gefunden".
+func TestNotizenSearchFolderGone(t *testing.T) {
+	for _, down := range []bool{false, true} {
+		dir, nd := shelf(t)
+		f := library13(t, dir)
+		if down {
+			f.Close()
+		}
+		os.RemoveAll(dir)
+		code, body, _ := familyPage(t, Notizen, StartConfig{Notes: nd, Library: &qmd.Client{URL: f.URL, Collection: "notizen"}}, "GET", "/notizen?q=Lebensmittel", "")
+		if code != 200 {
+			t.Fatalf("down %v: status %d", down, code)
+		}
+		if n := strings.Count(body, "<p class=k>"+saysNoNotes+"</p>"); n != 1 {
+			t.Fatalf("down %v: said %d times:\n%s", down, n, body)
+		}
+		mustNotContain(t, body, saysWordsOnly, "Nichts gefunden", "Treffer")
+		mustNotLeak(t, body, f.URL, dir, "qmd")
+	}
+}
+
+// A hit's line is plain text: a table row as its cells, no pipes, no
+// table header, no list dash (haus#13).
+func TestNotizenLinesArePlain(t *testing.T) {
+	dir := t.TempDir()
+	table := "# Handwerker\n\n| Gewerk | Firma | Telefon | Notiz |\n|---|---|---|---|\n| Heizung | Huber GmbH | 089 111 | Wartung |\n"
+	list := "# Putzplan\n\n- Bad: Anna, samstags\n- Küche: Ben\n"
+	os.WriteFile(filepath.Join(dir, "handwerker.md"), []byte(table), 0o644)
+	os.WriteFile(filepath.Join(dir, "putzplan.md"), []byte(list), 0o644)
+	nd, _ := notes.Open(dir)
+	f := qmdfake.New("notizen")
+	defer f.Close()
+	f.Add(qmdfake.Doc{Path: "handwerker.md", Title: "Handwerker", Body: table, Means: []string{"haus"}},
+		qmdfake.Doc{Path: "putzplan.md", Title: "Putzplan", Body: list, Means: []string{"haus"}})
+	for _, cfg := range []StartConfig{{Notes: nd, Library: &qmd.Client{URL: f.URL, Collection: "notizen"}}, {Notes: nd}} {
+		q := "/notizen?q=Haus"
+		if cfg.Library == nil {
+			q = "/notizen?q=Huber+Anna" // by words
+		}
+		_, body, _ := familyPage(t, Notizen, cfg, "GET", q, "")
+		mustContain(t, body, "Gewerk Heizung · Firma Huber GmbH · Telefon 089 111 · Notiz Wartung", "Bad: Anna, samstags")
+		mustNotContain(t, body, "|", "Gewerk · Firma", "Gewerk Firma", "- Bad", "---")
+	}
+}
+
+// When only words are searched, a sentence needs none of its common
+// words: any meaningful word of it finds a note. When none does, the page
+// says what to try, without suggesting a word of the query: each of them
+// has just failed (haus#13).
+func TestNotizenWordsFromASentence(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "kaminkehrer.md"), []byte("# Kaminkehrer\n\nHerr Brandl kommt im Oktober.\n"), 0o644)
+	nd, _ := notes.Open(dir)
+	_, body, _ := familyPage(t, Notizen, StartConfig{Notes: nd}, "GET", "/notizen?q="+url.QueryEscape("Wann kommt der Kaminkehrer?"), "")
+	mustContain(t, body, saysWordsOnly, `<a href="/notizen/kaminkehrer.md">Kaminkehrer</a>`)
+	mustNotContain(t, body, "Nichts gefunden")
+	// no example word: every word of the query has just failed
+	for _, q := range []string{"Wann kommt der Schornsteinfeger?", "wo liegt der Reisepass", "wo ist das"} {
+		_, body, _ := familyPage(t, Notizen, StartConfig{Notes: nd}, "GET", "/notizen?q="+url.QueryEscape(q), "")
+		mustContain(t, body, "Nichts gefunden.", "Versuch es mit einem anderen Wort, das in der Notiz stehen könnte.")
+		mustNotContain(t, body, "z. B.", "„Schornsteinfeger“.", "„Reisepass“", "einzelnen Wort")
 	}
 }

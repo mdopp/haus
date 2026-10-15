@@ -25,9 +25,11 @@ import (
 
 	"github.com/mdopp/haus/internal/caldav"
 	"github.com/mdopp/haus/internal/cards"
+	"github.com/mdopp/haus/internal/library"
 	"github.com/mdopp/haus/internal/mcpserver"
 	"github.com/mdopp/haus/internal/notes"
 	"github.com/mdopp/haus/internal/paperless"
+	"github.com/mdopp/haus/internal/qmd"
 )
 
 // Config is what the endpoint serves.
@@ -36,6 +38,7 @@ type Config struct {
 	Calendar  *caldav.Client    // nil: no calendar or reminder tools
 	Contacts  *caldav.Client    // nil: no contact tools (the same Radicale account)
 	Notes     *notes.Dir        // nil: no note tools
+	Library   *qmd.Client       // the memory library's search (haus#13); nil, or no Notes: no notizen_finden
 	Documents *paperless.Client // nil: no document tool
 	Loc       *time.Location    // the house's time zone
 	// PhoneCountry is the house's calling code (HAUS_PHONE_COUNTRY, default
@@ -49,6 +52,9 @@ type Config struct {
 
 const defaultCountry = "49"
 
+// defaultCollection is the notes' collection in qmd's index.yml (laib#195).
+const defaultCollection = "notizen"
+
 var countryRE = regexp.MustCompile(`^[1-9][0-9]{0,2}$`)
 
 // httpURL says whether u is http(s)://host[...].
@@ -59,6 +65,7 @@ func httpURL(u string) bool {
 
 // FromEnv reads HAUS_HAUSHALT_TOKEN, HAUS_RADICALE_URL (+ _USER,
 // _PASSWORD, optional _CALENDAR and _ADDRESSBOOK), HAUS_NOTES_DIR,
+// HAUS_QMD_URL (+ optional _COLLECTION, default notizen),
 // HAUS_PAPERLESS_URL (+ _TOKEN, optional _PUBLIC_URL), HAUS_PHONE_COUNTRY,
 // HAUS_PUBLIC_URL and TZ. A malformed backend address or country code
 // refuses to start; a missing backend only leaves its tools out. Haus's own
@@ -119,6 +126,21 @@ func FromEnv() (Config, error) {
 			log.Printf("haus: HAUS_NOTES_DIR: %v: no note tools", err)
 		} else {
 			cfg.Notes = n
+		}
+	}
+	// haus#13: qmd, in Haus's pod on loopback (laib#195); its hits are note files
+	if u := strings.TrimRight(os.Getenv("HAUS_QMD_URL"), "/"); u != "" {
+		if !httpURL(u) {
+			return cfg, fmt.Errorf("HAUS_QMD_URL %q: want http://127.0.0.1:<port>", u)
+		}
+		coll := strings.TrimSpace(os.Getenv("HAUS_QMD_COLLECTION"))
+		if coll == "" {
+			coll = defaultCollection
+		}
+		if cfg.Notes == nil {
+			log.Printf("haus: HAUS_QMD_URL is set but there is no notes folder: no memory library")
+		} else {
+			cfg.Library = &qmd.Client{URL: u, Collection: coll}
 		}
 	}
 	return cfg, nil
@@ -238,6 +260,16 @@ func Tools(cfg Config) []mcpserver.Tool {
 				Call:        func(ctx context.Context, a map[string]any) (string, error) { return notizAnlegen(n, a) },
 			},
 		)
+		if lib := cfg.Library; lib != nil {
+			pub := strings.TrimRight(cfg.PublicURL, "/")
+			out = append(out, mcpserver.Tool{
+				Name: "notizen_finden",
+				Description: "Findet Notizen der Familie nach ihrer Bedeutung, auch wenn andere Wörter darin stehen " +
+					"(„wann kommt der Schornsteinfeger“ findet die Notiz zum Kaminkehrer). Zeigt Titel, Dateiname, eine passende Stelle und die Seite der Notiz.",
+				Schema: obj(map[string]any{"text": str("Wonach gesucht wird, in eigenen Worten")}, "text"),
+				Call:   func(ctx context.Context, a map[string]any) (string, error) { return notizenFinden(ctx, lib, n, pub, a) },
+			})
+		}
 	}
 	cc := cfg.PhoneCountry
 	if cc == "" {
@@ -517,6 +549,49 @@ func notizenSuchen(ctx context.Context, n *notes.Dir, a map[string]any) (string,
 		fmt.Fprintf(&b, "… und %d weitere; such genauer.\n", res.Total-len(res.Hits))
 	}
 	b.WriteString(more)
+	return strings.TrimRight(b.String(), "\n"), nil
+}
+
+// maxFound is how many notes notizen_finden shows: the best few, not a list.
+const maxFound = 8
+
+// reducedNote opens notizen_finden's answer when the search by meaning
+// cannot answer and the words did (haus#13).
+const reducedNote = "Die Suche nach Bedeutung geht gerade nicht; gesucht wurde nur nach den Wörtern."
+
+// notizenFinden is the memory library's search: title, file, a passage
+// and, with Haus's address, the note's page.
+func notizenFinden(ctx context.Context, lib *qmd.Client, n *notes.Dir, pub string, a map[string]any) (string, error) {
+	q := mcpserver.Str(a, "text")
+	res, err := library.Find(ctx, lib, n, q, maxFound)
+	if err != nil {
+		return "", err
+	}
+	var b strings.Builder
+	if res.Reduced {
+		b.WriteString(reducedNote + "\n\n")
+	}
+	if len(res.Hits) == 0 {
+		if res.Reduced {
+			b.WriteString("Keine Notiz enthält „" + cut(q, MaxField) + "“.")
+		} else {
+			b.WriteString("Keine Notiz passt zu „" + cut(q, MaxField) + "“.")
+		}
+		return b.String(), nil
+	}
+	for _, h := range res.Hits {
+		b.WriteString("## " + h.Title + " (" + h.Name + ")\n")
+		for _, l := range h.Lines {
+			b.WriteString(l + "\n")
+		}
+		if pub != "" {
+			b.WriteString(pub + cards.NotePage(h.Name) + "\n")
+		}
+		b.WriteString("\n")
+	}
+	if res.Partial {
+		b.WriteString("Nur ein Teil der Notizen ist durchsucht (zu viele oder zu große Dateien); such genauer.\n")
+	}
 	return strings.TrimRight(b.String(), "\n"), nil
 }
 

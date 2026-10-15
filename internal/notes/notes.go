@@ -201,23 +201,119 @@ func title(name string, body []byte) string {
 	return cut(strings.TrimSuffix(path.Base(name), path.Ext(name)), MaxTitle)
 }
 
-func firstLines(body []byte, n int) []string {
-	var out []string
-	heading := true
-	for _, l := range strings.Split(string(body), "\n") {
+// tableSeparator is a Markdown table's separator row: |---|:---:|
+func tableSeparator(l string) bool {
+	return strings.HasPrefix(l, "|") && strings.Trim(l, "|-: \t") == "" && strings.Contains(l, "-")
+}
+
+// cells are a table row's cells, in their columns, empty ones kept.
+func cells(row string) []string {
+	row = strings.TrimSuffix(strings.TrimPrefix(row, "|"), "|")
+	out := strings.Split(row, "|")
+	for i, c := range out {
+		out[i] = strings.TrimSpace(c)
+	}
+	return out
+}
+
+// tables is what body's tables say about their rows: the rows that head
+// a table (each right before a separator row), and each other row's
+// column headers.
+type tables struct {
+	header  map[string]bool
+	columns map[string][]string
+}
+
+func readTables(body string) tables {
+	t := tables{header: map[string]bool{}, columns: map[string][]string{}}
+	lines := strings.Split(body, "\n")
+	var cols []string
+	for i, l := range lines {
 		l = strings.TrimSpace(l)
-		if l == "" {
-			continue
+		switch {
+		case !strings.HasPrefix(l, "|"):
+			cols = nil
+		case i+1 < len(lines) && tableSeparator(strings.TrimSpace(lines[i+1])):
+			t.header[l] = true
+			cols = cells(l)
+		case tableSeparator(l):
+		case cols != nil:
+			t.columns[l] = cols
 		}
-		if heading && strings.HasPrefix(l, "# ") {
-			heading = false
-			continue
+	}
+	return t
+}
+
+var listMark = []string{"- [ ] ", "- [x] ", "- [X] ", "* [ ] ", "* [x] ", "- ", "* ", "+ ", "> "}
+
+// plain is one line of a note as text (haus#13), or "" when it is only
+// markup: the note's "# " title (the hit's title says it), a table's
+// header or separator row. A table row is each value after its column's
+// header ("Strom 41.230"; a column without one: the value alone), joined
+// by " · "; a
+// list dash, a checkbox, a quote mark, a heading's hashes and emphasis
+// go. Cut at 120 characters.
+func plain(l string, t tables) string {
+	l = strings.TrimSpace(l)
+	if l == "" || strings.HasPrefix(l, "# ") || l == "#" {
+		return ""
+	}
+	if strings.HasPrefix(l, "|") {
+		if tableSeparator(l) || t.header[l] {
+			return ""
 		}
-		heading = false
-		out = append(out, cut(l, 120))
-		if len(out) == n {
-			break
+		cols := t.columns[l]
+		var parts []string
+		for i, c := range cells(l) {
+			if c == "" {
+				continue
+			}
+			if i < len(cols) && cols[i] != "" {
+				c = cols[i] + " " + c
+			}
+			parts = append(parts, c)
 		}
+		l = strings.Join(parts, " · ")
+	}
+	if strings.HasPrefix(l, "#") {
+		l = strings.TrimLeft(l, "#")
+	}
+	for again := true; again; {
+		again = false
+		l = strings.TrimSpace(l)
+		for _, m := range listMark {
+			if rest, ok := strings.CutPrefix(l, m); ok {
+				l, again = rest, true
+				break
+			}
+		}
+	}
+	l = strings.NewReplacer("**", "", "__", "", "`", "").Replace(l)
+	return cut(strings.TrimSpace(l), 120)
+}
+
+// Passage is what a hit shows of a note (haus#13): raw, the lines a
+// search picked (qmd's best passage, or none), made plain, at most n; when
+// none of them is more than markup — a passage that is only a table's
+// header — the note's first lines with real content. body is the note's
+// text, which says which table rows are headers and what heads each
+// column.
+func Passage(raw []string, body string, n int) []string {
+	t := readTables(body)
+	var out []string
+	add := func(lines []string) {
+		for _, l := range lines {
+			if len(out) == n {
+				return
+			}
+			if p := plain(l, t); p != "" {
+				out = append(out, p)
+			}
+		}
+	}
+	add(raw)
+	if len(out) == 0 {
+		add(strings.Split(body, "\n"))
 	}
 	return out
 }
@@ -285,28 +381,102 @@ func (d *Dir) walk(ctx context.Context, fn func(name string, body []byte)) (part
 	return partial, err
 }
 
-// Search finds notes whose title or text contains q (any case), titles
-// first, at most max of them in Hits.
+// match is a note the word search found: how many of the words, and
+// whether one was in its title or file name.
+type match struct {
+	hit     Hit
+	words   int
+	inTitle bool
+}
+
+// common are words too common to find a note by (haus#13): a sentence
+// asked of the search is mostly these. Words under three letters are
+// left out as well.
+var common = map[string]bool{}
+
+func init() {
+	for _, w := range strings.Fields(`der die das den dem des ein eine einer eines einem einen und oder aber
+		wann wo wie was wer wen wem warum wieso weshalb welche welcher welches woher wohin
+		ist sind war waren bin bist sein hat haben hatte wird werden wurde kommt kommen muss müssen
+		soll sollen kann können darf dürfen will wollen mag gibt geht
+		mit von zum zur aus bei nach vor über unter für ohne gegen bis seit durch auf
+		ich du er sie es wir ihr mein meine unser unsere unseren dein deine sich man
+		nicht noch schon auch nur mal denn doch nein dann wenn als wie bitte heute morgen`) {
+		common[w] = true
+	}
+}
+
+// Words are q's meaningful words, as written, each once: letters and
+// digits, at least three, not a common word.
+func Words(q string) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, w := range strings.FieldsFunc(q, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) }) {
+		lw := strings.ToLower(w)
+		if utf8.RuneCountInString(w) < 3 || common[lw] || seen[lw] {
+			continue
+		}
+		seen[lw] = true
+		out = append(out, w)
+	}
+	return out
+}
+
+func lower(ws []string) []string {
+	out := make([]string, len(ws))
+	for i, w := range ws {
+		out[i] = strings.ToLower(w)
+	}
+	return out
+}
+
+// Search finds notes that hold any of q's meaningful words in their
+// title, file name or text (any case; haus#13): the notes with more of
+// them first, a title match before a text match, at most max in Hits. A
+// q of only common words is looked for as written.
 func (d *Dir) Search(ctx context.Context, q string, max int) (Result, error) {
 	q = strings.ToLower(strings.TrimSpace(q))
 	if q == "" {
 		return Result{}, errors.New("Notizen: wonach suchen?")
 	}
-	var inTitle, inBody []Hit
+	words := lower(Words(q))
+	if len(words) == 0 {
+		words = []string{q} // only common words: looked for as written
+	}
+	var found []match
 	partial, err := d.walk(ctx, func(name string, body []byte) {
 		t := title(name, body)
-		h := Hit{Name: name, Title: t, Lines: firstLines(body, 3)}
-		switch {
-		case strings.Contains(strings.ToLower(t), q) || strings.Contains(strings.ToLower(name), q):
-			inTitle = append(inTitle, h)
-		case strings.Contains(strings.ToLower(string(body)), q):
-			inBody = append(inBody, h)
+		head := strings.ToLower(t) + "\n" + strings.ToLower(name)
+		text := strings.ToLower(string(body))
+		m := match{}
+		for _, w := range words {
+			switch {
+			case strings.Contains(head, w):
+				m.words++
+				m.inTitle = true
+			case strings.Contains(text, w):
+				m.words++
+			}
+		}
+		if m.words > 0 {
+			m.hit = Hit{Name: name, Title: t, Lines: Passage(nil, string(body), 3)}
+			found = append(found, m)
 		}
 	})
 	if err != nil {
 		return Result{}, err
 	}
-	all := append(inTitle, inBody...)
+	// more of the words first, then a title match before a text match
+	sort.SliceStable(found, func(i, j int) bool {
+		if found[i].words != found[j].words {
+			return found[i].words > found[j].words
+		}
+		return found[i].inTitle && !found[j].inTitle
+	})
+	all := make([]Hit, len(found))
+	for i, m := range found {
+		all[i] = m.hit
+	}
 	res := Result{Total: len(all), Partial: partial, Hits: all}
 	if len(all) > max {
 		res.Hits = all[:max]
@@ -320,6 +490,7 @@ type Note struct {
 	Title     string
 	Text      string
 	Truncated bool
+	Changed   time.Time
 }
 
 // viaSymlink says whether a part of name is a symlink: a name os.Root
@@ -489,4 +660,50 @@ func (d *Dir) Recent(ctx context.Context, n int) ([]Entry, error) {
 		out = append(out, e)
 	}
 	return out, nil
+}
+
+// Lookup reads the note with exactly this file name (relative, as the memory
+// library names it, haus#13): no slug, no title, no search. A name that
+// leaves the directory (a step out, a link out) is ErrOutside, a hidden
+// one ErrHidden, one that is not a note file ErrNotFound; a directory that
+// cannot be read is its own error.
+func (d *Dir) Lookup(ctx context.Context, name string) (Note, error) {
+	if err := ctx.Err(); err != nil {
+		return Note{}, err
+	}
+	if name == "" {
+		return Note{}, ErrNotFound
+	}
+	clean, err := checkName(name)
+	if err != nil {
+		return Note{}, err
+	}
+	root, err := os.OpenRoot(d.path)
+	if err != nil {
+		return Note{}, err
+	}
+	defer root.Close()
+	if !isNote(clean) {
+		return Note{}, ErrNotFound
+	}
+	f, err := root.Open(clean) // follows a symlink only while it stays inside
+	if errors.Is(err, fs.ErrNotExist) {
+		return Note{}, ErrNotFound
+	}
+	if err != nil {
+		if viaSymlink(root, clean) {
+			return Note{}, ErrOutside
+		}
+		return Note{}, err
+	}
+	defer f.Close()
+	st, err := f.Stat()
+	if err != nil {
+		return Note{}, err
+	}
+	if !st.Mode().IsRegular() || st.Size() > maxBytes {
+		return Note{}, ErrNotFound
+	}
+	buf, _ := io.ReadAll(io.LimitReader(f, maxRead+1))
+	return Note{Name: clean, Title: title(clean, buf), Text: string(buf[:min(len(buf), maxRead)]), Truncated: len(buf) > maxRead, Changed: st.ModTime()}, nil
 }

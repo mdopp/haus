@@ -287,3 +287,156 @@ func TestRecentNewestFirst(t *testing.T) {
 		t.Fatalf("n=0: %v %v", none, err)
 	}
 }
+
+// Lookup is a note by its exact file name, as the memory library names it
+// (haus#13): never by slug or title, never outside the folder, never a
+// hidden file, a folder or what is not a note.
+func TestLookupIsExact(t *testing.T) {
+	d, dir := open(t)
+	os.MkdirAll(filepath.Join(dir, "rezepte"), 0o755)
+	os.MkdirAll(filepath.Join(dir, ".stversions"), 0o755)
+	for name, body := range map[string]string{
+		"kaminkehrer.md":         "# Kaminkehrer\n\nHerr Brandl kommt im Oktober.\n",
+		"rezepte/pfannkuchen.md": "# Pfannkuchen\n\nMehl, Milch, Eier\n",
+		"Größen Kinder.md":       "Lena 31, Max 26\n",
+		".stversions/alt.md":     "# Alt\n",
+		"rechnung.pdf":           "%PDF",
+		"../draussen.md":         "# Draußen\n",
+		"rezepte/ordner.md/x.md": "# Ordner\n",
+	} {
+		os.MkdirAll(filepath.Dir(filepath.Join(dir, name)), 0o755)
+		os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644)
+	}
+	os.Symlink(filepath.Join(dir, "..", "draussen.md"), filepath.Join(dir, "link.md"))
+	// a file over the size the word search reads is no note here either
+	os.WriteFile(filepath.Join(dir, "riesig.md"), append([]byte("# Riesig\n\n"), make([]byte, maxBytes)...), 0o644)
+	for name, want := range map[string]string{"kaminkehrer.md": "Kaminkehrer", "rezepte/pfannkuchen.md": "Pfannkuchen", "Größen Kinder.md": "Größen Kinder"} {
+		e, err := d.Lookup(bg, name)
+		if err != nil || e.Name != name || e.Title != want || e.Changed.IsZero() {
+			t.Fatalf("%s: %+v %v", name, e, err)
+		}
+	}
+	for name, want := range map[string]error{
+		"Kaminkehrer": ErrNotFound, "kaminkehrer": ErrNotFound, "riesig.md": ErrNotFound, "gibtsnicht.md": ErrNotFound, "rechnung.pdf": ErrNotFound,
+		"rezepte/ordner.md": ErrNotFound, "rezepte": ErrNotFound,
+		"../draussen.md": ErrOutside, "/etc/passwd": ErrOutside, "rezepte/../../draussen.md": ErrOutside, `..\draussen.md`: ErrOutside,
+		"link.md": ErrOutside, ".stversions/alt.md": ErrHidden, "": ErrNotFound,
+	} {
+		if e, err := d.Lookup(bg, name); !errors.Is(err, want) {
+			t.Fatalf("%q: %+v %v, want %v", name, e, err, want)
+		}
+	}
+	// a folder that cannot be read is an error, not "no such note"
+	os.RemoveAll(dir)
+	if _, err := d.Lookup(bg, "kaminkehrer.md"); err == nil || errors.Is(err, ErrNotFound) {
+		t.Fatalf("gone folder: %v", err)
+	}
+}
+
+const tableNote = "# Handwerker\n\n| Gewerk | Firma | Telefon | Notiz |\n|---|---|:---:|---|\n| Heizung | Huber GmbH | 089 111 | Wartung im Herbst |\n| Dach | **Schmid** | 089 222 | |\n"
+
+const listNote = "# Packliste Ski\n\n- Skischuhe\n* Helm\n+ Brille\n- [ ] Schneeketten\n- [x] Skipass\n## Für die Kinder\n> **Wichtig**: `Sonnencreme`\n1. Mütze\n"
+
+// A passage is shown as plain text (haus#13): no table header or
+// separator row, a table row as each value after its column's header
+// ("Strom 41.230"; a column without a header: the value alone), joined
+// by " · ", no list dash,
+// checkbox, quote mark, emphasis or heading hash; the note's "# " title
+// is the hit's title, not a line. A passage that is only a table's header
+// is the note's first lines with real content. At most n lines, each cut
+// at 120 characters.
+func TestPassage(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		raw  []string
+		body string
+		n    int
+		want string
+	}{
+		{"only the header", []string{"# Handwerker", "| Gewerk | Firma | Telefon | Notiz |"}, tableNote, 3,
+			"Gewerk Heizung · Firma Huber GmbH · Telefon 089 111 · Notiz Wartung im Herbst|Gewerk Dach · Firma Schmid · Telefon 089 222"},
+		{"separator and a row", []string{"|---|---|:---:|---|", "| Dach | **Schmid** | 089 222 | |"}, tableNote, 3, "Gewerk Dach · Firma Schmid · Telefon 089 222"},
+		{"header with its separator", []string{"| Gewerk | Firma | Telefon | Notiz |", "|---|---|:---:|---|", "| Heizung | Huber GmbH | 089 111 | Wartung im Herbst |"}, tableNote, 3,
+			"Gewerk Heizung · Firma Huber GmbH · Telefon 089 111 · Notiz Wartung im Herbst"},
+		{"a list", nil, listNote, 10, "Skischuhe|Helm|Brille|Schneeketten|Skipass|Für die Kinder|Wichtig: Sonnencreme|1. Mütze"},
+		{"a list passage", []string{"- Skischuhe", "* Helm"}, listNote, 3, "Skischuhe|Helm"},
+		{"at most n", nil, listNote, 2, "Skischuhe|Helm"},
+		{"qmd's lines first", []string{"- [ ] Schneeketten"}, listNote, 3, "Schneeketten"},
+		{"nothing but markup", []string{"|---|"}, "# Leer\n\n|---|\n", 3, ""},
+		{"a column without a header", nil, "# Putzplan\n\n| | Montag | Dienstag |\n|---|---|---|\n| Anna | Bad | |\n", 3, "Anna · Montag Bad"},
+		{"meter readings", []string{"| 31.12.2024 | 41.230 | 18.442 | 812 |"}, "# Zählerstände\n\n| Datum | Strom | Gas | Wasser |\n|---|---|---|---|\n| 31.12.2024 | 41.230 | 18.442 | 812 |\n", 3,
+			"Datum 31.12.2024 · Strom 41.230 · Gas 18.442 · Wasser 812"},
+		{"a row of no known table", []string{"| a | b |"}, "", 3, "a · b"},
+	} {
+		got := strings.Join(Passage(c.raw, c.body, c.n), "|")
+		if got != c.want {
+			t.Errorf("%s: %q, want %q", c.name, got, c.want)
+		}
+	}
+	long := strings.Repeat("Wort ", 60)
+	if l := Passage([]string{"- " + long}, "", 3); len(l) != 1 || len([]rune(l[0])) > 121 || !strings.HasSuffix(l[0], "…") {
+		t.Fatalf("cut: %q", l)
+	}
+}
+
+// The word search's lines are plain too.
+func TestSearchLinesArePlain(t *testing.T) {
+	d, dir := open(t)
+	os.WriteFile(filepath.Join(dir, "handwerker.md"), []byte(tableNote), 0o644)
+	os.WriteFile(filepath.Join(dir, "packliste.md"), []byte(listNote), 0o644)
+	res, err := d.Search(bg, "Heizung", 10)
+	if err != nil || len(res.Hits) != 1 || strings.Join(res.Hits[0].Lines, "|") != "Gewerk Heizung · Firma Huber GmbH · Telefon 089 111 · Notiz Wartung im Herbst|Gewerk Dach · Firma Schmid · Telefon 089 222" {
+		t.Fatalf("%+v %v", res, err)
+	}
+	res, _ = d.Search(bg, "Helm", 10)
+	if len(res.Hits) != 1 || strings.Join(res.Hits[0].Lines, "|") != "Skischuhe|Helm|Brille" {
+		t.Fatalf("%+v", res)
+	}
+}
+
+// A sentence is not one string to find (haus#13): a note matches when it
+// holds any of the query's meaningful words — short and common ones left
+// out — and the notes with more of them come first, a title match before
+// a text match. A query of only common words is looked for as it is.
+func TestSearchAnyWord(t *testing.T) {
+	d, dir := open(t)
+	write := func(name, body string) { os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644) }
+	write("kaminkehrer.md", "# Kaminkehrer\n\nHerr Brandl kommt im Oktober.\nRechnung für die Steuer aufheben.\n")
+	write("steuer.md", "# Steuer 2025\n\nRechnung vom Kaminkehrer einreichen.\n")
+	write("brandl.md", "# Bezahlt\n\nRechnung bezahlt.\n")
+	write("woerter.md", "# Wann\n\nder die das, wann kommt wo ist mit\n")
+	write("kabel.md", "# Kabel\n\nWo ist das Ladekabel? Im Flur.\n")
+	res, err := d.Search(bg, "Wann kommt der Kaminkehrer mit der Rechnung?", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, h := range res.Hits {
+		got = append(got, h.Name)
+	}
+	if strings.Join(got, ",") != "kaminkehrer.md,steuer.md,brandl.md" || res.Total != 3 {
+		t.Fatalf("hits %v (%d)", got, res.Total)
+	}
+	res, _ = d.Search(bg, "wo ist das", 10)
+	if len(res.Hits) != 1 || res.Hits[0].Name != "kabel.md" {
+		t.Fatalf("only common words, as a phrase: %+v", res)
+	}
+	if res, _ := d.Search(bg, "wann kommt der Schornsteinfeger", 10); res.Total != 0 {
+		t.Fatalf("no meaningful word in any note: %+v", res)
+	}
+}
+
+// Words are the query's meaningful words as written, each once (haus#13).
+func TestWords(t *testing.T) {
+	for q, want := range map[string]string{
+		"Wann kommt der Schornsteinfeger?": "Schornsteinfeger",
+		"Wo liegt der Reisepass von Ben":   "liegt,Reisepass,Ben",
+		"wo ist das":                       "",
+		"Größe der Fußmatte, WC":           "Größe,Fußmatte",
+		`"><script>alert(1)</script>`:      "script,alert",
+	} {
+		if got := strings.Join(Words(q), ","); got != want {
+			t.Errorf("%q: %q, want %q", q, got, want)
+		}
+	}
+}

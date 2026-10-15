@@ -10,6 +10,7 @@ import (
 	"unicode"
 
 	"github.com/mdopp/haus/internal/cards"
+	"github.com/mdopp/haus/internal/library"
 	"github.com/mdopp/haus/internal/notes"
 )
 
@@ -20,8 +21,9 @@ const (
 )
 
 // Notizen is the household's notes (haus#12, laib ADR 0017): a search
-// field (GET, q=) over the notes package's search, and the newest notes;
-// /notizen/<name> is one note's own page. Haus keeps no index and renders
+// field (GET, q=) over the memory library — by meaning, or by words and
+// said so when the library cannot (haus#13) — and the newest notes;
+// /notizen/<name> is one note's own page. Haus keeps no index (qmd does) and renders
 // no Markdown: a note is shown as its text, paragraphs and line breaks,
 // never as markup from the file.
 func Notizen(cfg StartConfig) http.HandlerFunc {
@@ -49,13 +51,16 @@ func Notizen(cfg StartConfig) http.HandlerFunc {
 			`<input type=search name=q value="` + html.EscapeString(q) + `" placeholder="Notizen durchsuchen" aria-label="Notizen durchsuchen"> <button>Suchen</button></form>`)
 
 		if q != "" {
-			var res notes.Result
+			var res library.Found
 			var err error
-			fetch(r, func(ctx context.Context) { res, err = cfg.Notes.Search(ctx, q, maxHits) })
+			fetch(r, func(ctx context.Context) { res, err = library.Find(ctx, cfg.Library, cfg.Notes, q, maxHits) })
 			logErrs("notizen", map[string]error{"search": err})
 			if err != nil {
 				b.WriteString("<p class=k>" + saysNoNotes + "</p>")
 			} else {
+				if res.Reduced {
+					b.WriteString("<p class=k>" + saysWordsOnly + "</p>")
+				}
 				c := cards.Card{Title: "Treffer für „" + q + "“"}
 				for _, h := range res.Hits {
 					first := ""
@@ -66,7 +71,7 @@ func Notizen(cfg StartConfig) http.HandlerFunc {
 				}
 				more(&c, res.Total-len(res.Hits))
 				if res.Total == 0 {
-					c.Add("Nichts gefunden", "")
+					c.Add("Nichts gefunden.", saysTryAnother)
 				}
 				if res.Partial {
 					c.Add("Nicht alle Notizen durchsucht", "es sind zu viele für eine Suche")

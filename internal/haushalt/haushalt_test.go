@@ -17,6 +17,8 @@ import (
 	"github.com/mdopp/haus/internal/notes"
 	"github.com/mdopp/haus/internal/paperless"
 	"github.com/mdopp/haus/internal/paperless/paperlessfake"
+	"github.com/mdopp/haus/internal/qmd"
+	"github.com/mdopp/haus/internal/qmd/qmdfake"
 )
 
 const tok = "bote-token"
@@ -35,11 +37,13 @@ type setup struct {
 	fake  *davfake.Server
 	notes string
 	docs  *paperlessfake.Server
+	qmd   *qmdfake.Server // the memory library's search (haus#13)
 }
 
 // want says which backends a setup has.
 type want struct {
 	cal, notes, contacts, docs bool
+	library                    bool   // HAUS_QMD_URL: the memory library (haus#13)
 	country                    string // HAUS_PHONE_COUNTRY; "" the default
 	noPublic                   bool   // no HAUS_PUBLIC_URL: no links to Haus's pages
 	noPaperlessPublic          bool   // no HAUS_PAPERLESS_PUBLIC_URL: Haus's document page is a 404
@@ -84,6 +88,11 @@ func newSetup(t *testing.T, w want) setup {
 			t.Fatal(err)
 		}
 		cfg.Notes = d
+	}
+	if w.library {
+		s.qmd = qmdfake.New("notizen")
+		t.Cleanup(s.qmd.Close)
+		cfg.Library = &qmd.Client{URL: s.qmd.URL, Collection: "notizen"}
 	}
 	s.h = Handler(cfg)
 	return s
@@ -242,10 +251,13 @@ func TestToolsOnlyWhatWorks(t *testing.T) {
 		{want{}, nil},
 		{want{cal: true}, cal},
 		{want{notes: true}, not},
+		{want{library: true}, nil},
+		{want{notes: true, library: true}, join(not, []string{"notizen_finden"})},
 		{want{contacts: true}, con},
 		{want{docs: true}, doc},
 		{want{cal: true, notes: true}, join(cal, not)},
 		{want{cal: true, notes: true, contacts: true, docs: true}, join(cal, not, con, doc)},
+		{want{cal: true, notes: true, contacts: true, docs: true, library: true}, join(cal, not, con, doc, []string{"notizen_finden"})},
 	} {
 		got := toolNames(t, newSetup(t, c.w).h)
 		if strings.Join(got, ",") != strings.Join(c.want, ",") {
@@ -983,5 +995,131 @@ func TestContactLinkIsTheExactUID(t *testing.T) {
 	text, _ := call(t, s.h, "kontakt_lesen", map[string]any{"kontakt": "ab cd"})
 	if !strings.Contains(text, "Paula") || !strings.Contains(text, hausPublic+"/kontakte/%20ab%20%20cd%20") {
 		t.Fatalf("%q", text)
+	}
+}
+
+// haus#13: notizen_finden searches the notes by meaning through the memory
+// library: a note found by a word it does not contain, each with its
+// title, its file, a short passage and its page on Haus. The answer names
+// no tool and nothing technical (laib ADR 0021); nothing hidden or outside
+// the folder.
+func TestFindNotesByMeaning(t *testing.T) {
+	s := newSetup(t, want{notes: true, library: true})
+	write := func(name, body string, means ...string) {
+		p := filepath.Join(s.notes, name)
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		os.WriteFile(p, []byte(body), 0o644)
+		s.qmd.Add(qmdfake.Doc{Path: name, Title: "qmd", Body: body, Means: means})
+	}
+	write("kaminkehrer.md", "# Kaminkehrer\n\nHerr Brandl kommt einmal im Jahr im Oktober.\nRechnung aufheben.\n", "schornsteinfeger")
+	write("rezepte/Größen & Maße.md", "# Größen\n\nLena 31\n", "schornsteinfeger")
+	write(".stversions/alt.md", "# Alt\n\nGEHEIM\n", "schornsteinfeger")
+	text, isErr := call(t, s.h, "notizen_finden", map[string]any{"text": "Wann kommt der Schornsteinfeger?"})
+	if isErr {
+		t.Fatalf("%q", text)
+	}
+	for _, w := range []string{"## Kaminkehrer (kaminkehrer.md)", "Herr Brandl kommt einmal im Jahr im Oktober.",
+		hausPublic + "/notizen/kaminkehrer.md", "## Größen (rezepte/Größen & Maße.md)", hausPublic + "/notizen/rezepte/Gr%C3%B6%C3%9Fen%20&%20Ma%C3%9Fe.md"} {
+		if !strings.Contains(text, w) {
+			t.Fatalf("lacks %q:\n%s", w, text)
+		}
+	}
+	if strings.Index(text, "Kaminkehrer") > strings.Index(text, "Größen") {
+		t.Fatalf("qmd's order: %s", text)
+	}
+	for _, never := range []string{"GEHEIM", "Alt", "qmd", "notizen_suchen", "notiz_lesen", "notizen_finden", "lex", "vec", "@@", "127.0.0.1", "Bedeutung geht"} {
+		if strings.Contains(text, never) {
+			t.Fatalf("says %q:\n%s", never, text)
+		}
+	}
+	// without Haus's address: no link, the file still named
+	s2 := newSetup(t, want{notes: true, library: true, noPublic: true})
+	os.WriteFile(filepath.Join(s2.notes, "kaminkehrer.md"), []byte("# Kaminkehrer\n\nHerr Brandl\n"), 0o644)
+	s2.qmd.Add(qmdfake.Doc{Path: "kaminkehrer.md", Title: "Kaminkehrer", Body: "# Kaminkehrer\n\nHerr Brandl\n", Means: []string{"schornsteinfeger"}})
+	if text, _ := call(t, s2.h, "notizen_finden", map[string]any{"text": "Schornsteinfeger"}); !strings.Contains(text, "(kaminkehrer.md)") || strings.Contains(text, "http") || strings.Contains(text, "/notizen/") {
+		t.Fatalf("no public URL: %q", text)
+	}
+	// a blank search asks back, as the word search does
+	if text, isErr := call(t, s.h, "notizen_finden", map[string]any{"text": " "}); !isErr || text == "" {
+		t.Fatalf("blank: %q %v", text, isErr)
+	}
+}
+
+// When the library does not answer or is still indexing, notizen_finden
+// is the word search and says so first, plainly; not a transport error,
+// not empty while words match.
+func TestFindNotesReduced(t *testing.T) {
+	for _, set := range []func(*qmdfake.Server){
+		func(f *qmdfake.Server) { f.Close() },
+		func(f *qmdfake.Server) { f.Indexing = true },
+		func(f *qmdfake.Server) { f.Status = 500 },
+	} {
+		s := newSetup(t, want{notes: true, library: true})
+		os.WriteFile(filepath.Join(s.notes, "kaminkehrer.md"), []byte("# Kaminkehrer\n\nHerr Brandl kommt im Oktober.\n"), 0o644)
+		s.qmd.Add(qmdfake.Doc{Path: "kaminkehrer.md", Title: "Kaminkehrer", Body: "# Kaminkehrer\n\nHerr Brandl kommt im Oktober.\n", Means: []string{"schornsteinfeger"}})
+		set(s.qmd)
+		text, isErr := call(t, s.h, "notizen_finden", map[string]any{"text": "Brandl"})
+		if isErr || !strings.HasPrefix(text, reducedNote) || !strings.Contains(text, "## Kaminkehrer (kaminkehrer.md)") ||
+			!strings.Contains(text, hausPublic+"/notizen/kaminkehrer.md") {
+			t.Fatalf("%q %v", text, isErr)
+		}
+		text, isErr = call(t, s.h, "notizen_finden", map[string]any{"text": "Schornsteinfeger"})
+		if isErr || !strings.HasPrefix(text, reducedNote) || !strings.Contains(text, "Keine Notiz enthält „Schornsteinfeger“") {
+			t.Fatalf("no word hit: %q %v", text, isErr)
+		}
+		for _, never := range []string{"127.0.0.1", "http://127", "refused", "dial", "tcp", "qmd", "500", "notizen_suchen"} {
+			if strings.Contains(text, never) {
+				t.Fatalf("says %q: %q", never, text)
+			}
+		}
+	}
+}
+
+func TestFromEnvLibrary(t *testing.T) {
+	for _, k := range []string{"HAUS_RADICALE_URL", "HAUS_PAPERLESS_URL", "HAUS_QMD_URL", "HAUS_QMD_COLLECTION"} {
+		t.Setenv(k, "")
+	}
+	t.Setenv("HAUS_NOTES_DIR", t.TempDir())
+	if cfg, err := FromEnv(); err != nil || cfg.Library != nil {
+		t.Fatalf("unset: %+v %v", cfg.Library, err)
+	}
+	t.Setenv("HAUS_QMD_URL", "127.0.0.1:8181")
+	if _, err := FromEnv(); err == nil {
+		t.Fatal("a malformed library address refuses to start")
+	}
+	t.Setenv("HAUS_QMD_URL", "http://127.0.0.1:8181/")
+	cfg, err := FromEnv()
+	if err != nil || cfg.Library == nil || cfg.Library.URL != "http://127.0.0.1:8181" || cfg.Library.Collection != "notizen" {
+		t.Fatalf("set: %+v %v", cfg.Library, err)
+	}
+	t.Setenv("HAUS_QMD_COLLECTION", "haus-notizen")
+	if cfg, _ := FromEnv(); cfg.Library == nil || cfg.Library.Collection != "haus-notizen" {
+		t.Fatalf("collection: %+v", cfg.Library)
+	}
+	// the library maps its hits to the notes folder: without one, no library
+	t.Setenv("HAUS_NOTES_DIR", "")
+	if cfg, err := FromEnv(); err != nil || cfg.Library != nil {
+		t.Fatalf("no notes: %+v %v", cfg.Library, err)
+	}
+}
+
+// The Haushalt's passages are plain the same way the page's are: a table
+// row as its cells, no header row, no pipes, no list dashes (haus#13).
+func TestFindNotesPlainPassages(t *testing.T) {
+	s := newSetup(t, want{notes: true, library: true})
+	table := "# Handwerker\n\n| Gewerk | Firma | Telefon | Notiz |\n|---|---|---|---|\n| Heizung | Huber GmbH | 089 111 | Wartung |\n"
+	list := "# Putzplan\n\n- Bad: Anna, samstags\n- Küche: Ben\n"
+	os.WriteFile(filepath.Join(s.notes, "handwerker.md"), []byte(table), 0o644)
+	os.WriteFile(filepath.Join(s.notes, "putzplan.md"), []byte(list), 0o644)
+	s.qmd.Add(qmdfake.Doc{Path: "handwerker.md", Title: "Handwerker", Body: table, Means: []string{"haus"}},
+		qmdfake.Doc{Path: "putzplan.md", Title: "Putzplan", Body: list, Means: []string{"haus"}})
+	text, isErr := call(t, s.h, "notizen_finden", map[string]any{"text": "Haus"})
+	if isErr || !strings.Contains(text, "Gewerk Heizung · Firma Huber GmbH · Telefon 089 111 · Notiz Wartung") || !strings.Contains(text, "\nBad: Anna, samstags\n") {
+		t.Fatalf("%q", text)
+	}
+	for _, never := range []string{"|", "Gewerk · Firma", "Gewerk Firma", "- Bad", "- Küche", "---"} {
+		if strings.Contains(text, never) {
+			t.Fatalf("says %q:\n%s", never, text)
+		}
 	}
 }
