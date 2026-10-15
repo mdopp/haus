@@ -14,6 +14,9 @@ import (
 
 	"github.com/mdopp/haus/internal/caldav"
 	"github.com/mdopp/haus/internal/caldav/davfake"
+	"github.com/mdopp/haus/internal/judge"
+	"github.com/mdopp/haus/internal/judge/proxyfake"
+	"github.com/mdopp/haus/internal/library"
 	"github.com/mdopp/haus/internal/notes"
 	"github.com/mdopp/haus/internal/paperless"
 	"github.com/mdopp/haus/internal/paperless/paperlessfake"
@@ -38,12 +41,14 @@ type setup struct {
 	notes string
 	docs  *paperlessfake.Server
 	qmd   *qmdfake.Server // the memory library's search (haus#13)
+	llm   *proxyfake.Server
 }
 
 // want says which backends a setup has.
 type want struct {
 	cal, notes, contacts, docs bool
 	library                    bool   // HAUS_QMD_URL: the memory library (haus#13)
+	llm                        bool   // HAUS_LLM_*: the house model tidies its hits (haus#13)
 	country                    string // HAUS_PHONE_COUNTRY; "" the default
 	noPublic                   bool   // no HAUS_PUBLIC_URL: no links to Haus's pages
 	noPaperlessPublic          bool   // no HAUS_PAPERLESS_PUBLIC_URL: Haus's document page is a 404
@@ -93,6 +98,11 @@ func newSetup(t *testing.T, w want) setup {
 		s.qmd = qmdfake.New("notizen")
 		t.Cleanup(s.qmd.Close)
 		cfg.Library = &qmd.Client{URL: s.qmd.URL, Collection: "notizen"}
+	}
+	if w.llm {
+		s.llm = proxyfake.New("gemma-4-e4b")
+		t.Cleanup(s.llm.Close)
+		cfg.Judge = &judge.Client{URL: s.llm.Base(), Model: "gemma-4-e4b", Key: "model-key"}
 	}
 	s.h = Handler(cfg)
 	return s
@@ -1076,7 +1086,7 @@ func TestFindNotesReduced(t *testing.T) {
 }
 
 func TestFromEnvLibrary(t *testing.T) {
-	for _, k := range []string{"HAUS_RADICALE_URL", "HAUS_PAPERLESS_URL", "HAUS_QMD_URL", "HAUS_QMD_COLLECTION"} {
+	for _, k := range []string{"HAUS_RADICALE_URL", "HAUS_PAPERLESS_URL", "HAUS_QMD_URL", "HAUS_QMD_COLLECTION", "HAUS_LLM_URL", "HAUS_LLM_MODEL", "HAUS_LLM_KEY"} {
 		t.Setenv(k, "")
 	}
 	t.Setenv("HAUS_NOTES_DIR", t.TempDir())
@@ -1093,8 +1103,20 @@ func TestFromEnvLibrary(t *testing.T) {
 		t.Fatalf("set: %+v %v", cfg.Library, err)
 	}
 	t.Setenv("HAUS_QMD_COLLECTION", "haus-notizen")
-	if cfg, _ := FromEnv(); cfg.Library == nil || cfg.Library.Collection != "haus-notizen" {
-		t.Fatalf("collection: %+v", cfg.Library)
+	if cfg, _ := FromEnv(); cfg.Library == nil || cfg.Library.Collection != "haus-notizen" || cfg.Judge != nil {
+		t.Fatalf("collection: %+v %+v", cfg.Library, cfg.Judge)
+	}
+	// the house model, when the box has the model role
+	t.Setenv("HAUS_LLM_URL", "http://host.containers.internal:11435/v1")
+	t.Setenv("HAUS_LLM_MODEL", "gemma-4-e4b")
+	t.Setenv("HAUS_LLM_KEY", "model-key")
+	if cfg, err := FromEnv(); err != nil || cfg.Judge == nil || cfg.Judge.Model != "gemma-4-e4b" {
+		t.Fatalf("house model: %+v %v", cfg.Judge, err)
+	}
+	// one of the three missing: no tidy-up, and Haus still starts
+	t.Setenv("HAUS_LLM_KEY", "")
+	if cfg, err := FromEnv(); err != nil || cfg.Judge != nil || cfg.Library == nil {
+		t.Fatalf("no key: %+v %v", cfg.Judge, err)
 	}
 	// the library maps its hits to the notes folder: without one, no library
 	t.Setenv("HAUS_NOTES_DIR", "")
@@ -1120,6 +1142,43 @@ func TestFindNotesPlainPassages(t *testing.T) {
 	for _, never := range []string{"|", "Gewerk · Firma", "Gewerk Firma", "- Bad", "- Küche", "---"} {
 		if strings.Contains(text, never) {
 			t.Fatalf("says %q:\n%s", never, text)
+		}
+	}
+}
+
+// notizen_finden uses the cut and the tidy-up as the page does (haus#13):
+// a note far from the question is not named, and the house model narrows
+// what is left. The Bote waits for its answer anyway, so the tidy-up has
+// longer than the page's budget.
+func TestFindNotesCutAndTidy(t *testing.T) {
+	s := newSetup(t, want{notes: true, library: true, llm: true})
+	write := func(name, body string, vec float64) {
+		os.WriteFile(filepath.Join(s.notes, name), []byte(body), 0o644)
+		s.qmd.Add(qmdfake.Doc{Path: name, Title: "qmd", Body: body, Means: []string{"schornsteinfeger"}, Vec: vec})
+	}
+	write("kaminkehrer.md", "# Kaminkehrer\n\nHerr Brandl kommt im Oktober.\n", 0.54)
+	write("heizung.md", "# Gastherme\n\nWartung im September.\n", 0.45)
+	write("dachrinne.md", "# Dachrinne\n\nIm November reinigen.\n", 0.31)
+	s.llm.Content = `{"ids":[1]}`
+	s.llm.Hang = library.PageTidy + 300*time.Millisecond
+	text, isErr := call(t, s.h, "notizen_finden", map[string]any{"text": "Wann kommt der Schornsteinfeger?"})
+	if isErr || !strings.Contains(text, "## Kaminkehrer (kaminkehrer.md)") || strings.Contains(text, "Gastherme") || strings.Contains(text, "Dachrinne") {
+		t.Fatalf("%q", text)
+	}
+	// the house model not loaded: the cut's two, never the far one
+	s.llm.Lease.Alias = "gemma-4-12b"
+	text, _ = call(t, s.h, "notizen_finden", map[string]any{"text": "Wann kommt der Schornsteinfeger?"})
+	if !strings.Contains(text, "(kaminkehrer.md)") || !strings.Contains(text, "(heizung.md)") || strings.Contains(text, "Dachrinne") {
+		t.Fatalf("not loaded: %q", text)
+	}
+	for _, never := range []string{"gemma", "Modell", "Bedeutung geht"} {
+		if strings.Contains(text, never) {
+			t.Fatalf("says %q: %q", never, text)
+		}
+	}
+	for _, r := range s.llm.Seen() {
+		if r.Path == "/api/model-lease" && r.Method != http.MethodGet {
+			t.Fatalf("the Haushalt took the lease: %s", r.Method)
 		}
 	}
 }

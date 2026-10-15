@@ -9,10 +9,11 @@ import (
 	"github.com/mdopp/haus/internal/qmd"
 )
 
-// TestAgainstRealQmd runs only by hand, against a real `qmd mcp --http`
-// indexing a notes folder as the collection "notizen" (haus#13): set
-// HAUS_QMD_REAL to its address and HAUS_QMD_REAL_NOTES to the folder. CI
-// never has one; the fake's shapes come from such a run (qmd/testdata).
+// TestAgainstRealQmd runs only by hand, against a real Vermittler
+// (laib#198) in front of qmd, indexing a notes folder as the collection
+// "notizen" (haus#13): set HAUS_QMD_REAL to its address and
+// HAUS_QMD_REAL_NOTES to the folder. CI never has one; the fake's shapes
+// come from such a run (qmd/testdata).
 // The folder is the eval's 44 German notes, the recipes moved to
 // rezepte/, plus "Größen Kinder.md" and "schlüssel & keller (2).md".
 func TestAgainstRealQmd(t *testing.T) {
@@ -36,7 +37,7 @@ func TestAgainstRealQmd(t *testing.T) {
 		"wo hängt der Kellerschlüssel":          "schlüssel & keller (2).md",
 		"wer passt abends auf die Kinder auf":   "babysitter.md",
 	} {
-		got, err := Find(bg, c, d, q, 5)
+		got, err := Find(bg, c, Tidy{}, d, q, 5)
 		if err != nil || got.Reduced || len(got.Hits) == 0 {
 			t.Fatalf("%q: %+v %v", q, got, err)
 		}

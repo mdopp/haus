@@ -3,6 +3,7 @@ package qmd
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,9 +15,9 @@ import (
 	"github.com/mdopp/haus/internal/qmd/qmdfake"
 )
 
-// testdata holds what a real qmd 2.8.3 (`qmd mcp --http`, embeddinggemma
-// on the CPU) answered on German notes (haus#13), the eval folder's path
-// replaced by /notes; the fake answers in the same shapes.
+// testdata holds what the Vermittler's prototype (laib#198: qmd 2.8.3's
+// SDK, embeddinggemma on the CPU) answered on the eval's German notes
+// (haus#13); the fake answers in the same shapes.
 func captured(t *testing.T, name string) string {
 	t.Helper()
 	b, err := os.ReadFile("testdata/" + name)
@@ -87,16 +88,9 @@ func TestSendsTypedSearchesNeverThePlainQuery(t *testing.T) {
 			if !reflect.DeepEqual(body["collections"], []any{"notizen"}) || body["limit"] != float64(7) || body["minScore"] != float64(0) {
 				t.Fatalf("scope: %s", r.Body)
 			}
-		case "/mcp":
-			var rpc struct {
-				Method string `json:"method"`
-				Params struct {
-					Name string `json:"name"`
-				} `json:"params"`
-			}
-			json.Unmarshal(r.Body, &rpc)
-			if rpc.Method != "tools/call" || rpc.Params.Name != "status" {
-				t.Fatalf("the only MCP call is the status tool, not %s %s", rpc.Method, rpc.Params.Name)
+		case "/status":
+			if r.Method != http.MethodGet || len(r.Body) != 0 {
+				t.Fatalf("status is a GET: %s %s", r.Method, r.Body)
 			}
 		default:
 			t.Fatalf("unexpected %s %s", r.Method, r.Path)
@@ -107,11 +101,12 @@ func TestSendsTypedSearchesNeverThePlainQuery(t *testing.T) {
 	}
 }
 
-// qmd's own answer, as captured: the document path relative to the
-// collection, decoded; the title; the snippet as the note's own lines,
-// without qmd's diff header and the line numbers it puts in front. Making
-// them plain (Markdown, tables, length) is the notes package's: it knows
-// the note (haus#13).
+// The Vermittler's answer, as captured: the document path relative to
+// the collection, decoded; the title; the snippet as the note's own lines,
+// without qmd's diff header and the line numbers it puts in front, and the
+// note's line it starts at (the header's, not qmd's numbers, which count
+// the header); the cosine. Making the lines plain (Markdown, tables,
+// length) is the notes package's: it knows the note (haus#13).
 func TestReadsRealAnswers(t *testing.T) {
 	ctx := context.Background()
 	c := &Client{URL: verbatim(t, "application/json", captured(t, "query-meaning.json")).URL, Collection: "notizen"}
@@ -125,6 +120,13 @@ func TestReadsRealAnswers(t *testing.T) {
 	k := hits[0]
 	if k.Title != "Kaminkehrer" || len(k.Lines) != 4 || k.Lines[0] != "- Kommt einmal im Jahr, meist zweite Oktoberwoche, kündigt sich per Zettel im Briefkasten an." {
 		t.Fatalf("first hit: %+v", k)
+	}
+	var got []string
+	for _, h := range hits {
+		got = append(got, fmt.Sprintf("%d %.3f", h.Start, h.Vec))
+	}
+	if strings.Join(got, ",") != "5 0.538,7 0.318,2 0.311,1 0.305,1 0.276" {
+		t.Fatalf("start lines and cosines: %s", strings.Join(got, ","))
 	}
 	for _, h := range hits {
 		for _, l := range h.Lines {
@@ -148,9 +150,9 @@ func TestReadsRealAnswers(t *testing.T) {
 
 	// folders, umlauts, spaces, & and parentheses: qmd encodes each segment
 	for file, want := range map[string]string{
-		"query-subfolder.json":    "rezepte/rezept-pfannkuchen.md",
-		"query-umlaut.json":       "Größen Kinder.md",
-		"query-before-embed.json": "schlüssel & keller (2).md",
+		"query-subfolder.json": "rezepte/rezept-pfannkuchen.md",
+		"query-umlaut.json":    "Größen Kinder.md",
+		"query-ampersand.json": "schlüssel & keller (2).md",
 	} {
 		c := &Client{URL: verbatim(t, "application/json", captured(t, file)).URL, Collection: "notizen"}
 		hits, err := c.Search(ctx, "x", 5)
@@ -206,31 +208,25 @@ func TestDropsWhatIsNotANoteOfTheCollection(t *testing.T) {
 
 func strconvQuote(s string) string { b, _ := json.Marshal(s); return string(b) }
 
-// qmd's status tool, over stateless streamable HTTP (an SSE frame): ready
-// only once the notes' collection has documents and vectors. Before the
-// first `qmd embed` it answers words only, which is the reduced search.
+// The Vermittler's GET /status: ready only once the notes' collection
+// has documents and some of them their vectors. Before the first `qmd
+// embed` it answers words only, which is the reduced search.
 func TestStatusFromRealAnswers(t *testing.T) {
 	ctx := context.Background()
-	for file, ready := range map[string]bool{"status-embedded.sse": true, "status-before-embed.sse": false} {
-		c := &Client{URL: verbatim(t, "text/event-stream", captured(t, file)).URL, Collection: "notizen"}
-		st, err := c.Status(ctx)
-		if err != nil {
-			t.Fatalf("%s: %v", file, err)
-		}
-		if st.Ready() != ready || st.Documents != 46 {
-			t.Fatalf("%s: %+v ready %v", file, st, st.Ready())
-		}
-		// the same index, but Haus's collection is not in it
-		c.Collection = "andere"
-		if st, err := c.Status(ctx); err != nil || st.Ready() {
-			t.Fatalf("%s: a collection qmd does not have is not ready: %+v %v", file, st, err)
-		}
+	c := &Client{URL: verbatim(t, "application/json", captured(t, "status.json")).URL, Collection: "notizen"}
+	st, err := c.Status(ctx)
+	if err != nil || !st.Ready() || st.Documents != 46 || st.Embedded != 46 {
+		t.Fatalf("captured: %+v %v", st, err)
 	}
-	// the MCP transport may answer plain JSON too
+	// the same index, but Haus's collection is not in it
+	c.Collection = "andere"
+	if st, err := c.Status(ctx); err != nil || st.Ready() {
+		t.Fatalf("a collection the index does not have is not ready: %+v %v", st, err)
+	}
 	f := qmdfake.New("notizen")
 	defer f.Close()
 	f.Add(qmdfake.Doc{Path: "a.md", Title: "A", Body: "# A\n\nText"})
-	c := &Client{URL: f.URL, Collection: "notizen"}
+	c = &Client{URL: f.URL, Collection: "notizen"}
 	if st, err := c.Status(ctx); err != nil || !st.Ready() {
 		t.Fatalf("fake, embedded: %+v %v", st, err)
 	}
@@ -238,28 +234,27 @@ func TestStatusFromRealAnswers(t *testing.T) {
 	if st, err := c.Status(ctx); err != nil || st.Ready() {
 		t.Fatalf("fake, indexing: %+v %v", st, err)
 	}
-	j := verbatim(t, "application/json", `{"result":{"content":[],"structuredContent":{"totalDocuments":3,"needsEmbedding":0,"hasVectorIndex":true,"collections":[{"name":"notizen","documents":3}]}},"jsonrpc":"2.0","id":1}`)
-	if st, err := (&Client{URL: j.URL, Collection: "notizen"}).Status(ctx); err != nil || !st.Ready() {
-		t.Fatalf("plain JSON: %+v %v", st, err)
+	for body, ready := range map[string]bool{
+		`{"collections":[{"name":"notizen","documents":3,"embedded":1}]}`:                                              true,
+		`{"collections":[{"name":"notizen","documents":3,"embedded":0}]}`:                                              false,
+		`{"collections":[{"name":"notizen","documents":0,"embedded":0}]}`:                                              false,
+		`{"collections":[{"name":"andere","documents":3,"embedded":3},{"name":"notizen","documents":3,"embedded":0}]}`: false,
+		`{"collections":[]}`: false,
+	} {
+		if st, err := (&Client{URL: verbatim(t, "application/json", body).URL, Collection: "notizen"}).Status(ctx); err != nil || st.Ready() != ready {
+			t.Fatalf("%s: %+v %v, want ready %v", body, st, err, ready)
+		}
 	}
-	// nothing embedded yet, though an index of vectors exists (a new model)
-	n := verbatim(t, "application/json", `{"result":{"structuredContent":{"totalDocuments":3,"needsEmbedding":3,"hasVectorIndex":true,"collections":[{"name":"notizen","documents":3}]}},"jsonrpc":"2.0","id":1}`)
-	if st, _ := (&Client{URL: n.URL, Collection: "notizen"}).Status(ctx); st.Ready() {
-		t.Fatalf("nothing embedded is not ready: %+v", st)
-	}
-	// a JSON-RPC error, or a tool error, is an error
-	for _, body := range []string{`{"jsonrpc":"2.0","id":1,"error":{"code":-32601,"message":"nope"}}`,
-		`{"jsonrpc":"2.0","id":1,"result":{"isError":true,"content":[{"type":"text","text":"kaputt"}]}}`,
-		`{"jsonrpc":"2.0","id":1,"result":{"isError":true,"structuredContent":{"totalDocuments":3,"needsEmbedding":0,"hasVectorIndex":true,"collections":[{"name":"notizen","documents":3}]}}}`, `event: message\ndata: nicht json\n\n`} {
-		e := verbatim(t, "application/json", body)
-		if _, err := (&Client{URL: e.URL, Collection: "notizen"}).Status(ctx); err == nil {
+	// an answer without collections, or not JSON, is an error
+	for _, body := range []string{`{}`, `{"collections":null}`, `nicht json`, `{"collections":"notizen"}`} {
+		if _, err := (&Client{URL: verbatim(t, "application/json", body).URL, Collection: "notizen"}).Status(ctx); err == nil {
 			t.Fatalf("%s: want an error", body)
 		}
 	}
 }
 
-// The fake answers in the captured shapes: the same fields, the same
-// path encoding, the same snippet header.
+// The fake answers in the captured shapes: the same fields (vec too),
+// the same path encoding, the same snippet header.
 func TestFakeAnswersLikeQmd(t *testing.T) {
 	keys := func(raw string) (string, map[string]any) {
 		var r struct {
@@ -275,7 +270,7 @@ func TestFakeAnswersLikeQmd(t *testing.T) {
 		sort.Strings(ks)
 		return strings.Join(ks, ","), r.Results[0]
 	}
-	realKeys, real := keys(captured(t, "query-before-embed.json"))
+	realKeys, real := keys(captured(t, "query-ampersand.json"))
 	f := qmdfake.New("notizen")
 	defer f.Close()
 	f.Add(qmdfake.Doc{Path: "schlüssel & keller (2).md", Title: "schlüssel & keller (2)",

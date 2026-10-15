@@ -1,16 +1,17 @@
-// Package qmdfake is a fake qmd 2.8.3 HTTP server for tests (haus#13),
-// answering in the shapes captured from a real `qmd mcp --http` (the
-// captures are internal/qmd/testdata): GET /health, POST /query with typed
-// searches, and POST /mcp, where only the status tool is served, as
-// stateless streamable HTTP (an SSE "event: message" frame). Like qmd it
-// refuses a Host that is not loopback (403), a body without searches (400),
-// a body that is not JSON (500), and an /mcp call that does not accept both
-// JSON and SSE (406).
+// Package qmdfake is a fake of the Vermittler (laib#198), the small
+// server in front of qmd 2.8.3, for tests (haus#13). It answers in the
+// shapes captured from the prototype (internal/qmd/testdata): GET /health,
+// GET /status with each collection's documents and how many have their
+// vectors, and POST /query with typed searches — qmd's answer, plus vec,
+// each hit's cosine to the question. Like qmd it refuses a Host that is
+// not loopback (403), a body without searches (400) and a body that is not
+// JSON (500).
 //
 // A document is found when a word of the query is in its body or in its
 // Means words: the fake's stand-in for search by meaning, so a test can
 // find a note by a word it does not contain. The order is the order the
-// documents were added; the score is qmd's fused rank, 1/rank.
+// documents were added; the score is qmd's fused rank, 1/rank; vec is the
+// document's Vec.
 package qmdfake
 
 import (
@@ -36,7 +37,14 @@ type Doc struct {
 	Title string   // qmd's title: the first heading, else the file name
 	Body  string   // the file's text
 	Means []string // words it is found by without containing them
+	// Vec is the cosine the fake answers for it; 0 is DefaultVec, a
+	// clear match. A hit outside the vector list (vec 0) is a Results test.
+	Vec float64
 }
+
+// DefaultVec is a Doc's cosine when it sets none: well above the cut
+// (haus#13), as a note that answers the question has.
+const DefaultVec = 0.5
 
 // Request is one request the fake saw.
 type Request struct {
@@ -53,14 +61,14 @@ type Server struct {
 	docs []Doc
 	seen []Request
 
-	// Indexing answers status as qmd does before the first `qmd embed`:
-	// documents known, no vector index.
+	// Indexing answers status as before the first `qmd embed`: documents
+	// known, none with its vectors.
 	Indexing bool
 	// Status, when set, is every answer's status, with qmd's plain body.
 	Status int
 	// Results, when set, is /query's answer verbatim.
 	Results string
-	// Hang, when set, holds every /query and /mcp answer that long.
+	// Hang, when set, holds every /query and /status answer that long.
 	Hang time.Duration
 }
 
@@ -128,10 +136,10 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch {
-	case (r.URL.Path == "/query" || r.URL.Path == "/search") && r.Method == http.MethodPost:
+	case r.URL.Path == "/query" && r.Method == http.MethodPost:
 		s.query(w, body)
-	case r.URL.Path == "/mcp":
-		s.mcp(w, r, body)
+	case r.URL.Path == "/status" && r.Method == http.MethodGet:
+		s.status(w)
 	default:
 		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte("Not Found"))
@@ -151,6 +159,7 @@ type result struct {
 	Context *string `json:"context"`
 	Line    int     `json:"line"`
 	Snippet string  `json:"snippet"`
+	Vec     float64 `json:"vec"`
 }
 
 // encode is qmd's encodeQmdPath: each segment percent-encoded as
@@ -219,8 +228,12 @@ func (s *Server) query(w http.ResponseWriter, body []byte) {
 		}
 		sum := sha256.Sum256([]byte(d.Body))
 		line, snip := snippet(d.Body)
+		vec := d.Vec
+		if vec == 0 {
+			vec = DefaultVec
+		}
 		out = append(out, result{Docid: "#" + hex.EncodeToString(sum[:3]), File: "qmd://" + s.Collection + "/" + encode(d.Path),
-			Title: d.Title, Score: math.Round(100/float64(len(out)+1)) / 100, Line: line, Snippet: snip})
+			Title: d.Title, Score: math.Round(100/float64(len(out)+1)) / 100, Line: line, Snippet: snip, Vec: vec})
 	}
 	json.NewEncoder(w).Encode(map[string]any{"results": out})
 }
@@ -238,41 +251,15 @@ func matches(d Doc, searches []search) bool {
 	return false
 }
 
-func (s *Server) mcp(w http.ResponseWriter, r *http.Request, body []byte) {
-	acc := r.Header.Get("Accept")
-	if r.Method != http.MethodPost || !strings.Contains(acc, "application/json") || !strings.Contains(acc, "text/event-stream") {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusNotAcceptable)
-		w.Write([]byte(`{"jsonrpc":"2.0","error":{"code":-32000,"message":"Not Acceptable: Client must accept both application/json and text/event-stream"},"id":null}`))
-		return
+// status is the Vermittler's GET /status: each collection, its documents
+// and how many of them have their vectors.
+func (s *Server) status(w http.ResponseWriter) {
+	s.mu.Lock()
+	n, embedded := len(s.docs), len(s.docs)
+	if s.Indexing {
+		embedded = 0
 	}
-	var req struct {
-		ID     json.RawMessage `json:"id"`
-		Method string          `json:"method"`
-		Params struct {
-			Name string `json:"name"`
-		} `json:"params"`
-	}
-	json.Unmarshal(body, &req)
-	msg := map[string]any{"jsonrpc": "2.0", "id": req.ID}
-	if req.Method == "tools/call" && req.Params.Name == "status" {
-		s.mu.Lock()
-		n, need := len(s.docs), 0
-		if s.Indexing {
-			need = n
-		}
-		msg["result"] = map[string]any{
-			"content": []map[string]any{{"type": "text", "text": fmt.Sprintf("QMD Index Status:\n  Total documents: %d\n  Needs embedding: %d", n, need)}},
-			"structuredContent": map[string]any{"totalDocuments": n, "needsEmbedding": need, "hasVectorIndex": !s.Indexing,
-				"collections": []map[string]any{{"name": s.Collection, "path": "/notes", "pattern": "**/*.md", "documents": n,
-					"lastUpdated": "2026-10-15T09:05:23.566Z"}}},
-		}
-		s.mu.Unlock()
-	} else {
-		msg["error"] = map[string]any{"code": -32601, "message": "the fake serves only the status tool"}
-	}
-	b, _ := json.Marshal(msg)
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache, no-transform")
-	fmt.Fprintf(w, "event: message\ndata: %s\n\n", b)
+	s.mu.Unlock()
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{"collections": []map[string]any{{"name": s.Collection, "documents": n, "embedded": embedded}}})
 }
