@@ -1,0 +1,21 @@
+{
+ "color": "DEFAULT",
+ "isTrashed": false,
+ "isPinned": true,
+ "isArchived": false,
+ "title": "Einkaufsliste",
+ "listContent": [
+  {
+   "textHtml": "Milch",
+   "text": "Milch",
+   "isChecked": false
+  },
+  {
+   "textHtml": "Brot",
+   "text": "Brot",
+   "isChecked": true
+  }
+ ],
+ "userEditedTimestampUsec": 1760000000000000,
+ "createdTimestampUsec": 1750000000000000
+}
