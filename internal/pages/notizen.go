@@ -71,7 +71,7 @@ func Notizen(cfg StartConfig) http.HandlerFunc {
 				}
 				more(&c, res.Total-len(res.Hits))
 				if res.Total == 0 {
-					c.Add("Nichts gefunden.", tryOneWord(q))
+					c.Add("Nichts gefunden.", saysTryAnother)
 				}
 				if res.Partial {
 					c.Add("Nicht alle Notizen durchsucht", "es sind zu viele für eine Suche")
@@ -170,13 +170,4 @@ func paragraphs(text string) []string {
 	}
 	flush()
 	return out
-}
-
-// tryOneWord is what to do when nothing was found (haus#13): one word that
-// stands in the note, the query's longest meaningful word as the example.
-func tryOneWord(q string) string {
-	if w := notes.Longest(notes.Words(q)); w != "" {
-		return "Versuch es mit einem einzelnen Wort aus der Notiz, z. B. „" + w + "“."
-	}
-	return "Versuch es mit einem einzelnen Wort aus der Notiz."
 }

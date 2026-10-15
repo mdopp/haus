@@ -109,11 +109,13 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     above the hits: *Die Suche nach Bedeutung geht gerade nicht; gesucht
     wird nur nach den Wörtern.* By words, a sentence needs only one of its
     meaningful words (common and short words left out), the notes with
-    more of them first; nothing found says *Nichts gefunden.* and to try
-    one word that stands in the note, the query's longest as the example.
-    A hit's lines are plain text: a table row as `Firma · Telefon`, no
-    table header, pipes, list dashes or heading hashes, here and in the
-    Haushalt's answers. `/notizen/<file>` (the
+    more of them first; nothing found says *Nichts gefunden. Versuch es
+    mit einem anderen Wort, das in der Notiz stehen könnte.*, without an
+    example word (every word of the query has just failed). A hit's lines
+    are plain text: a table row as each value after its column's header
+    (`Datum 31.12.2024 · Strom 41.230`; a column without one, the value
+    alone), no header row, pipes, list dashes or heading hashes, here and
+    in the Haushalt's answers. `/notizen/<file>` (the
     note's file name, e.g. `einkaufsliste.md`; a slug or title works too)
     shows the note as text: paragraphs and line breaks, no Markdown
     rendering, never markup from the file. Outside the folder, hidden or

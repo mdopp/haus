@@ -27,12 +27,15 @@ import (
 // Jetzt and Haushalt, Kalender's Erinnerungen), else on its own where the
 // cards would be; an item page is the line and the way back (missing).
 const (
-	saysNoHouse     = "Licht und Geräte antworten gerade nicht."
-	saysNoRooms     = "Die Räume werden gerade gelesen — gleich nochmal versuchen."
-	saysNoCalendar  = "Der Kalender antwortet gerade nicht."
-	saysNoContacts  = "Die Kontakte lassen sich gerade nicht lesen."
-	saysNoNotes     = "Die Notizen lassen sich gerade nicht lesen."
-	saysWordsOnly   = "Die Suche nach Bedeutung geht gerade nicht; gesucht wird nur nach den Wörtern."
+	saysNoHouse    = "Licht und Geräte antworten gerade nicht."
+	saysNoRooms    = "Die Räume werden gerade gelesen — gleich nochmal versuchen."
+	saysNoCalendar = "Der Kalender antwortet gerade nicht."
+	saysNoContacts = "Die Kontakte lassen sich gerade nicht lesen."
+	saysNoNotes    = "Die Notizen lassen sich gerade nicht lesen."
+	saysWordsOnly  = "Die Suche nach Bedeutung geht gerade nicht; gesucht wird nur nach den Wörtern."
+	// what to do when a search finds nothing (haus#13): no example word,
+	// since every word of the query has just failed
+	saysTryAnother  = "Versuch es mit einem anderen Wort, das in der Notiz stehen könnte."
 	saysNoFavorites = "Deine Favoriten lassen sich gerade nicht lesen."
 	saysFavsUnseen  = "Deine Favoriten sind gerade nicht zu sehen."
 )

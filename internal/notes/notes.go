@@ -206,44 +206,74 @@ func tableSeparator(l string) bool {
 	return strings.HasPrefix(l, "|") && strings.Trim(l, "|-: \t") == "" && strings.Contains(l, "-")
 }
 
-// tableHeaders are the rows of body's tables that head them: each row
-// right before a separator row.
-func tableHeaders(body string) map[string]bool {
-	h := map[string]bool{}
-	var prev string
-	for _, l := range strings.Split(body, "\n") {
-		l = strings.TrimSpace(l)
-		if tableSeparator(l) && strings.HasPrefix(prev, "|") {
-			h[prev] = true
-		}
-		prev = l
+// cells are a table row's cells, in their columns, empty ones kept.
+func cells(row string) []string {
+	row = strings.TrimSuffix(strings.TrimPrefix(row, "|"), "|")
+	out := strings.Split(row, "|")
+	for i, c := range out {
+		out[i] = strings.TrimSpace(c)
 	}
-	return h
+	return out
+}
+
+// tables is what body's tables say about their rows: the rows that head
+// a table (each right before a separator row), and each other row's
+// column headers.
+type tables struct {
+	header  map[string]bool
+	columns map[string][]string
+}
+
+func readTables(body string) tables {
+	t := tables{header: map[string]bool{}, columns: map[string][]string{}}
+	lines := strings.Split(body, "\n")
+	var cols []string
+	for i, l := range lines {
+		l = strings.TrimSpace(l)
+		switch {
+		case !strings.HasPrefix(l, "|"):
+			cols = nil
+		case i+1 < len(lines) && tableSeparator(strings.TrimSpace(lines[i+1])):
+			t.header[l] = true
+			cols = cells(l)
+		case tableSeparator(l):
+		case cols != nil:
+			t.columns[l] = cols
+		}
+	}
+	return t
 }
 
 var listMark = []string{"- [ ] ", "- [x] ", "- [X] ", "* [ ] ", "* [x] ", "- ", "* ", "+ ", "> "}
 
 // plain is one line of a note as text (haus#13), or "" when it is only
 // markup: the note's "# " title (the hit's title says it), a table's
-// header or separator row. A table row is its cells joined by " · "; a
+// header or separator row. A table row is each value after its column's
+// header ("Strom 41.230"; a column without one: the value alone), joined
+// by " · "; a
 // list dash, a checkbox, a quote mark, a heading's hashes and emphasis
 // go. Cut at 120 characters.
-func plain(l string, headers map[string]bool) string {
+func plain(l string, t tables) string {
 	l = strings.TrimSpace(l)
 	if l == "" || strings.HasPrefix(l, "# ") || l == "#" {
 		return ""
 	}
 	if strings.HasPrefix(l, "|") {
-		if tableSeparator(l) || headers[l] {
+		if tableSeparator(l) || t.header[l] {
 			return ""
 		}
-		var cells []string
-		for _, c := range strings.Split(strings.Trim(l, "|"), "|") {
-			if c = strings.TrimSpace(c); c != "" {
-				cells = append(cells, c)
+		cols := t.columns[l]
+		var parts []string
+		for i, c := range cells(l) {
+			if c == "" {
+				continue
 			}
+			if i < len(cols) && cols[i] != "" {
+				c = cols[i] + " " + c
+			}
+			parts = append(parts, c)
 		}
-		l = strings.Join(cells, " · ")
+		l = strings.Join(parts, " · ")
 	}
 	if strings.HasPrefix(l, "#") {
 		l = strings.TrimLeft(l, "#")
@@ -266,16 +296,17 @@ func plain(l string, headers map[string]bool) string {
 // search picked (qmd's best passage, or none), made plain, at most n; when
 // none of them is more than markup — a passage that is only a table's
 // header — the note's first lines with real content. body is the note's
-// text, which says which table rows are headers.
+// text, which says which table rows are headers and what heads each
+// column.
 func Passage(raw []string, body string, n int) []string {
-	headers := tableHeaders(body)
+	t := readTables(body)
 	var out []string
 	add := func(lines []string) {
 		for _, l := range lines {
 			if len(out) == n {
 				return
 			}
-			if p := plain(l, headers); p != "" {
+			if p := plain(l, t); p != "" {
 				out = append(out, p)
 			}
 		}
@@ -389,17 +420,6 @@ func Words(q string) []string {
 		out = append(out, w)
 	}
 	return out
-}
-
-// Longest is the longest of words, the first of equals; "" for none.
-func Longest(words []string) string {
-	best := ""
-	for _, w := range words {
-		if utf8.RuneCountInString(w) > utf8.RuneCountInString(best) {
-			best = w
-		}
-	}
-	return best
 }
 
 func lower(ws []string) []string {

@@ -355,7 +355,7 @@ func TestPassage(t *testing.T) {
 	}{
 		{"only the header", []string{"# Handwerker", "| Gewerk | Firma | Telefon | Notiz |"}, tableNote, 3,
 			"Gewerk Heizung · Firma Huber GmbH · Telefon 089 111 · Notiz Wartung im Herbst|Gewerk Dach · Firma Schmid · Telefon 089 222"},
-		{"separator and a row", []string{"|---|---|:---:|---|", "| Dach | Schmid | 089 222 | |"}, tableNote, 3, "Gewerk Dach · Firma Schmid · Telefon 089 222"},
+		{"separator and a row", []string{"|---|---|:---:|---|", "| Dach | **Schmid** | 089 222 | |"}, tableNote, 3, "Gewerk Dach · Firma Schmid · Telefon 089 222"},
 		{"header with its separator", []string{"| Gewerk | Firma | Telefon | Notiz |", "|---|---|:---:|---|", "| Heizung | Huber GmbH | 089 111 | Wartung im Herbst |"}, tableNote, 3,
 			"Gewerk Heizung · Firma Huber GmbH · Telefon 089 111 · Notiz Wartung im Herbst"},
 		{"a list", nil, listNote, 10, "Skischuhe|Helm|Brille|Schneeketten|Skipass|Für die Kinder|Wichtig: Sonnencreme|1. Mütze"},
