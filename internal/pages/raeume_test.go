@@ -2,6 +2,9 @@ package pages
 
 import (
 	"fmt"
+	"net/http"
+	"net/url"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -39,7 +42,8 @@ func rooms(t *testing.T, fake *hafake.HA) {
 
 // haus#12: Räume — one card per HA area with its lights, heating, covers
 // and media, the area from the entity or else its device; what has no room
-// in one "Ohne Raum" card at the end. Read-only.
+// in one "Ohne Raum" card at the end. What switches is in
+// TestRaeumeSwitchesLampsInPlace.
 func TestRaeumeOneCardPerRoom(t *testing.T) {
 	fake, hc := house(t)
 	rooms(t, fake)
@@ -57,8 +61,7 @@ func TestRaeumeOneCardPerRoom(t *testing.T) {
 		"Kellerlicht")
 	// each thing leads to its own page (haus#28)
 	mustContain(t, body, `<a href="/raeume/light.kueche_decke">Deckenlampe</a>`, `<a href="/raeume/media_player.wz">Sonos</a>`)
-	mustNotContain(t, body, "Bad</h2>", "Kaffeemaschine", "Küchentemperatur", "Feuchte", "Erdgeschoss",
-		"<form", "<button", "<script")
+	mustNotContain(t, body, "Bad</h2>", "Kaffeemaschine", "Küchentemperatur", "Feuchte", "Erdgeschoss", "<script")
 	// rooms by name, Ohne Raum last
 	before(t, body, "karte-kueche", "karte-wohnzimmer")
 	before(t, body, "karte-wohnzimmer", "karte-ohne-raum")
@@ -183,4 +186,107 @@ func TestRaeumeLeavesOutWhatHAHides(t *testing.T) {
 	_, body, _ := familyPage(t, Raeume, StartConfig{HA: hc}, "GET", "/raeume", "")
 	mustContain(t, body, "Deckenlampe")
 	mustNotContain(t, body, "Alte Lampe", "Status-LED", "Diagnoseplayer", "Verstecktes Rollo", "Ohne Raum")
+}
+
+// haus#12: a lamp is switched right in Räume — a switch on its row, the
+// same /schalten form the thing's own page and Start use, landing back on
+// the lamp's room. Only what a page switches has one: a lamp HA reaches,
+// not a group, a cover, a heating or a player.
+func TestRaeumeSwitchesLampsInPlace(t *testing.T) {
+	fake, hc := house(t)
+	rooms(t, fake)
+	fake.Set("light.garten", "unavailable", map[string]any{"friendly_name": "Gartenlicht"})
+	_, body, _ := familyPage(t, Raeume, StartConfig{HA: hc}, "GET", "/raeume", "family")
+	kueche, wz, ohne := section(t, body, "karte-kueche"), section(t, body, "karte-wohnzimmer"), section(t, body, "karte-ohne-raum")
+	mustContain(t, kueche, `<form method=post action=/schalten>`, `name=geraet value="light.kueche_decke"`, `name=tun value="light.turn_off"`,
+		`name=zurueck value="/raeume#karte-kueche"`, `role=switch aria-checked=true aria-label="Deckenlampe"`)
+	mustContain(t, wz, `name=geraet value="light.stehlampe"`, `name=tun value="light.turn_on"`, `name=zurueck value="/raeume#karte-wohnzimmer"`,
+		`role=switch aria-checked=false aria-label="Stehlampe"`)
+	mustContain(t, ohne, `name=geraet value="light.keller"`, `name=zurueck value="/raeume#karte-ohne-raum"`)
+	// one switch a lamp, nothing for the rest
+	if n := strings.Count(body, "action=/schalten"); n != 3 {
+		t.Fatalf("%d switches, want 3 (Deckenlampe, Stehlampe, Kellerlicht):\n%s", n, body)
+	}
+	mustNotContain(t, body, `value="cover.`, `value="climate.`, `value="media_player.`, `value="light.eg"`, `value="light.garten"`,
+		"<script")
+	// HA not answering: no switch at all
+	fake.Down(true)
+	_, body, _ = familyPage(t, Raeume, StartConfig{HA: hc}, "GET", "/raeume", "family")
+	mustNotContain(t, body, "<form", "role=switch")
+}
+
+// haus#12: the ☆ that puts a thing on the person's Start is right in
+// Räume, on every thing's row, the same form the thing's own page sends;
+// it lands back on the thing's room, and the row then shows ★. One line
+// says what ☆ does.
+func TestRaeumePinsFromTheList(t *testing.T) {
+	fake, hc := house(t)
+	rooms(t, fake)
+	cfg := StartConfig{HA: hc, Favorites: favorites(t, `{"anna": ["climate.wohnzimmer"], "ben": ["light.keller"]}`)}
+	_, body, _ := familyPage(t, Raeume, cfg, "GET", "/raeume", "family")
+	mustContain(t, body, "Mit ☆ steht ein Gerät auf Start unter „Meine Geräte“.")
+	kueche, wz := section(t, body, "karte-kueche"), section(t, body, "karte-wohnzimmer")
+	mustContain(t, kueche, `<form method=post action="/raeume/light.kueche_decke">`, `name=stern value=an`,
+		`name=zurueck value="/raeume#karte-kueche"`, `aria-label="Deckenlampe auf Start zeigen">☆</button>`,
+		`<form method=post action="/raeume/cover.rollo_kueche">`)
+	mustContain(t, wz, `<form method=post action="/raeume/climate.wohnzimmer">`, `name=stern value=aus`,
+		`aria-label="Heizung Wohnzimmer von Start nehmen">★</button>`, `<form method=post action="/raeume/media_player.wz">`)
+	// one ☆ a thing: Deckenlampe, Rollo, Stehlampe, Heizung, Sonos, Kellerlicht
+	if n := strings.Count(body, "name=stern"); n != 6 {
+		t.Fatalf("%d stars, want 6:\n%s", n, body)
+	}
+	// ben's pin is not anna's
+	mustNotContain(t, section(t, body, "karte-ohne-raum"), "★")
+	before(t, body, "Mit ☆", "karte-kueche")
+
+	// pinning from Räume lands back on the room
+	rec := post(t, Ding(cfg), "/raeume/light.kueche_decke", url.Values{"stern": {"an"}, "zurueck": {"/raeume#karte-kueche"}}, "anna", nil)
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/raeume#karte-kueche" {
+		t.Fatalf("pin from Räume → %d %q", rec.Code, rec.Header().Get("Location"))
+	}
+	if got, _ := cfg.Favorites.For("anna"); !reflect.DeepEqual(got, []string{"climate.wohnzimmer", "light.kueche_decke"}) {
+		t.Fatalf("anna: %v", got)
+	}
+	_, body, _ = familyPage(t, Raeume, cfg, "GET", "/raeume", "family")
+	mustContain(t, section(t, body, "karte-kueche"), `aria-label="Deckenlampe von Start nehmen">★</button>`)
+	rec = post(t, Ding(cfg), "/raeume/climate.wohnzimmer", url.Values{"stern": {"aus"}, "zurueck": {"/raeume#karte-wohnzimmer"}}, "anna", nil)
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/raeume#karte-wohnzimmer" {
+		t.Fatalf("unpin from Räume → %d %q", rec.Code, rec.Header().Get("Location"))
+	}
+	if got, _ := cfg.Favorites.For("anna"); !reflect.DeepEqual(got, []string{"light.kueche_decke"}) {
+		t.Fatalf("anna after unpinning: %v", got)
+	}
+	// back leads only to Räume or the thing's own page
+	for _, back := range []string{"https://boese.example/", "//boese.example", "/box", "/raeume/../box", "/raeume#x", `/raeume#karte-"><b>`,
+		"/raeume?x", "/raeume/light.keller", "javascript:alert(1)"} {
+		rec := post(t, Ding(cfg), "/raeume/light.kueche_decke", url.Values{"stern": {"an"}, "zurueck": {back}}, "anna", nil)
+		if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/raeume/light.kueche_decke" {
+			t.Errorf("zurueck %q → %d %q, want the thing's page", back, rec.Code, rec.Header().Get("Location"))
+		}
+	}
+	if len(fake.Calls()) != 0 {
+		t.Fatalf("pinning switched something: %v", calls(fake))
+	}
+}
+
+// No ☆ in Räume without a list to pin to: no store, nobody asking. A
+// favorites file that does not read says so once, the switches stay.
+func TestRaeumePinsOnlyWhatItCan(t *testing.T) {
+	fake, hc := house(t)
+	rooms(t, fake)
+	for _, c := range []struct {
+		cfg  StartConfig
+		user string
+	}{{StartConfig{HA: hc}, "anna"}, {StartConfig{HA: hc, Favorites: favorites(t, "")}, ""}} {
+		_, body, _ := familyPageAs(t, Raeume, c.cfg, "GET", "/raeume", c.user, "family")
+		mustNotContain(t, body, "☆", "★", "name=stern")
+		mustContain(t, body, "role=switch")
+	}
+	_, body, _ := familyPage(t, Raeume, StartConfig{HA: hc, Favorites: favorites(t, `{"anna": [`)}, "GET", "/raeume", "family")
+	mustNotContain(t, body, "☆", "★", "name=stern")
+	if n := strings.Count(body, "Deine Favoriten lassen sich gerade nicht lesen."); n != 1 {
+		t.Fatalf("the broken file said %d times, want once:\n%s", n, body)
+	}
+	mustContain(t, body, "role=switch", "Deckenlampe")
+	mustNotLeak(t, body, "favoriten.json", "unexpected", "JSON")
 }
