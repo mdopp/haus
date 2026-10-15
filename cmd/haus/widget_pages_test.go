@@ -181,6 +181,33 @@ func TestAnItemPageForNothingIsA404(t *testing.T) {
 	}
 }
 
+// haus#12: a path Haus does not serve is a 404 in the house's own frame,
+// one plain line and the way to Start, never a blank error and never Start
+// pretending all is well; "/" alone is Start.
+func TestAPathHausDoesNotServeIsA404(t *testing.T) {
+	s, _, _ := fullSite(t)
+	h := routes(s)
+	for _, p := range []string{"/unbekannt", "/download", "/p/start", "/start/x", "/index.html"} {
+		rec := page(h, p)
+		body := rec.Body.String()
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("%s → %d %q, want 404", p, rec.Code, rec.Header().Get("Location"))
+			continue
+		}
+		for _, want := range []string{"<!doctype html>", "<nav class=tabs", "<p>Diese Seite gibt es nicht.</p>", "<p><a href=/start>Zur Startseite</a></p>"} {
+			if !strings.Contains(body, want) {
+				t.Errorf("%s: the 404 lacks %q:\n%s", p, want, body)
+			}
+		}
+		if strings.Contains(body, p) {
+			t.Errorf("%s: the 404 repeats the path:\n%s", p, body)
+		}
+	}
+	if rec := page(h, "/"); rec.Code != http.StatusFound || rec.Header().Get("Location") != "/start" {
+		t.Fatalf("/ → %d %q, want 302 /start", rec.Code, rec.Header().Get("Location"))
+	}
+}
+
 // A thing's page shows only what a widget may show: an entity of a card
 // domain (the ones /napi/portal/state draws) that HA does not hide. A
 // person's whereabouts, a phone's address sensor in another domain, a
