@@ -250,3 +250,68 @@ func TestEnergieUsedNeedsEveryCounter(t *testing.T) {
 	mustContain(t, heute, "<span>Aus dem Netz</span>")
 	mustNotContain(t, heute, "Erzeugt", "Verbraucht", "0 kWh")
 }
+
+// The edges of the words: MW and MWh as HA may send them, the kilowatt
+// line, under a watt is resting either way, a reading that is no number
+// (Inf) is not a size; a day whose counters do not add up has no
+// Verbraucht; a fall to 80 % is a new meter (HA's 10 % line).
+func TestEnergieEdgesOfTheWords(t *testing.T) {
+	fake, hc := house(t)
+	energyHouse(t, fake)
+	unit := func(name, class, u string) map[string]any {
+		return map[string]any{"friendly_name": name, "device_class": class, "unit_of_measurement": u}
+	}
+	at := func(state, when string) map[string]any { return map[string]any{"state": state, "last_changed": when} }
+	fake.Set("sensor.pv", "Inf", unit("Aktuell erzeugter PV-Strom", "power", "W"))
+	fake.Set("sensor.haus", "0.0012", unit("Aktueller Hausverbrauch", "power", "MW"))
+	fake.Set("sensor.netz", "0.4", unit("Aktuelle Netz Leistung", "power", "W"))
+	fake.Set("sensor.akku", "999.6", unit("Aktuelle Akku Leistung", "power", "W"))
+	fake.Set("sensor.pv_total", "5.0124", unit("PV Erzeugung", "energy", "MWh"))
+	fake.SetHistory("sensor.pv_total", []map[string]any{at("5.0", "2026-10-13T22:00:00Z")})
+	fake.Set("sensor.einsp_total", "2330", unit("Netzeinspeisung", "energy", "kWh")) // +30: more fed in than came in
+	fake.Set("sensor.akku_laden", "801", unit("Batterie laden", "energy", "kWh"))
+	fake.SetHistory("sensor.akku_laden", []map[string]any{at("1000", "2026-10-13T22:00:00Z"), at("800", "2026-10-14T02:00:00Z")})
+	_, body, _ := familyPage(t, Energie, StartConfig{HA: hc}, "GET", "/energie", "family")
+	jetzt := section(t, body, "karte-jetzt")
+	mustContain(t, jetzt, "<b class=zustand>Unbekannt</b>", "<b class=zustand>1,2 kW</b> <span class=k>Verbrauch</span>",
+		"<b class=zustand>0 W</b> <span class=k>ruht</span>", "<b class=zustand>1 kW</b> <span class=k>lädt</span>")
+	heute := section(t, body, "karte-heute")
+	mustContain(t, heute, "<span>Erzeugt</span></div><p><b class=zustand>12,4 kWh</b>", "<span>In den Akku</span></div><p><b class=zustand>801 kWh</b>")
+	mustNotContain(t, heute, "Verbraucht")
+	// the history reaches up to now, not short of it
+	_, qs := fake.HistoryQueries()
+	for _, q := range qs {
+		if end := q.Get("end_time"); end <= "2026-10-14T08:00:00Z" {
+			t.Fatalf("history ends %q, before now", end)
+		}
+	}
+
+	fake.Set("sensor.netz", "-0.4", unit("Aktuelle Netz Leistung", "power", "W"))
+	_, body, _ = familyPage(t, Energie, StartConfig{HA: hc}, "GET", "/energie", "family")
+	mustContain(t, section(t, body, "karte-jetzt"), "<b class=zustand>0 W</b> <span class=k>ruht</span>")
+}
+
+// A house with counters and no flow sensor still has Heute.
+func TestEnergieCountersWithoutFlow(t *testing.T) {
+	fake, hc := house(t)
+	fake.Set("sensor.pv_total", "5012.4", map[string]any{"friendly_name": "PV Erzeugung", "device_class": "energy", "unit_of_measurement": "kWh"})
+	fake.SetHistory("sensor.pv_total", []map[string]any{{"state": "5000", "last_changed": "2026-10-13T22:00:00Z"}})
+	_, body, _ := familyPage(t, Energie, StartConfig{HA: hc}, "GET", "/energie", "family")
+	mustContain(t, section(t, body, "karte-heute"), "<span>Erzeugt</span>", "12,4 kWh")
+	mustNotContain(t, body, "karte-jetzt", "eingerichtet")
+}
+
+// Verbraucht only when the house's counters make its meaning certain:
+// one battery counter without the other, or no Einspeisung counter, is
+// no sum.
+func TestEnergieUsedOnlyWhenItsMeaningIsCertain(t *testing.T) {
+	for _, gone := range []string{"sensor.akku_entladen", "sensor.einsp_total"} {
+		fake, hc := house(t)
+		energyHouse(t, fake)
+		fake.Set(gone, "1", map[string]any{"friendly_name": "Etwas anderes", "device_class": "energy", "unit_of_measurement": "kWh"})
+		_, body, _ := familyPage(t, Energie, StartConfig{HA: hc}, "GET", "/energie", "family")
+		heute := section(t, body, "karte-heute")
+		mustContain(t, heute, "<span>Erzeugt</span>")
+		mustNotContain(t, heute, "Verbraucht")
+	}
+}
