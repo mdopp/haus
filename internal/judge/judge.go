@@ -1,8 +1,9 @@
 // Package judge asks the house model which of a search's hits answer the
 // question (haus#13): the memory library's tidy-up, optional and never
 // blocking. The model is Laib's household model behind its model proxy
-// (laib ADR 0011), asked only while it is the one already loaded and
-// ready: Haus reads the lease, never takes it, never asks for another
+// (laib ADR 0011), asked only while it is the one in place — ready in the
+// window, or the default with no window held: Haus reads the lease, never
+// takes it, never asks for another
 // model, so the tidy-up never makes the card swap. One call, temperature
 // 0, the answer held to a JSON schema; anything else is an error and the
 // caller keeps what it had.
@@ -97,7 +98,7 @@ func (c *Client) do(ctx context.Context, method, u, key string, body []byte) ([]
 }
 
 // loaded reads the lease (GET, no key: it is public): the house model is
-// the one answering, and ready.
+// the one answering, ready in a window or the default with none held.
 func (c *Client) loaded(ctx context.Context) error {
 	raw, err := c.do(ctx, http.MethodGet, strings.TrimSuffix(c.URL, "/v1")+"/api/model-lease", "", nil)
 	if err != nil {
@@ -110,7 +111,10 @@ func (c *Client) loaded(ctx context.Context) error {
 	if err := json.Unmarshal(raw, &l); err != nil {
 		return fmt.Errorf("judge: the lease: %w", err)
 	}
-	if l.State != "ready" || l.Alias != c.Model {
+	// ready with the house model; or no window held and the house model the
+	// default: nobody holds the card, so asking takes it from no one, and a
+	// model not loaded yet only runs out the caller's budget
+	if (l.State != "ready" && l.State != "none") || l.Alias != c.Model {
 		return fmt.Errorf("%w (lease %q, %q)", ErrNotLoaded, l.State, l.Alias)
 	}
 	return nil
@@ -133,7 +137,8 @@ func prompt(question string, items []Item) string {
 
 // Pick asks which of items answer question, and returns their indexes,
 // in items' order. It asks only when the lease says the house model is
-// loaded and ready (else ErrNotLoaded), and only that model. A refusal
+// ready, or nobody holds the card and it is the default (else
+// ErrNotLoaded), and only that model. A refusal
 // (409: not allowed in the window), another status, an answer that is not
 // {"ids":[…]} or names a number that is not an item, is an error. An
 // empty list is the model's answer, not an error: what to do with it is

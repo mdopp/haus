@@ -576,6 +576,14 @@ func notizenFinden(ctx context.Context, lib *qmd.Client, j *judge.Client, n *not
 	if res.Reduced {
 		b.WriteString(reducedNote + "\n\n")
 	}
+	if res.NoMatch {
+		// the search worked; no note is close to the question
+		b.WriteString("Keine Notiz passt wirklich zu „" + cut(q, MaxField) + "“.")
+		if len(res.Hits) == 0 {
+			return b.String(), nil
+		}
+		b.WriteString(" Notizen mit Wörtern aus der Frage:\n\n")
+	}
 	if len(res.Hits) == 0 {
 		if res.Reduced {
 			b.WriteString("Keine Notiz enthält „" + cut(q, MaxField) + "“.")

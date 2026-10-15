@@ -104,8 +104,11 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     *Erinnerungen* when only the reminders fail.
   - *Notizen*: a search field (`GET /notizen?q=…`, the memory library
     below: 20 hits, by meaning) and the ten newest notes. When the library
-    is not set, does not answer, is still indexing, or finds nothing close
-    to the question, the field searches
+    answers but no note is close to the question, the page says *Keine
+    Notiz passt wirklich zu deiner Frage.* and shows what the words find
+    under *Notizen mit Wörtern aus deiner Frage* (nothing more when they
+    find nothing). When the library is not set, does not answer, or is
+    still indexing, the field searches
     by words (the notes search above, its caps) and says so in one line
     above the hits: *Die Suche nach Bedeutung geht gerade nicht; gesucht
     wird nur nach den Wörtern.* By words, a sentence needs only one of its
@@ -361,13 +364,16 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     too, so a hit by meaning is shown only when its cosine is at least
     0.30 and at least 0.75 of the best hit's, in qmd's order (measured on
     44 questions and 10 nonsense ones: 42/44 found, 9/10 nonsense
-    emptied). Nothing over the cut: the word search, with its line.
+    emptied). Nothing over the cut: the word search, said as "no note
+    fits", not as the search being down (page and Haushalt alike).
   - **The tidy-up**, optional and never blocking: with more than one hit
     left and `HAUS_LLM_URL` (the model proxy's OpenAI base, `…/v1`),
     `HAUS_LLM_MODEL` (the house model, `gemma-4-e4b`) and `HAUS_LLM_KEY`
     all set, Haus reads the lease (`GET /api/model-lease`, no key) and
     asks the house model which hits answer — only when the lease says
-    that model is loaded and ready, never taking the lease, never naming
+    that model is ready, or no window is held and it is the default
+    (nobody holds the card; not loaded yet only runs out the budget),
+    never taking the lease, never naming
     another model, so it never makes the card swap. One call,
     temperature 0, the answer held to `{"ids":[…]}`, each hit as its
     title and about 700 characters of the note; at most 1.2 s on the

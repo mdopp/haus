@@ -5,10 +5,11 @@
 // hit is a note the family can open, nothing else.
 //
 // A hit by meaning is shown only when it is close enough to the question
-// (Cut). When qmd is not set, does not answer in time, is still indexing
-// (no vectors yet), or nothing it found is close enough, the search is the
-// notes package's word search, and says it is reduced: never empty while
-// words match, never an error of its own. When more than one hit is left
+// (Cut). When qmd is not set, does not answer in time, or is still
+// indexing (no vectors yet), the search is the notes package's word
+// search, and says it is reduced; when it answered but nothing is close
+// enough, it is the word search too, and says that instead (NoMatch):
+// never empty while words match, never an error of its own. When more than one hit is left
 // and the house model is there, it may narrow them (Tidy). Paperless
 // documents are a later step.
 package library
@@ -29,11 +30,14 @@ import (
 // time: the rest is the word search's, should qmd not answer.
 var Wait = 2500 * time.Millisecond
 
-// Found is a search's answer: the notes package's result, and whether it
-// is the reduced search by words.
+// Found is a search's answer: the notes package's result, and which
+// search it is. Reduced: the search by meaning could not answer, these are
+// the words'. NoMatch: it answered, but no note is close to the question;
+// these are the words' too, notes that hold a word of it, not answers.
 type Found struct {
 	notes.Result
 	Reduced bool
+	NoMatch bool
 }
 
 // The cut (haus#13, measured on 44 questions and 10 nonsense ones): a hit
@@ -97,7 +101,14 @@ func Find(ctx context.Context, c *qmd.Client, t Tidy, d *notes.Dir, q string, ma
 		if errors.As(err, &folder) {
 			return Found{}, folder.error
 		}
-		log.Printf("haus: library: search by words only: %v", err)
+		if !errors.Is(err, errNothingClose) {
+			log.Printf("haus: library: search by words only: %v", err)
+		}
+		res, werr := d.Search(ctx, q, max)
+		if werr != nil {
+			return Found{}, werr
+		}
+		return Found{Result: res, Reduced: !errors.Is(err, errNothingClose), NoMatch: errors.Is(err, errNothingClose)}, nil
 	}
 	res, err := d.Search(ctx, q, max)
 	if err != nil {
