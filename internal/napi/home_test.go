@@ -914,3 +914,27 @@ func TestEnergyFromEnv(t *testing.T) {
 		}
 	}
 }
+
+// haus#35: the widgets and the family's pages share one rule (package
+// schalter). A media player pauses, nothing more: no URL played on the
+// speakers, no volume, no turning off.
+func TestHACallPausesAPlayerAndNothingMore(t *testing.T) {
+	fake, h := house(t)
+	fake.Set("media_player.wohnzimmer", "playing", map[string]any{"friendly_name": "Wohnzimmer", "supported_features": 1})
+	for _, c := range []struct {
+		body string
+		want int
+	}{
+		{`{"entity_id":"media_player.wohnzimmer","service":"media_player.media_pause"}`, 200},
+		{`{"entity_id":"media_player.wohnzimmer","service":"media_player.play_media","data":{"media_content_id":"http://x"}}`, 400},
+		{`{"entity_id":"media_player.wohnzimmer","service":"media_player.volume_set","data":{"volume_level":1},"confirmed":true}`, 400},
+		{`{"entity_id":"media_player.wohnzimmer","service":"media_player.turn_off"}`, 400},
+	} {
+		before := len(fake.Calls())
+		code, body := raw(t, h, "POST", "/napi/ha/call", "dev1", c.body)
+		calls := len(fake.Calls()) - before
+		if code != c.want || (code == 200) != (calls == 1) || (code != 200 && !strings.Contains(body, "unsupported_service")) {
+			t.Errorf("%s → %d %s, %d calls; want %d", c.body, code, body, calls, c.want)
+		}
+	}
+}

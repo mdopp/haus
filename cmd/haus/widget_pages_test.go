@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,6 +19,7 @@ import (
 	"github.com/mdopp/haus/internal/ha/hafake"
 	"github.com/mdopp/haus/internal/haushalt"
 	"github.com/mdopp/haus/internal/notes"
+	"github.com/mdopp/haus/internal/pages"
 	"github.com/mdopp/haus/internal/paperless"
 	"github.com/mdopp/haus/internal/paperless/paperlessfake"
 )
@@ -310,7 +312,7 @@ func TestStartShowsTheFavoritesFromTheDataFolder(t *testing.T) {
 	if rec.Code != 200 {
 		t.Fatalf("/start → %d", rec.Code)
 	}
-	for _, w := range []string{"Meine Favoriten", `<a href="/raeume/switch.kaffee">Kaffeemaschine</a>`, `<a href="/raeume/light.decke">Deckenlampe</a>`} {
+	for _, w := range []string{"Meine Geräte", `<a href="/raeume/switch.kaffee">Kaffeemaschine</a>`, `<a href="/raeume/light.decke">Deckenlampe</a>`} {
 		if !strings.Contains(body, w) {
 			t.Errorf("/start lacks %q:\n%s", w, body)
 		}
@@ -369,5 +371,51 @@ func TestHaushaltLinksAreHausPages(t *testing.T) {
 	text = tool("dokumente_suchen", map[string]any{"text": "strom"})
 	if rec := page(h, link(text)); rec.Code != http.StatusFound || rec.Header().Get("Location") != "https://paperless.example/documents/2/details" {
 		t.Fatalf("document page %q → %d %q", link(text), rec.Code, rec.Header().Get("Location"))
+	}
+}
+
+// haus#35, end to end through Haus's routes: the ☆ on a thing's page pins
+// it to the person's Start, its switch there turns it off in Home
+// Assistant, and the font comes from Haus. Each only with the proxy
+// secret, as a person, from Haus's own page.
+func TestPinAndSwitchThroughTheRoutes(t *testing.T) {
+	s, fake, _ := fullSite(t)
+	s.favorites = favoriten.Open(t.TempDir())
+	h := routes(s)
+	send := func(path string, form url.Values, secret string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest("POST", path, strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.Header.Set("Sec-Fetch-Site", "same-origin")
+		if secret != "" {
+			req.Header.Set("X-Haus-Proxy", secret)
+		}
+		req.Header.Set("Remote-User", "anna")
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec
+	}
+	pin := url.Values{"stern": {"an"}}
+	off := url.Values{"geraet": {"light.decke"}, "tun": {"light.turn_off"}, "zurueck": {"/start"}}
+	if rec := send("/raeume/light.decke", pin, ""); rec.Code != 403 {
+		t.Fatalf("a pin without the proxy secret → %d", rec.Code)
+	}
+	if rec := send("/schalten", off, "falsch"); rec.Code != 403 || len(fake.Calls()) != 0 {
+		t.Fatalf("a switch without the proxy secret → %d, %d calls", rec.Code, len(fake.Calls()))
+	}
+	if rec := send("/raeume/light.decke", pin, "geheim"); rec.Code != http.StatusSeeOther {
+		t.Fatalf("pin → %d %s", rec.Code, rec.Body.String())
+	}
+	body := page(h, "/start").Body.String()
+	if !strings.Contains(body, `<a href="/raeume/light.decke">Deckenlampe</a>`) || !strings.Contains(body, `name=geraet value="light.decke"`) {
+		t.Fatalf("/start lacks the pinned lamp and its switch:\n%s", body)
+	}
+	if rec := send("/schalten", off, "geheim"); rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/start" {
+		t.Fatalf("switch → %d %q", rec.Code, rec.Header().Get("Location"))
+	}
+	if c := fake.Calls(); len(c) != 1 || c[0].Domain != "light" || c[0].Service != "turn_off" || c[0].Data["entity_id"] != "light.decke" {
+		t.Fatalf("HA got %+v", c)
+	}
+	if rec := page(h, pages.FontPath); rec.Code != 200 || rec.Header().Get("Content-Type") != "font/woff2" {
+		t.Fatalf("the font → %d %q", rec.Code, rec.Header().Get("Content-Type"))
 	}
 }

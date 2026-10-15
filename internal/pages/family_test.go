@@ -10,6 +10,7 @@ import (
 
 	"github.com/mdopp/haus/internal/caldav"
 	"github.com/mdopp/haus/internal/notes"
+	"github.com/mdopp/haus/internal/persona"
 )
 
 // familyPage asks one of the family's pages, with Start's test clock.
@@ -41,11 +42,12 @@ func before(t *testing.T, body, a, b string) {
 	}
 }
 
-// haus#12: one nav on every family page — Start · Räume · Kalender ·
-// Notizen, each only when its backend is set, Box for admins — with the
-// page itself marked.
-func TestFamilyNav(t *testing.T) {
-	_, hc := house(t)
+// haus#12, haus#35: one tab bar on every family page, the item pages too
+// — Start · Räume · Kalender · Notizen, each with its icon and only when
+// its backend is set, Box for admins — with the page itself marked.
+func TestFamilyTabBar(t *testing.T) {
+	fake, hc := house(t)
+	fake.Set("light.flur", "on", map[string]any{"friendly_name": "Flurlicht"})
 	_, cal := calendar(t)
 	nd := notesDir(t, map[string]time.Duration{"Einkaufsliste": time.Hour})
 	all := StartConfig{HA: hc, Calendar: cal, Notes: nd}
@@ -53,12 +55,17 @@ func TestFamilyNav(t *testing.T) {
 		page func(StartConfig) http.HandlerFunc
 		path string
 		self string
-	}{{Start, "/start", "Start"}, {Raeume, "/raeume", "Räume"}, {Kalender, "/kalender", "Kalender"}, {Notizen, "/notizen", "Notizen"}} {
+	}{{Start, "/start", "/start"}, {Raeume, "/raeume", "/raeume"}, {Kalender, "/kalender", "/kalender"}, {Notizen, "/notizen", "/notizen"},
+		{Ding, "/raeume/light.flur", "/raeume"}, {Ding, "/raeume/light.gibtsnicht", "/raeume"}, {Notizen, "/notizen/einkaufsliste.md", "/notizen"}} {
 		code, body, _ := familyPage(t, p.page, all, "GET", p.path, "family")
-		if code != 200 {
+		if code != 200 && code != 404 {
 			t.Fatalf("%s → %d", p.path, code)
 		}
-		mustContain(t, body, "<nav>", "href=/start", "href=/raeume", "href=/kalender", "href=/notizen", "aria-current=page>"+p.self+"</a>")
+		mustContain(t, body, "<nav class=tabs aria-label=Seiten>", "href=/start", "href=/raeume", "href=/kalender", "href=/notizen",
+			"href="+p.self+" aria-current=page>", "<svg")
+		if n := strings.Count(body, "aria-current=page"); n != 1 {
+			t.Errorf("%s: %d tabs marked", p.path, n)
+		}
 		mustNotContain(t, body, "href=/box")
 		before(t, body, "href=/start", "href=/raeume")
 		before(t, body, "href=/raeume", "href=/kalender")
@@ -68,7 +75,7 @@ func TestFamilyNav(t *testing.T) {
 	}
 	// nothing set: Start alone, and no word about the rest
 	_, body, _ := familyPage(t, Start, StartConfig{}, "GET", "/start", "family")
-	mustContain(t, body, "href=/start")
+	mustContain(t, body, "href=/start aria-current=page>")
 	mustNotContain(t, body, "href=/raeume", "href=/kalender", "href=/notizen", "Räume", "Kalender", "Notizen")
 }
 
@@ -105,9 +112,17 @@ func TestFamilyPagesDecideNothing(t *testing.T) {
 	}
 }
 
-// laib ADR 0020: the family's pages wear the persona's header, German.
-func TestFamilyPagesWearThePersona(t *testing.T) {
-	_, hc := house(t)
+// haus#35: the persona speaks where you talk to it, not on the pages: no
+// greeting, name, icon or colours on any family page. The pages wear the
+// house palette (solaris-chat's tokens, haus-android's colors.xml), light
+// or dark as the phone is, and Haus's own Geist — never a font from
+// Google.
+func TestFamilyPagesWearTheHousePaletteNotThePersona(t *testing.T) {
+	House = persona.Persona{Display: "Joshua", Greeting: map[string]string{"de": "Wollen wir ein Spiel spielen?"},
+		Colors: map[string]string{"accent": "#3ddc84", "ground": "#0c120e"}, Icon: []byte("<svg/>")}
+	defer func() { House = persona.Default() }()
+	fake, hc := house(t)
+	fake.Set("light.flur", "on", map[string]any{"friendly_name": "Flurlicht"})
 	_, cal := calendar(t)
 	nd := notesDir(t, map[string]time.Duration{"Einkaufsliste": time.Hour})
 	all := StartConfig{HA: hc, Calendar: cal, Notes: nd}
@@ -115,13 +130,43 @@ func TestFamilyPagesWearThePersona(t *testing.T) {
 		page  func(StartConfig) http.HandlerFunc
 		path  string
 		title string
-	}{{Raeume, "/raeume", "Räume"}, {Kalender, "/kalender", "Kalender"}, {Notizen, "/notizen", "Notizen"}} {
+	}{{Start, "/start", "Zuhause"}, {Raeume, "/raeume", "Räume · Zuhause"}, {Kalender, "/kalender", "Kalender · Zuhause"},
+		{Notizen, "/notizen", "Notizen · Zuhause"}, {Ding, "/raeume/light.flur", "Flurlicht · Zuhause"}} {
 		_, body, h := familyPage(t, p.page, all, "GET", p.path, "")
-		mustContain(t, body, "<title>"+p.title+" · Haus</title>", "<header>", "lang=de", "<h1")
-		mustNotContain(t, body, "<script")
+		mustContain(t, body, "<title>"+p.title+"</title>", "lang=de", "<h1>",
+			"#070709", "#14141a", "#f97316", "#ffc107", "prefers-color-scheme:light", "color-scheme",
+			"@font-face", FontPath, "system-ui")
+		mustNotContain(t, body, "Joshua", "Wollen wir", "#3ddc84", "#0c120e", "/persona/icon.svg", "<header>", "class=sr>",
+			"<script", "googleapis", "gstatic", "#faf9f6")
 		if h.Get("Content-Type") != "text/html; charset=utf-8" {
 			t.Fatalf("%s: %q", p.path, h.Get("Content-Type"))
 		}
+	}
+}
+
+// haus#35: Haus serves Geist itself (OFL, vendored), cached for good: the
+// family's box asks no one else for a font.
+func TestHausServesItsFont(t *testing.T) {
+	rec := httptest.NewRecorder()
+	Font().ServeHTTP(rec, httptest.NewRequest("GET", FontPath, nil))
+	if rec.Code != 200 || rec.Header().Get("Content-Type") != "font/woff2" || !strings.HasPrefix(rec.Body.String(), "wOF2") ||
+		!strings.Contains(rec.Header().Get("Cache-Control"), "immutable") {
+		t.Fatalf("%d %q %q %d bytes", rec.Code, rec.Header().Get("Content-Type"), rec.Header().Get("Cache-Control"), rec.Body.Len())
+	}
+	if rec.Body.Len() > 64<<10 {
+		t.Fatalf("the font is %d bytes: keep it a small subset", rec.Body.Len())
+	}
+	for _, m := range []string{"POST", "DELETE"} {
+		rec = httptest.NewRecorder()
+		Font().ServeHTTP(rec, httptest.NewRequest(m, FontPath, nil))
+		if rec.Code != http.StatusMethodNotAllowed {
+			t.Fatalf("%s → %d", m, rec.Code)
+		}
+	}
+	rec = httptest.NewRecorder()
+	Font().ServeHTTP(rec, httptest.NewRequest("GET", "/schrift/andere.woff2", nil))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("another font → %d", rec.Code)
 	}
 }
 
@@ -146,14 +191,14 @@ func TestFamilyPagesDoNotWaitForAHangingBackend(t *testing.T) {
 		page func(StartConfig) http.HandlerFunc
 		path string
 		want string
-	}{{Start, "/start", "Einkaufsliste"}, {Kalender, "/kalender", "<h1 class=sr>Kalender</h1>"}} {
+	}{{Start, "/start", "<h1>Zuhause</h1>"}, {Kalender, "/kalender", "<h1>Kalender</h1>"}} {
 		began := time.Now()
 		code, body, _ := familyPage(t, p.page, StartConfig{Calendar: cal, Notes: nd}, "GET", p.path, "")
 		if took := time.Since(began); took > 3*time.Second || code != 200 {
 			t.Fatalf("%s: %d after %v", p.path, code, took)
 		}
 		mustContain(t, body, p.want)
-		mustNotContain(t, body, "karte-heute", "Termin", "Erinnerungen")
+		mustNotContain(t, body, "id=karte-heute>", "Termin", "Erinnerungen")
 		// haus#12, haus#33: each page says it, once, in a plain line
 		if n := strings.Count(body, "Der Kalender antwortet gerade nicht."); n != 1 {
 			t.Fatalf("%s: the calendar said %d times:\n%s", p.path, n, body)
@@ -219,7 +264,7 @@ func TestItemPagesSayPlainlyWhatDoesNotAnswer(t *testing.T) {
 		if n := strings.Count(body, c.says); n != 1 {
 			t.Errorf("%s says %q %d times, want once:\n%s", c.path, c.says, n, body)
 		}
-		mustContain(t, body, "<h1", "<nav>", c.back)
+		mustContain(t, body, "<h1", "<nav class=tabs", c.back)
 		mustNotContain(t, body, "gibt es nicht")
 		mustNotLeak(t, body, c.hidden...)
 		if h.Get("Content-Type") != "text/html; charset=utf-8" {

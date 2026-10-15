@@ -43,27 +43,23 @@ func get(h http.HandlerFunc, groups string) string {
 	return rec.Body.String()
 }
 
-// haus#2: three plain-German lines at the top, for everyone.
-func TestStartPageShowsTheThreeGuarantees(t *testing.T) {
+// haus#2, haus#35: the three guarantees in the admin's words are the Box
+// page's; the family's Start says the box in one calm line (TestStartBoxLine).
+func TestBoxShowsTheThreeGuarantees(t *testing.T) {
 	now := time.Now()
 	ready := map[string]any{"state": "bereit", "services": 2, "green": 2, "operator": "läuft",
 		"lastBackup": map[string]any{"at": now.Add(-3 * time.Hour).UTC().Format(time.RFC3339), "repos": 1, "ok": true},
 		"lastChange": map[string]any{"proposal": 4, "summary": "Paperless wird installiert — unter paperless.box.test nur im Heimnetz erreichbar", "at": now.Add(-20 * time.Hour).UTC().Format(time.RFC3339), "reversible": true}}
 	rows := []map[string]any{{"name": "immich", "state": "grün"}, {"name": "paperless", "state": "grün"}}
-	// the family sees the guarantees on Start; Box is the admins' (haus#12)
-	_, body := startPage(t, StartConfig{Laib: fakeLaib(t, ready, rows), LaibURL: "https://laib.box.test"}, "family")
-	for _, want := range []string{"Alles läuft", "Letzte Sicherung", "an einem Ort", "Letzte Änderung", "Paperless wird installiert"} {
-		if !strings.Contains(body, want) {
-			t.Fatalf("start page lacks %q:\n%s", want, body[:600])
+	admin := get(Box(fakeLaib(t, ready, rows), "https://laib.box.test"), "admins,family")
+	for _, want := range []string{"Alles läuft", "Letzte Sicherung", "an einem Ort", "Letzte Änderung", "Paperless wird installiert", "Rückgängig", "https://laib.box.test/inbox"} {
+		if !strings.Contains(admin, want) {
+			t.Fatalf("the Box page lacks %q:\n%s", want, admin)
 		}
 	}
-	if strings.Contains(body, "Rückgängig") {
-		t.Fatal("Rückgängig is for admins only")
-	}
-	admin := get(Box(fakeLaib(t, ready, rows), "https://laib.box.test"), "admins,family")
-	if !strings.Contains(admin, "Rückgängig") || !strings.Contains(admin, "https://laib.box.test/inbox") {
-		t.Fatal("an admin sees Rückgängig, pointing at Laib's inbox (Haus decides nothing)")
-	}
+	// the family's Start has none of it
+	_, body := startPage(t, StartConfig{Laib: fakeLaib(t, ready, rows), LaibURL: "https://laib.box.test"}, "family,admins")
+	mustNotContain(t, body, "Alles läuft", "Letzte Sicherung", "an einem Ort", "Letzte Änderung", "Paperless wird installiert", "Rückgängig")
 }
 
 // haus#2: a red service in family words, and someone is on it; a backup
