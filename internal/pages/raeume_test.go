@@ -295,3 +295,24 @@ func TestRaeumePinsOnlyWhatItCan(t *testing.T) {
 	mustContain(t, body, "role=switch", "Deckenlampe")
 	mustNotLeak(t, body, "favoriten.json", "unexpected", "JSON")
 }
+
+// A room whose name has no letter a card id keeps ("🛋", "客厅") is the
+// card "karte"; a lamp switched or a thing pinned there still lands back
+// on it, not on Start or the thing's page (haus#12).
+func TestRaeumeRoomWithoutLettersLandsBackOnIt(t *testing.T) {
+	fake, hc := house(t)
+	fake.SetRegistries([]map[string]any{{"area_id": "x", "name": "🛋"}}, nil,
+		[]map[string]any{{"entity_id": "light.sofa", "area_id": "x"}})
+	fake.Set("light.sofa", "on", map[string]any{"friendly_name": "Sofalicht"})
+	cfg := StartConfig{HA: hc, Favorites: favorites(t, "")}
+	_, body, _ := familyPageAs(t, Raeume, cfg, "GET", "/raeume", "anna", "family")
+	mustContain(t, body, `id=karte`, `name=zurueck value="/raeume#karte"`)
+	rec := post(t, Schalten(cfg), "/schalten", url.Values{"geraet": {"light.sofa"}, "tun": {"light.turn_off"}, "zurueck": {"/raeume#karte"}}, "anna", nil)
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/raeume#karte" {
+		t.Errorf("switch → %d %q, want /raeume#karte", rec.Code, rec.Header().Get("Location"))
+	}
+	rec = post(t, Ding(cfg), "/raeume/light.sofa", url.Values{"stern": {"an"}, "zurueck": {"/raeume#karte"}}, "anna", nil)
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/raeume#karte" {
+		t.Errorf("pin → %d %q, want /raeume#karte", rec.Code, rec.Header().Get("Location"))
+	}
+}
