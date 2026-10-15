@@ -53,7 +53,9 @@ func Notizen(cfg StartConfig) http.HandlerFunc {
 			var err error
 			fetch(r, func(ctx context.Context) { res, err = cfg.Notes.Search(ctx, q, maxHits) })
 			logErrs("notizen", map[string]error{"search": err})
-			if err == nil {
+			if err != nil {
+				b.WriteString("<p class=k>" + saysNoNotes + "</p>")
+			} else {
 				c := cards.Card{Title: "Treffer für „" + q + "“"}
 				for _, h := range res.Hits {
 					first := ""
@@ -79,7 +81,9 @@ func Notizen(cfg StartConfig) http.HandlerFunc {
 		var err error
 		fetch(r, func(ctx context.Context) { recent, err = cfg.Notes.Recent(ctx, maxNewest) })
 		logErrs("notizen", map[string]error{"notes": err})
-		if err == nil {
+		if err != nil {
+			b.WriteString("<p class=k>" + saysNoNotes + "</p>")
+		} else {
 			c := cards.Card{Title: "Zuletzt geändert"}
 			for _, n := range recent {
 				c.AddLink(summary(n.Title), "geändert "+dayWord(n.Changed, now, loc)+" "+n.Changed.In(loc).Format("15:04"), cards.NotePage(n.Name))
@@ -95,21 +99,19 @@ func Notizen(cfg StartConfig) http.HandlerFunc {
 
 // notePage is one note: its title, then its text as paragraphs. A name
 // that is not a note — outside the folder, hidden, not there — is a 404
-// that says so plainly and shows nothing from outside.
+// that says so plainly and shows nothing from outside; a folder that
+// cannot be read is Notizen's plain line (haus#33).
 func notePage(w http.ResponseWriter, r *http.Request, cfg StartConfig, ref string) {
 	var n notes.Note
 	var err error
 	fetch(r, func(ctx context.Context) { n, err = cfg.Notes.Read(ctx, ref) })
 	if err != nil {
-		code := http.StatusNotFound
-		say := "Diese Notiz gibt es nicht."
+		m := missing{http.StatusNotFound, "Diese Notiz gibt es nicht.", "Notizen", "/notizen", "Alle Notizen"}
 		if !errors.Is(err, notes.ErrNotFound) && !errors.Is(err, notes.ErrOutside) && !errors.Is(err, notes.ErrHidden) {
 			log.Printf("haus: notizen page: %q: %v", ref, err)
-			code, say = http.StatusServiceUnavailable, "Die Notiz lässt sich gerade nicht lesen."
+			m.code, m.say = http.StatusOK, saysNoNotes
 		}
-		b := familyHead(r, cfg, "Notizen", "Notizen")
-		b.WriteString("<h1 class=sr>Notizen</h1><p>" + say + "</p><p><a href=/notizen>Alle Notizen</a></p>")
-		writePage(w, code, b)
+		m.write(w, r, cfg)
 		return
 	}
 	title := summary(n.Title)

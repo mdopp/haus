@@ -18,8 +18,9 @@ import (
 // words and when that changed. Read-only like Räume. Only what a widget may
 // show: an entity of a card domain (cards.Domains) that HA does not hide.
 // Anything else — a person, a tracker, a hidden entity, one HA does not
-// know — is the same 404, which shows nothing of it. Until HA's registry
-// has been read, whether a thing is hidden is not known: 503.
+// know — is the same 404, which shows nothing of it. HA not answering, or
+// its registry not read yet (whether a thing is hidden is not known), is
+// Räume's plain line and the way back, a 200 like Start (haus#33).
 func Ding(cfg StartConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !showOnly(w, r, "Das Gerät") {
@@ -54,11 +55,12 @@ func Ding(cfg StartConfig) http.HandlerFunc {
 			none.write(w, r, cfg)
 			return
 		case err != nil || !roomsOK:
+			unread := none
+			unread.code, unread.say = http.StatusOK, saysNoRooms
 			if err != nil {
 				log.Printf("haus: gerät page: %q: %v", id, err)
+				unread.say = saysNoHouse
 			}
-			unread := none
-			unread.code, unread.say = http.StatusServiceUnavailable, "Das Gerät lässt sich gerade nicht lesen."
 			unread.write(w, r, cfg)
 			return
 		}

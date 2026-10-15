@@ -13,7 +13,8 @@ import (
 
 // Erinnerung is one reminder's own page (haus#28), the page a reminders
 // widget row opens: its title, whether it is open, due, done or cancelled.
-// Ticking it off stays the widget's (haus#1: the pages show).
+// Ticking it off stays the widget's (haus#1: the pages show). Radicale
+// not answering is Kalender's plain line (haus#33).
 func Erinnerung(cfg StartConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !showOnly(w, r, "Die Erinnerung") {
@@ -31,7 +32,7 @@ func Erinnerung(cfg StartConfig) http.HandlerFunc {
 		}
 		if err != nil {
 			log.Printf("haus: erinnerung page: %q: %v", uid, err)
-			missing{http.StatusServiceUnavailable, "Die Erinnerungen lassen sich gerade nicht lesen.", "Kalender", "/kalender", "Kalender"}.write(w, r, cfg)
+			missing{http.StatusOK, saysNoCalendar, "Kalender", "/kalender", "Kalender"}.write(w, r, cfg)
 			return
 		}
 		for _, t := range todos {

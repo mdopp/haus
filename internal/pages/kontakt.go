@@ -14,7 +14,7 @@ import (
 
 // Kontakt is one contact's own page (haus#28), the page a contacts widget
 // row opens: the name, the numbers and addresses to tap, the birthday, the
-// postal addresses.
+// postal addresses. Radicale not answering is one plain line (haus#33).
 func Kontakt(cfg StartConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !showOnly(w, r, "Der Kontakt") {
@@ -32,7 +32,7 @@ func Kontakt(cfg StartConfig) http.HandlerFunc {
 		}
 		if err != nil {
 			log.Printf("haus: kontakt page: %q: %v", uid, err)
-			missing{http.StatusServiceUnavailable, "Die Kontakte lassen sich gerade nicht lesen.", "Kontakt", "/start", "Start"}.write(w, r, cfg)
+			missing{http.StatusOK, saysNoContacts, "Kontakt", "/start", "Start"}.write(w, r, cfg)
 			return
 		}
 		for _, ct := range all {

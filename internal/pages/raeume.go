@@ -27,9 +27,9 @@ const noRoom = "Ohne Raum"
 // heating, covers and media, the area the entity's own or else its
 // device's; what has none in one "Ohne Raum" card at the end. Read-only in
 // this cut: switching comes with the decision where actions live. HA not
-// answering, or its rooms not readable yet, leaves the cards out: a card
-// that put every lamp in "Ohne Raum" because the registry failed would be
-// wrong, not just short.
+// answering, or its rooms not readable yet, leaves the cards out for one
+// plain line (haus#33): a card that put every lamp in "Ohne Raum" because
+// the registry failed would be wrong, not just short.
 func Raeume(cfg StartConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !showOnly(w, r, "Räume") {
@@ -55,9 +55,10 @@ func Raeume(cfg StartConfig) http.HandlerFunc {
 		b := familyHead(r, cfg, "Räume", "Räume")
 		b.WriteString("<h1 class=sr>Räume</h1>")
 		switch {
-		case haErr != nil: // left out; the log has it
+		case haErr != nil:
+			b.WriteString("<p class=k>" + saysNoHouse + "</p>")
 		case !roomsOK:
-			b.WriteString("<p class=k>Die Räume werden gerade gelesen — gleich nochmal versuchen.</p>")
+			b.WriteString("<p class=k>" + saysNoRooms + "</p>")
 		default:
 			for _, c := range roomCards(states, reg) {
 				b.WriteString(c.HTML())

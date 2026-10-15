@@ -114,8 +114,9 @@ func TestRaeumeCutsLongRooms(t *testing.T) {
 
 // HA in trouble, or its rooms unreadable, leaves the rooms out — no card
 // that puts every lamp in "Ohne Raum" because the registry did not answer,
-// and no error on the page. The log has it.
-func TestRaeumeHidesBrokenBackends(t *testing.T) {
+// and no error on the page. The log has it. Each says so in one plain
+// line, HA not answering in Start's words (haus#33).
+func TestRaeumeSaysPlainlyWhatDoesNotAnswer(t *testing.T) {
 	fake, hc := house(t)
 	rooms(t, fake)
 	fake.RegistriesDown(true)
@@ -138,6 +139,10 @@ func TestRaeumeHidesBrokenBackends(t *testing.T) {
 	if !strings.Contains(body, "<h1") {
 		t.Fatal("the page still comes")
 	}
+	if n := strings.Count(body, "<p class=k>Licht und Geräte antworten gerade nicht.</p>"); n != 1 {
+		t.Fatalf("HA not answering said %d times, want once:\n%s", n, body)
+	}
+	mustNotLeak(t, body, "Deckenlampe", host(hc2.URL))
 }
 
 // The temperature's unit is Home Assistant's: the entity's own

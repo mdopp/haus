@@ -3,11 +3,13 @@ package pages
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/mdopp/haus/internal/caldav"
+	"github.com/mdopp/haus/internal/notes"
 )
 
 // familyPage asks one of the family's pages, with Start's test clock.
@@ -76,7 +78,8 @@ func TestFamilyPagesWithoutBackendLandOnStart(t *testing.T) {
 	for _, p := range []struct {
 		page func(StartConfig) http.HandlerFunc
 		path string
-	}{{Raeume, "/raeume"}, {Kalender, "/kalender"}, {Notizen, "/notizen"}, {Notizen, "/notizen/einkaufsliste.md"}} {
+	}{{Raeume, "/raeume"}, {Kalender, "/kalender"}, {Notizen, "/notizen"}, {Notizen, "/notizen/einkaufsliste.md"},
+		{Ding, "/raeume/light.flur"}, {Erinnerung, "/kalender/erinnerung/a"}, {Kontakt, "/kontakte/a"}, {Dokument, "/dokumente/2"}} {
 		code, _, h := familyPage(t, p.page, StartConfig{}, "GET", p.path, "family")
 		if code != http.StatusFound || h.Get("Location") != "/start" {
 			t.Fatalf("%s without its backend → %d %q, want 302 /start", p.path, code, h.Get("Location"))
@@ -151,10 +154,94 @@ func TestFamilyPagesDoNotWaitForAHangingBackend(t *testing.T) {
 		}
 		mustContain(t, body, p.want)
 		mustNotContain(t, body, "karte-heute", "Termin", "Erinnerungen")
-		if p.path == "/start" { // haus#12: Start says it, once, in a plain line
-			if n := strings.Count(body, "Der Kalender antwortet gerade nicht."); n != 1 {
-				t.Fatalf("/start: the calendar said %d times:\n%s", n, body)
-			}
+		// haus#12, haus#33: each page says it, once, in a plain line
+		if n := strings.Count(body, "Der Kalender antwortet gerade nicht."); n != 1 {
+			t.Fatalf("%s: the calendar said %d times:\n%s", p.path, n, body)
 		}
 	}
 }
+
+// mustNotLeak: a backend that does not answer is never named on a family
+// page, nor is its error or where it lives (laib ADR 0021). The log has
+// them.
+func mustNotLeak(t *testing.T, body string, extra ...string) {
+	t.Helper()
+	mustNotContain(t, body, append([]string{"boom", "HA 500", "500", "401", "Anmeldung abgelehnt", "HTTP", "class=rot",
+		"connection refused", "no such file", "openat", "Home Assistant", "Radicale", "CalDAV", "CardDAV", "WebSocket",
+		"127.0.0.1", "localhost", "registry"}, extra...)...)
+}
+
+// haus#33: an item page whose backend does not answer is a page with
+// Start's plain line and the way back, a 200 like Start — not a 503, and
+// never "gibt es nicht": the thing may well be there. Something that is
+// not there stays a 404.
+func TestItemPagesSayPlainlyWhatDoesNotAnswer(t *testing.T) {
+	haDown, hcDown := house(t)
+	haDown.Set("light.flur", "on", map[string]any{"friendly_name": "Flurlicht"})
+	haDown.SetRegistries([]map[string]any{{"area_id": "flur", "name": "Flur"}}, nil, []map[string]any{
+		{"entity_id": "light.flur", "area_id": "flur"}, {"entity_id": "light.versteckt", "hidden_by": "user"}})
+	haDown.Down(true)
+
+	unread, hcUnread := house(t)
+	unread.Set("light.flur", "on", map[string]any{"friendly_name": "Flurlicht"})
+	unread.RegistriesDown(true)
+
+	_, cal := calendar(t)
+	cal.Password = "falsch"
+	_, contacts := calendar(t)
+	contacts.Password = "falsch"
+	gone := t.TempDir()
+	nd, err := notes.Open(gone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(gone); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		page   func(StartConfig) http.HandlerFunc
+		cfg    StartConfig
+		path   string
+		says   string
+		back   string
+		hidden []string // nothing of the thing, nor where its backend lives
+	}{
+		{Ding, StartConfig{HA: hcDown}, "/raeume/light.flur", "Licht und Geräte antworten gerade nicht.", "href=/raeume", []string{"Flurlicht", "Flur<", host(hcDown.URL)}},
+		{Ding, StartConfig{HA: hcUnread}, "/raeume/light.flur", "Die Räume werden gerade gelesen — gleich nochmal versuchen.", "href=/raeume", []string{"Flurlicht", "Ohne Raum", host(hcUnread.URL)}},
+		{Erinnerung, StartConfig{Calendar: cal}, "/kalender/erinnerung/a", "Der Kalender antwortet gerade nicht.", "href=/kalender", []string{host(cal.URL)}},
+		{Kontakt, StartConfig{Contacts: contacts}, "/kontakte/a", "Die Kontakte lassen sich gerade nicht lesen.", "href=/start", []string{host(contacts.URL)}},
+		{Notizen, StartConfig{Notes: nd}, "/notizen/einkaufsliste.md", "Die Notizen lassen sich gerade nicht lesen.", "href=/notizen", []string{gone}},
+	} {
+		code, body, h := familyPage(t, c.page, c.cfg, "GET", c.path, "family")
+		if code != http.StatusOK {
+			t.Errorf("%s with its backend down → %d, want 200", c.path, code)
+		}
+		if n := strings.Count(body, c.says); n != 1 {
+			t.Errorf("%s says %q %d times, want once:\n%s", c.path, c.says, n, body)
+		}
+		mustContain(t, body, "<h1", "<nav>", c.back)
+		mustNotContain(t, body, "gibt es nicht")
+		mustNotLeak(t, body, c.hidden...)
+		if h.Get("Content-Type") != "text/html; charset=utf-8" {
+			t.Errorf("%s: %q", c.path, h.Get("Content-Type"))
+		}
+	}
+
+	// what is not there stays a 404, whatever else does not answer: a
+	// thing HA does not know while its rooms are unread, a thing HA hides
+	// while its states do not answer
+	for _, c := range []struct {
+		cfg  StartConfig
+		path string
+	}{{StartConfig{HA: hcUnread}, "/raeume/light.gibtsnicht"}, {StartConfig{HA: hcDown}, "/raeume/light.versteckt"}} {
+		code, body, _ := familyPage(t, Ding, c.cfg, "GET", c.path, "family")
+		if code != http.StatusNotFound {
+			t.Errorf("%s → %d, want 404:\n%s", c.path, code, body)
+		}
+		mustContain(t, body, "Dieses Gerät gibt es nicht.", "href=/raeume")
+		mustNotContain(t, body, "antworten gerade nicht", "gerade gelesen")
+	}
+}
+
+// host is a backend's host and port, from its URL.
+func host(u string) string { return strings.TrimPrefix(u, "http://") }

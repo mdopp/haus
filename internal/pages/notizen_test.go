@@ -150,3 +150,30 @@ func TestNotizRefusesWhatIsNotANote(t *testing.T) {
 		mustNotContain(t, body, "Draußen", "Geheim", "Versteckt", "Passwort", "außerhalb", "versteckte")
 	}
 }
+
+// A notes folder that cannot be read is said in Start's plain line, where
+// the notes would be, for the newest and for a search alike; the search
+// field stays, the folder's path and the error never show (haus#33).
+func TestNotizenSaysPlainlyWhatDoesNotAnswer(t *testing.T) {
+	gone := t.TempDir()
+	nd, err := notes.Open(gone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(gone); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"/notizen", "/notizen?q=apfel"} {
+		code, body, _ := familyPage(t, Notizen, StartConfig{Notes: nd}, "GET", path, "")
+		if code != 200 {
+			t.Fatalf("%s → %d", path, code)
+		}
+		mustContain(t, body, `<form method=get action=/notizen`)
+		if n := strings.Count(body, "<p class=k>Die Notizen lassen sich gerade nicht lesen.</p>"); n != 1 {
+			t.Fatalf("%s: the notes said %d times, want once:\n%s", path, n, body)
+		}
+		mustNotContain(t, body, "karte-", "Noch keine Notizen", "Nichts gefunden", "Treffer")
+		mustNotLeak(t, body, gone)
+		before(t, body, "</form>", "Die Notizen lassen sich gerade nicht lesen.")
+	}
+}
