@@ -41,14 +41,21 @@ type setup struct {
 type want struct {
 	cal, notes, contacts, docs bool
 	country                    string // HAUS_PHONE_COUNTRY; "" the default
+	noPublic                   bool   // no HAUS_PUBLIC_URL: no links to Haus's pages
+	noPaperlessPublic          bool   // no HAUS_PAPERLESS_PUBLIC_URL: Haus's document page is a 404
 }
+
+const hausPublic = "https://haus.example"
 
 const plToken = "pl-geheim-123"
 
 func newSetup(t *testing.T, w want) setup {
 	t.Helper()
 	s := setup{}
-	cfg := Config{Token: tok, Loc: berlin(t), Version: "test", PhoneCountry: w.country}
+	cfg := Config{Token: tok, Loc: berlin(t), Version: "test", PhoneCountry: w.country, PublicURL: hausPublic}
+	if w.noPublic {
+		cfg.PublicURL = ""
+	}
 	if w.cal || w.contacts {
 		s.fake = davfake.New("bote", "pw")
 		t.Cleanup(s.fake.Close)
@@ -66,6 +73,9 @@ func newSetup(t *testing.T, w want) setup {
 		s.docs = paperlessfake.New(plToken)
 		t.Cleanup(s.docs.Close)
 		cfg.Documents = &paperless.Client{URL: s.docs.URL, Token: plToken, PublicURL: "https://paperless.example"}
+		if w.noPaperlessPublic {
+			cfg.Documents.PublicURL = ""
+		}
 	}
 	if w.notes {
 		s.notes = t.TempDir()
@@ -215,7 +225,7 @@ func TestProtocolShape(t *testing.T) {
 func TestToolsOnlyWhatWorks(t *testing.T) {
 	cal := []string{"erinnerung_anlegen", "erinnerungen", "termin_anlegen", "termine"}
 	not := []string{"notiz_anlegen", "notiz_lesen", "notizen_suchen"}
-	con := []string{"kontakt_anlegen", "kontakte_suchen"}
+	con := []string{"kontakt_anlegen", "kontakt_lesen", "kontakte_suchen"}
 	doc := []string{"dokumente_suchen"}
 	join := func(ls ...[]string) []string {
 		var out []string
@@ -597,15 +607,18 @@ func TestContactSearchSmall(t *testing.T) {
 	}
 }
 
-// Documents: title, correspondent, date and a link to Paperless's own
-// page; at most 20; read-only; a Paperless failure is a tool error without
-// the token.
+// Documents: date, correspondent, title, tags and a link to Haus's own
+// page for it (haus#28: /dokumente/<id>, which sends the person on to
+// Paperless); at most 20; read-only; a Paperless failure is a tool error
+// without the token.
 func TestDocumentTools(t *testing.T) {
 	s := newSetup(t, want{docs: true})
 	s.docs.Correspondent(3, "Stadtwerke")
-	s.docs.Add(paperlessfake.Doc{ID: 12, Title: "Rechnung März", Correspondent: 3, Created: "2025-03-14"})
+	s.docs.Tag(1, "Rechnung")
+	s.docs.Tag(2, "Strom")
+	s.docs.Add(paperlessfake.Doc{ID: 12, Title: "Rechnung März", Correspondent: 3, Created: "2025-03-14", Tags: []int{1, 2}})
 	text, isErr := call(t, s.h, "dokumente_suchen", map[string]any{"text": "rechnung"})
-	if isErr || text != "14.03.2025 · Stadtwerke · Rechnung März — https://paperless.example/documents/12/details" {
+	if isErr || text != "14.03.2025 · Stadtwerke · Rechnung März · Schlagworte: Rechnung, Strom — https://haus.example/dokumente/12" {
 		t.Fatalf("dokumente_suchen: %q %v", text, isErr)
 	}
 	if text, _ := call(t, s.h, "dokumente_suchen", map[string]any{"text": "steuer"}); !strings.HasPrefix(text, "Kein Dokument") {
@@ -703,5 +716,272 @@ func TestBirthdayYearZeroRefused(t *testing.T) {
 	}
 	if len(s.fake.Objects()) != 0 {
 		t.Fatal("written")
+	}
+}
+
+const annaCard = "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:urn:uuid:anna-1\r\nFN:Anna Schmidt\r\nN:Schmidt;Anna;;;\r\nNICKNAME:Anni\r\n" +
+	"ORG:Stadtwerke;Kundendienst\r\nTEL;TYPE=CELL:+49 170 1111111\r\nTEL;TYPE=HOME:0711 222222\r\nTEL;TYPE=WORK:0711 333333\r\nTEL:0711 444444\r\n" +
+	"item1.EMAIL;TYPE=INTERNET:anna@example.org\r\nEMAIL:anna.schmidt@firma.example\r\nBDAY:1985-04-12\r\n" +
+	"ADR;TYPE=HOME:;;Hauptstraße 1;Stuttgart;;70173;Deutschland\r\nitem2.ADR:;;Industriestr. 5;Esslingen;;73728;\r\nEND:VCARD\r\n"
+
+// One contact read whole: every number, every email, the birthday, the
+// postal addresses and its page on Haus. It is found by its name (any
+// case), by its id, or by a search only it matches; when several match,
+// the answer names them with their ids and shows none whole.
+func TestContactRead(t *testing.T) {
+	s := newSetup(t, want{contacts: true})
+	s.fake.Put("/bote/kontakte/anna.vcf", annaCard)
+	s.fake.Put("/bote/kontakte/berg.vcf", "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:berg\r\nFN:Anna Berg\r\nTEL:0170 999999\r\nEND:VCARD\r\n")
+	full := []string{"Anna Schmidt", "Anni", "Stadtwerke, Kundendienst", "+49 170 1111111", "0711 222222", "0711 333333", "0711 444444",
+		"anna@example.org", "anna.schmidt@firma.example", "12.04.1985", "Hauptstraße 1, 70173 Stuttgart, Deutschland",
+		"Industriestr. 5, 73728 Esslingen", hausPublic + "/kontakte/urn:uuid:anna-1"}
+	for _, q := range []string{"Anna Schmidt", "anna schmidt", "  Anna   Schmidt ", "urn:uuid:anna-1", "anni", "0170 1111111", "firma.example", "schmidt"} {
+		text, isErr := call(t, s.h, "kontakt_lesen", map[string]any{"kontakt": q})
+		if isErr {
+			t.Fatalf("%q: %q", q, text)
+		}
+		for _, w := range full {
+			if !strings.Contains(text, w) {
+				t.Fatalf("%q: the answer lacks %q:\n%s", q, w, text)
+			}
+		}
+		if strings.Contains(text, "Anna Berg") || strings.Contains(text, "berg") {
+			t.Fatalf("%q: only the one contact:\n%s", q, text)
+		}
+	}
+	// several match: named with their ids, none shown whole
+	text, isErr := call(t, s.h, "kontakt_lesen", map[string]any{"kontakt": "anna"})
+	if isErr || !strings.HasPrefix(text, "Mehrere Kontakte passen") || !strings.Contains(text, "Anna Schmidt") || !strings.Contains(text, "Anna Berg") ||
+		!strings.Contains(text, "urn:uuid:anna-1") || !strings.Contains(text, "berg") || strings.Contains(text, "Hauptstraße") ||
+		strings.Contains(text, "kontakt_lesen") || strings.Contains(text, "kontakte_suchen") {
+		t.Fatalf("ambiguous: %q %v", text, isErr)
+	}
+	if i, j := strings.Index(text, "Anna Berg"), strings.Index(text, "Anna Schmidt"); i > j {
+		t.Fatalf("by name: %q", text)
+	}
+	// the same name twice: the id decides
+	s.fake.Put("/bote/kontakte/max1.vcf", "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:max-1\r\nFN:Max Muster\r\nTEL:0170 1\r\nEND:VCARD\r\n")
+	s.fake.Put("/bote/kontakte/max2.vcf", "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:max-2\r\nFN:Max Muster\r\nTEL:0170 2\r\nEND:VCARD\r\n")
+	text, _ = call(t, s.h, "kontakt_lesen", map[string]any{"kontakt": "max muster"})
+	if !strings.HasPrefix(text, "Mehrere Kontakte passen") || !strings.Contains(text, "max-1") || !strings.Contains(text, "max-2") {
+		t.Fatalf("one name, two cards: %q", text)
+	}
+	if text, _ := call(t, s.h, "kontakt_lesen", map[string]any{"kontakt": "max-2"}); !strings.Contains(text, "0170 2") || strings.Contains(text, "0170 1") {
+		t.Fatalf("by id: %q", text)
+	}
+	// an exact name wins over a search that matches more
+	s.fake.Put("/bote/kontakte/eva1.vcf", "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:eva-1\r\nFN:Eva\r\nTEL:0170 3\r\nEND:VCARD\r\n")
+	s.fake.Put("/bote/kontakte/eva2.vcf", "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:eva-2\r\nFN:Eva Lang\r\nEND:VCARD\r\n")
+	if text, _ := call(t, s.h, "kontakt_lesen", map[string]any{"kontakt": "eva"}); strings.HasPrefix(text, "Mehrere") || !strings.Contains(text, "0170 3") {
+		t.Fatalf("exact name: %q", text)
+	}
+	// an id wins over a name that is the same text
+	s.fake.Put("/bote/kontakte/x.vcf", "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:Eva\r\nFN:Jemand Anders\r\nEND:VCARD\r\n")
+	if text, _ := call(t, s.h, "kontakt_lesen", map[string]any{"kontakt": "Eva"}); !strings.Contains(text, "Jemand Anders") ||
+		strings.HasPrefix(text, "Mehrere") || strings.Contains(text, "0170 3") {
+		t.Fatalf("the id first, and only the id: %q", text)
+	}
+	if text, isErr := call(t, s.h, "kontakt_lesen", map[string]any{"kontakt": "niemand"}); isErr || text != "Kein Kontakt passt zu „niemand“." {
+		t.Fatalf("none: %q %v", text, isErr)
+	}
+	for _, bad := range []string{"", "  ", strings.Repeat("x", MaxField+1)} {
+		if _, isErr := call(t, s.h, "kontakt_lesen", map[string]any{"kontakt": bad}); !isErr {
+			t.Fatalf("%q: want an error", bad)
+		}
+	}
+	if len(s.fake.Objects()) != 7 {
+		t.Fatal("reading writes nothing")
+	}
+}
+
+// Many matches: ten named, the rest counted.
+func TestContactReadManyMatches(t *testing.T) {
+	s := newSetup(t, want{contacts: true})
+	for i := 0; i < 14; i++ {
+		s.fake.Put(fmt.Sprintf("/bote/kontakte/%d.vcf", i), fmt.Sprintf("BEGIN:VCARD\r\nVERSION:4.0\r\nUID:m-%d\r\nFN:Müller %02d\r\nEND:VCARD\r\n", i, i))
+	}
+	text, _ := call(t, s.h, "kontakt_lesen", map[string]any{"kontakt": "müller"})
+	if strings.Count(text, "Müller") != maxContacts || !strings.Contains(text, "… und 4 weitere") || !strings.Contains(text, "Müller 00") || strings.Contains(text, "Müller 13") {
+		t.Fatalf("%q", text)
+	}
+}
+
+// A card's text cannot add a line to the answer or make it endless: each
+// value is one line and cut, at most ten of a kind, the rest counted.
+func TestContactReadIsBounded(t *testing.T) {
+	s := newSetup(t, want{contacts: true})
+	var tels strings.Builder
+	for i := 0; i < 25; i++ {
+		fmt.Fprintf(&tels, "TEL:0170 %07d\r\n", i)
+	}
+	s.fake.Put("/bote/kontakte/v.vcf", "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:v\r\nFN:Vroni\\nTEL: 666\r\nNICKNAME:a\\nb\r\nORG:c\\nd\r\n"+tels.String()+
+		"EMAIL:v@example.org\\nTEL:666\r\nADR:;;Weg 1\\nZeile;Ort;;;\r\nADR:;;"+strings.Repeat("z", 3000)+";;;;\r\nEND:VCARD\r\n")
+	text, isErr := call(t, s.h, "kontakt_lesen", map[string]any{"kontakt": "v"})
+	if isErr {
+		t.Fatal(text)
+	}
+	if !strings.Contains(text, "Vroni TEL: 666") || !strings.Contains(text, "Weg 1 Zeile, Ort") || !strings.Contains(text, "… und 15 weitere") ||
+		strings.Contains(text, "0170 0000010") || !strings.Contains(text, "0170 0000009") {
+		t.Fatalf("%s", text)
+	}
+	for _, l := range strings.Split(text, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(l), "TEL") {
+			t.Fatalf("a line from the card: %q in\n%s", l, text)
+		}
+	}
+	if n := strings.Count(text, "\n") + 1; n > 9 {
+		t.Fatalf("%d lines:\n%s", n, text)
+	}
+	if len([]rune(text)) > 2500 {
+		t.Fatalf("too long: %d", len([]rune(text)))
+	}
+}
+
+// Without Haus's public address an answer has no link (never an internal
+// one); a card without an id has none either.
+func TestContactReadWithoutLinks(t *testing.T) {
+	s := newSetup(t, want{contacts: true, noPublic: true})
+	s.fake.Put("/bote/kontakte/anna.vcf", annaCard)
+	if text, _ := call(t, s.h, "kontakt_lesen", map[string]any{"kontakt": "anna"}); !strings.Contains(text, "Hauptstraße 1") || strings.Contains(text, "http") || strings.Contains(text, "/kontakte/") {
+		t.Fatalf("no public address: %q", text)
+	}
+	s = newSetup(t, want{contacts: true})
+	s.fake.Put("/bote/kontakte/o.vcf", "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Ohne Kennung\r\nTEL:0170 4\r\nEND:VCARD\r\n")
+	if text, _ := call(t, s.h, "kontakt_lesen", map[string]any{"kontakt": "ohne"}); !strings.Contains(text, "0170 4") || strings.Contains(text, "http") {
+		t.Fatalf("no id: %q", text)
+	}
+}
+
+// A document's link is Haus's page only where that page leads somewhere:
+// Haus's own address and Paperless's public one both set. Never
+// Paperless's internal address.
+func TestDocumentLinks(t *testing.T) {
+	for _, c := range []struct {
+		w    want
+		link bool
+	}{
+		{want{docs: true}, true},
+		{want{docs: true, noPublic: true}, false},
+		{want{docs: true, noPaperlessPublic: true}, false},
+	} {
+		s := newSetup(t, c.w)
+		s.docs.Add(paperlessfake.Doc{ID: 12, Title: "Rechnung März"})
+		text, isErr := call(t, s.h, "dokumente_suchen", map[string]any{"text": "rechnung"})
+		if isErr || strings.Contains(text, s.docs.URL) || strings.Contains(text, "paperless.example") {
+			t.Fatalf("%+v: %q %v", c.w, text, isErr)
+		}
+		if got := strings.Contains(text, " — "+hausPublic+"/dokumente/12"); got != c.link {
+			t.Fatalf("%+v: link %v: %q", c.w, got, text)
+		}
+		if !c.link && text != "Rechnung März" {
+			t.Fatalf("%+v: %q", c.w, text)
+		}
+	}
+}
+
+// Many tags: five named, the rest counted; a tag cannot add a line.
+func TestDocumentTagsBounded(t *testing.T) {
+	s := newSetup(t, want{docs: true})
+	var ids []int
+	for i := 1; i <= 8; i++ {
+		s.docs.Tag(i, fmt.Sprintf("T%d", i))
+		ids = append(ids, i)
+	}
+	s.docs.Tag(1, "Eins\nZwei")
+	s.docs.Add(paperlessfake.Doc{ID: 5, Title: "Brief", Tags: ids})
+	text, _ := call(t, s.h, "dokumente_suchen", map[string]any{"text": "brief"})
+	if text != "Brief · Schlagworte: Eins Zwei, T2, T3, T4, T5 (+3) — "+hausPublic+"/dokumente/5" {
+		t.Fatalf("%q", text)
+	}
+}
+
+// A backend that does not answer is a plain tool error, never a crash:
+// which one, and to try again later; never the password, the token, an
+// internal address or the transport's words (those go to Haus's log).
+func TestBackendDown(t *testing.T) {
+	s := newSetup(t, want{cal: true, contacts: true, docs: true})
+	s.fake.Close()
+	s.docs.Close()
+	for _, c := range []struct{ tool, arg, says string }{
+		{"kontakt_lesen", "kontakt", "Radicale"},
+		{"kontakte_suchen", "text", "Radicale"},
+		{"kontakt_anlegen", "name", "Radicale"},
+		{"termine", "von", "Radicale"},
+		{"dokumente_suchen", "text", "Paperless"},
+	} {
+		arg := "anna"
+		if c.tool == "termine" {
+			arg = "2026-10-15"
+		}
+		text, isErr := call(t, s.h, c.tool, map[string]any{c.arg: arg})
+		if !isErr || !strings.Contains(text, c.says) || !strings.Contains(text, "später") {
+			t.Fatalf("%s: %q %v", c.tool, text, isErr)
+		}
+		for _, never := range []string{plToken, "pw", "127.0.0.1", "http", "dial", "tcp", "refused", "\n"} {
+			if strings.Contains(text, never) {
+				t.Fatalf("%s says %q: %q", c.tool, never, text)
+			}
+		}
+	}
+	// an answer Haus did not expect stays as plain as before
+	s = newSetup(t, want{docs: true})
+	s.docs.Status = http.StatusInternalServerError
+	if text, _ := call(t, s.h, "dokumente_suchen", map[string]any{"text": "x"}); text != "Paperless antwortet HTTP 500" {
+		t.Fatalf("%q", text)
+	}
+}
+
+func TestFromEnvPublicURL(t *testing.T) {
+	for _, k := range []string{"HAUS_RADICALE_URL", "HAUS_NOTES_DIR", "HAUS_PAPERLESS_URL"} {
+		t.Setenv(k, "")
+	}
+	for v, want := range map[string]string{"": "", "https://haus.example.org/": "https://haus.example.org", "http://haus.lan:8650": "http://haus.lan:8650",
+		"haus.example.org": "", "javascript:alert(1)": ""} {
+		t.Setenv("HAUS_PUBLIC_URL", v)
+		if cfg, err := FromEnv(); err != nil || cfg.PublicURL != want {
+			t.Fatalf("%q: %q %v", v, cfg.PublicURL, err)
+		}
+	}
+}
+
+// A read the address book cut short (too many cards, or too slow) says so
+// when nothing was found, so "no such contact" is never claimed on half
+// the cards.
+func TestContactReadPartial(t *testing.T) {
+	fake := davfake.New("bote", "pw")
+	t.Cleanup(fake.Close)
+	fake.AddAddressBook("/bote/kontakte/", "Haushalt")
+	fake.Put("/bote/kontakte/a.vcf", "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:a\r\nFN:Anna\r\nEND:VCARD\r\n")
+	fake.Put("/bote/kontakte/b.vcf", "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:b\r\nFN:Bert\r\nEND:VCARD\r\n")
+	fake.StallAfter = 1
+	dav := &caldav.Client{URL: fake.URL, User: "bote", Password: "pw", HTTP: &http.Client{Timeout: 300 * time.Millisecond}}
+	h := Handler(Config{Token: tok, Loc: berlin(t), Contacts: dav})
+	text, isErr := call(t, h, "kontakt_lesen", map[string]any{"kontakt": "niemand"})
+	if isErr || !strings.HasPrefix(text, "Kein Kontakt passt") || !strings.Contains(text, "Nur ein Teil des Adressbuchs") {
+		t.Fatalf("%q %v", text, isErr)
+	}
+}
+
+// A tag without a name is no tag: not shown, not counted.
+func TestDocumentBlankTags(t *testing.T) {
+	s := newSetup(t, want{docs: true, noPublic: true})
+	for i := 1; i <= 6; i++ {
+		s.docs.Tag(i, fmt.Sprintf("T%d", i))
+	}
+	s.docs.Tag(9, "  ")
+	s.docs.Add(paperlessfake.Doc{ID: 5, Title: "Brief", Tags: []int{9, 1, 2, 3, 4, 5}})
+	if text, _ := call(t, s.h, "dokumente_suchen", map[string]any{"text": "brief"}); text != "Brief · Schlagworte: T1, T2, T3, T4, T5" {
+		t.Fatalf("%q", text)
+	}
+}
+
+// The link names the card's UID exactly as the page matches it, padding
+// and all; the lookup reads the UID as the query is read, one line.
+func TestContactLinkIsTheExactUID(t *testing.T) {
+	s := newSetup(t, want{contacts: true})
+	s.fake.Put("/bote/kontakte/p.vcf", "BEGIN:VCARD\r\nVERSION:4.0\r\nUID: ab  cd \r\nFN:Paula\r\nEND:VCARD\r\n")
+	text, _ := call(t, s.h, "kontakt_lesen", map[string]any{"kontakt": "ab cd"})
+	if !strings.Contains(text, "Paula") || !strings.Contains(text, hausPublic+"/kontakte/%20ab%20%20cd%20") {
+		t.Fatalf("%q", text)
 	}
 }
