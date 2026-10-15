@@ -440,11 +440,20 @@ func agenda(events []caldav.Event, evErr error, todos []caldav.Todo, todoErr err
 	return c
 }
 
-// ToStart sends every page path Haus does not serve to Start (haus#12): an
-// old bookmark never ends on an error.
-func ToStart() http.HandlerFunc {
+// saysNoSuchPage is what a path Haus does not serve says.
+const saysNoSuchPage = "Diese Seite gibt es nicht."
+
+// Elsewhere is "/" and every page path Haus does not serve (haus#12): "/"
+// is Start; anything else is a 404 in the house's own frame, one plain
+// line and the way to Start — never a blank error, never Start
+// pretending all is well.
+func Elsewhere(cfg StartConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/start", http.StatusFound)
+		if r.URL.Path == "/" {
+			http.Redirect(w, r, "/start", http.StatusFound)
+			return
+		}
+		missing{http.StatusNotFound, saysNoSuchPage, "Nicht gefunden", "/start", "Zur Startseite"}.write(w, r, cfg)
 	}
 }
 

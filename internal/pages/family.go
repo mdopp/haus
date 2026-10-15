@@ -17,7 +17,8 @@ import (
 // The family's pages (haus#12): Start, Räume, Kalender, Notizen. They read
 // one config (StartConfig), share one nav and the persona's header, and
 // show without changing anything (haus#1). A page whose backend is not set
-// is not served: it lands on Start, like every path Haus does not serve.
+// is not served: it lands on Start. A path Haus does not serve at all is
+// a 404 with the way to Start (Elsewhere).
 
 // What a family page says, in one plain line where the rows would be,
 // when a backend does not answer (haus#12, haus#33): what is missing, in
