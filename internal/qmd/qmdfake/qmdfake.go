@@ -27,6 +27,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 )
 
 // Doc is one indexed document.
@@ -227,7 +228,8 @@ func (s *Server) query(w http.ResponseWriter, body []byte) {
 func matches(d Doc, searches []search) bool {
 	hay := strings.ToLower(d.Body + " " + strings.Join(d.Means, " "))
 	for _, q := range searches {
-		for _, word := range strings.Fields(strings.ToLower(q.Query)) {
+		words := strings.FieldsFunc(strings.ToLower(q.Query), func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) })
+		for _, word := range words {
 			if strings.Contains(hay, word) {
 				return true
 			}

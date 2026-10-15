@@ -19,6 +19,7 @@ import (
 	"github.com/mdopp/haus/internal/laib"
 	"github.com/mdopp/haus/internal/notes"
 	"github.com/mdopp/haus/internal/paperless"
+	"github.com/mdopp/haus/internal/qmd"
 )
 
 // StartConfig is what the family's pages read (Start, Räume, Kalender,
@@ -31,6 +32,7 @@ type StartConfig struct {
 	Calendar  *caldav.Client
 	Contacts  *caldav.Client // a contact's page (haus#28)
 	Notes     *notes.Dir
+	Library   *qmd.Client       // Notizen's search by meaning (haus#13); nil: by words, said so
 	Docs      *paperless.Client // a document's page sends on to Paperless (haus#28)
 	Favorites *favoriten.Store  // each person's things on Start (laib ADR 0017), pinned with ☆ (haus#35)
 	Loc       *time.Location    // the house's time zone; default time.Local

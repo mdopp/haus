@@ -32,6 +32,7 @@ const (
 	saysNoCalendar  = "Der Kalender antwortet gerade nicht."
 	saysNoContacts  = "Die Kontakte lassen sich gerade nicht lesen."
 	saysNoNotes     = "Die Notizen lassen sich gerade nicht lesen."
+	saysWordsOnly   = "Die Suche nach Bedeutung geht gerade nicht; gesucht wird nur nach den Wörtern."
 	saysNoFavorites = "Deine Favoriten lassen sich gerade nicht lesen."
 	saysFavsUnseen  = "Deine Favoriten sind gerade nicht zu sehen."
 )

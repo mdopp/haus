@@ -334,7 +334,8 @@ func TestErrorsArePlain(t *testing.T) {
 	if _, err := c.Search(ctx, "x", 3); err == nil {
 		t.Fatal("a shape Haus does not know is an error")
 	}
-	// qmd's guard refuses a Host that is not loopback
+	f.Results = ""
+	// qmd's guard lets a loopback Host in
 	if _, err := (&Client{URL: strings.Replace(f.URL, "127.0.0.1", "localhost", 1), Collection: "notizen"}).Search(ctx, "x", 3); err != nil {
 		t.Fatalf("localhost is loopback: %v", err)
 	}

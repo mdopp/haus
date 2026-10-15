@@ -490,3 +490,49 @@ func (d *Dir) Recent(ctx context.Context, n int) ([]Entry, error) {
 	}
 	return out, nil
 }
+
+// Lookup is the note with exactly this file name (relative, as the memory
+// library names it, haus#13): no slug, no title, no search. A name that
+// leaves the directory (a step out, a link out) is ErrOutside, a hidden
+// one ErrHidden, one that is not a note file ErrNotFound; a directory that
+// cannot be read is its own error.
+func (d *Dir) Lookup(ctx context.Context, name string) (Entry, error) {
+	if err := ctx.Err(); err != nil {
+		return Entry{}, err
+	}
+	if name == "" {
+		return Entry{}, ErrNotFound
+	}
+	clean, err := checkName(name)
+	if err != nil {
+		return Entry{}, err
+	}
+	root, err := os.OpenRoot(d.path)
+	if err != nil {
+		return Entry{}, err
+	}
+	defer root.Close()
+	if !isNote(clean) {
+		return Entry{}, ErrNotFound
+	}
+	f, err := root.Open(clean) // follows a symlink only while it stays inside
+	if errors.Is(err, fs.ErrNotExist) {
+		return Entry{}, ErrNotFound
+	}
+	if err != nil {
+		if viaSymlink(root, clean) {
+			return Entry{}, ErrOutside
+		}
+		return Entry{}, err
+	}
+	defer f.Close()
+	st, err := f.Stat()
+	if err != nil {
+		return Entry{}, err
+	}
+	if !st.Mode().IsRegular() || st.Size() > maxBytes {
+		return Entry{}, ErrNotFound
+	}
+	head, _ := io.ReadAll(io.LimitReader(f, 4<<10))
+	return Entry{Name: clean, Title: title(clean, head), Changed: st.ModTime()}, nil
+}
