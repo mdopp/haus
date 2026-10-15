@@ -287,3 +287,46 @@ func TestRecentNewestFirst(t *testing.T) {
 		t.Fatalf("n=0: %v %v", none, err)
 	}
 }
+
+// Lookup is a note by its exact file name, as the memory library names it
+// (haus#13): never by slug or title, never outside the folder, never a
+// hidden file, a folder or what is not a note.
+func TestLookupIsExact(t *testing.T) {
+	d, dir := open(t)
+	os.MkdirAll(filepath.Join(dir, "rezepte"), 0o755)
+	os.MkdirAll(filepath.Join(dir, ".stversions"), 0o755)
+	for name, body := range map[string]string{
+		"kaminkehrer.md":         "# Kaminkehrer\n\nHerr Brandl kommt im Oktober.\n",
+		"rezepte/pfannkuchen.md": "# Pfannkuchen\n\nMehl, Milch, Eier\n",
+		"Größen Kinder.md":       "Lena 31, Max 26\n",
+		".stversions/alt.md":     "# Alt\n",
+		"rechnung.pdf":           "%PDF",
+		"../draussen.md":         "# Draußen\n",
+		"rezepte/ordner.md/x.md": "# Ordner\n",
+	} {
+		os.MkdirAll(filepath.Dir(filepath.Join(dir, name)), 0o755)
+		os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644)
+	}
+	os.Symlink(filepath.Join(dir, "..", "draussen.md"), filepath.Join(dir, "link.md"))
+	for name, want := range map[string]string{"kaminkehrer.md": "Kaminkehrer", "rezepte/pfannkuchen.md": "Pfannkuchen", "Größen Kinder.md": "Größen Kinder"} {
+		e, err := d.Lookup(bg, name)
+		if err != nil || e.Name != name || e.Title != want || e.Changed.IsZero() {
+			t.Fatalf("%s: %+v %v", name, e, err)
+		}
+	}
+	for name, want := range map[string]error{
+		"Kaminkehrer": ErrNotFound, "kaminkehrer": ErrNotFound, "gibtsnicht.md": ErrNotFound, "rechnung.pdf": ErrNotFound,
+		"rezepte/ordner.md": ErrNotFound, "rezepte": ErrNotFound,
+		"../draussen.md": ErrOutside, "/etc/passwd": ErrOutside, "rezepte/../../draussen.md": ErrOutside, `..\draussen.md`: ErrOutside,
+		"link.md": ErrOutside, ".stversions/alt.md": ErrHidden, "": ErrNotFound,
+	} {
+		if e, err := d.Lookup(bg, name); !errors.Is(err, want) {
+			t.Fatalf("%q: %+v %v, want %v", name, e, err, want)
+		}
+	}
+	// a folder that cannot be read is an error, not "no such note"
+	os.RemoveAll(dir)
+	if _, err := d.Lookup(bg, "kaminkehrer.md"); err == nil || errors.Is(err, ErrNotFound) {
+		t.Fatalf("gone folder: %v", err)
+	}
+}
