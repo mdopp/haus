@@ -204,3 +204,49 @@ func TestEnergieUnknownPathIsA404(t *testing.T) {
 		mustNotContain(t, body, "kWh", "karte-")
 	}
 }
+
+// A lifetime counter that dips a little (a meter's jitter, a rounding)
+// has not started over: HA itself counts a drop of less than 10 % as
+// noise. Only a real fall — a new meter, a reset — counts from zero, and
+// then from wherever the new count stands.
+func TestEnergieTodayTellsANewMeterFromNoise(t *testing.T) {
+	fake, hc := house(t)
+	energyHouse(t, fake)
+	at := func(state, when string) map[string]any { return map[string]any{"state": state, "last_changed": when} }
+	kwh := func(name string) map[string]any {
+		return map[string]any{"friendly_name": name, "device_class": "energy", "unit_of_measurement": "kWh"}
+	}
+	fake.Set("sensor.bezug_total", "2.5", kwh("Netzbezug"))
+	fake.SetHistory("sensor.bezug_total", []map[string]any{at("1800", "2026-10-13T22:00:00Z"), at("1801", "2026-10-14T03:00:00Z"),
+		at("0.4", "2026-10-14T04:00:00Z")}) // +1, a new meter at 0,4, +2,1
+	fake.Set("sensor.einsp_total", "2303", kwh("Netzeinspeisung"))
+	fake.SetHistory("sensor.einsp_total", []map[string]any{at("2300", "2026-10-13T22:00:00Z"), at("2302", "2026-10-14T03:00:00Z"),
+		at("2301.9", "2026-10-14T04:00:00Z")}) // +2, a dip, +1
+	_, body, _ := familyPage(t, Energie, StartConfig{HA: hc}, "GET", "/energie", "family")
+	heute := section(t, body, "karte-heute")
+	mustContain(t, heute, "<span>Aus dem Netz</span></div><p><b class=zustand>3,5 kWh</b>", "<span>Ins Netz</span></div><p><b class=zustand>3 kWh</b>")
+	mustNotContain(t, heute, "230")
+}
+
+// What the house used needs every counter the house has: both battery
+// counters without today's history leave Verbraucht out, never a sum
+// that forgets the battery. A counter whose history holds no reading at
+// all is not "0 kWh" today; it is left out.
+func TestEnergieUsedNeedsEveryCounter(t *testing.T) {
+	fake, hc := house(t)
+	energyHouse(t, fake)
+	fake.SetHistory("sensor.akku_laden", nil)
+	fake.SetHistory("sensor.akku_entladen", nil)
+	_, body, _ := familyPage(t, Energie, StartConfig{HA: hc}, "GET", "/energie", "family")
+	heute := section(t, body, "karte-heute")
+	mustContain(t, heute, "<span>Erzeugt</span>")
+	mustNotContain(t, heute, "Verbraucht", "Akku")
+
+	fake2, hc2 := house(t)
+	energyHouse(t, fake2)
+	fake2.SetHistory("sensor.pv_total", []map[string]any{{"state": "unavailable", "last_changed": "2026-10-13T22:00:00Z"}})
+	_, body, _ = familyPage(t, Energie, StartConfig{HA: hc2}, "GET", "/energie", "family")
+	heute = section(t, body, "karte-heute")
+	mustContain(t, heute, "<span>Aus dem Netz</span>")
+	mustNotContain(t, heute, "Erzeugt", "Verbraucht", "0 kWh")
+}
