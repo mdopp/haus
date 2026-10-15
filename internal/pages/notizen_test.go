@@ -341,10 +341,11 @@ func TestNotizenWordsFromASentence(t *testing.T) {
 }
 
 // haus#13: a hit by meaning is shown only when it is close to the
-// question. When nothing is, the field falls to the word search with its
-// one line, as when the library cannot answer: nonsense shows no notes by
-// meaning.
-func TestNotizenNothingCloseIsWords(t *testing.T) {
+// question. When the library answered but nothing is close, the page says
+// so — not that the search is down — and shows what the words find under
+// a label that says what they are; with no word hit, only the sentence.
+func TestNotizenNothingClose(t *testing.T) {
+	const noMatch, byWords = "Keine Notiz passt wirklich zu deiner Frage.", "Notizen mit Wörtern aus deiner Frage"
 	dir, nd := shelf(t)
 	f := qmdfake.New("notizen")
 	defer f.Close()
@@ -352,16 +353,28 @@ func TestNotizenNothingCloseIsWords(t *testing.T) {
 	f.Add(qmdfake.Doc{Path: "einkaufsliste.md", Title: "Einkaufsliste", Body: read("einkaufsliste.md"), Means: []string{"lebensmittel", "apfel"}, Vec: 0.29},
 		qmdfake.Doc{Path: "packliste.md", Title: "Packliste", Body: read("packliste.md"), Means: []string{"lebensmittel", "apfel"}, Vec: 0.2})
 	cfg := StartConfig{Notes: nd, Library: &qmd.Client{URL: f.URL, Collection: "notizen"}}
-	_, body, _ := familyPage(t, Notizen, cfg, "GET", "/notizen?q=Lebensmittel", "")
-	if n := strings.Count(body, "<p class=k>"+saysWordsOnly+"</p>"); n != 1 {
-		t.Fatalf("the word search's line %d times:\n%s", n, body)
+	// no word hit either: the sentence alone
+	code, body, _ := familyPage(t, Notizen, cfg, "GET", "/notizen?q=Lebensmittel", "")
+	if code != 200 || strings.Count(body, "<p class=k>"+noMatch+"</p>") != 1 {
+		t.Fatalf("status %d, the sentence not once:\n%s", code, body)
 	}
-	mustContain(t, body, "Nichts gefunden.", saysTryAnother)
-	mustNotContain(t, body, "Einkaufsliste", "Packliste")
-	// the words still find what they find
+	mustNotContain(t, body, saysWordsOnly, "Bedeutung", "Nichts gefunden", "Treffer", byWords, "Einkaufsliste", "Packliste")
+	before(t, body, "</form>", noMatch)
+	// the words find something: under the label, never as "Treffer"
 	_, body, _ = familyPage(t, Notizen, cfg, "GET", "/notizen?q=Apfel", "")
-	mustContain(t, body, saysWordsOnly, `<a href="/notizen/rezepte/apfelkuchen.md">Apfelkuchen</a>`)
-	mustNotContain(t, body, "Einkaufsliste", "Packliste", "Geheim")
+	if strings.Count(body, "<p class=k>"+noMatch+"</p>") != 1 {
+		t.Fatalf("the sentence not once:\n%s", body)
+	}
+	mustContain(t, body, byWords, `<a href="/notizen/rezepte/apfelkuchen.md">Apfelkuchen</a>`)
+	mustNotContain(t, body, saysWordsOnly, "Bedeutung", "Treffer", "Nichts gefunden", "Einkaufsliste", "Packliste", "Geheim")
+	before(t, body, noMatch, byWords)
+	before(t, body, byWords, "Apfelkuchen")
+	mustNotLeak(t, body, f.URL, "qmd", "Vektor", "Kosinus", "embed")
+	// the library down is the other sentence, as before
+	f.Status = 500
+	_, body, _ = familyPage(t, Notizen, cfg, "GET", "/notizen?q=Apfel", "")
+	mustContain(t, body, saysWordsOnly, "Treffer für „Apfel“")
+	mustNotContain(t, body, noMatch, byWords)
 }
 
 // The house model tidies the page's hits (haus#13) when it is loaded: the

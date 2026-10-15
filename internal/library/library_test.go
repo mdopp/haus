@@ -168,7 +168,7 @@ func TestReducedToWords(t *testing.T) {
 		cl := c.set(f)
 		start := time.Now()
 		got, err := Find(bg, cl, Tidy{}, d, "Brandl", 10)
-		if err != nil || !got.Reduced {
+		if err != nil || !got.Reduced || got.NoMatch {
 			t.Fatalf("%s: %+v %v", c.name, got, err)
 		}
 		if names(got.Hits) != "kaminkehrer.md" || got.Hits[0].Title != "Kaminkehrer" {
@@ -310,27 +310,33 @@ func TestCutOnRealScores(t *testing.T) {
 	}
 }
 
-// When nothing qmd found is close enough, the meaning hits are not shown:
-// the search is the word search, with its line, as when qmd cannot answer.
+// When nothing qmd found is close enough, the meaning hits are not shown,
+// and the search says so apart from a library that cannot answer: NoMatch,
+// not Reduced. The hits, if any, are the word search's.
 func TestNothingCloseIsTheWordSearch(t *testing.T) {
 	dir, d, f := shelf(t)
 	os.WriteFile(filepath.Join(dir, "everest.md"), []byte("# Berge\n\nDer Mount Everest ist hoch.\n"), 0o644)
 	f.Add(qmdfake.Doc{Path: "everest.md", Title: "Berge", Body: "# Berge\n\nDer Mount Everest ist hoch.\n", Vec: 0.29})
 	c := &qmd.Client{URL: f.URL, Collection: "notizen"}
 	got, err := Find(bg, c, Tidy{}, d, "Everest", 10)
-	if err != nil || !got.Reduced || names(got.Hits) != "everest.md" {
+	if err != nil || got.Reduced || !got.NoMatch || names(got.Hits) != "everest.md" {
 		t.Fatalf("%+v %v", got, err)
 	}
 	// the real nonsense answer (its best, "Größen Kinder.md", is in the
 	// folder at 0.175): words
 	f.Results = string(mustRead(t, filepath.Join("..", "qmd", "testdata", "cut-everest.json")))
 	got, err = Find(bg, c, Tidy{}, d, "Wie hoch ist der Gipfel?", 10)
-	if err != nil || !got.Reduced || names(got.Hits) != "everest.md" {
+	if err != nil || got.Reduced || !got.NoMatch || names(got.Hits) != "everest.md" {
 		t.Fatalf("real nonsense scores: %+v %v", got, err)
 	}
 	// and nothing by words either: said as nothing, not as an error
-	if got, err := Find(bg, c, Tidy{}, d, "Quantenchromodynamik", 10); err != nil || !got.Reduced || got.Total != 0 {
+	if got, err := Find(bg, c, Tidy{}, d, "Quantenchromodynamik", 10); err != nil || got.Reduced || !got.NoMatch || got.Total != 0 {
 		t.Fatalf("nothing at all: %+v %v", got, err)
+	}
+	// a library that answers with close notes is neither
+	f.Results = ""
+	if got, err := Find(bg, c, Tidy{}, d, "Schornsteinfeger", 10); err != nil || got.Reduced || got.NoMatch || got.Total != 2 {
+		t.Fatalf("close: %+v %v", got, err)
 	}
 }
 

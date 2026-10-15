@@ -107,6 +107,18 @@ func TestTidyNarrows(t *testing.T) {
 	neverTakesTheLease(t, p)
 }
 
+// Nobody holds the card and the house model is the default: the tidy-up
+// asks, and narrows.
+func TestTidyWhenNobodyHoldsTheCard(t *testing.T) {
+	s := tidyShelf(t)
+	s.p.Lease = proxyfake.Lease{State: "none", Alias: house}
+	s.p.Content = `{"ids":[2]}`
+	if got := s.find(t, s.j, time.Second, "Schornsteinfeger"); names(got.Hits) != "heizung.md" {
+		t.Fatalf("%+v", got)
+	}
+	neverTakesTheLease(t, s.p)
+}
+
 // The passage the model reads is the note's, about 700 characters, not
 // qmd's few lines: from a little before qmd's passage (the answer is often
 // a line above it: the eval's one miss of the judge), a long note cut.
@@ -155,7 +167,11 @@ func TestTidyKeepsTheCutsHits(t *testing.T) {
 			p.Lease = proxyfake.Lease{State: "ready", Model: "full", Alias: "qwen3.6-35b-a3b", Holder: "pi"}
 		}, 0},
 		{"the house model still loading", func(p *proxyfake.Server) { p.Lease.State = "preparing" }, 0},
-		{"no lease", func(p *proxyfake.Server) { p.Lease = proxyfake.Lease{State: "none", Alias: house} }, 0},
+		{"no lease, another default", func(p *proxyfake.Server) { p.Lease = proxyfake.Lease{State: "none", Alias: "gemma-4-12b"} }, 0},
+		{"no lease, the house model too slow to load", func(p *proxyfake.Server) {
+			p.Lease = proxyfake.Lease{State: "none", Alias: house}
+			p.Hang = 3 * time.Second
+		}, 1},
 		{"refused", func(p *proxyfake.Server) { p.Status = http.StatusConflict }, 1},
 		{"broken", func(p *proxyfake.Server) { p.Status = http.StatusInternalServerError }, 1},
 		{"not JSON", func(p *proxyfake.Server) { p.Content = "Die zweite Notiz." }, 1},
@@ -189,7 +205,7 @@ func TestTidyOnlyForMoreThanOne(t *testing.T) {
 	if got := s.find(t, s.j, time.Second, "Brandl"); names(got.Hits) != "kaminkehrer.md" {
 		t.Fatalf("one: %+v", got)
 	}
-	if got := s.find(t, s.j, time.Second, "Quantenchromodynamik"); got.Total != 0 || !got.Reduced {
+	if got := s.find(t, s.j, time.Second, "Quantenchromodynamik"); got.Total != 0 || !got.NoMatch {
 		t.Fatalf("none: %+v", got)
 	}
 	if got := s.find(t, nil, time.Second, "Schornsteinfeger"); names(got.Hits) != "kaminkehrer.md,heizung.md" {

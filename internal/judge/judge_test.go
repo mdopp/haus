@@ -84,16 +84,19 @@ func TestAsksTheLoadedHouseModelOnce(t *testing.T) {
 	}
 }
 
-// The lease decides whether to ask at all: only the house model, loaded
-// and ready. Another model in the window, the house model still loading,
-// or no window at all (the router may not have it loaded) is ErrNotLoaded,
-// and no chat is sent: a chat could make the card load or swap.
+// The lease decides whether to ask at all: the house model ready in a
+// window, or no window at all with the house model as the default (nobody
+// holds the card; asking takes it from no one, and a model still loading
+// only runs out the budget). Another model in the window, the house model
+// still loading, or no window with another default is ErrNotLoaded, and
+// no chat is sent: a chat could make the card load or swap.
 func TestOnlyWhileTheHouseModelIsLoaded(t *testing.T) {
 	for _, l := range []proxyfake.Lease{
 		{State: "ready", Model: "shared", Alias: "gemma-4-12b", Holder: "chronicle"},
 		{State: "ready", Model: "full", Alias: "qwen3.6-35b-a3b", Holder: "pi"},
 		{State: "preparing", Model: "shared", Alias: "gemma-4-e4b", Holder: "chronicle"},
-		{State: "none", Alias: "gemma-4-e4b"},
+		{State: "none", Alias: "gemma-4-12b"},
+		{State: "", Alias: "gemma-4-e4b"},
 		{State: "ready", Model: "exclusive", Holder: "maintenance"},
 	} {
 		p := proxyfake.New("gemma-4-e4b")
@@ -105,6 +108,21 @@ func TestOnlyWhileTheHouseModelIsLoaded(t *testing.T) {
 			t.Errorf("%+v: %d chats", l, n)
 		}
 		p.Close()
+	}
+}
+
+// No window held, the house model the default: nobody holds the card, so
+// Haus asks, once, for the house model.
+func TestAsksWhenNobodyHoldsTheCard(t *testing.T) {
+	p := proxyfake.New("gemma-4-e4b")
+	defer p.Close()
+	p.Lease = proxyfake.Lease{State: "none", Alias: "gemma-4-e4b"}
+	p.Content = `{"ids":[1]}`
+	if ids, err := client(p).Pick(bg, "q", two); err != nil || !reflect.DeepEqual(ids, []int{0}) {
+		t.Fatalf("%v %v", ids, err)
+	}
+	if n := len(p.Chats()); n != 1 {
+		t.Fatalf("%d chats", n)
 	}
 }
 

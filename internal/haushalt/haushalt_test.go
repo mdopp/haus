@@ -1182,3 +1182,33 @@ func TestFindNotesCutAndTidy(t *testing.T) {
 		}
 	}
 }
+
+// When the library answered but no note is close, notizen_finden says
+// that plainly — not that the search is down — and names what the words
+// find as such; with no word hit, only that (haus#13).
+func TestFindNotesNothingClose(t *testing.T) {
+	s := newSetup(t, want{notes: true, library: true})
+	body := "# Garten\n\nIm März das Hochbeet vorbereiten.\n"
+	os.WriteFile(filepath.Join(s.notes, "garten.md"), []byte(body), 0o644)
+	s.qmd.Add(qmdfake.Doc{Path: "garten.md", Title: "Garten", Body: body, Means: []string{"everest", "gipfel"}, Vec: 0.17})
+	text, isErr := call(t, s.h, "notizen_finden", map[string]any{"text": "Wie hoch ist der Mount Everest?"})
+	if isErr || !strings.HasPrefix(text, "Keine Notiz passt wirklich zu „Wie hoch ist der Mount Everest?“.") ||
+		!strings.Contains(text, "Notizen mit Wörtern aus der Frage:") || !strings.Contains(text, "## Garten (garten.md)") {
+		t.Fatalf("%q %v", text, isErr)
+	}
+	if strings.Index(text, "Notizen mit Wörtern") > strings.Index(text, "## Garten") {
+		t.Fatalf("the label after the hit: %q", text)
+	}
+	text, isErr = call(t, s.h, "notizen_finden", map[string]any{"text": "Gipfel"})
+	if isErr || text != "Keine Notiz passt wirklich zu „Gipfel“." {
+		t.Fatalf("no word hit: %q %v", text, isErr)
+	}
+	for _, q := range []string{"Wie hoch ist der Mount Everest?", "Gipfel"} {
+		text, _ := call(t, s.h, "notizen_finden", map[string]any{"text": q})
+		for _, never := range []string{reducedNote, "Bedeutung", "geht gerade nicht", "Keine Notiz enthält", "qmd"} {
+			if strings.Contains(text, never) {
+				t.Fatalf("%s: says %q: %q", q, never, text)
+			}
+		}
+	}
+}
