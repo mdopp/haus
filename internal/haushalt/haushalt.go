@@ -24,6 +24,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/mdopp/haus/internal/caldav"
+	"github.com/mdopp/haus/internal/cards"
 	"github.com/mdopp/haus/internal/mcpserver"
 	"github.com/mdopp/haus/internal/notes"
 	"github.com/mdopp/haus/internal/paperless"
@@ -58,11 +59,19 @@ func httpURL(u string) bool {
 
 // FromEnv reads HAUS_HAUSHALT_TOKEN, HAUS_RADICALE_URL (+ _USER,
 // _PASSWORD, optional _CALENDAR and _ADDRESSBOOK), HAUS_NOTES_DIR,
-// HAUS_PAPERLESS_URL (+ _TOKEN, optional _PUBLIC_URL), HAUS_PHONE_COUNTRY
-// and TZ. A malformed address or country code refuses to start; a missing
-// backend only leaves its tools out.
+// HAUS_PAPERLESS_URL (+ _TOKEN, optional _PUBLIC_URL), HAUS_PHONE_COUNTRY,
+// HAUS_PUBLIC_URL and TZ. A malformed backend address or country code
+// refuses to start; a missing backend only leaves its tools out. Haus's own
+// address is the setup link's too, so a malformed one only drops the links.
 func FromEnv() (Config, error) {
 	cfg := Config{Token: os.Getenv("HAUS_HAUSHALT_TOKEN"), Loc: time.Local, PhoneCountry: defaultCountry}
+	if pub := strings.TrimRight(os.Getenv("HAUS_PUBLIC_URL"), "/"); pub != "" {
+		if httpURL(pub) {
+			cfg.PublicURL = pub
+		} else {
+			log.Printf("haus: HAUS_PUBLIC_URL %q is not http(s)://host: the Haushalt's answers carry no links", pub)
+		}
+	}
 	if cc := strings.TrimPrefix(strings.TrimSpace(os.Getenv("HAUS_PHONE_COUNTRY")), "+"); cc != "" {
 		if !countryRE.MatchString(cc) {
 			return cfg, fmt.Errorf("HAUS_PHONE_COUNTRY %q: want a calling code like 49", cc)
@@ -171,7 +180,14 @@ func Tools(cfg Config) []mcpserver.Tool {
 		loc = time.Local
 	}
 	var out []mcpserver.Tool
+	// the tools appended since from reach backend over the network
+	plainFrom := func(from int, backend string) {
+		for i := from; i < len(out); i++ {
+			out[i].Call = plainWhenDown(backend, out[i].Name, out[i].Call)
+		}
+	}
 	if c := cfg.Calendar; c != nil {
+		from := len(out)
 		out = append(out,
 			mcpserver.Tool{
 				Name:        "termine",
@@ -199,6 +215,7 @@ func Tools(cfg Config) []mcpserver.Tool {
 				Call:        func(ctx context.Context, a map[string]any) (string, error) { return erinnerungAnlegen(ctx, c, loc, a) },
 			},
 		)
+		plainFrom(from, "Radicale")
 	}
 	if n := cfg.Notes; n != nil {
 		out = append(out,
@@ -226,13 +243,22 @@ func Tools(cfg Config) []mcpserver.Tool {
 	if cc == "" {
 		cc = defaultCountry
 	}
+	pub := strings.TrimRight(cfg.PublicURL, "/")
 	if c := cfg.Contacts; c != nil {
+		from := len(out)
 		out = append(out,
 			mcpserver.Tool{
 				Name:        "kontakte_suchen",
 				Description: "Sucht im Adressbuch der Familie nach Name, Telefonnummer oder E-Mail und zeigt Telefon, E-Mail und Geburtstag.",
 				Schema:      obj(map[string]any{"text": str("Name, Teil einer Nummer oder E-Mail-Adresse")}, "text"),
 				Call:        func(ctx context.Context, a map[string]any) (string, error) { return kontakteSuchen(ctx, c, cc, a) },
+			},
+			mcpserver.Tool{
+				Name: "kontakt_lesen",
+				Description: "Zeigt einen Kontakt aus dem Adressbuch der Familie ganz: alle Nummern und E-Mail-Adressen, Geburtstag, Anschrift " +
+					"und einen Link zu seiner Seite. Passen mehrere, nennt die Antwort sie mit ihrer Kennung; dann mit dem ganzen Namen oder der Kennung noch einmal fragen.",
+				Schema: obj(map[string]any{"kontakt": str("Name (ganz oder ein Teil), Nummer, E-Mail-Adresse oder die Kennung des Kontakts")}, "kontakt"),
+				Call:   func(ctx context.Context, a map[string]any) (string, error) { return kontaktLesen(ctx, c, cc, pub, a) },
 			},
 			mcpserver.Tool{
 				Name:        "kontakt_anlegen",
@@ -242,16 +268,35 @@ func Tools(cfg Config) []mcpserver.Tool {
 				Call: func(ctx context.Context, a map[string]any) (string, error) { return kontaktAnlegen(ctx, c, a) },
 			},
 		)
+		plainFrom(from, "Radicale")
 	}
 	if d := cfg.Documents; d != nil {
+		from := len(out)
 		out = append(out, mcpserver.Tool{
 			Name:        "dokumente_suchen",
-			Description: "Sucht in den Dokumenten der Familie (Paperless, Volltext) und zeigt Datum, Absender, Titel und einen Link; nur lesen.",
+			Description: "Sucht in den Dokumenten der Familie (Paperless, Volltext) und zeigt Datum, Absender, Titel, Schlagworte und einen Link; nur lesen.",
 			Schema:      obj(map[string]any{"text": str("Wonach gesucht wird, z. B. Rechnung Stadtwerke")}, "text"),
-			Call:        func(ctx context.Context, a map[string]any) (string, error) { return dokumenteSuchen(ctx, d, a) },
+			Call:        func(ctx context.Context, a map[string]any) (string, error) { return dokumenteSuchen(ctx, d, pub, a) },
 		})
+		plainFrom(from, "Paperless")
 	}
 	return out
+}
+
+// plainWhenDown answers a backend that cannot be reached (refused, timed
+// out, no such host) in a plain sentence: which one, and to try again
+// later. The transport's words and the internal address go to Haus's log,
+// not to the person. Any other error stays as it is.
+func plainWhenDown(backend, tool string, call func(context.Context, map[string]any) (string, error)) func(context.Context, map[string]any) (string, error) {
+	return func(ctx context.Context, a map[string]any) (string, error) {
+		out, err := call(ctx, a)
+		var ue *url.Error
+		if err != nil && errors.As(err, &ue) {
+			log.Printf("haus: haushalt %s: %v", tool, err)
+			return "", fmt.Errorf("%s antwortet gerade nicht; später noch einmal versuchen", backend)
+		}
+		return out, err
+	}
 }
 
 // ParseWhen reads a date or a local time; dateOnly says there was no time.
@@ -638,6 +683,129 @@ func kontakteSuchen(ctx context.Context, c *caldav.Client, cc string, a map[stri
 	return strings.TrimRight(b.String(), "\n"), nil
 }
 
+// findContact is the contact q names: the one whose id it is, else those
+// whose whole name it is (any case), else those a search for it finds.
+func findContact(all []caldav.Contact, q, cc string) []caldav.Contact {
+	var hits []caldav.Contact
+	for _, ct := range all {
+		if strings.TrimSpace(ct.UID) == q {
+			hits = append(hits, ct)
+		}
+	}
+	if len(hits) > 0 {
+		return hits
+	}
+	for _, ct := range all {
+		if strings.EqualFold(oneLine(ct.Name), q) {
+			hits = append(hits, ct)
+		}
+	}
+	if len(hits) > 0 {
+		return hits
+	}
+	for _, ct := range all {
+		if matches(ct, q, cc) {
+			hits = append(hits, ct)
+		}
+	}
+	return hits
+}
+
+// some is at most max of vs, each one line cut at n, joined with sep, and
+// how many more there are.
+func some(vs []string, max, n int, sep string) (out string, more int) {
+	var keep []string
+	for _, v := range vs {
+		if v = oneLine(v); v == "" {
+			continue
+		}
+		if len(keep) == max {
+			more++
+			continue
+		}
+		keep = append(keep, cut(v, n))
+	}
+	return strings.Join(keep, sep), more
+}
+
+// listAll is some with the rest said: "a, b … und 3 weitere".
+func listAll(vs []string, n int, sep string) string {
+	out, more := some(vs, maxOfAKind, n, sep)
+	if more > 0 {
+		out += fmt.Sprintf(" … und %d weitere", more)
+	}
+	return out
+}
+
+// maxOfAKind is how many numbers, emails or addresses one contact shows.
+const maxOfAKind = 10
+
+// contactCard is one contact whole, a line a kind, and its page on Haus
+// when Haus's address is known.
+func contactCard(ct caldav.Contact, pub string) string {
+	head := orDash(ct.Name)
+	if nick := oneLine(ct.Nickname); nick != "" {
+		head += " („" + cut(nick, 60) + "“)"
+	}
+	lines := []string{head}
+	add := func(label, v string) {
+		if v != "" {
+			lines = append(lines, label+": "+v)
+		}
+	}
+	add("Firma", cut(oneLine(ct.Org), 100))
+	add("Telefon", listAll(ct.Phones, 40, ", "))
+	add("E-Mail", listAll(ct.Emails, 100, ", "))
+	if ct.Birthday != "" {
+		add("Geburtstag", birthdayDay(ct.Birthday))
+	}
+	add("Adresse", listAll(ct.Addresses, MaxField, "; "))
+	if uid := strings.TrimSpace(ct.UID); pub != "" && uid != "" {
+		add("Seite", pub+cards.ContactPage(uid))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func kontaktLesen(ctx context.Context, c *caldav.Client, cc, pub string, a map[string]any) (string, error) {
+	q := oneLine(mcpserver.Str(a, "kontakt"))
+	if q == "" {
+		return "", errors.New("kontakt fehlt")
+	}
+	if err := tooLong("kontakt", q, MaxField); err != nil {
+		return "", err
+	}
+	all, partial, err := c.Contacts(ctx)
+	if err != nil {
+		return "", err
+	}
+	hits := findContact(all, q, cc)
+	more := ""
+	if partial {
+		more = "\nNur ein Teil des Adressbuchs ist durchsucht (zu viele Kontakte); such genauer."
+	}
+	switch len(hits) {
+	case 0:
+		return "Kein Kontakt passt zu „" + cut(q, MaxField) + "“." + more, nil
+	case 1:
+		return contactCard(hits[0], pub), nil
+	}
+	sort.SliceStable(hits, func(i, j int) bool { return strings.ToLower(hits[i].Name) < strings.ToLower(hits[j].Name) })
+	var b strings.Builder
+	b.WriteString("Mehrere Kontakte passen zu „" + cut(q, MaxField) + "“; welcher ist gemeint? Den ganzen Namen oder die Kennung nennen:\n")
+	for i, ct := range hits {
+		if i == maxContacts {
+			fmt.Fprintf(&b, "… und %d weitere; such genauer.\n", len(hits)-maxContacts)
+			break
+		}
+		line := contactLine(ct)
+		if uid := oneLine(ct.UID); uid != "" {
+			line += " · Kennung " + cut(uid, 120)
+		}
+		b.WriteString(line + "\n")
+	}
+	return strings.TrimRight(b.String(), "\n") + more, nil
+}
+
 func kontaktAnlegen(ctx context.Context, c *caldav.Client, a map[string]any) (string, error) {
 	ct := caldav.Contact{Name: oneLine(mcpserver.Str(a, "name"))}
 	if ct.Name == "" {
@@ -674,7 +842,10 @@ func kontaktAnlegen(ctx context.Context, c *caldav.Client, a map[string]any) (st
 // maxDocs is how many documents a search shows.
 const maxDocs = 20
 
-func dokumenteSuchen(ctx context.Context, d *paperless.Client, a map[string]any) (string, error) {
+// maxTags is how many tags a document shows.
+const maxTags = 5
+
+func dokumenteSuchen(ctx context.Context, d *paperless.Client, pub string, a map[string]any) (string, error) {
 	q := oneLine(mcpserver.Str(a, "text"))
 	if q == "" {
 		return "", errors.New("text fehlt")
@@ -698,9 +869,18 @@ func dokumenteSuchen(ctx context.Context, d *paperless.Client, a map[string]any)
 		if c := oneLine(doc.Correspondent); c != "" {
 			parts = append(parts, cut(c, 100))
 		}
-		line := strings.Join(append(parts, orDash(doc.Title)), " · ")
-		if doc.Link != "" {
-			line += " — " + doc.Link
+		parts = append(parts, orDash(doc.Title))
+		if t, more := some(doc.Tags, maxTags, 40, ", "); t != "" {
+			if more > 0 {
+				t += fmt.Sprintf(" (+%d)", more)
+			}
+			parts = append(parts, "Schlagworte: "+t)
+		}
+		line := strings.Join(parts, " · ")
+		// Haus's page sends the person on to Paperless (haus#28); it leads
+		// somewhere only when Paperless's public address is set
+		if pub != "" && doc.Link != "" {
+			line += " — " + pub + cards.DocumentPage(doc.ID)
 		}
 		b.WriteString(line + "\n")
 	}

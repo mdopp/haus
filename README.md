@@ -79,8 +79,8 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     a card domain, `cards.Domains`, that HA does not hide — a person, a
     tracker, a hidden entity are a 404; until the registry is read, 503),
     `/kalender/erinnerung/<uid>` (a reminder: open and due, done, or
-    cancelled), `/kontakte/<uid>` (a contact: numbers and addresses to tap,
-    the birthday), `/dokumente/<id>` (a 302 to the document's page in
+    cancelled), `/kontakte/<uid>` (a contact: numbers and email addresses to
+    tap, the birthday, the postal addresses), `/dokumente/<id>` (a 302 to the document's page in
     Paperless, `HAUS_PAPERLESS_PUBLIC_URL`; without it a 404), and a note's
     `/notizen/<file>`.
     Something not there is a 404 that says so, with the way back. Their
@@ -238,8 +238,18 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     number, any other is a piece of it; the house's calling code is
     `HAUS_PHONE_COUNTRY`, default `49`; ten hits with phone, email and
     birthday),
+    `kontakt_lesen(kontakt)` (one contact whole: every number and email,
+    ten of a kind, the birthday, the postal addresses (`ADR`, as a letter
+    has them) and its page `<HAUS_PUBLIC_URL>/kontakte/<uid>` when
+    `HAUS_PUBLIC_URL` is set; found by its UID, else its whole name in any
+    case, else the search above; when several match, the answer names ten
+    with their UIDs and shows none whole),
     `kontakt_anlegen(name, telefon?, email?, geburtstag?)` (a vCard 4.0
     with a random `urn:uuid` UID; `geburtstag` `JJJJ-MM-TT` or `--MM-TT`).
+    No tool changes a contact: until identity per person (below), the Bote
+    writes with one account over every address book it can read, and a
+    changed card on someone's phone cannot be taken back the way a new
+    one can be deleted.
     Reads cover every address book of the account; writes go to
     `HAUS_RADICALE_ADDRESSBOOK` when set, else the address book named
     `Haushalt`, made on the first write at `/<user>/haushalt-kontakte/`.
@@ -247,10 +257,16 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     timeout (after the first card) and says so. No redirect is followed.
   - `HAUS_PAPERLESS_URL` + `HAUS_PAPERLESS_TOKEN` (a Paperless API token;
     what its user may see is what the Bote sees): `dokumente_suchen(text)`,
-    full text, at most 20 hits with date, correspondent, title and, when
-    `HAUS_PAPERLESS_PUBLIC_URL` is set, a link to
-    `<public>/documents/<id>/details`. Read-only (GET only), no redirect
-    followed, the token never in an answer.
+    Paperless's own full text search (no index of Haus's), at most 20 hits
+    with date, correspondent, title, five tags and, when `HAUS_PUBLIC_URL`
+    and `HAUS_PAPERLESS_PUBLIC_URL` are both set, a link to the document's
+    page on Haus, `<HAUS_PUBLIC_URL>/dokumente/<id>`, which sends the
+    person on to Paperless. Read-only (GET only), no redirect followed, the
+    token never in an answer.
+  A backend that does not answer (refused, timed out) is a plain tool
+  error, `Radicale antwortet gerade nicht; später noch einmal versuchen`
+  (or Paperless), its detail in Haus's log; any other answer it did not
+  expect says the status.
   - `HAUS_NOTES_DIR` (the share's `notes` folder): `notizen_suchen(text)`,
     `notiz_lesen(titel)`, `notiz_anlegen(titel, text)`. A note is
     `<slug>.md`, `# Titel` first, never written over an existing one (`-2`,

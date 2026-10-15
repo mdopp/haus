@@ -115,10 +115,11 @@ func (c *Client) list(ctx context.Context, q url.Values, max int) ([]Doc, int, e
 			Correspondent *int   `json:"correspondent"`
 			Created       string `json:"created"`
 			CreatedDate   string `json:"created_date"`
+			Tags          []int  `json:"tags"`
 		} `json:"results"`
 	}
 	q.Set("page_size", strconv.Itoa(max))
-	q.Set("fields", "id,title,correspondent,created,created_date") // not the OCR text
+	q.Set("fields", "id,title,correspondent,created,created_date,tags") // not the OCR text
 	q.Set("truncate_content", "true")
 	if err := c.get(ctx, "/api/documents/", q, &page); err != nil {
 		return nil, 0, err
@@ -126,18 +127,27 @@ func (c *Client) list(ctx context.Context, q url.Values, max int) ([]Doc, int, e
 	if len(page.Results) > max {
 		page.Results = page.Results[:max]
 	}
-	ids := map[int]bool{}
+	ids, tagIDs := map[int]bool{}, map[int]bool{}
 	for _, r := range page.Results {
 		if r.Correspondent != nil {
 			ids[*r.Correspondent] = true
 		}
+		for _, t := range r.Tags {
+			tagIDs[t] = true
+		}
 	}
-	names := c.correspondents(ctx, ids)
+	names := c.names(ctx, "/api/correspondents/", ids)
+	tags := c.names(ctx, "/api/tags/", tagIDs)
 	out := make([]Doc, 0, len(page.Results))
 	for _, r := range page.Results {
 		d := Doc{ID: r.ID, Title: r.Title}
 		if r.Correspondent != nil {
 			d.Correspondent = names[*r.Correspondent]
+		}
+		for _, t := range r.Tags {
+			if n, ok := tags[t]; ok {
+				d.Tags = append(d.Tags, n)
+			}
 		}
 		for _, s := range []string{r.Created, r.CreatedDate} {
 			if len(s) >= 10 {
@@ -162,9 +172,10 @@ func (c *Client) Page(id int) string {
 	return pub + "/documents/" + strconv.Itoa(id) + "/details"
 }
 
-// correspondents names the ids in one request; one Paperless will not
-// name stays nameless rather than failing the search.
-func (c *Client) correspondents(ctx context.Context, ids map[int]bool) map[int]string {
+// names names the ids of one kind (correspondents, tags) in one request;
+// one Paperless will not name stays nameless rather than failing the
+// search.
+func (c *Client) names(ctx context.Context, path string, ids map[int]bool) map[int]string {
 	out := map[int]string{}
 	if len(ids) == 0 {
 		return out
@@ -184,7 +195,7 @@ func (c *Client) correspondents(ctx context.Context, ids map[int]bool) map[int]s
 			Name string `json:"name"`
 		} `json:"results"`
 	}
-	if err := c.get(ctx, "/api/correspondents/", url.Values{"id__in": {strings.Join(strs, ",")}, "page_size": {strconv.Itoa(len(list))}}, &page); err != nil {
+	if err := c.get(ctx, path, url.Values{"id__in": {strings.Join(strs, ",")}, "page_size": {strconv.Itoa(len(list))}}, &page); err != nil {
 		return out
 	}
 	for _, r := range page.Results {

@@ -155,6 +155,10 @@ func Contacts(root *Component) []Contact {
 				}
 			case "BDAY":
 				ct.Birthday = birthday(v, p.Params["X-APPLE-OMIT-YEAR"])
+			case "ADR":
+				if a := address(p.Value); a != "" {
+					ct.Addresses = append(ct.Addresses, a)
+				}
 			}
 		}
 		out = append(out, ct)
@@ -162,9 +166,11 @@ func Contacts(root *Component) []Contact {
 	return out
 }
 
-// orgParts reads a structured ORG (name;unit;…) as "name, unit".
-func orgParts(v string) string {
-	var parts []string
+// parts splits a structured value (ORG, ADR) at its unescaped semicolons,
+// empty parts kept in their place; an escaped newline is a space, any
+// other escaped character itself.
+func parts(v string) []string {
+	var out []string
 	var cur strings.Builder
 	for i := 0; i < len(v); i++ {
 		switch {
@@ -176,18 +182,33 @@ func orgParts(v string) string {
 				cur.WriteByte(v[i])
 			}
 		case v[i] == ';':
-			parts = append(parts, cur.String())
+			out = append(out, cur.String())
 			cur.Reset()
 		default:
 			cur.WriteByte(v[i])
 		}
 	}
-	parts = append(parts, cur.String())
+	return append(out, cur.String())
+}
+
+// joinSome joins the parts that are not blank, each on one line.
+func joinSome(sep string, ps ...string) string {
 	var keep []string
-	for _, p := range parts {
-		if p = strings.TrimSpace(p); p != "" {
+	for _, p := range ps {
+		if p = strings.Join(strings.Fields(p), " "); p != "" {
 			keep = append(keep, p)
 		}
 	}
-	return strings.Join(keep, ", ")
+	return strings.Join(keep, sep)
+}
+
+// orgParts reads a structured ORG (name;unit;…) as "name, unit".
+func orgParts(v string) string { return joinSome(", ", parts(v)...) }
+
+// address reads an ADR (post box;extended;street;locality;region;code;
+// country) as a letter has it: "street, code locality, region, country";
+// "" when it is all blank.
+func address(v string) string {
+	p := append(parts(v), make([]string, 7)...)
+	return joinSome(", ", p[0], p[1], p[2], joinSome(" ", p[5], p[3]), p[4], p[6])
 }

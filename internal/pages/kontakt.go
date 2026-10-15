@@ -13,7 +13,8 @@ import (
 )
 
 // Kontakt is one contact's own page (haus#28), the page a contacts widget
-// row opens: the name, the numbers and addresses to tap, the birthday.
+// row opens: the name, the numbers and addresses to tap, the birthday, the
+// postal addresses.
 func Kontakt(cfg StartConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !showOnly(w, r, "Der Kontakt") {
@@ -63,6 +64,11 @@ func Kontakt(cfg StartConfig) http.HandlerFunc {
 			}
 			if ct.Birthday != "" {
 				c.Add(haushalt.BirthdayText(ct.Birthday), "Geburtstag")
+			}
+			for _, a := range ct.Addresses {
+				if a = trimRunes(oneLine(a), 200); a != "" {
+					c.Add(a, "Adresse")
+				}
 			}
 			b.WriteString(c.HTML())
 			writePage(w, http.StatusOK, b)
