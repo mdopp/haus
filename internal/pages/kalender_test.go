@@ -142,7 +142,7 @@ func TestKalenderReminderDueOnADay(t *testing.T) {
 	mustNotContain(t, body, "00:00", "überfällig seit heute")
 
 	_, body = startPage(t, StartConfig{Calendar: cal}, "")
-	mustContain(t, body, "Erinnerung · heute<", "Erinnerung · überfällig seit gestern<")
+	mustContain(t, body, "<time>heute</time>", "<time>überfällig seit gestern</time>", "<time>Fr 16.10.</time>")
 	mustNotContain(t, body, "00:00")
 }
 

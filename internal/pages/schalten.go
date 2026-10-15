@@ -1,0 +1,100 @@
+package pages
+
+import (
+	"errors"
+	"log"
+	"net/http"
+	"strings"
+
+	"github.com/mdopp/haus/internal/cards"
+	"github.com/mdopp/haus/internal/ha"
+	"github.com/mdopp/haus/internal/schalter"
+)
+
+// pageDoes is what a family page may ask Home Assistant to do (haus#35):
+// a lamp or a switch on and off, a player's pause — narrower than package
+// schalter's rule, which every call still passes, never wider.
+var pageDoes = map[string]bool{"light.turn_on": true, "light.turn_off": true, "switch.turn_on": true, "switch.turn_off": true,
+	"media_player.media_pause": true}
+
+// allLightsOff is Im Haus's "Alle aus": every lamp Start counted as on.
+const allLightsOff = "alle-lichter-aus"
+
+// What a switch that did not happen says.
+const (
+	saysSwitchFailed = "Das hat nicht geklappt: Licht und Geräte antworten gerade nicht."
+	saysNotSwitched  = "Das lässt sich hier nicht schalten."
+)
+
+// Schalten is where a family page's switch posts (cards.SwitchPath): one
+// thing, one service of pageDoes, through package schalter's rule — the
+// widgets' own — and back to the page it came from (303, so a reload
+// sends nothing again). Only a person, only from Haus's own page; the
+// form's other fields go nowhere. It decides nothing about the box
+// (haus#1): it switches the house.
+func Schalten(cfg StartConfig) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", "POST")
+			http.Error(w, "Schalten geht nur mit dem Knopf auf der Seite.", http.StatusMethodNotAllowed)
+			return
+		}
+		if cfg.HA == nil {
+			http.Redirect(w, r, "/start", http.StatusSeeOther)
+			return
+		}
+		if !fromHaus(r) {
+			http.Error(w, "Schalten geht nur von Haus' eigener Seite.", http.StatusForbidden)
+			return
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, 4<<10)
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "Das Formular ist nicht lesbar.", http.StatusBadRequest)
+			return
+		}
+		id, do := r.PostForm.Get("geraet"), r.PostForm.Get("tun")
+		back := backTo(r.PostForm.Get("zurueck"))
+		var err error
+		switch {
+		case do == allLightsOff && id == "":
+			var states []ha.State
+			if states, err = cfg.HA.States(r.Context()); err == nil {
+				reg, _ := cfg.HA.CachedRegistry(r.Context())
+				for _, l := range litLamps(states, reg.Hidden) {
+					if err = schalter.Do(r.Context(), cfg.HA, l.EntityID, "light.turn_off", nil, false); err != nil {
+						break
+					}
+				}
+			}
+		case pageDoes[do]:
+			err = schalter.Do(r.Context(), cfg.HA, id, do, nil, false)
+		default:
+			err = &schalter.Refusal{Code: http.StatusBadRequest, Reason: "not a page's"}
+		}
+		if err == nil {
+			http.Redirect(w, r, back, http.StatusSeeOther)
+			return
+		}
+		log.Printf("haus: schalten %q on %q: %v", do, id, err)
+		m := missing{http.StatusOK, saysSwitchFailed, "Zuhause", back, "Zurück"}
+		if back != "/start" {
+			m.page = "Räume"
+		}
+		var no *schalter.Refusal
+		if errors.As(err, &no) {
+			m.code, m.say = no.Code, saysNotSwitched
+		}
+		m.write(w, r, cfg)
+	}
+}
+
+// backTo is where a switch lands: Start, or the page of a thing that has
+// one; anything else is Start.
+func backTo(path string) string {
+	if id, ok := strings.CutPrefix(path, cards.ThingPages); ok && ha.EntityRE.MatchString(id) {
+		if domain, _, _ := strings.Cut(id, "."); cards.Domains[domain] {
+			return cards.ThingPage(id)
+		}
+	}
+	return "/start"
+}

@@ -114,7 +114,7 @@ func TestFamilyPagesDecideNothing(t *testing.T) {
 
 // haus#35: the persona speaks where you talk to it, not on the pages: no
 // greeting, name, icon or colours on any family page. The pages wear the
-// house palette (solaris-chat's tokens, haus-android's colors.xml), light
+// house palette (the chat's tokens, haus-android's colors.xml), light
 // or dark as the phone is, and Haus's own Geist — never a font from
 // Google.
 func TestFamilyPagesWearTheHousePaletteNotThePersona(t *testing.T) {

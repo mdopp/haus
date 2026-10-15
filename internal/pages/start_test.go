@@ -496,6 +496,13 @@ func TestStartBoxLine(t *testing.T) {
 		mustNotContain(t, body, "Alles läuft", "Letzte Sicherung", "Orten", "Operator", "Admin", "Letzte Änderung", "Rückgängig",
 			"immich", "paperless", "Laib", "rot<", "grün")
 	}
+	// the box well but the house not answering: the box line does not say
+	// "Alles in Ordnung" under a page that says something does not answer
+	fake, hc := house(t)
+	fake.Down(true)
+	_, body := startPage(t, StartConfig{Laib: fakeLaib(t, allGreen(t), ok), HA: hc}, "family")
+	mustContain(t, body, "class=ruhig", "Eure Daten sind von gestern Abend gesichert", "Licht und Geräte antworten gerade nicht.")
+	mustNotContain(t, body, "Alles in Ordnung", "class=achtung")
 	// Laib not answering: #34's line, at the bottom, without its error
 	code, body := startPage(t, StartConfig{Laib: brokenLaib(t)}, "")
 	if code != 200 {
@@ -505,7 +512,7 @@ func TestStartBoxLine(t *testing.T) {
 	mustNotContain(t, body, "Alles in Ordnung", "class=achtung", "connection refused", "500", "boom")
 	// no Laib configured: not a word
 	_, body = startPage(t, StartConfig{}, "")
-	mustNotContain(t, body, "class=ruhig", "class=achtung", "Box", "gesichert")
+	mustNotContain(t, body, "class=ruhig", "class=achtung", "Box geht", "Die Box", "gesichert", "Alles in Ordnung")
 }
 
 // How long ago the backup was, the way the family says it.
@@ -592,7 +599,7 @@ func TestStartSaysNothingAboutWhatIsNotConfigured(t *testing.T) {
 	if code != 200 {
 		t.Fatalf("status %d", code)
 	}
-	mustContain(t, body, "Alles in Ordnung")
+	mustContain(t, body, "Alles in Ordnung · eure Daten sind von gestern Abend gesichert")
 	mustNotContain(t, body, "karte-im-haus", "karte-meine-geraete", "karte-heute", "Licht", "Termin", "Erinnerung", "Notiz", "nicht konfiguriert", "HAUS_")
 }
 
@@ -704,7 +711,7 @@ func favorites(t *testing.T, content string) *favoriten.Store {
 
 // The family reads Start on a phone: the page scales to the screen, a
 // long name breaks inside its row, and what a finger taps is at least
-// 40 px (solarisbay design-guidelines).
+// 40 px (the design guidelines: "could my mother use it?").
 func TestStartFitsAPhone(t *testing.T) {
 	fake, hc := house(t)
 	fake.Set("light.lang", "on", map[string]any{"friendly_name": strings.Repeat("Wohnzimmerdeckenfluter", 3)})

@@ -211,12 +211,12 @@ func TestSchaltenSaysPlainlyWhenHADoesNotAnswer(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("→ %d", rec.Code)
 	}
-	mustContain(t, body, "Das hat nicht geklappt: Licht und Geräte antworten gerade nicht.", `href="/raeume/light.buero"`, "<nav class=tabs")
+	mustContain(t, body, "Das hat nicht geklappt: Licht und Geräte antworten gerade nicht.", "<p><a href=/raeume/light.buero>Zurück</a></p>", "<nav class=tabs")
 	mustNotLeak(t, body, "some detail", "service failed", host(cfg.HA.URL))
 	fake.FailCalls(0)
 	fake.Down(true)
 	rec = post(t, Schalten(cfg), "/schalten", url.Values{"tun": {"alle-lichter-aus"}}, "anna", nil)
-	mustContain(t, rec.Body.String(), "Das hat nicht geklappt: Licht und Geräte antworten gerade nicht.", `href="/start"`)
+	mustContain(t, rec.Body.String(), "Das hat nicht geklappt: Licht und Geräte antworten gerade nicht.", "<p><a href=/start>Zurück</a></p>")
 	mustNotLeak(t, rec.Body.String())
 }
 
@@ -305,14 +305,14 @@ func TestDingPinIsGuarded(t *testing.T) {
 	}
 	cfg.Favorites = nil
 	_, body, _ := familyPage(t, Ding, cfg, "GET", "/raeume/light.buero", "family")
-	mustNotContain(t, body, "☆", "★", "stern")
+	mustNotContain(t, body, "☆", "★", "name=stern")
 	if rec := post(t, Ding(cfg), "/raeume/light.buero", url.Values{"stern": {"an"}}, "anna", nil); rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("without a store → %d, want 405", rec.Code)
 	}
 	// nobody asking sees no ☆: there is no list to pin to
 	cfg.Favorites = favorites(t, "")
 	_, body, _ = familyPageAs(t, Ding, cfg, "GET", "/raeume/light.buero", "", "")
-	mustNotContain(t, body, "☆", "stern")
+	mustNotContain(t, body, "☆", "name=stern")
 }
 
 // A favorites file that does not read is not written over; the page says
@@ -325,7 +325,7 @@ func TestDingPinSaysABrokenFilePlainly(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("→ %d", rec.Code)
 	}
-	mustContain(t, body, "Deine Favoriten lassen sich gerade nicht lesen.", `href="/raeume/light.buero"`)
+	mustContain(t, body, "Deine Favoriten lassen sich gerade nicht lesen.", "<p><a href=/raeume/light.buero>Zurück zum Gerät</a></p>")
 	mustNotLeak(t, body, "favoriten.json", "unexpected", "JSON")
 	if _, err := cfg.Favorites.For("anna"); err == nil {
 		t.Fatal("the broken file was written over")

@@ -54,7 +54,7 @@ func TestRoutesGuards(t *testing.T) {
 		{"GET", "/box/geraete", 403},
 		{"POST", "/schalten", 403},
 		{"POST", "/raeume/light.flur", 403},
-		{"GET", "/schrift/geist-1.401.woff2", 403},
+		{"GET", "/schrift/geist-1b5ebf.woff2", 403},
 		{"GET", "/healthz", 200},
 		{"GET", "/napi/box/home", 401},
 		{"POST", "/mcp/haushalt", 401},

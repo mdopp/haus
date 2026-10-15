@@ -43,7 +43,7 @@ type site struct {
 	laibURL     string
 	publicURL   string
 	tickets     *werkstatt.Tickets // haus#15: the Werkstatt card; nil, no card
-	favorites   *favoriten.Store   // haus#12: each person's favorites on Start
+	favorites   *favoriten.Store   // haus#12, haus#35: each person's things on Start, pinned with ☆
 }
 
 // routes is Haus's whole surface: /napi for the app, /mcp/haushalt for the
@@ -69,7 +69,9 @@ func routes(s site) http.Handler {
 	pagesMux.HandleFunc(cards.ReminderPages, pages.Erinnerung(family))
 	pagesMux.HandleFunc(cards.ContactPages, pages.Kontakt(family))
 	pagesMux.HandleFunc(cards.DocumentPages, pages.Dokument(family))
-	pagesMux.HandleFunc(cards.NotePages, pages.Notizen(family)) // a note's own page
+	pagesMux.HandleFunc(cards.NotePages, pages.Notizen(family))   // a note's own page
+	pagesMux.HandleFunc(cards.SwitchPath, pages.Schalten(family)) // a page's switch, the widgets' rule (haus#35)
+	pagesMux.HandleFunc("/schrift/", pages.Font())                // Geist, from Haus itself (haus#35)
 	pagesMux.HandleFunc("/box", pages.BoxWith(s.ops, s.laibURL, s.tickets))
 	pagesMux.HandleFunc("/box/geraete", pages.Geraete(s.store, s.publicURL))
 	pagesMux.HandleFunc("/pair-device", pages.PairDevice(s.store)) // the app's own pairing path (haus#6)
