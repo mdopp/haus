@@ -123,17 +123,18 @@ func TestSprechenRelaysAndShowsTheReply(t *testing.T) {
 	mustContain(t, body, "Joshua", "action=/sprechen")
 }
 
-// The reply is the Bote's text, shown as text: markup in it is escaped,
+// The reply is the Bote's text, shown as text: markup in it, and in the
+// person's own words, is escaped,
 // a code block (a persona's screen) keeps its lines in a box of its own,
 // **bold** is bold, and nothing runs.
 func TestSprechenShowsTheReplyAsText(t *testing.T) {
 	fake, bc := fakeBote(t)
 	fake.Reply = "Hier ist das **Menü**:\n\n```\nJOSHUA> 1 HAUS\n        2 SPIELE\n```\n<script>alert(1)</script> <a href=x>y</a>"
 	h := Sprechen(StartConfig{Bote: bc})
-	say(t, h, "anna", "Menü", nil)
+	say(t, h, "anna", "Menü <i>bitte</i>", nil)
 	_, body, _ := talkPage(t, h, "anna")
-	mustContain(t, body, "<strong>Menü</strong>", "<pre>JOSHUA&gt; 1 HAUS\n        2 SPIELE</pre>", "&lt;script&gt;alert(1)&lt;/script&gt;", "&lt;a href=x&gt;")
-	mustNotContain(t, body, "<script", "<a href=x>", "```", "**")
+	mustContain(t, body, "Menü &lt;i&gt;bitte&lt;/i&gt;", "<strong>Menü</strong>", "<pre>JOSHUA&gt; 1 HAUS\n        2 SPIELE</pre>", "&lt;script&gt;alert(1)&lt;/script&gt;", "&lt;a href=x&gt;")
+	mustNotContain(t, body, "<script", "<a href=x>", "<i>", "```", "**")
 }
 
 // Only a person, only from Haus's own page (the #35 rule): no Remote-User,

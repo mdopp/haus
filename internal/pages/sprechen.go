@@ -89,7 +89,7 @@ func Sprechen(cfg StartConfig) http.HandlerFunc {
 			e, ok := t.get(person)
 			b := familyHead(r, cfg, "Sprechen", "Sprechen")
 			b.WriteString("<h1>Sprechen</h1><form method=post action=/sprechen class=sprechen>" + sprechenInput)
-			if ok && person != "" {
+			if ok {
 				b.WriteString(e.html())
 			} else {
 				b.WriteString("<p class=k>Was du hier schreibst, liest " + html.EscapeString(House.Display) + ". Die Antwort erscheint hier; das kann einen Moment dauern.</p>")
