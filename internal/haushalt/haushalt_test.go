@@ -894,21 +894,39 @@ func TestDocumentTagsBounded(t *testing.T) {
 	}
 }
 
-// A backend that does not answer is a plain tool error, never a crash, and
-// never the password or the token.
+// A backend that does not answer is a plain tool error, never a crash:
+// which one, and to try again later; never the password, the token, an
+// internal address or the transport's words (those go to Haus's log).
 func TestBackendDown(t *testing.T) {
-	s := newSetup(t, want{contacts: true, docs: true})
+	s := newSetup(t, want{cal: true, contacts: true, docs: true})
 	s.fake.Close()
 	s.docs.Close()
 	for _, c := range []struct{ tool, arg, says string }{
 		{"kontakt_lesen", "kontakt", "Radicale"},
 		{"kontakte_suchen", "text", "Radicale"},
+		{"kontakt_anlegen", "name", "Radicale"},
+		{"termine", "von", "Radicale"},
 		{"dokumente_suchen", "text", "Paperless"},
 	} {
-		text, isErr := call(t, s.h, c.tool, map[string]any{c.arg: "anna"})
-		if !isErr || !strings.Contains(text, c.says) || strings.Contains(text, plToken) || strings.Contains(text, ":pw@") {
+		arg := "anna"
+		if c.tool == "termine" {
+			arg = "2026-10-15"
+		}
+		text, isErr := call(t, s.h, c.tool, map[string]any{c.arg: arg})
+		if !isErr || !strings.Contains(text, c.says) || !strings.Contains(text, "später") {
 			t.Fatalf("%s: %q %v", c.tool, text, isErr)
 		}
+		for _, never := range []string{plToken, "pw", "127.0.0.1", "http", "dial", "tcp", "refused", "\n"} {
+			if strings.Contains(text, never) {
+				t.Fatalf("%s says %q: %q", c.tool, never, text)
+			}
+		}
+	}
+	// an answer Haus did not expect stays as plain as before
+	s = newSetup(t, want{docs: true})
+	s.docs.Status = http.StatusInternalServerError
+	if text, _ := call(t, s.h, "dokumente_suchen", map[string]any{"text": "x"}); text != "Paperless antwortet HTTP 500" {
+		t.Fatalf("%q", text)
 	}
 }
 
