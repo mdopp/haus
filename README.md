@@ -37,7 +37,8 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   of the page does not answer); a service down or the data not backed up
   for three days moves it to the top, saying what it means (*Gerade nicht
   erreichbar: Fotos.*, *Eure Daten sind seit 3 Tagen nicht gesichert.*) and
-  who is on it. The admin's words (services, places, the last change,
+  who is on it: amber when the box mends it itself, red only when a person
+  is needed (nobody automatic on it, or the data not backed up). The admin's words (services, places, the last change,
   Rückgängig) are /box's.
   Each part only when its backend is set (`HAUS_HA_URL` + `HAUS_HA_TOKEN`,
   `HAUS_RADICALE_*`); one not set is not mentioned. One not
@@ -67,7 +68,7 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   own rule (`internal/schalter`, below); nothing else in the form rides
   along. Only with `Remote-User` and from Haus's own page
   (`Sec-Fetch-Site: same-origin`, or, from an older browser, an `Origin`
-  of Haus's host), else 403; then 303 back. HA not answering is one plain
+  of Haus's host; neither header is a 403 too), else 403; then 303 back. HA not answering is one plain
   line and the way back. No script: a plain form.
 - `POST /raeume/<id>` `stern=an|aus` — the ☆ on a thing's own page pins it
   to the person's *Meine Geräte* or takes it off (`favoriten.json`, their

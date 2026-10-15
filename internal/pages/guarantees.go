@@ -103,7 +103,9 @@ func when(t time.Time) string {
 // decision 2026-10-15): one calm line at the bottom when all is well —
 // "Alles in Ordnung · eure Daten sind von gestern Abend gesichert". When
 // a service is down or the data is not backed up, it is on top instead,
-// saying what it means for the family and that someone is on it; the
+// saying what it means for the family and that someone is on it — amber
+// (selbst) when the box mends it itself, red (hilfe) only when a person is
+// needed: nobody automatic is on it, or the data is not backed up; the
 // admin's words (services, places, the Operator) stay on /box. Laib not
 // answering is #34's plain line, at the bottom. "Alles in Ordnung" only
 // when quiet: no part of the page said something does not answer.
@@ -122,12 +124,12 @@ func familyBox(ready laib.Readiness, rows []laib.Service, err error, quiet bool,
 		wrong = append(wrong, "Gerade nicht erreichbar: "+andList(down)+".")
 	}
 	at, _ := time.Parse(time.RFC3339, ready.LastBackup.At)
-	saved := ""
+	saved, unsaved := "", false
 	switch {
 	case !ready.LastBackup.OK || ready.LastBackup.Repos < 1 || at.IsZero():
-		wrong = append(wrong, "Eure Daten sind noch nicht gesichert.")
+		wrong, unsaved = append(wrong, "Eure Daten sind noch nicht gesichert."), true
 	case now.Sub(at) > 72*time.Hour:
-		wrong = append(wrong, "Eure Daten sind seit "+strconv.Itoa(int(now.Sub(at)/(24*time.Hour)))+" Tagen nicht gesichert.")
+		wrong, unsaved = append(wrong, "Eure Daten sind seit "+strconv.Itoa(int(now.Sub(at)/(24*time.Hour)))+" Tagen nicht gesichert."), true
 	default:
 		saved = "eure Daten sind " + backupWords(at, now, loc) + " gesichert"
 	}
@@ -137,12 +139,15 @@ func familyBox(ready laib.Readiness, rows []laib.Service, err error, quiet bool,
 	case len(wrong) == 0:
 		return "", "<p class=ruhig><span class=punkt></span>E" + saved[1:] + "</p>"
 	}
-	who := "Wer die Box betreut, weiß Bescheid."
+	who, kind := "Wer die Box betreut, weiß Bescheid.", "hilfe"
 	if ready.Operator == "läuft" || ready.Operator == "startet" {
 		who = "Die Box versucht, das selbst zu beheben."
+		if !unsaved {
+			kind = "selbst"
+		}
 	}
 	var b strings.Builder
-	b.WriteString("<section class=achtung role=status aria-label=\"Die Box\"><p>" + html.EscapeString(strings.Join(wrong, " ")) + "</p><p>" + who + "</p>")
+	b.WriteString("<section class=\"achtung " + kind + "\" role=status aria-label=\"Die Box\"><p>" + html.EscapeString(strings.Join(wrong, " ")) + "</p><p>" + who + "</p>")
 	if saved != "" {
 		b.WriteString("<p>E" + saved[1:] + ".</p>")
 	}

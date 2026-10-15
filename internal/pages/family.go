@@ -74,9 +74,9 @@ func familyNav(r *http.Request, cfg StartConfig, current string) string {
 // green and red only for a state, never alone.
 const frame = `<style>@font-face{font-family:Geist;src:url(` + FontPath + `) format("woff2");font-weight:100 900;font-display:swap}
 :root{color-scheme:dark;--bg:#070709;--panel:#0c0c0e;--card:#14141a;--edge:rgba(255,255,255,.12);--line:rgba(255,255,255,.07);--ink:#f2f2f5;--muted:#9aa0ae;--faint:#6b7280;
---accent:#f97316;--accent-soft:rgba(249,115,22,.14);--state:#ffc107;--ok:#10b981;--danger:#ef5350;--danger-soft:rgba(239,83,80,.12);--track:rgba(255,255,255,.15);--tile:linear-gradient(180deg,#17171d,#0d0d11)}
+--accent:#f97316;--accent-soft:rgba(249,115,22,.14);--state:#ffc107;--ok:#10b981;--warn:#f59e0b;--warn-soft:rgba(245,158,11,.12);--danger:#ef5350;--danger-soft:rgba(239,83,80,.12);--track:rgba(255,255,255,.15);--tile:linear-gradient(180deg,#17171d,#0d0d11)}
 @media (prefers-color-scheme:light){:root{color-scheme:light;--bg:#f1f5f9;--panel:#ffffff;--card:#ffffff;--edge:rgba(15,23,42,.12);--line:rgba(15,23,42,.08);--ink:#0f172a;--muted:#64748b;--faint:#94a3b8;
---accent:#ea580c;--accent-soft:rgba(234,88,12,.10);--state:#b45309;--ok:#059669;--danger:#dc2626;--danger-soft:rgba(220,38,38,.08);--track:rgba(15,23,42,.12);--tile:linear-gradient(180deg,#ffffff,#f6f7f9)}}
+--accent:#ea580c;--accent-soft:rgba(234,88,12,.10);--state:#b45309;--ok:#059669;--warn:#b45309;--warn-soft:rgba(180,83,9,.10);--danger:#dc2626;--danger-soft:rgba(220,38,38,.08);--track:rgba(15,23,42,.12);--tile:linear-gradient(180deg,#ffffff,#f6f7f9)}}
 *{box-sizing:border-box}html{background:var(--bg)}
 body{margin:0 auto;max-width:40rem;padding:0 16px calc(88px + env(safe-area-inset-bottom));background:var(--bg);color:var(--ink);font:16px/1.5 Geist,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-text-size-adjust:100%}
 h1{font-size:1.6rem;font-weight:700;letter-spacing:-.01em;line-height:1.2;margin:22px 0 2px;overflow-wrap:anywhere}.datum{margin:0;color:var(--muted);font-size:.9rem}
@@ -86,6 +86,7 @@ input[type=search]{font:inherit;color:var(--ink);background:var(--card);border:1
 form[role=search]{display:flex;gap:8px;margin:16px 0 0}.notiz{white-space:pre-wrap;overflow-wrap:anywhere}
 .achtung{margin:16px 0 0;padding:12px 14px;background:var(--danger-soft);border:1px solid var(--danger);border-radius:14px}.achtung p{margin:0}.achtung p+p{margin-top:4px;color:var(--muted)}
 .achtung p:first-child::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--danger);margin-right:8px;vertical-align:1px}
+.achtung.selbst{background:var(--warn-soft);border-color:var(--warn)}.achtung.selbst p:first-child::before{background:var(--warn)}
 .ruhig{display:flex;gap:8px;align-items:flex-start;margin:26px 2px 0;color:var(--muted);font-size:.8rem}.punkt{width:8px;height:8px;margin-top:.45em;border-radius:50%;background:var(--ok);flex:none}.punkt.grau{background:var(--faint)}
 .stern{margin:20px 0 0}.stern p{margin:6px 2px 0;font-size:.85rem}
 .tabs{position:fixed;left:0;right:0;bottom:0;z-index:2;display:flex;justify-content:center;background:var(--panel);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
@@ -111,7 +112,8 @@ func familyHead(r *http.Request, cfg StartConfig, title, current string) *string
 // fromHaus is a POST the person sent from Haus's own page (haus#35): the
 // browser says same-origin (Sec-Fetch-Site), or, from one too old to say,
 // the Origin is Haus's own host; and Authelia names the person. A form on
-// another site cannot switch the house with the family's session.
+// another site cannot switch the house with the family's session, and a
+// POST that says neither is refused: Haus's own form always sends one.
 func fromHaus(r *http.Request) bool {
 	if r.Header.Get("Remote-User") == "" {
 		return false
@@ -123,7 +125,7 @@ func fromHaus(r *http.Request) bool {
 		u, err := url.Parse(o)
 		return err == nil && u.Host != "" && u.Host == r.Host
 	}
-	return true
+	return false
 }
 
 // showOnly answers anything but GET and HEAD with 405: a page shows; what
