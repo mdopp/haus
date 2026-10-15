@@ -86,8 +86,10 @@ func TestNotizenSearch(t *testing.T) {
 	before(t, body, "Apfelkuchen", "zwiebelkuchen")
 	mustNotContain(t, body, "Geheim", "Versteckt", "Draußen", "Einkaufsliste", "karte-zuletzt")
 
+	// any word of the query finds a note now (haus#13): the shopping list
+	// holds a <script> line, which stays text
 	_, body, _ = familyPage(t, Notizen, StartConfig{Notes: nd}, "GET", "/notizen?q="+url.QueryEscape(`"><script>alert(1)</script>`), "")
-	mustContain(t, body, "Nichts gefunden", `value="&#34;&gt;&lt;script&gt;alert(1)&lt;/script&gt;"`)
+	mustContain(t, body, `value="&#34;&gt;&lt;script&gt;alert(1)&lt;/script&gt;"`, `<a href="/notizen/einkaufsliste.md">Einkaufsliste</a>`)
 	mustNotContain(t, body, "<script")
 
 	// a blank query is no search
@@ -291,4 +293,52 @@ func TestNotizenSearchFolderGone(t *testing.T) {
 		mustNotContain(t, body, saysWordsOnly, "Nichts gefunden", "Treffer")
 		mustNotLeak(t, body, f.URL, dir, "qmd")
 	}
+}
+
+// A hit's line is plain text: a table row as its cells, no pipes, no
+// table header, no list dash (haus#13).
+func TestNotizenLinesArePlain(t *testing.T) {
+	dir := t.TempDir()
+	table := "# Handwerker\n\n| Gewerk | Firma | Telefon | Notiz |\n|---|---|---|---|\n| Heizung | Huber GmbH | 089 111 | Wartung |\n"
+	list := "# Putzplan\n\n- Bad: Anna, samstags\n- Küche: Ben\n"
+	os.WriteFile(filepath.Join(dir, "handwerker.md"), []byte(table), 0o644)
+	os.WriteFile(filepath.Join(dir, "putzplan.md"), []byte(list), 0o644)
+	nd, _ := notes.Open(dir)
+	f := qmdfake.New("notizen")
+	defer f.Close()
+	f.Add(qmdfake.Doc{Path: "handwerker.md", Title: "Handwerker", Body: table, Means: []string{"haus"}},
+		qmdfake.Doc{Path: "putzplan.md", Title: "Putzplan", Body: list, Means: []string{"haus"}})
+	for _, cfg := range []StartConfig{{Notes: nd, Library: &qmd.Client{URL: f.URL, Collection: "notizen"}}, {Notes: nd}} {
+		q := "/notizen?q=Haus"
+		if cfg.Library == nil {
+			q = "/notizen?q=Huber+Anna" // by words
+		}
+		_, body, _ := familyPage(t, Notizen, cfg, "GET", q, "")
+		mustContain(t, body, "Heizung · Huber GmbH · 089 111 · Wartung", "Bad: Anna, samstags")
+		mustNotContain(t, body, "|", "Gewerk", "- Bad", "---")
+	}
+}
+
+// When only words are searched, a sentence needs none of its common
+// words: any meaningful word of it finds a note. When none does, the page
+// says what to try, with a word from the query itself (haus#13).
+func TestNotizenWordsFromASentence(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "kaminkehrer.md"), []byte("# Kaminkehrer\n\nHerr Brandl kommt im Oktober.\n"), 0o644)
+	nd, _ := notes.Open(dir)
+	_, body, _ := familyPage(t, Notizen, StartConfig{Notes: nd}, "GET", "/notizen?q="+url.QueryEscape("Wann kommt der Kaminkehrer?"), "")
+	mustContain(t, body, saysWordsOnly, `<a href="/notizen/kaminkehrer.md">Kaminkehrer</a>`)
+	mustNotContain(t, body, "Nichts gefunden")
+	for q, example := range map[string]string{
+		"Wann kommt der Schornsteinfeger?": "Schornsteinfeger",
+		"wo liegt der Reisepass":           "Reisepass",
+	} {
+		_, body, _ := familyPage(t, Notizen, StartConfig{Notes: nd}, "GET", "/notizen?q="+url.QueryEscape(q), "")
+		mustContain(t, body, "Nichts gefunden.", "Versuch es mit einem einzelnen Wort aus der Notiz, z. B. „"+example+"“.")
+		mustNotContain(t, body, "„Kaminkehrer“.")
+	}
+	// a query of only common words: the hint without an example
+	_, body, _ = familyPage(t, Notizen, StartConfig{Notes: nd}, "GET", "/notizen?q=wo+ist+das", "")
+	mustContain(t, body, "Nichts gefunden.", "Versuch es mit einem einzelnen Wort aus der Notiz.")
+	mustNotContain(t, body, "z. B.")
 }

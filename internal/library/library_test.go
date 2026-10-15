@@ -210,3 +210,27 @@ func TestUnreadableFolderIsAnError(t *testing.T) {
 		t.Fatal("a blank search is an error, as the word search's")
 	}
 }
+
+// qmd's passage is shown plain (haus#13): a table row as its cells, no
+// list dash; a passage that is only a table's header is the note's first
+// real lines, read from the note itself.
+func TestPassagesArePlain(t *testing.T) {
+	dir, d, f := shelf(t)
+	table := "# Handwerker\n\n| Gewerk | Firma | Telefon | Notiz |\n|---|---|---|---|\n| Heizung | Huber GmbH | 089 111 | Wartung |\n"
+	list := "# Packliste\n\n- Skischuhe\n- Helm\n"
+	os.WriteFile(filepath.Join(dir, "handwerker.md"), []byte(table), 0o644)
+	os.WriteFile(filepath.Join(dir, "packliste.md"), []byte(list), 0o644)
+	// the fake's passage is the note's first three lines: heading, blank, the table's header row
+	f.Add(qmdfake.Doc{Path: "handwerker.md", Title: "Handwerker", Body: table, Means: []string{"monteur"}},
+		qmdfake.Doc{Path: "packliste.md", Title: "Packliste", Body: list, Means: []string{"monteur"}})
+	got, err := Find(bg, &qmd.Client{URL: f.URL, Collection: "notizen"}, d, "Monteur", 10)
+	if err != nil || got.Reduced || len(got.Hits) != 2 {
+		t.Fatalf("%+v %v", got, err)
+	}
+	if l := strings.Join(got.Hits[0].Lines, "|"); l != "Heizung · Huber GmbH · 089 111 · Wartung" {
+		t.Fatalf("table: %q", l)
+	}
+	if l := strings.Join(got.Hits[1].Lines, "|"); l != "Skischuhe|Helm" {
+		t.Fatalf("list: %q", l)
+	}
+}

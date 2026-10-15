@@ -1102,3 +1102,24 @@ func TestFromEnvLibrary(t *testing.T) {
 		t.Fatalf("no notes: %+v %v", cfg.Library, err)
 	}
 }
+
+// The Haushalt's passages are plain the same way the page's are: a table
+// row as its cells, no header row, no pipes, no list dashes (haus#13).
+func TestFindNotesPlainPassages(t *testing.T) {
+	s := newSetup(t, want{notes: true, library: true})
+	table := "# Handwerker\n\n| Gewerk | Firma | Telefon | Notiz |\n|---|---|---|---|\n| Heizung | Huber GmbH | 089 111 | Wartung |\n"
+	list := "# Putzplan\n\n- Bad: Anna, samstags\n- Küche: Ben\n"
+	os.WriteFile(filepath.Join(s.notes, "handwerker.md"), []byte(table), 0o644)
+	os.WriteFile(filepath.Join(s.notes, "putzplan.md"), []byte(list), 0o644)
+	s.qmd.Add(qmdfake.Doc{Path: "handwerker.md", Title: "Handwerker", Body: table, Means: []string{"haus"}},
+		qmdfake.Doc{Path: "putzplan.md", Title: "Putzplan", Body: list, Means: []string{"haus"}})
+	text, isErr := call(t, s.h, "notizen_finden", map[string]any{"text": "Haus"})
+	if isErr || !strings.Contains(text, "Heizung · Huber GmbH · 089 111 · Wartung") || !strings.Contains(text, "Bad: Anna, samstags\nKüche: Ben") {
+		t.Fatalf("%q", text)
+	}
+	for _, never := range []string{"|", "Gewerk", "- Bad", "- Küche", "---"} {
+		if strings.Contains(text, never) {
+			t.Fatalf("says %q:\n%s", never, text)
+		}
+	}
+}

@@ -108,8 +108,10 @@ func TestSendsTypedSearchesNeverThePlainQuery(t *testing.T) {
 }
 
 // qmd's own answer, as captured: the document path relative to the
-// collection, decoded; the title; the snippet as lines, without qmd's
-// diff header, its line numbers or the note's heading.
+// collection, decoded; the title; the snippet as the note's own lines,
+// without qmd's diff header and the line numbers it puts in front. Making
+// them plain (Markdown, tables, length) is the notes package's: it knows
+// the note (haus#13).
 func TestReadsRealAnswers(t *testing.T) {
 	ctx := context.Background()
 	c := &Client{URL: verbatim(t, "application/json", captured(t, "query-meaning.json")).URL, Collection: "notizen"}
@@ -121,25 +123,23 @@ func TestReadsRealAnswers(t *testing.T) {
 		t.Fatalf("paths: %s", got)
 	}
 	k := hits[0]
-	if k.Title != "Kaminkehrer" || len(k.Lines) == 0 || k.Lines[0] != "- Kommt einmal im Jahr, meist zweite Oktoberwoche, kündigt sich per Zettel im Briefkasten an." {
+	if k.Title != "Kaminkehrer" || len(k.Lines) != 4 || k.Lines[0] != "- Kommt einmal im Jahr, meist zweite Oktoberwoche, kündigt sich per Zettel im Briefkasten an." {
 		t.Fatalf("first hit: %+v", k)
-	}
-	if len(k.Lines) > 3 {
-		t.Fatalf("at most three lines: %q", k.Lines)
 	}
 	for _, h := range hits {
 		for _, l := range h.Lines {
-			if strings.Contains(l, "@@") || strings.HasPrefix(l, "# ") || l == "" || l[0] >= '0' && l[0] <= '9' && strings.Contains(l[:min(4, len(l))], ":") {
+			if strings.Contains(l, "@@") || l == "" || l[0] >= '0' && l[0] <= '9' && strings.Contains(l[:min(4, len(l))], ":") {
 				t.Fatalf("%s: a line still carries qmd's markup: %q", h.Path, l)
-			}
-			if len([]rune(l)) > 121 {
-				t.Fatalf("%s: a line is not cut: %q", h.Path, l)
 			}
 		}
 	}
-	// the rauchmelder snippet is its heading and the first line
-	if r := hits[3]; len(r.Lines) != 1 || r.Lines[0] != "Wir haben 7 Stück: alle Schlafzimmer, Kinderzimmer, Flur oben + unten, Wohnzimmer." {
-		t.Fatalf("heading left out: %+v", r)
+	// the rauchmelder snippet is its heading and the first line; the
+	// handwerker snippet its heading and a table's header row only
+	if r := hits[3]; strings.Join(r.Lines, "|") != "# Rauchwarnmelder|Wir haben 7 Stück: alle Schlafzimmer, Kinderzimmer, Flur oben + unten, Wohnzimmer." {
+		t.Fatalf("rauchmelder: %q", r.Lines)
+	}
+	if h := hits[4]; strings.Join(h.Lines, "\n") != "# Handwerker\n| Gewerk | Firma | Telefon | Notiz |" {
+		t.Fatalf("handwerker: %q", h.Lines)
 	}
 	// qmd's " ..." at a cut snippet is the page's ellipsis
 	if last := k.Lines[len(k.Lines)-1]; strings.HasSuffix(last, " ...") {
