@@ -37,7 +37,7 @@ func TestAgainstRealQmd(t *testing.T) {
 		"wo hängt der Kellerschlüssel":          "schlüssel & keller (2).md",
 		"wer passt abends auf die Kinder auf":   "babysitter.md",
 	} {
-		got, err := Find(bg, c, Tidy{}, d, q, 5)
+		got, err := Find(bg, c, Tidy{}, d, nil, q, 5)
 		if err != nil || got.Reduced || len(got.Hits) == 0 {
 			t.Fatalf("%q: %+v %v", q, got, err)
 		}

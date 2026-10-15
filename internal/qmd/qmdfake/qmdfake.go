@@ -35,10 +35,12 @@ import (
 
 // Doc is one indexed document.
 type Doc struct {
-	Path  string   // relative to the collection, as the share has it
-	Title string   // qmd's title: the first heading, else the file name
-	Body  string   // the file's text
-	Means []string // words it is found by without containing them
+	// Collection is the document's collection; "": the server's (the notes').
+	Collection string
+	Path       string   // relative to the collection, as the share has it
+	Title      string   // qmd's title: the first heading, else the file name
+	Body       string   // the file's text
+	Means      []string // words it is found by without containing them
 	// Vec is the cosine the fake answers for it; 0 is DefaultVec, a
 	// clear match. A hit outside the vector list (vec 0) is a Results test.
 	Vec float64
@@ -57,7 +59,7 @@ type Request struct {
 // Server is the fake.
 type Server struct {
 	*httptest.Server
-	Collection string // the notes' collection name
+	Collection string // the notes' collection name; a Doc may name another
 
 	mu   sync.Mutex
 	docs []Doc
@@ -254,13 +256,14 @@ func (s *Server) query(w http.ResponseWriter, body []byte) {
 	if p.Limit != nil {
 		limit = int(*p.Limit)
 	}
-	inColl := p.Collections == nil
+	asked := map[string]bool{}
 	for _, c := range p.Collections {
-		inColl = inColl || c == s.Collection
+		asked[c] = true
 	}
 	out := []result{}
 	for _, d := range s.docs {
-		if !inColl || len(out) >= limit || !matches(d, p.Searches) {
+		coll := s.coll(d)
+		if (p.Collections != nil && !asked[coll]) || len(out) >= limit || !matches(d, p.Searches) {
 			continue
 		}
 		sum := sha256.Sum256([]byte(d.Body))
@@ -269,7 +272,7 @@ func (s *Server) query(w http.ResponseWriter, body []byte) {
 		if vec == 0 {
 			vec = DefaultVec
 		}
-		out = append(out, result{Docid: "#" + hex.EncodeToString(sum[:3]), File: "qmd://" + s.Collection + "/" + encode(d.Path),
+		out = append(out, result{Docid: "#" + hex.EncodeToString(sum[:3]), File: "qmd://" + coll + "/" + encode(d.Path),
 			Title: d.Title, Score: math.Round(100/float64(len(out)+1)) / 100, Line: line, Snippet: snip, Vec: vec})
 	}
 	json.NewEncoder(w).Encode(map[string]any{"results": out})
@@ -288,15 +291,35 @@ func matches(d Doc, searches []search) bool {
 	return false
 }
 
+func (s *Server) coll(d Doc) string {
+	if d.Collection != "" {
+		return d.Collection
+	}
+	return s.Collection
+}
+
 // status is the Vermittler's GET /status: each collection, its documents
 // and how many of them have their vectors.
 func (s *Server) status(w http.ResponseWriter) {
 	s.mu.Lock()
-	n, embedded := len(s.docs), len(s.docs)
-	if s.Indexing {
-		embedded = 0
+	names := []string{s.Collection}
+	count := map[string]int{s.Collection: 0}
+	for _, d := range s.docs {
+		c := s.coll(d)
+		if _, ok := count[c]; !ok {
+			names = append(names, c)
+		}
+		count[c]++
+	}
+	cols := []map[string]any{}
+	for _, n := range names {
+		embedded := count[n]
+		if s.Indexing {
+			embedded = 0
+		}
+		cols = append(cols, map[string]any{"name": n, "documents": count[n], "embedded": embedded})
 	}
 	s.mu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{"collections": []map[string]any{{"name": s.Collection, "documents": n, "embedded": embedded}}})
+	json.NewEncoder(w).Encode(map[string]any{"collections": cols})
 }

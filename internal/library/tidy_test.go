@@ -67,7 +67,7 @@ func neverTakesTheLease(t *testing.T, p *proxyfake.Server) {
 
 func (s tidied) find(t *testing.T, j *judge.Client, wait time.Duration, q string) Found {
 	t.Helper()
-	got, err := Find(bg, s.c, Tidy{Judge: j, Wait: wait}, s.d, q, 10)
+	got, err := Find(bg, s.c, Tidy{Judge: j, Wait: wait}, s.d, nil, q, 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -228,7 +228,7 @@ func TestTidyWithinTheCallersTime(t *testing.T) {
 	ctx, cancel := context.WithTimeout(bg, 400*time.Millisecond)
 	defer cancel()
 	start := time.Now()
-	got, err := Find(ctx, s.c, Tidy{Judge: s.j, Wait: BoteTidy}, s.d, "Schornsteinfeger", 10)
+	got, err := Find(ctx, s.c, Tidy{Judge: s.j, Wait: BoteTidy}, s.d, nil, "Schornsteinfeger", 10)
 	if err != nil || names(got.Hits) != "kaminkehrer.md,heizung.md" {
 		t.Fatalf("%+v %v", got, err)
 	}
