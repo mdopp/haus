@@ -13,6 +13,7 @@ import (
 
 	"github.com/mdopp/haus/internal/caldav"
 	"github.com/mdopp/haus/internal/caldav/davfake"
+	"github.com/mdopp/haus/internal/favoriten"
 	"github.com/mdopp/haus/internal/ha"
 	"github.com/mdopp/haus/internal/ha/hafake"
 	"github.com/mdopp/haus/internal/haushalt"
@@ -288,5 +289,33 @@ func TestADocumentPageWantsAnIdAndAnAddress(t *testing.T) {
 	}
 	if p, ok := docs[0].(map[string]any)["page"]; ok {
 		t.Fatalf("a document row without Paperless's address names a page: %v", p)
+	}
+}
+
+// haus#12, laib ADR 0017: Start reads the person's favorites from Haus's
+// data folder (favoriten.json, by Remote-User), and each leads to its own
+// page, which is there.
+func TestStartShowsTheFavoritesFromTheDataFolder(t *testing.T) {
+	s, _, _ := fullSite(t)
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, favoriten.File), []byte(`{"anna": ["switch.kaffee", "light.decke"]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s.favorites = favoriten.Open(dir)
+	h := routes(s)
+	rec := page(h, "/start")
+	body := rec.Body.String()
+	if rec.Code != 200 {
+		t.Fatalf("/start → %d", rec.Code)
+	}
+	for _, w := range []string{"Meine Favoriten", `<a href="/raeume/switch.kaffee">Kaffeemaschine</a>`, `<a href="/raeume/light.decke">Deckenlampe</a>`} {
+		if !strings.Contains(body, w) {
+			t.Errorf("/start lacks %q:\n%s", w, body)
+		}
+	}
+	for _, p := range []string{"/raeume/switch.kaffee", "/raeume/light.decke"} {
+		if rec := page(h, p); rec.Code != 200 {
+			t.Errorf("%s → %d", p, rec.Code)
+		}
 	}
 }

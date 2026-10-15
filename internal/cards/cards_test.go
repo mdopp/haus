@@ -75,3 +75,14 @@ func TestRowLinks(t *testing.T) {
 		t.Fatalf("json: %s", b)
 	}
 }
+
+// haus#12: the family reads cards on a phone. A long name or a long word
+// breaks inside its row instead of pushing the page sideways, and a row
+// that leads somewhere is a tap target a finger hits.
+func TestCardsFitAPhone(t *testing.T) {
+	for _, want := range []string{".karte li{", "overflow-wrap:anywhere", ".karte li a{display:block"} {
+		if !strings.Contains(Style, want) {
+			t.Errorf("the cards' style lacks %q:\n%s", want, Style)
+		}
+	}
+}

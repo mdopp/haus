@@ -14,6 +14,7 @@ import (
 
 	"github.com/mdopp/haus/internal/cards"
 	"github.com/mdopp/haus/internal/devices"
+	"github.com/mdopp/haus/internal/favoriten"
 	"github.com/mdopp/haus/internal/ha"
 	"github.com/mdopp/haus/internal/haushalt"
 	"github.com/mdopp/haus/internal/laib"
@@ -42,6 +43,7 @@ type site struct {
 	laibURL     string
 	publicURL   string
 	tickets     *werkstatt.Tickets // haus#15: the Werkstatt card; nil, no card
+	favorites   *favoriten.Store   // haus#12: each person's favorites on Start
 }
 
 // routes is Haus's whole surface: /napi for the app, /mcp/haushalt for the

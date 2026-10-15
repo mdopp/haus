@@ -1,8 +1,13 @@
 package pages
 
 import (
+	"bytes"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httputil"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,7 +16,9 @@ import (
 
 	"github.com/mdopp/haus/internal/caldav"
 	"github.com/mdopp/haus/internal/caldav/davfake"
+	"github.com/mdopp/haus/internal/cards"
 	"github.com/mdopp/haus/internal/devices"
+	"github.com/mdopp/haus/internal/favoriten"
 	"github.com/mdopp/haus/internal/ha"
 	"github.com/mdopp/haus/internal/ha/hafake"
 	"github.com/mdopp/haus/internal/laib"
@@ -38,6 +45,12 @@ func allGreen(t *testing.T) map[string]any {
 
 func startPage(t *testing.T, cfg StartConfig, groups string) (int, string) {
 	t.Helper()
+	return startPageAs(t, cfg, "anna", groups)
+}
+
+// startPageAs is Start for one person (Remote-User; "" for nobody).
+func startPageAs(t *testing.T, cfg StartConfig, user, groups string) (int, string) {
+	t.Helper()
 	if cfg.Loc == nil {
 		cfg.Loc = berlin(t)
 	}
@@ -46,7 +59,9 @@ func startPage(t *testing.T, cfg StartConfig, groups string) (int, string) {
 		cfg.Now = func() time.Time { return now }
 	}
 	req := httptest.NewRequest("GET", "/start", nil)
-	req.Header.Set("Remote-User", "anna")
+	if user != "" {
+		req.Header.Set("Remote-User", user)
+	}
 	if groups != "" {
 		req.Header.Set("Remote-Groups", groups)
 	}
@@ -221,25 +236,72 @@ func TestStartSaysNothingAboutWhatIsNotConfigured(t *testing.T) {
 	mustNotContain(t, body, "karte-jetzt", "karte-haushalt", "Licht", "Termin", "Erinnerung", "Notiz", "nicht konfiguriert", "HAUS_")
 }
 
-// A backend in trouble is left out of the family's page; its error goes to
-// the log, not to the kitchen table.
-func TestStartHidesBrokenBackends(t *testing.T) {
+// haus#12: a backend in trouble is said in one plain line where its card
+// would be — never a blank card, never a 500, never its error or its
+// name: the error goes to the log, not to the kitchen table.
+func TestStartSaysPlainlyWhatDoesNotAnswer(t *testing.T) {
 	fake, hc := house(t)
 	fake.Set("light.flur", "on", map[string]any{"friendly_name": "Flur"})
 	fake.Down(true)
 	_, cal := calendar(t)
 	cal.Password = "falsch"
-	code, body := startPage(t, StartConfig{HA: hc, Calendar: cal, Laib: fakeLaib(t, allGreen(t), nil)}, "")
+	gone := t.TempDir()
+	nd, err := notes.Open(gone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(gone); err != nil {
+		t.Fatal(err)
+	}
+	fav := favorites(t, `{"anna": ["light.flur"]}`)
+	code, body := startPage(t, StartConfig{HA: hc, Calendar: cal, Notes: nd, Favorites: fav, Laib: brokenLaib(t)}, "family")
 	if code != 200 {
 		t.Fatalf("status %d", code)
 	}
-	mustContain(t, body, "Alles läuft")
-	mustNotContain(t, body, "boom", "HA 500", "Anmeldung abgelehnt", "HTTP", "Flur", "class=rot")
+	mustContain(t, body,
+		"Wie es der Box geht, lässt sich gerade nicht sagen.",
+		"<h2 id=karte-jetzt>Jetzt</h2>", "Licht und Geräte antworten gerade nicht.", "Der Kalender antwortet gerade nicht.",
+		"<h2 id=karte-meine-favoriten>Meine Favoriten</h2>", "Deine Favoriten sind gerade nicht zu sehen.",
+		"<h2 id=karte-haushalt>Haushalt</h2>", "Die Notizen lassen sich gerade nicht lesen.")
+	mustNotContain(t, body, "boom", "HA 500", "Anmeldung abgelehnt", "HTTP", "Flur", "class=rot", "connection refused",
+		"Home Assistant", "Radicale", "CalDAV", "Laib", "favoriten.json", "no such file", "Alles läuft")
+	// the calendar is said once, though both Jetzt and Haushalt read it
+	if n := strings.Count(body, "Der Kalender antwortet gerade nicht."); n != 1 {
+		t.Fatalf("the calendar said %d times", n)
+	}
+}
+
+// Only the reminders failing (the appointments read) is said in Haushalt.
+func TestStartSaysFailingRemindersInHaushalt(t *testing.T) {
+	dav, cal := calendar(t)
+	dav.Put("/haus/familie/2.ics", event("2", "20261015T130000Z", "20261015T140000Z", "Zahnarzt"))
+	// in front of the fake: a reminders query answers 500, the rest passes
+	front := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		if r.Method == "REPORT" && strings.Contains(string(body), `name="VTODO"`) {
+			http.Error(w, "REPORT 500", http.StatusInternalServerError)
+			return
+		}
+		r.Body = io.NopCloser(bytes.NewReader(body))
+		httputil.NewSingleHostReverseProxy(must(url.Parse(dav.URL))).ServeHTTP(w, r)
+	}))
+	t.Cleanup(front.Close)
+	cal.URL = front.URL
+	_, body := startPage(t, StartConfig{Calendar: cal}, "")
+	mustContain(t, body, "Nächster Termin: Zahnarzt", "<h2 id=karte-haushalt>Haushalt</h2>", "Der Kalender antwortet gerade nicht.")
+	mustNotContain(t, body, "REPORT", "500")
+	if strings.Index(body, "Der Kalender antwortet") < strings.Index(body, "karte-haushalt") {
+		t.Fatal("the reminders' line belongs in Haushalt")
+	}
 }
 
 // Laib not answering is said without its error text.
 func TestStartWithoutLaib(t *testing.T) {
-	_, body := startPage(t, StartConfig{Laib: brokenLaib(t)}, "")
+	code, body := startPage(t, StartConfig{Laib: brokenLaib(t)}, "")
+	if code != 200 {
+		t.Fatalf("status %d", code)
+	}
+	mustContain(t, body, "Wie es der Box geht, lässt sich gerade nicht sagen.")
 	mustNotContain(t, body, "Alles läuft", "connection refused", "500")
 }
 
@@ -386,4 +448,122 @@ func TestStartLeavesOutWhatHAHides(t *testing.T) {
 	_, body := startPage(t, StartConfig{HA: hc}, "")
 	mustContain(t, body, "1 Licht an", "Küche")
 	mustNotContain(t, body, "Alte Lampe", "Status-LED", "Diagnoseplayer", "Lichter an")
+}
+
+// favorites is a favorites store holding content ("" for no file).
+func favorites(t *testing.T, content string) *favoriten.Store {
+	t.Helper()
+	dir := t.TempDir()
+	if content != "" {
+		if err := os.WriteFile(filepath.Join(dir, favoriten.File), []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return favoriten.Open(dir)
+}
+
+// haus#12, laib ADR 0017: Meine Favoriten — the person's own things, in
+// their order, each with its state in words and leading to its own page;
+// between Jetzt and Haushalt (laib DEKONSTRUKTION).
+func TestStartShowsMyFavorites(t *testing.T) {
+	fake, hc := house(t)
+	fake.SetRegistries(nil, nil, []map[string]any{{"entity_id": "light.alt", "hidden_by": "user"}})
+	fake.Set("cover.wohnzimmer", "open", map[string]any{"friendly_name": "Rollladen Wohnzimmer", "current_position": 40.0})
+	fake.Set("light.buero", "on", map[string]any{"friendly_name": "Bürolicht", "brightness": 128.0})
+	fake.Set("light.alt", "on", map[string]any{"friendly_name": "Alte Lampe"})
+	fake.Set("light.flur", "off", map[string]any{"friendly_name": "Flurlicht"})
+	fake.Set("person.ben", "home", map[string]any{"friendly_name": "Ben"})
+	fake.Set("climate.bad", "heat", map[string]any{"friendly_name": "Heizung Bad", "current_temperature": 21.5, "temperature": 23.0})
+	fav := favorites(t, `{"anna": ["cover.wohnzimmer", "light.buero", "light.weg", "person.ben", "light.alt", "climate.bad"], "ben": ["light.flur"]}`)
+	nd := notesDir(t, map[string]time.Duration{"Einkaufsliste": time.Hour})
+	_, body := startPage(t, StartConfig{HA: hc, Notes: nd, Favorites: fav}, "family")
+	mustContain(t, body, "<h2 id=karte-meine-favoriten>Meine Favoriten</h2>",
+		`<a href="/raeume/cover.wohnzimmer">Rollladen Wohnzimmer</a> <span class=k>offen · 40 %</span>`,
+		`<a href="/raeume/light.buero">Bürolicht</a> <span class=k>an · 50 %</span>`,
+		`<a href="/raeume/climate.bad">Heizung Bad</a> <span class=k>21,5 °C · Soll 23 °C</span>`)
+	// what is not there, not a card's thing, or hidden by HA is left out; Ben's are Ben's
+	mustNotContain(t, body, "light.weg", "/raeume/person.ben", "Alte Lampe", "Flurlicht")
+	fav0 := strings.Index(body, "karte-meine-favoriten")
+	if strings.Index(body, "Rollladen Wohnzimmer") > strings.Index(body, "Bürolicht") || strings.Index(body, "Bürolicht") > strings.Index(body, "Heizung Bad") {
+		t.Fatal("the favorites keep the person's order")
+	}
+	if !(strings.Index(body, "karte-jetzt") < fav0 && fav0 < strings.Index(body, "karte-haushalt")) {
+		t.Fatal("Jetzt, then Meine Favoriten, then Haushalt")
+	}
+
+	_, body = startPageAs(t, StartConfig{HA: hc, Favorites: fav}, "ben", "family")
+	mustContain(t, body, `<a href="/raeume/light.flur">Flurlicht</a> <span class=k>aus</span>`)
+	mustNotContain(t, body, "Bürolicht", "Rollladen")
+}
+
+// Without a person (no Remote-User), without favorites or without a store
+// there is no favorites card and no word about it.
+func TestStartWithoutFavoritesSaysNothing(t *testing.T) {
+	fake, hc := house(t)
+	fake.Set("light.buero", "on", map[string]any{"friendly_name": "Bürolicht"})
+	for name, c := range map[string]struct {
+		fav  *favoriten.Store
+		user string
+	}{
+		"no store":       {nil, "anna"},
+		"no file":        {favorites(t, ""), "anna"},
+		"an empty list":  {favorites(t, `{"anna": []}`), "anna"},
+		"someone else's": {favorites(t, `{"ben": ["light.buero"]}`), "anna"},
+		"nobody":         {favorites(t, `{"anna": ["light.buero"]}`), ""},
+		"only unknowns":  {favorites(t, `{"anna": ["light.weg"]}`), "anna"},
+	} {
+		code, body := startPageAs(t, StartConfig{HA: hc, Favorites: c.fav}, c.user, "")
+		if code != 200 {
+			t.Fatalf("%s: status %d", name, code)
+		}
+		if strings.Contains(body, "Favoriten") {
+			t.Errorf("%s: the page talks about favorites:\n%s", name, body)
+		}
+	}
+	// favorites without the house configured: nothing to draw them from, nothing said
+	_, body := startPage(t, StartConfig{Favorites: favorites(t, `{"anna": ["light.buero"]}`)}, "")
+	mustNotContain(t, body, "Favoriten")
+}
+
+// A favorites file that does not read is said plainly, not as "none".
+func TestStartSaysABrokenFavoritesFilePlainly(t *testing.T) {
+	fake, hc := house(t)
+	fake.Set("light.buero", "on", map[string]any{"friendly_name": "Bürolicht"})
+	code, body := startPage(t, StartConfig{HA: hc, Favorites: favorites(t, `{"anna": [`)}, "")
+	if code != 200 {
+		t.Fatalf("status %d", code)
+	}
+	mustContain(t, body, "<h2 id=karte-meine-favoriten>Meine Favoriten</h2>", "Deine Favoriten lassen sich gerade nicht lesen.")
+	mustNotContain(t, body, "unexpected", "JSON", "favoriten.json")
+}
+
+// Many favorites: the first twelve, and how many more.
+func TestStartCutsLongFavoriteLists(t *testing.T) {
+	fake, hc := house(t)
+	var ids []string
+	for i := 1; i <= 15; i++ {
+		id := fmt.Sprintf("light.l%02d", i)
+		fake.Set(id, "off", map[string]any{"friendly_name": fmt.Sprintf("Lampe %02d", i)})
+		ids = append(ids, `"`+id+`"`)
+	}
+	_, body := startPage(t, StartConfig{HA: hc, Favorites: favorites(t, `{"anna": [`+strings.Join(ids, ",")+`]}`)}, "")
+	mustContain(t, body, "Lampe 01", "Lampe 12", "und 3 weitere")
+	mustNotContain(t, body, "Lampe 13", "Lampe 15")
+}
+
+// The family reads Start on a phone: the page scales to the screen and a
+// long name breaks inside its card instead of pushing the page sideways.
+func TestStartFitsAPhone(t *testing.T) {
+	fake, hc := house(t)
+	fake.Set("light.lang", "on", map[string]any{"friendly_name": strings.Repeat("Wohnzimmerdeckenfluter", 3)})
+	_, body := startPage(t, StartConfig{HA: hc}, "")
+	mustContain(t, body, "width=device-width", cards.Style)
+	mustNotContain(t, body, "<script", "<table")
+}
+
+func must[T any](v T, err error) T {
+	if err != nil {
+		panic(err)
+	}
+	return v
 }

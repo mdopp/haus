@@ -151,5 +151,10 @@ func TestFamilyPagesDoNotWaitForAHangingBackend(t *testing.T) {
 		}
 		mustContain(t, body, p.want)
 		mustNotContain(t, body, "karte-heute", "Termin", "Erinnerungen")
+		if p.path == "/start" { // haus#12: Start says it, once, in a plain line
+			if n := strings.Count(body, "Der Kalender antwortet gerade nicht."); n != 1 {
+				t.Fatalf("/start: the calendar said %d times:\n%s", n, body)
+			}
+		}
 	}
 }

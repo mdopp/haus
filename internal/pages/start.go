@@ -10,6 +10,7 @@ import (
 
 	"github.com/mdopp/haus/internal/caldav"
 	"github.com/mdopp/haus/internal/cards"
+	"github.com/mdopp/haus/internal/favoriten"
 	"github.com/mdopp/haus/internal/ha"
 	"github.com/mdopp/haus/internal/laib"
 	"github.com/mdopp/haus/internal/notes"
@@ -20,15 +21,16 @@ import (
 // Notizen). A nil backend is not configured, and no page says anything
 // about it.
 type StartConfig struct {
-	Laib     *laib.Client
-	LaibURL  string // where Rückgängig lives (the guarantees, admins only)
-	HA       *ha.Client
-	Calendar *caldav.Client
-	Contacts *caldav.Client // a contact's page (haus#28)
-	Notes    *notes.Dir
-	Docs     *paperless.Client // a document's page sends on to Paperless (haus#28)
-	Loc      *time.Location    // the house's time zone; default time.Local
-	Now      func() time.Time  // for the tests; default time.Now
+	Laib      *laib.Client
+	LaibURL   string // where Rückgängig lives (the guarantees, admins only)
+	HA        *ha.Client
+	Calendar  *caldav.Client
+	Contacts  *caldav.Client // a contact's page (haus#28)
+	Notes     *notes.Dir
+	Docs      *paperless.Client // a document's page sends on to Paperless (haus#28)
+	Favorites *favoriten.Store  // each person's favorites on Start (laib ADR 0017)
+	Loc       *time.Location    // the house's time zone; default time.Local
+	Now       func() time.Time  // for the tests; default time.Now
 }
 
 // backendWait is how long a page waits for any one backend: a slow one
