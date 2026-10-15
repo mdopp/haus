@@ -189,3 +189,18 @@ func TestEnergieSaysPlainlyWhatDoesNotAnswer(t *testing.T) {
 	mustNotContain(t, body, "karte-", "kWh", "eingerichtet")
 	mustNotLeak(t, body, host(hc.URL))
 }
+
+// A path under Energie that Haus does not serve is a 404 with the way
+// back, never Start pretending all is well (haus#12).
+func TestEnergieUnknownPathIsA404(t *testing.T) {
+	fake, hc := house(t)
+	energyHouse(t, fake)
+	for _, p := range []string{"/energie/", "/energie/heute", "/energie/x/y"} {
+		code, body, _ := familyPage(t, Energie, StartConfig{HA: hc}, "GET", p, "family")
+		if code != 404 {
+			t.Fatalf("%s → %d, want 404", p, code)
+		}
+		mustContain(t, body, "<p>Diese Seite gibt es nicht.</p>", "<p><a href=/energie>Energie</a></p>", "href=/energie aria-current=page>")
+		mustNotContain(t, body, "kWh", "karte-")
+	}
+}

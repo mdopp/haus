@@ -432,3 +432,11 @@ func TestEnergiePageServedFromTheWidgetsSensors(t *testing.T) {
 		t.Fatalf("/energie → %d:\n%s", rec.Code, rec.Body.String())
 	}
 }
+
+// A path under Energie that Haus does not serve is a 404 with the way back.
+func TestEnergieSubpathIsA404(t *testing.T) {
+	s, _, _ := fullSite(t)
+	if rec := page(routes(s), "/energie/heute"); rec.Code != http.StatusNotFound || !strings.Contains(rec.Body.String(), "<a href=/energie>Energie</a>") {
+		t.Fatalf("/energie/heute → %d:\n%s", rec.Code, rec.Body.String())
+	}
+}
