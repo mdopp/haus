@@ -10,8 +10,10 @@
 // search, and says it is reduced; when it answered but nothing is close
 // enough, it is the word search too, and says that instead (NoMatch):
 // never empty while words match, never an error of its own. When more than one hit is left
-// and the house model is there, it may narrow them (Tidy). Paperless
-// documents are a later step.
+// and the house model is there, it may narrow them (Tidy). With Paperless
+// and the documents' collection set, the same search covers the family's
+// documents: their OCR text, mirrored into qmd by internal/dokumente, each
+// hit checked against Paperless as a note's is against its folder.
 package library
 
 import (
