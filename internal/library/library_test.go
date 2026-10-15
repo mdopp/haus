@@ -230,7 +230,8 @@ func TestPassagesArePlain(t *testing.T) {
 	if l := strings.Join(got.Hits[0].Lines, "|"); l != "Heizung · Huber GmbH · 089 111 · Wartung" {
 		t.Fatalf("table: %q", l)
 	}
-	if l := strings.Join(got.Hits[1].Lines, "|"); l != "Skischuhe|Helm" {
+	// the fake's passage is heading, blank, first item: one line
+	if l := strings.Join(got.Hits[1].Lines, "|"); l != "Skischuhe" {
 		t.Fatalf("list: %q", l)
 	}
 }

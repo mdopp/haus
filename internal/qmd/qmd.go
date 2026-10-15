@@ -152,17 +152,14 @@ func (c *Client) local(file string) (string, bool) {
 	return strings.Join(segs, "/"), true
 }
 
-// maxLines and maxLine bound a passage: a few lines to recognise a note
-// by, not the note.
-const (
-	maxLines = 3
-	maxLine  = 120
-)
+// maxLines bounds a passage: qmd's snippets are a few lines.
+const maxLines = 12
 
-// Lines is qmd's snippet as plain lines: without its diff-like header
-// ("@@ -5,4 @@ (4 before, 1 after)"), the line numbers it puts in front
-// ("7: "), blank lines and the note's "# " heading; qmd's " ..." at a cut
-// is "…"; each line cut at maxLine characters, at most maxLines.
+// Lines is qmd's snippet as the note's own lines: without its diff-like
+// header ("@@ -5,4 @@ (4 before, 1 after)"), the line numbers it puts in
+// front ("7: ") and blank lines; qmd's " ..." at a cut is "…". Making
+// them plain — Markdown, tables, length — is notes.Passage's, which knows
+// the note.
 func Lines(snippet string) []string {
 	var out []string
 	for _, l := range strings.Split(snippet, "\n") {
@@ -170,14 +167,11 @@ func Lines(snippet string) []string {
 			l = l[i+2:]
 		}
 		l = strings.TrimSpace(l)
-		if l == "" || strings.HasPrefix(l, "@@ ") || strings.HasPrefix(l, "# ") {
+		if l == "" || strings.HasPrefix(l, "@@ ") {
 			continue
 		}
 		if s, ok := strings.CutSuffix(l, " ..."); ok {
 			l = s + " …"
-		}
-		if r := []rune(l); len(r) > maxLine {
-			l = string(r[:maxLine]) + "…"
 		}
 		out = append(out, l)
 		if len(out) == maxLines {

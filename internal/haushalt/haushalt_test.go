@@ -1114,7 +1114,7 @@ func TestFindNotesPlainPassages(t *testing.T) {
 	s.qmd.Add(qmdfake.Doc{Path: "handwerker.md", Title: "Handwerker", Body: table, Means: []string{"haus"}},
 		qmdfake.Doc{Path: "putzplan.md", Title: "Putzplan", Body: list, Means: []string{"haus"}})
 	text, isErr := call(t, s.h, "notizen_finden", map[string]any{"text": "Haus"})
-	if isErr || !strings.Contains(text, "Heizung · Huber GmbH · 089 111 · Wartung") || !strings.Contains(text, "Bad: Anna, samstags\nKüche: Ben") {
+	if isErr || !strings.Contains(text, "Heizung · Huber GmbH · 089 111 · Wartung") || !strings.Contains(text, "\nBad: Anna, samstags\n") {
 		t.Fatalf("%q", text)
 	}
 	for _, never := range []string{"|", "Gewerk", "- Bad", "- Küche", "---"} {

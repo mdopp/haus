@@ -52,6 +52,9 @@ func Find(ctx context.Context, c *qmd.Client, d *notes.Dir, q string, max int) (
 	return Found{Result: res, Reduced: true}, nil
 }
 
+// passageLines is how many lines of its passage a hit shows.
+const passageLines = 3
+
 // folderError is the notes folder failing, not qmd: no word search
 // would answer either.
 type folderError struct{ error }
@@ -83,7 +86,7 @@ func byMeaning(ctx context.Context, c *qmd.Client, d *notes.Dir, q string, max i
 		if err != nil {
 			return Found{}, folderError{err}
 		}
-		out.Hits = append(out.Hits, notes.Hit{Name: e.Name, Title: e.Title, Lines: h.Lines})
+		out.Hits = append(out.Hits, notes.Hit{Name: e.Name, Title: e.Title, Lines: notes.Passage(h.Lines, e.Text, passageLines)})
 		if len(out.Hits) == max {
 			break
 		}

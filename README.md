@@ -107,7 +107,13 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     is not set, does not answer, or is still indexing, the field searches
     by words (the notes search above, its caps) and says so in one line
     above the hits: *Die Suche nach Bedeutung geht gerade nicht; gesucht
-    wird nur nach den Wörtern.* `/notizen/<file>` (the
+    wird nur nach den Wörtern.* By words, a sentence needs only one of its
+    meaningful words (common and short words left out), the notes with
+    more of them first; nothing found says *Nichts gefunden.* and to try
+    one word that stands in the note, the query's longest as the example.
+    A hit's lines are plain text: a table row as `Firma · Telefon`, no
+    table header, pipes, list dashes or heading hashes, here and in the
+    Haushalt's answers. `/notizen/<file>` (the
     note's file name, e.g. `einkaufsliste.md`; a slug or title works too)
     shows the note as text: paragraphs and line breaks, no Markdown
     rendering, never markup from the file. Outside the folder, hidden or
