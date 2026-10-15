@@ -16,6 +16,7 @@ import (
 	"github.com/mdopp/haus/internal/cards"
 	"github.com/mdopp/haus/internal/favoriten"
 	"github.com/mdopp/haus/internal/ha"
+	"github.com/mdopp/haus/internal/judge"
 	"github.com/mdopp/haus/internal/laib"
 	"github.com/mdopp/haus/internal/notes"
 	"github.com/mdopp/haus/internal/paperless"
@@ -33,6 +34,7 @@ type StartConfig struct {
 	Contacts  *caldav.Client // a contact's page (haus#28)
 	Notes     *notes.Dir
 	Library   *qmd.Client       // Notizen's search by meaning (haus#13); nil: by words, said so
+	Judge     *judge.Client     // the house model's tidy-up of Notizen's hits (haus#13); nil: none
 	Docs      *paperless.Client // a document's page sends on to Paperless (haus#28)
 	Favorites *favoriten.Store  // each person's things on Start (laib ADR 0017), pinned with ☆ (haus#35)
 	Loc       *time.Location    // the house's time zone; default time.Local

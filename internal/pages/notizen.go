@@ -53,7 +53,9 @@ func Notizen(cfg StartConfig) http.HandlerFunc {
 		if q != "" {
 			var res library.Found
 			var err error
-			fetch(r, func(ctx context.Context) { res, err = library.Find(ctx, cfg.Library, cfg.Notes, q, maxHits) })
+			fetch(r, func(ctx context.Context) {
+				res, err = library.Find(ctx, cfg.Library, library.Tidy{Judge: cfg.Judge, Wait: library.PageTidy}, cfg.Notes, q, maxHits)
+			})
 			logErrs("notizen", map[string]error{"search": err})
 			if err != nil {
 				b.WriteString("<p class=k>" + saysNoNotes + "</p>")

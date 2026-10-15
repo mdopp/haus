@@ -25,6 +25,7 @@ import (
 
 	"github.com/mdopp/haus/internal/caldav"
 	"github.com/mdopp/haus/internal/cards"
+	"github.com/mdopp/haus/internal/judge"
 	"github.com/mdopp/haus/internal/library"
 	"github.com/mdopp/haus/internal/mcpserver"
 	"github.com/mdopp/haus/internal/notes"
@@ -39,6 +40,7 @@ type Config struct {
 	Contacts  *caldav.Client    // nil: no contact tools (the same Radicale account)
 	Notes     *notes.Dir        // nil: no note tools
 	Library   *qmd.Client       // the memory library's search (haus#13); nil, or no Notes: no notizen_finden
+	Judge     *judge.Client     // the house model's tidy-up of its hits (haus#13); nil: none
 	Documents *paperless.Client // nil: no document tool
 	Loc       *time.Location    // the house's time zone
 	// PhoneCountry is the house's calling code (HAUS_PHONE_COUNTRY, default
@@ -141,6 +143,7 @@ func FromEnv() (Config, error) {
 			log.Printf("haus: HAUS_QMD_URL is set but there is no notes folder: no memory library")
 		} else {
 			cfg.Library = &qmd.Client{URL: u, Collection: coll}
+			cfg.Judge = judge.FromEnv() // optional: a box without the model role has none
 		}
 	}
 	return cfg, nil
@@ -267,7 +270,9 @@ func Tools(cfg Config) []mcpserver.Tool {
 				Description: "Findet Notizen der Familie nach ihrer Bedeutung, auch wenn andere Wörter darin stehen " +
 					"(„wann kommt der Schornsteinfeger“ findet die Notiz zum Kaminkehrer). Zeigt Titel, Dateiname, eine passende Stelle und die Seite der Notiz.",
 				Schema: obj(map[string]any{"text": str("Wonach gesucht wird, in eigenen Worten")}, "text"),
-				Call:   func(ctx context.Context, a map[string]any) (string, error) { return notizenFinden(ctx, lib, n, pub, a) },
+				Call: func(ctx context.Context, a map[string]any) (string, error) {
+					return notizenFinden(ctx, lib, cfg.Judge, n, pub, a)
+				},
 			})
 		}
 	}
@@ -561,9 +566,9 @@ const reducedNote = "Die Suche nach Bedeutung geht gerade nicht; gesucht wurde n
 
 // notizenFinden is the memory library's search: title, file, a passage
 // and, with Haus's address, the note's page.
-func notizenFinden(ctx context.Context, lib *qmd.Client, n *notes.Dir, pub string, a map[string]any) (string, error) {
+func notizenFinden(ctx context.Context, lib *qmd.Client, j *judge.Client, n *notes.Dir, pub string, a map[string]any) (string, error) {
 	q := mcpserver.Str(a, "text")
-	res, err := library.Find(ctx, lib, n, q, maxFound)
+	res, err := library.Find(ctx, lib, library.Tidy{Judge: j, Wait: library.BoteTidy}, n, q, maxFound)
 	if err != nil {
 		return "", err
 	}
