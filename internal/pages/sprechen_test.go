@@ -214,7 +214,7 @@ func TestSprechenSaysASlowBotePlainly(t *testing.T) {
 	}
 	_, body, _ := talkPage(t, h, "anna")
 	mustContain(t, body, "Wie wird das Wetter?", "Joshua hat nach einer Minute noch nicht geantwortet.", "bevor du es noch einmal schickst")
-	mustNotContain(t, body, "Erledigt")
+	mustNotContain(t, body, "Erledigt", ">Joshua<") // Haus says it, not in the persona's name
 	mustNotLeak(t, body, "deadline", "context", "timeout", "Bote", "Hermes")
 }
 
@@ -248,6 +248,7 @@ func TestSprechenSaysABoteThatDoesNotAnswerPlainly(t *testing.T) {
 			t.Fatalf("%s: page %d", what, code)
 		}
 		mustContain(t, body, "Hallo", "Joshua antwortet gerade nicht. Versuch es später noch einmal.")
+		mustNotContain(t, body, ">Joshua<")
 		mustNotLeak(t, body, "502", "Agent run", "Invalid API key", "agent_incomplete", "Bote", "Hermes", "8642", "refused")
 	}
 }
@@ -274,5 +275,5 @@ func TestSprechenEmptySaysWhatItIsFor(t *testing.T) {
 	defer func() { House = persona.Default() }()
 	_, bc := fakeBote(t)
 	_, body, _ := talkPage(t, Sprechen(StartConfig{Bote: bc}), "anna")
-	mustContain(t, body, "Was du hier schreibst, liest Joshua. Die Antwort erscheint hier.")
+	mustContain(t, body, "Was du hier schreibst, liest Joshua. Die Antwort erscheint hier; das kann einen Moment dauern.")
 }
