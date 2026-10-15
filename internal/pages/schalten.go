@@ -104,4 +104,4 @@ func backTo(path string) string {
 }
 
 // inRaeume is Räume, or one room's card on it (cards.Card.ID).
-var inRaeume = regexp.MustCompile(`^/raeume(#karte-[a-z0-9]+(-[a-z0-9]+)*)?$`)
+var inRaeume = regexp.MustCompile(`^/raeume(#karte(-[a-z0-9]+)*)?$`)
