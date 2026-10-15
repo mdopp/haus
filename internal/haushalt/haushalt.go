@@ -688,7 +688,7 @@ func kontakteSuchen(ctx context.Context, c *caldav.Client, cc string, a map[stri
 func findContact(all []caldav.Contact, q, cc string) []caldav.Contact {
 	var hits []caldav.Contact
 	for _, ct := range all {
-		if strings.TrimSpace(ct.UID) == q {
+		if oneLine(ct.UID) == q {
 			hits = append(hits, ct)
 		}
 	}
@@ -760,8 +760,8 @@ func contactCard(ct caldav.Contact, pub string) string {
 		add("Geburtstag", birthdayDay(ct.Birthday))
 	}
 	add("Adresse", listAll(ct.Addresses, MaxField, "; "))
-	if uid := strings.TrimSpace(ct.UID); pub != "" && uid != "" {
-		add("Seite", pub+cards.ContactPage(uid))
+	if pub != "" && oneLine(ct.UID) != "" { // the UID as the page matches it
+		add("Seite", pub+cards.ContactPage(ct.UID))
 	}
 	return strings.Join(lines, "\n")
 }
@@ -799,7 +799,7 @@ func kontaktLesen(ctx context.Context, c *caldav.Client, cc, pub string, a map[s
 		}
 		line := contactLine(ct)
 		if uid := oneLine(ct.UID); uid != "" {
-			line += " · Kennung " + cut(uid, 120)
+			line += " · Kennung " + cut(uid, MaxField)
 		}
 		b.WriteString(line + "\n")
 	}
