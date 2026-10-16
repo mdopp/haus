@@ -12,6 +12,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/mdopp/haus/internal/bote"
 	"github.com/mdopp/haus/internal/caldav"
 	"github.com/mdopp/haus/internal/cards"
 	"github.com/mdopp/haus/internal/energie"
@@ -39,6 +40,7 @@ type StartConfig struct {
 	Judge     *judge.Client     // the house model's tidy-up of Notizen's hits (haus#13); nil: none
 	Docs      *paperless.Client // a document's page sends on to Paperless (haus#28)
 	Favorites *favoriten.Store  // each person's things on Start (laib ADR 0017), pinned with ☆ (haus#35)
+	Bote      *bote.Client      // the Sprechen field's (haus#12); nil: no field, no tab
 	Loc       *time.Location    // the house's time zone; default time.Local
 	Now       func() time.Time  // for the tests; default time.Now
 }
@@ -124,6 +126,9 @@ func Start(cfg StartConfig) http.HandlerFunc {
 			top, bottom = familyBox(ready, services, laibErr, quiet, now, loc)
 		}
 		b.WriteString(top)
+		if cfg.Bote != nil {
+			b.WriteString(sprechenField)
+		}
 		if cfg.HA != nil {
 			b.WriteString(imHaus(states, haErr, reg.Hidden).HTML())
 		}

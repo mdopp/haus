@@ -53,6 +53,8 @@ func TestRoutesGuards(t *testing.T) {
 		{"GET", "/pair-device", 403},
 		{"GET", "/box/geraete", 403},
 		{"POST", "/schalten", 403},
+		{"POST", "/sprechen", 403},
+		{"GET", "/sprechen", 403},
 		{"POST", "/raeume/light.flur", 403},
 		{"GET", "/schrift/geist-1b5ebf.woff2", 403},
 		{"GET", "/healthz", 200},

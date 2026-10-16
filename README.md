@@ -383,9 +383,36 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     already let only close notes through, and the model said "none" when
     a passage missed the answer, not when the note did.
 
+- The Sprechen field (haus#12, laib ADR 0016): on Start under the day,
+  above the cards, while the Bote is set (no tab of its own: `/sprechen`
+  belongs to Start)
+  (`HAUS_BOTE_URL`, the Bote's OpenAI base `http://host.containers.internal:8642/v1`,
+  and `HAUS_BOTE_KEY`, Hermes' `API_SERVER_KEY`; laib renders the key only
+  with the Bote installed, laib#215: no key, no field, no word about it).
+  One line and *Senden*, a plain form post, no script. `POST /sprechen`
+  takes it only from a person on Haus's own page (#35's rule) and sends it
+  to the Bote's `/chat/completions` as one chat completion: the person's
+  login (`Remote-User`) and, quoted after it without quotes or brackets
+  of its own, their name (`Remote-Name`, which a person may set
+  themselves) in a system line, because
+  Hermes' API server has no per-person field and layers system lines on
+  top of the Bote's SOUL, and `X-Hermes-Session-Key: haus:<login>`, the
+  person's memory scope. No model named, no stream, one sentence at a time:
+  the Bote does not see the page's earlier exchange. Then 303 to
+  `/sprechen`, which shows the person's last exchange (in memory, per
+  person): their words, the reply under the persona's name, as text (code
+  blocks kept, **bold** bold, nothing else rendered). Haus relays and
+  decides nothing (haus#1). Leaving the page does not stop the wait: the
+  reply is kept for the person's next look. It waits 60 s; then, in the house persona's name, *Joshua hat nach einer Minute
+  noch nicht geantwortet. Vielleicht passiert es trotzdem noch: schau nach,
+  bevor du es noch einmal schickst.* A Bote down, refusing the key or
+  failing its run: *Joshua antwortet gerade nicht. Versuch es später noch
+  einmal.*, the error in the log. Over 1000 characters is refused plainly;
+  empty sends nothing.
+
 Not yet: Start's *Häufig genutzt*; switching in the Räume list (a thing's
 own page switches); Energie, Medien; Paperless in the memory library and dictation in Notizen, timers in
-Kalender; the `Sprechen` field to the Bote (laib#21).
+Kalender.
 
 - The Box page's Werkstatt card (haus#15): the open tickets of the repos in
   `HAUS_WERKSTATT_REPOS` (owner/name, comma-separated), what pi works
@@ -405,7 +432,8 @@ HAUS_RADICALE_URL=http://host.containers.internal:5232 HAUS_RADICALE_USER=<servi
 HAUS_PAPERLESS_URL=http://host.containers.internal:8000 HAUS_PAPERLESS_TOKEN=<a Paperless API token> \
 HAUS_PAPERLESS_PUBLIC_URL=https://paperless.<domain> HAUS_NOTES_DIR=/notes \
 HAUS_QMD_URL=http://127.0.0.1:8181 HAUS_UPLOAD_DIR=/consume \
-HAUS_LLM_URL=http://host.containers.internal:11435/v1 HAUS_LLM_MODEL=gemma-4-e4b HAUS_LLM_KEY=<the model key> ./haus
+HAUS_LLM_URL=http://host.containers.internal:11435/v1 HAUS_LLM_MODEL=gemma-4-e4b HAUS_LLM_KEY=<the model key> \
+HAUS_BOTE_URL=http://host.containers.internal:8642/v1 HAUS_BOTE_KEY=<the Bote's API_SERVER_KEY> ./haus
 ```
 
 `HAUS_DATA` (default `/data`) holds `devices.json` and `favoriten.json`; `HAUS_PUBLIC_URL` is the
@@ -424,7 +452,7 @@ request of 64 MB through).
 (`internal/paperless/paperlessfake`), a fake Vermittler in front of qmd
 (`internal/qmd/qmdfake`, built from the prototype's answers on qmd
 2.8.3 in `internal/qmd/testdata`), a fake model proxy
-(`internal/judge/proxyfake`) and a temp folder for the notes; the shapes are pinned to the app's `data/*.kt`
+(`internal/judge/proxyfake`), a fake Bote (`internal/bote/botefake`, Hermes' API server) and a temp folder for the notes; the shapes are pinned to the app's `data/*.kt`
 parsers in mdopp/haus-android. `HAUS_QMD_REAL=<a running qmd>
 HAUS_QMD_REAL_NOTES=<its notes folder> go test ./internal/library -run Real`
 checks against a real qmd by hand; CI never does.
