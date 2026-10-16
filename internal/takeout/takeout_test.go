@@ -6,6 +6,8 @@ import (
 	"context"
 	"io"
 	"io/fs"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"sort"
@@ -294,7 +296,7 @@ func TestDryRunAndSkippedCalendars(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rep.Events != (Count{New: 4}) || strings.Join(rep.Skipped, ",") != "Feiertage in Deutschland" || rep.Contacts.New != 4 || rep.Notes.New != 3 {
+	if rep.Events != (Count{New: 4}) || strings.Join(rep.Skipped, ",") != "Feiertage in Deutschland" || rep.Contacts != (Count{New: 3, There: 1, Failed: 1}) || rep.Notes.New != 3 {
 		t.Fatalf("%+v", rep)
 	}
 	if len(dav.Methods) != 0 || len(files(t, dir)) != 0 {
@@ -339,5 +341,193 @@ func TestNotAZip(t *testing.T) {
 	}
 	if len(files(t, dir)) != 0 {
 		t.Fatal("wrote")
+	}
+}
+
+// zipOf is one archive of these members, in name order.
+func zipOf(t *testing.T, members map[string][]byte) string {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), "takeout-001.zip")
+	f, err := os.Create(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	z := zip.NewWriter(f)
+	var names []string
+	for n := range members {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	for _, n := range names {
+		w, err := z.Create(n)
+		if err != nil {
+			t.Fatal(err)
+		}
+		w.Write(members[n])
+	}
+	if err := z.Close(); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	return p
+}
+
+func keepJSON(title, text string, atts ...string) []byte {
+	var a []string
+	for _, x := range atts {
+		a = append(a, `{"filePath":"`+x+`","mimetype":"image/jpeg"}`)
+	}
+	return []byte(`{"title":"` + title + `","textContent":"` + text + `","attachments":[` + strings.Join(a, ",") +
+		`],"createdTimestampUsec":1750000000000000,"userEditedTimestampUsec":1750000000000000,"isTrashed":false}`)
+}
+
+// An attachment past its cap — a zip bomb's shape, a few KB packed and
+// far more unpacked — is not unpacked whole and not written; the note is.
+func TestAnAttachmentTooBigIsLeftOut(t *testing.T) {
+	_, target, dir := box(t)
+	target.Radicale = nil
+	zp := zipOf(t, map[string][]byte{
+		"Takeout/Notizen/Riesig.json": keepJSON("Riesig", "mit Bild", "riesig.jpg"),
+		"Takeout/Notizen/riesig.jpg":  make([]byte, maxAttachment+1),
+	})
+	var log bytes.Buffer
+	rep, err := Import(bg, []string{zp}, target, &log)
+	if err != nil || rep.Notes != (Count{New: 1}) || rep.Attachments != (Count{Failed: 1}) || !strings.Contains(log.String(), "größer als 25 MB") {
+		t.Fatalf("%+v %v\n%s", rep, err, log.String())
+	}
+	for _, f := range files(t, dir) {
+		if strings.Contains(f, "riesig.jpg") {
+			t.Fatalf("written: %v", files(t, dir))
+		}
+	}
+}
+
+// An attachment's name is only ever its file's name inside "Google
+// Notizen/Anhänge": one that tries to step out, or is hidden, writes
+// nothing elsewhere and does not stop the import. Of two files of that
+// name, the one beside the note is the note's.
+func TestAttachmentNamesStayInTheirFolder(t *testing.T) {
+	_, target, dir := box(t)
+	target.Radicale = nil
+	zp := zipOf(t, map[string][]byte{
+		"Takeout/Fotos/Bild.jpg":      []byte("ein anderes Bild"),
+		"Takeout/Notizen/Bild.jpg":    []byte("das Bild der Notiz"),
+		"Takeout/Notizen/.geheim.jpg": []byte("versteckt"),
+		"Takeout/Notizen/passwd":      []byte("root:x"),
+		"Takeout/Notizen/Notiz.json":  keepJSON("Notiz", "Text", ".geheim.jpg", "../../../../etc/passwd", "Bild.jpg"),
+		"Takeout/Notizen/Zweite.json": keepJSON("Zweite", "danach"),
+	})
+	rep, err := Import(bg, []string{zp}, target, io.Discard)
+	if err != nil || rep.Notes.New != 2 {
+		t.Fatalf("%+v %v", rep, err)
+	}
+	for _, f := range files(t, dir) {
+		if !strings.HasPrefix(f, "Google Notizen/") || strings.Contains(f, "/.") {
+			t.Fatalf("written outside or hidden: %v", files(t, dir))
+		}
+	}
+	if got := read(t, filepath.Join(dir, "Google Notizen", "Anhänge", "Bild.jpg")); got != "das Bild der Notiz" {
+		t.Fatalf("Bild.jpg: %q", got)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "Google Notizen", "Anhänge", "passwd")); err != nil {
+		t.Fatalf("the step out is the file's own name or nothing: %v", err)
+	}
+}
+
+// Radicale refusing the account (403), sending elsewhere (302), or a
+// Haushalt calendar that takes no appointments stops the import with that
+// error, also when the archive holds calendars only — never a line per
+// entry and a success.
+func TestImportStopsOnWhatEveryEntryWouldHit(t *testing.T) {
+	ics := zipOf(t, map[string][]byte{"Takeout/Kalender/Familie.ics": []byte("BEGIN:VCALENDAR\r\nVERSION:2.0\r\n" +
+		"BEGIN:VEVENT\r\nUID:a@google.com\r\nDTSTART:20260101T100000Z\r\nSUMMARY:A\r\nEND:VEVENT\r\n" +
+		"BEGIN:VEVENT\r\nUID:b@google.com\r\nDTSTART:20260102T100000Z\r\nSUMMARY:B\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n")})
+	for _, code := range []int{http.StatusForbidden, http.StatusFound} {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if code == http.StatusFound {
+				w.Header().Set("Location", "http://example.invalid/")
+			}
+			w.WriteHeader(code)
+		}))
+		_, target, _ := box(t)
+		target.Radicale.URL = srv.URL
+		var log bytes.Buffer
+		if _, err := Import(bg, []string{ics}, target, &log); err == nil || strings.Contains(log.String(), "Termin") {
+			t.Fatalf("%d: %v\n%s", code, err, log.String())
+		}
+		srv.Close()
+	}
+	dav, target, _ := box(t)
+	dav.AddCalendar("/haus/haushalt/", "Haushalt", "VTODO")
+	if _, err := Import(bg, []string{ics}, target, io.Discard); err == nil || !strings.Contains(err.Error(), "nimmt kein") {
+		t.Fatalf("a calendar that takes no appointments: %v", err)
+	}
+}
+
+// One object carries each time zone it names once, though it names it on
+// DTSTART and DTEND.
+func TestObjectNamesEachZoneOnce(t *testing.T) {
+	dav, target, _ := box(t)
+	if _, err := Import(bg, fixture(t), target, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	z := objects(dav, ".ics")["/haus/haushalt/zahnarzt-lena-1@google.com.ics"]
+	if !strings.Contains(z, "DTEND;TZID=Europe/Berlin") || strings.Count(z, "BEGIN:VTIMEZONE") != 1 {
+		t.Fatalf("%s", z)
+	}
+}
+
+// What an entry without a UID is named by is its own: its summary and its
+// times, not a reminder's inside it; folded lines are read unfolded. Two
+// such entries on different days are two.
+func TestEntriesAreKnownByThemselves(t *testing.T) {
+	dav, target, _ := box(t)
+	alarm := "BEGIN:VALARM\r\nACTION:EMAIL\r\nSUMMARY:Erinnerung\r\nTRIGGER:-PT1H\r\nEND:VALARM\r\n"
+	zp := zipOf(t, map[string][]byte{"Takeout/Kalender/Familie.ics": []byte("BEGIN:VCALENDAR\r\nVERSION:2.0\r\n" +
+		"BEGIN:VEVENT\r\n" + alarm + "SUMMARY:Turnen\r\nDTSTART:20260105T160000Z\r\nEND:VEVENT\r\n" +
+		"BEGIN:VEVENT\r\n" + alarm + "SUMMARY:Schwimmen\r\nDTSTART:20260105T160000Z\r\nEND:VEVENT\r\n" +
+		"BEGIN:VEVENT\r\nSUMMARY:Turnen\r\nDTSTART:20260112T160000Z\r\nEND:VEVENT\r\n" +
+		"BEGIN:VEVENT\r\nUID:sehr-lange-kennung-die-google-\r\n umbricht@google.com\r\nSUMMARY:Gefaltet\r\nDTSTART:20260201T100000Z\r\nEND:VEVENT\r\n" +
+		"END:VCALENDAR\r\n")})
+	rep, err := Import(bg, []string{zp}, target, io.Discard)
+	if err != nil || rep.Events != (Count{New: 4}) {
+		t.Fatalf("%+v %v", rep, err)
+	}
+	if _, ok := objects(dav, ".ics")["/haus/haushalt/sehr-lange-kennung-die-google-umbricht@google.com.ics"]; !ok {
+		t.Fatalf("folded UID: %v", dav.Objects())
+	}
+}
+
+// A contact is known by its name and its first email address in order,
+// however Google listed them: the same person twice, addresses in another
+// order, is one card; two people of one name with their own addresses
+// are two.
+func TestContactsAreKnownByNameAndAddress(t *testing.T) {
+	dav, target, _ := box(t)
+	card := func(fn string, mails ...string) string {
+		s := "BEGIN:VCARD\r\nVERSION:3.0\r\nFN:" + fn + "\r\n"
+		for _, m := range mails {
+			s += "EMAIL;TYPE=INTERNET:" + m + "\r\n"
+		}
+		return s + "END:VCARD\r\n"
+	}
+	zp := zipOf(t, map[string][]byte{
+		"Takeout/Kontakte/Alle Kontakte/Alle Kontakte.vcf":   []byte(card("Anna Beispiel", "b@example.org", "a@example.org") + card("Anna Beispiel", "anna2@example.net")),
+		"Takeout/Kontakte/Meine Kontakte/Meine Kontakte.vcf": []byte(card("Anna Beispiel", "a@example.org", "b@example.org")),
+	})
+	rep, err := Import(bg, []string{zp}, target, io.Discard)
+	if err != nil || rep.Contacts != (Count{New: 2, There: 1}) || len(objects(dav, ".vcf")) != 2 {
+		t.Fatalf("%+v %v %v", rep, err, objects(dav, ".vcf"))
+	}
+}
+
+// A dry run says what a real run would: an entry the archive lists twice
+// (a person in two of Takeout's address books) is counted once as new.
+func TestDryRunCountsAsTheRunWould(t *testing.T) {
+	_, target, _ := box(t)
+	target.DryRun = true
+	rep, err := Import(bg, fixture(t), target, io.Discard)
+	if err != nil || rep.Contacts != (Count{New: 3, There: 1, Failed: 1}) || rep.Events != (Count{New: 5}) || rep.Notes != (Count{New: 3}) {
+		t.Fatalf("%+v %v", rep, err)
 	}
 }

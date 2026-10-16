@@ -102,3 +102,49 @@ func TestImportTakeoutCommand(t *testing.T) {
 		t.Fatalf("notes only: %d %q", code, said)
 	}
 }
+
+// A -dry-run put after the archive is no archive: the command stops before
+// it writes anything, rather than taking it as a file and importing. Only
+// a contact left out is reason enough for exit 1; a Keep note's day is
+// the box's (TZ), not UTC's.
+func TestImportTakeoutEdges(t *testing.T) {
+	dav := davfake.New("haus", "pw")
+	defer dav.Close()
+	dir := t.TempDir()
+	zp := filepath.Join(t.TempDir(), "takeout-001.zip")
+	f, _ := os.Create(zp)
+	z := zip.NewWriter(f)
+	w, _ := z.Create("Takeout/Kalender/Familie.ics")
+	w.Write([]byte("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:a@google.com\r\nDTSTART:20260101T100000Z\r\nSUMMARY:Spaziergang\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"))
+	w, _ = z.Create("Takeout/Kontakte/Alle Kontakte/Alle Kontakte.vcf")
+	w.Write([]byte("BEGIN:VCARD\r\nVERSION:3.0\r\nNOTE:nichts\r\nEND:VCARD\r\n"))
+	w, _ = z.Create("Takeout/Notizen/Spaet.json")
+	// 2025-06-15 22:30 UTC: the 16th in Berlin
+	w.Write([]byte(`{"title":"Spät","textContent":"Licht aus","createdTimestampUsec":1750026600000000,"userEditedTimestampUsec":1750026600000000,"isTrashed":false}`))
+	z.Close()
+	f.Close()
+	env := map[string]string{"HAUS_RADICALE_URL": dav.URL, "HAUS_RADICALE_USER": "haus", "HAUS_RADICALE_PASSWORD": "pw", "HAUS_NOTES_DIR": dir, "TZ": "Europe/Berlin"}
+	run := func(args ...string) (int, string) {
+		var out, errw bytes.Buffer
+		code := command(context.Background(), append([]string{"import-takeout"}, args...), func(k string) string { return env[k] }, &out, &errw)
+		return code, out.String() + errw.String()
+	}
+	if code, said := run(zp, "-dry-run"); code == 0 || len(dav.Methods) != 0 {
+		t.Fatalf("a misplaced -dry-run: %d %q %v", code, said, dav.Methods)
+	}
+	if es, _ := os.ReadDir(dir); len(es) != 0 {
+		t.Fatalf("a misplaced -dry-run wrote %v", es)
+	}
+	code, said := run(zp)
+	if code != 1 || !strings.Contains(said, "1 Termin neu") || !strings.Contains(said, "1 nicht übernommen") {
+		t.Fatalf("a contact left out: %d %q", code, said)
+	}
+	es, _ := os.ReadDir(filepath.Join(dir, "Google Notizen"))
+	if len(es) != 1 {
+		t.Fatalf("notes: %v", es)
+	}
+	b, _ := os.ReadFile(filepath.Join(dir, "Google Notizen", es[0].Name()))
+	if !strings.Contains(string(b), "angelegt am 16.06.2025") {
+		t.Fatalf("the note's day: %q", b)
+	}
+}
