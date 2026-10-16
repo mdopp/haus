@@ -53,16 +53,17 @@ var tabs = []struct{ name, href, icon string }{
 	{"Start", "/start", `<path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z"/>`},
 	{"Räume", "/raeume", `<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>`},
 	{"Energie", "/energie", `<path d="M13 3L5 13.5h6L10 21l8-10.5h-6z"/>`},
+	{"Medien", "/medien", `<circle cx="12" cy="12" r="9"/><path d="M10 8.5v7l6-3.5z"/>`},
 	{"Kalender", "/kalender", `<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>`},
 	{"Notizen", "/notizen", `<path d="M6 4h9l3 3v13H6z"/><path d="M9 11h6M9 15h6"/>`},
 	{"Box", "/box", `<rect x="3" y="7" width="18" height="12" rx="2"/><path d="M3 11h18M8 15h2"/>`},
 }
 
-// familyNav is the tab bar (haus#35): Start · Räume · Energie · Kalender · Notizen,
-// each only when its backend is set, and Box for admins; the page itself
-// (current, by name) is marked.
+// familyNav is the tab bar (haus#35): Start · Räume · Energie · Medien ·
+// Kalender · Notizen, each only when its backend is set, and Box for
+// admins; the page itself (current, by name) is marked.
 func familyNav(r *http.Request, cfg StartConfig, current string) string {
-	show := map[string]bool{"Start": true, "Räume": cfg.HA != nil, "Energie": cfg.HA != nil, "Kalender": cfg.Calendar != nil, "Notizen": cfg.Notes != nil, "Box": isAdmin(r)}
+	show := map[string]bool{"Start": true, "Räume": cfg.HA != nil, "Energie": cfg.HA != nil, "Medien": cfg.HA != nil, "Kalender": cfg.Calendar != nil, "Notizen": cfg.Notes != nil, "Box": isAdmin(r)}
 	var b strings.Builder
 	b.WriteString("<nav class=tabs aria-label=Seiten>")
 	for _, t := range tabs {
@@ -95,7 +96,13 @@ h1{font-size:1.6rem;font-weight:700;letter-spacing:-.01em;line-height:1.2;margin
 p{margin:12px 0}a{color:var(--accent)}.k{color:var(--muted)}
 button{font:inherit;font-size:.85rem;font-weight:600;color:var(--accent);background:var(--accent-soft);border:0;border-radius:999px;padding:0 16px;min-height:40px;cursor:pointer;white-space:nowrap}
 input[type=search]{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--edge);border-radius:999px;padding:0 16px;min-height:44px;width:min(24rem,62vw)}
-form[role=search]{display:flex;gap:8px;margin:16px 0 0}.notiz{white-space:pre-wrap;overflow-wrap:anywhere}
+form[role=search]{display:flex;gap:8px;margin:16px 0 0}
+.sprechen{margin:20px 0 0}.sprechen label{display:block;font-size:.72rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:0 0 8px}
+.sprechen div{display:flex;gap:8px}.sprechen input{flex:1;min-width:0;font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--edge);border-radius:999px;padding:0 16px;min-height:44px}
+.gespraech{margin:16px 0 0;padding:12px 14px;background:var(--card);border:1px solid var(--edge);border-radius:14px;overflow-wrap:anywhere}
+.gespraech .wer{display:block;font-size:.72rem;font-weight:600;letter-spacing:.04em;color:var(--muted);margin:0 0 2px}.gespraech .frage{margin:0;white-space:pre-wrap}
+.antwort,.gespraech .keine{margin:12px 0 0;padding:12px 0 0;border-top:1px solid var(--line)}.gespraech .keine{color:var(--muted)}.antwort p{margin:6px 0 0;white-space:pre-wrap}.antwort .wer+p{margin-top:0}
+.antwort pre{margin:8px 0 0;padding:10px 12px;overflow-x:auto;background:var(--panel);border:1px solid var(--line);border-radius:10px;font:.8rem/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;overflow-wrap:normal}.notiz{white-space:pre-wrap;overflow-wrap:anywhere}
 .achtung{margin:16px 0 0;padding:12px 14px;background:var(--danger-soft);border:1px solid var(--danger);border-radius:14px}.achtung p{margin:0}.achtung p+p{margin-top:4px;color:var(--muted)}
 .achtung p:first-child::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--danger);margin-right:8px;vertical-align:1px}
 .achtung.selbst{background:var(--warn-soft);border-color:var(--warn)}.achtung.selbst p:first-child::before{background:var(--warn)}
@@ -215,7 +222,7 @@ type missing struct {
 
 func (m missing) write(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
 	tab := m.page
-	if tab == "Zuhause" {
+	if tab == "Zuhause" || tab == "Sprechen" { // Sprechen is Start's field, no tab (haus#12)
 		tab = "Start"
 	}
 	b := familyHead(r, cfg, m.page, tab)

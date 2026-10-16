@@ -89,6 +89,9 @@ func Ding(cfg StartConfig) http.HandlerFunc {
 			row.Action = t.Action
 			row.Action.Switch, row.Action.Label = false, map[bool]string{true: "Ausschalten", false: "Einschalten"}[t.On]
 		}
+		if domain == "media_player" {
+			row.Action, row.Also = playerButtons(s, cards.ThingPage(id))
+		}
 		c.Rows = append(c.Rows, row)
 		room := trimRunes(oneLine(reg.Rooms[s.EntityID]), 60)
 		if room == "" {

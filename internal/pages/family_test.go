@@ -55,13 +55,13 @@ func TestFamilyTabBar(t *testing.T) {
 		page func(StartConfig) http.HandlerFunc
 		path string
 		self string
-	}{{Start, "/start", "/start"}, {Raeume, "/raeume", "/raeume"}, {Energie, "/energie", "/energie"}, {Kalender, "/kalender", "/kalender"}, {Notizen, "/notizen", "/notizen"},
+	}{{Start, "/start", "/start"}, {Raeume, "/raeume", "/raeume"}, {Energie, "/energie", "/energie"}, {Medien, "/medien", "/medien"}, {Kalender, "/kalender", "/kalender"}, {Notizen, "/notizen", "/notizen"},
 		{Ding, "/raeume/light.flur", "/raeume"}, {Ding, "/raeume/light.gibtsnicht", "/raeume"}, {Notizen, "/notizen/einkaufsliste.md", "/notizen"}} {
 		code, body, _ := familyPage(t, p.page, all, "GET", p.path, "family")
 		if code != 200 && code != 404 {
 			t.Fatalf("%s → %d", p.path, code)
 		}
-		mustContain(t, body, "<nav class=tabs aria-label=Seiten>", "href=/start", "href=/raeume", "href=/energie", "href=/kalender", "href=/notizen",
+		mustContain(t, body, "<nav class=tabs aria-label=Seiten>", "href=/start", "href=/raeume", "href=/energie", "href=/medien", "href=/kalender", "href=/notizen",
 			"href="+p.self+" aria-current=page>", "<svg")
 		if n := strings.Count(body, "aria-current=page"); n != 1 {
 			t.Errorf("%s: %d tabs marked", p.path, n)
@@ -69,7 +69,8 @@ func TestFamilyTabBar(t *testing.T) {
 		mustNotContain(t, body, "href=/box")
 		before(t, body, "href=/start", "href=/raeume")
 		before(t, body, "href=/raeume", "href=/energie")
-		before(t, body, "href=/energie", "href=/kalender")
+		before(t, body, "href=/energie", "href=/medien")
+		before(t, body, "href=/medien", "href=/kalender")
 		before(t, body, "href=/kalender", "href=/notizen")
 		_, body, _ = familyPage(t, p.page, all, "GET", p.path, "family,admins")
 		mustContain(t, body, "href=/box")
@@ -77,7 +78,7 @@ func TestFamilyTabBar(t *testing.T) {
 	// nothing set: Start alone, and no word about the rest
 	_, body, _ := familyPage(t, Start, StartConfig{}, "GET", "/start", "family")
 	mustContain(t, body, "href=/start aria-current=page>")
-	mustNotContain(t, body, "href=/raeume", "href=/energie", "href=/kalender", "href=/notizen", "Räume", "Energie", "Kalender", "Notizen")
+	mustNotContain(t, body, "href=/raeume", "href=/energie", "href=/medien", "href=/kalender", "href=/notizen", "Räume", "Energie", "Medien", "Kalender", "Notizen")
 }
 
 // A page whose backend is not set is not served: it lands on Start, like
@@ -86,7 +87,7 @@ func TestFamilyPagesWithoutBackendLandOnStart(t *testing.T) {
 	for _, p := range []struct {
 		page func(StartConfig) http.HandlerFunc
 		path string
-	}{{Raeume, "/raeume"}, {Energie, "/energie"}, {Kalender, "/kalender"}, {Notizen, "/notizen"}, {Notizen, "/notizen/einkaufsliste.md"},
+	}{{Raeume, "/raeume"}, {Energie, "/energie"}, {Medien, "/medien"}, {Kalender, "/kalender"}, {Notizen, "/notizen"}, {Notizen, "/notizen/einkaufsliste.md"},
 		{Ding, "/raeume/light.flur"}, {Erinnerung, "/kalender/erinnerung/a"}, {Kontakt, "/kontakte/a"}, {Dokument, "/dokumente/2"}} {
 		code, _, h := familyPage(t, p.page, StartConfig{}, "GET", p.path, "family")
 		if code != http.StatusFound || h.Get("Location") != "/start" {
@@ -104,7 +105,7 @@ func TestFamilyPagesDecideNothing(t *testing.T) {
 	for _, p := range []struct {
 		page func(StartConfig) http.HandlerFunc
 		path string
-	}{{Raeume, "/raeume"}, {Energie, "/energie"}, {Kalender, "/kalender"}, {Notizen, "/notizen"}, {Notizen, "/notizen/einkaufsliste.md"}} {
+	}{{Raeume, "/raeume"}, {Energie, "/energie"}, {Medien, "/medien"}, {Kalender, "/kalender"}, {Notizen, "/notizen"}, {Notizen, "/notizen/einkaufsliste.md"}} {
 		for _, m := range []string{"POST", "PUT", "DELETE"} {
 			if code, _, _ := familyPage(t, p.page, all, m, p.path, "admins"); code != http.StatusMethodNotAllowed {
 				t.Fatalf("%s %s → %d, want 405", m, p.path, code)

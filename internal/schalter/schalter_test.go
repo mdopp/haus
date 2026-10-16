@@ -22,9 +22,10 @@ func house(t *testing.T) (*hafake.HA, *ha.Client) {
 }
 
 // haus#35: one rule for what Haus switches, for the widgets' /napi/ha/call
-// and the family's pages alike. A media player only pauses: Start's
-// "Pause" is the one thing the pages need from it, and playing a URL on
-// the speakers stays off the list.
+// and the family's pages alike. A media player pauses and goes on, and
+// steps its volume (Start's Pause, Medien's buttons, haus#12); playing a
+// URL on the speakers, setting a volume, muting, stopping, turning off
+// stay off the list.
 func TestOneRuleForWhatHausSwitches(t *testing.T) {
 	fake, hc := house(t)
 	for _, c := range []struct {
@@ -36,7 +37,13 @@ func TestOneRuleForWhatHausSwitches(t *testing.T) {
 	}{
 		{"light.kueche", "light.turn_off", nil, false, 0, ""},
 		{"cover.rollo", "cover.open_cover", nil, false, 0, ""},
+		{"media_player.wohnzimmer", "media_player.media_play", nil, false, 0, ""},  // Medien's Weiter (haus#12)
+		{"media_player.wohnzimmer", "media_player.volume_up", nil, false, 0, ""},   // Medien's Lauter
+		{"media_player.wohnzimmer", "media_player.volume_down", nil, false, 0, ""}, // Medien's Leiser
 		{"media_player.wohnzimmer", "media_player.media_pause", nil, false, 0, ""},
+		{"media_player.wohnzimmer", "media_player.volume_mute", map[string]any{"is_volume_muted": true}, true, 400, "unsupported_service"},
+		{"media_player.wohnzimmer", "media_player.media_stop", nil, true, 400, "unsupported_service"},
+		{"media_player.wohnzimmer", "media_player.select_source", map[string]any{"source": "x"}, true, 400, "unsupported_service"},
 		{"media_player.wohnzimmer", "media_player.play_media", map[string]any{"media_content_id": "http://x"}, false, 400, "unsupported_service"},
 		{"media_player.wohnzimmer", "media_player.turn_off", nil, false, 400, "unsupported_service"},
 		{"media_player.wohnzimmer", "media_player.volume_set", map[string]any{"volume_level": 1}, true, 400, "unsupported_service"},
@@ -80,5 +87,33 @@ func TestHATroubleIsNotARefusal(t *testing.T) {
 	var he *ha.Error
 	if err == nil || errors.As(err, &r) || !errors.As(err, &he) {
 		t.Fatalf("%v, want HA's error", err)
+	}
+}
+
+// haus#12: a media player does exactly four things — pause, go on, a
+// volume step down and up. Every other service HA has for a player is
+// refused and HA hears nothing; a new one is refused until it is named.
+func TestAPlayerDoesExactlyFourThings(t *testing.T) {
+	fake, hc := house(t)
+	allowed := set("media_pause", "media_play", "volume_down", "volume_up")
+	for _, s := range []string{"turn_on", "turn_off", "toggle", "volume_up", "volume_down", "volume_set", "volume_mute",
+		"media_play_pause", "media_play", "media_pause", "media_stop", "media_next_track", "media_previous_track", "media_seek",
+		"play_media", "select_source", "select_sound_mode", "clear_playlist", "shuffle_set", "repeat_set", "join", "unjoin",
+		"browse_media", "search_media", "reload", "some_future_service"} {
+		before := len(fake.Calls())
+		err := Do(context.Background(), hc, "media_player.wohnzimmer", "media_player."+s, nil, true)
+		var r *Refusal
+		switch {
+		case allowed[s] && (err != nil || len(fake.Calls()) != before+1):
+			t.Errorf("%s: %v, want it done", s, err)
+		case !allowed[s] && (!errors.As(err, &r) || r.Reason != "unsupported_service" || len(fake.Calls()) != before):
+			t.Errorf("%s: %v, want it refused and HA hearing nothing", s, err)
+		}
+	}
+	// the player's services on anything but a player are not a player's
+	for _, e := range []string{"light.kueche", "switch.kaffee", "cover.rollo"} {
+		if err := Do(context.Background(), hc, e, "media_player.volume_up", nil, true); err == nil {
+			t.Errorf("volume_up on %s was done", e)
+		}
 	}
 }
