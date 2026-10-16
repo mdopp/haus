@@ -74,8 +74,10 @@ func TestSendsTypedSearchesNeverThePlainQuery(t *testing.T) {
 				keys = append(keys, k)
 			}
 			sort.Strings(keys)
-			if strings.Join(keys, ",") != "collections,limit,minScore,rerank,searches" {
-				t.Fatalf("the body says %v, want only collections, limit, minScore, rerank, searches: %s", keys, r.Body)
+			// exactly what the Vermittler takes (laib#198, qmd/vermittler.mjs):
+			// any other field, minScore too, is its 400
+			if strings.Join(keys, ",") != "collections,limit,rerank,searches" {
+				t.Fatalf("the body says %v, want only collections, limit, rerank, searches: %s", keys, r.Body)
 			}
 			if rr, ok := body["rerank"].(bool); !ok || rr {
 				t.Fatalf("rerank must be sent, and false: %s", r.Body)
@@ -85,7 +87,7 @@ func TestSendsTypedSearchesNeverThePlainQuery(t *testing.T) {
 			if !reflect.DeepEqual(body["searches"], want) {
 				t.Fatalf("searches: %v", body["searches"])
 			}
-			if !reflect.DeepEqual(body["collections"], []any{"notizen"}) || body["limit"] != float64(7) || body["minScore"] != float64(0) {
+			if !reflect.DeepEqual(body["collections"], []any{"notizen"}) || body["limit"] != float64(7) {
 				t.Fatalf("scope: %s", r.Body)
 			}
 		case "/status":
@@ -275,7 +277,7 @@ func TestFakeAnswersLikeQmd(t *testing.T) {
 	defer f.Close()
 	f.Add(qmdfake.Doc{Path: "schlüssel & keller (2).md", Title: "schlüssel & keller (2)",
 		Body: "Notiz ohne Überschrift über den Kellerschlüssel: hängt am Brett neben der Tür.\n"})
-	resp, err := http.Post(f.URL+"/query", "application/json", strings.NewReader(`{"searches":[{"type":"lex","query":"Kellerschlüssel"},{"type":"vec","query":"Kellerschlüssel"}],"limit":3,"minScore":0,"rerank":false,"collections":["notizen"]}`))
+	resp, err := http.Post(f.URL+"/query", "application/json", strings.NewReader(`{"searches":[{"type":"lex","query":"Kellerschlüssel"},{"type":"vec","query":"Kellerschlüssel"}],"limit":3,"rerank":false,"collections":["notizen"]}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -358,5 +360,37 @@ func TestAnswerIsBounded(t *testing.T) {
 	c = &Client{URL: verbatim(t, "application/json", padded).URL, Collection: "notizen"}
 	if hits, err := c.Search(context.Background(), "x", 3); err == nil {
 		t.Fatalf("an answer over the cap is an error, not %v", hits)
+	}
+}
+
+// The fake refuses what the Vermittler refuses (laib#198): a field it does
+// not take — minScore, intent, a plain query — rerank on, a search that is
+// not lex or vec. So a Haus that sends one fails here, not on the box,
+// where every search would fall to words (haus#13).
+func TestFakeRefusesLikeTheVermittler(t *testing.T) {
+	f := qmdfake.New("notizen")
+	defer f.Close()
+	f.Add(qmdfake.Doc{Path: "a.md", Title: "A", Body: "Kellerschlüssel"})
+	for _, body := range []string{
+		`{"searches":[{"type":"lex","query":"x"}],"minScore":0}`,
+		`{"searches":[{"type":"lex","query":"x"}],"intent":"y"}`,
+		`{"query":"x"}`,
+		`{"searches":[{"type":"lex","query":"x"}],"rerank":true}`,
+		`{"searches":[{"type":"hyde","query":"x"}]}`,
+		`{"searches":[{"type":"lex","query":" "}]}`,
+	} {
+		resp, err := http.Post(f.URL+"/query", "application/json", strings.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("%s: %d, want 400", body, resp.StatusCode)
+		}
+	}
+	// and Haus's own body is taken
+	c := &Client{URL: f.URL, Collection: "notizen"}
+	if hits, err := c.Search(context.Background(), "Kellerschlüssel", 3); err != nil || len(hits) != 1 {
+		t.Fatalf("%v %v", hits, err)
 	}
 }
