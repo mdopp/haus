@@ -633,15 +633,22 @@ func TestStartLinksTheBoxForAdmins(t *testing.T) {
 	mustNotContain(t, body, `href=/box`)
 }
 
-// haus#12: "/" and every path Haus does not serve land on Start, never on
-// an error.
-func TestEverythingElseLandsOnStart(t *testing.T) {
-	for _, p := range []string{"/", "/download", "/p/start", "/unbekannt"} {
-		rec := httptest.NewRecorder()
-		ToStart().ServeHTTP(rec, httptest.NewRequest("GET", p, nil))
-		if rec.Code != http.StatusFound || rec.Header().Get("Location") != "/start" {
-			t.Fatalf("%s → %d %q, want 302 /start", p, rec.Code, rec.Header().Get("Location"))
+// haus#12: "/" is Start; every other path Haus does not serve is a 404
+// with the way to Start, in the house's frame, never a blank error and
+// never Start pretending all is well. The path asked for is not repeated.
+func TestOnlyTheRootLandsOnStart(t *testing.T) {
+	code, _, hdr := familyPage(t, Elsewhere, StartConfig{}, "GET", "/", "family")
+	if code != http.StatusFound || hdr.Get("Location") != "/start" {
+		t.Fatalf("/ → %d %q, want 302 /start", code, hdr.Get("Location"))
+	}
+	for _, p := range []string{"/download", "/p/start", "/unbekannt", "/%3Cb%3Ex"} {
+		code, body, hdr := familyPage(t, Elsewhere, StartConfig{}, "GET", p, "family")
+		if code != http.StatusNotFound || hdr.Get("Location") != "" {
+			t.Fatalf("%s → %d %q, want 404", p, code, hdr.Get("Location"))
 		}
+		mustContain(t, body, "<title>Nicht gefunden · Zuhause</title>", "<h1>Nicht gefunden</h1>", "<p>Diese Seite gibt es nicht.</p>",
+			"<p><a href=/start>Zur Startseite</a></p>", "<nav class=tabs")
+		mustNotContain(t, body, "unbekannt", "download", "<b>x", "aria-current=page")
 	}
 }
 

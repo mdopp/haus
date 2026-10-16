@@ -50,8 +50,9 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   sagen.* at the bottom. The page is always a 200. Cards are one renderer,
   `internal/cards` (title, rows, optional link; a list, boxes, tiles or a
   time column; a row may carry one button), for the pages and later the
-  widgets' JSON. `/` and every page path Haus does not serve redirect to
-  `/start`.
+  widgets' JSON. `/` redirects to `/start`; every other page path Haus
+  does not serve is a 404 in the family's frame: *Diese Seite gibt es
+  nicht.* and *Zur Startseite* (haus#12).
 - The family's page frame (haus#35): the house palette (the chat's tokens
   and haus-android's `colors.xml`: ground `#070709`, cards `#14141A`,
   orange `#F97316` for what you can do, amber `#FFC107` for what is on,
