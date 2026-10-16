@@ -17,7 +17,8 @@ import (
 // The family's pages (haus#12): Start, Räume, Kalender, Notizen. They read
 // one config (StartConfig), share one nav and the persona's header, and
 // show without changing anything (haus#1). A page whose backend is not set
-// is not served: it lands on Start, like every path Haus does not serve.
+// is not served: it lands on Start. A path Haus does not serve at all is
+// a 404 with the way to Start (Elsewhere).
 
 // What a family page says, in one plain line where the rows would be,
 // when a backend does not answer (haus#12, haus#33): what is missing, in
@@ -47,17 +48,18 @@ const (
 var tabs = []struct{ name, href, icon string }{
 	{"Start", "/start", `<path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z"/>`},
 	{"Räume", "/raeume", `<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>`},
+	{"Energie", "/energie", `<path d="M13 3L5 13.5h6L10 21l8-10.5h-6z"/>`},
 	{"Medien", "/medien", `<circle cx="12" cy="12" r="9"/><path d="M10 8.5v7l6-3.5z"/>`},
 	{"Kalender", "/kalender", `<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>`},
 	{"Notizen", "/notizen", `<path d="M6 4h9l3 3v13H6z"/><path d="M9 11h6M9 15h6"/>`},
 	{"Box", "/box", `<rect x="3" y="7" width="18" height="12" rx="2"/><path d="M3 11h18M8 15h2"/>`},
 }
 
-// familyNav is the tab bar (haus#35): Start · Räume · Medien · Kalender · Notizen,
-// each only when its backend is set, and Box for admins; the page itself
-// (current, by name) is marked.
+// familyNav is the tab bar (haus#35): Start · Räume · Energie · Medien ·
+// Kalender · Notizen, each only when its backend is set, and Box for
+// admins; the page itself (current, by name) is marked.
 func familyNav(r *http.Request, cfg StartConfig, current string) string {
-	show := map[string]bool{"Start": true, "Räume": cfg.HA != nil, "Medien": cfg.HA != nil, "Kalender": cfg.Calendar != nil, "Notizen": cfg.Notes != nil, "Box": isAdmin(r)}
+	show := map[string]bool{"Start": true, "Räume": cfg.HA != nil, "Energie": cfg.HA != nil, "Medien": cfg.HA != nil, "Kalender": cfg.Calendar != nil, "Notizen": cfg.Notes != nil, "Box": isAdmin(r)}
 	var b strings.Builder
 	b.WriteString("<nav class=tabs aria-label=Seiten>")
 	for _, t := range tabs {

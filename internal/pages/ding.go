@@ -124,7 +124,8 @@ func star(id string, favs []string, err error) string {
 }
 
 // pin is the ☆'s POST: the person's own list only, only from Haus's own
-// page; then back to the thing's page (303). A favorites file that does
+// page; then back to Räume (one room on it) when it came from there, else
+// to the thing's page (303). A favorites file that does
 // not read is never written over: one plain line and the way back.
 func pin(w http.ResponseWriter, r *http.Request, cfg StartConfig, id string) {
 	if !fromHaus(r) {
@@ -141,13 +142,17 @@ func pin(w http.ResponseWriter, r *http.Request, cfg StartConfig, id string) {
 		http.Error(w, "Anheften kennt nur an und aus.", http.StatusBadRequest)
 		return
 	}
+	back, backText := cards.ThingPage(id), "Zurück zum Gerät"
+	if z := r.PostForm.Get("zurueck"); inRaeume.MatchString(z) {
+		back, backText = z, "Zurück zu den Räumen"
+	}
 	err := cfg.Favorites.Set(r.Header.Get("Remote-User"), id, on)
 	if err == nil {
-		http.Redirect(w, r, cards.ThingPage(id), http.StatusSeeOther)
+		http.Redirect(w, r, back, http.StatusSeeOther)
 		return
 	}
 	log.Printf("haus: gerät page: pinning %q: %v", id, err)
-	m := missing{http.StatusOK, saysNoFavorites, "Räume", cards.ThingPage(id), "Zurück zum Gerät"}
+	m := missing{http.StatusOK, saysNoFavorites, "Räume", back, backText}
 	if errors.Is(err, favoriten.ErrFull) {
 		m.say = "Auf Start ist kein Platz mehr. Nimm erst ein anderes Gerät herunter."
 	}

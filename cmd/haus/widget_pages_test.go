@@ -18,6 +18,7 @@ import (
 	"github.com/mdopp/haus/internal/ha"
 	"github.com/mdopp/haus/internal/ha/hafake"
 	"github.com/mdopp/haus/internal/haushalt"
+	"github.com/mdopp/haus/internal/napi"
 	"github.com/mdopp/haus/internal/notes"
 	"github.com/mdopp/haus/internal/pages"
 	"github.com/mdopp/haus/internal/paperless"
@@ -178,6 +179,33 @@ func TestAnItemPageForNothingIsA404(t *testing.T) {
 		if rec.Code != 404 || !strings.Contains(rec.Body.String(), "gibt es nicht") {
 			t.Errorf("%s → %d, want a 404 that says so: %s", p, rec.Code, rec.Body.String())
 		}
+	}
+}
+
+// haus#12: a path Haus does not serve is a 404 in the house's own frame,
+// one plain line and the way to Start, never a blank error and never Start
+// pretending all is well; "/" alone is Start.
+func TestAPathHausDoesNotServeIsA404(t *testing.T) {
+	s, _, _ := fullSite(t)
+	h := routes(s)
+	for _, p := range []string{"/unbekannt", "/download", "/p/start", "/start/x", "/index.html"} {
+		rec := page(h, p)
+		body := rec.Body.String()
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("%s → %d %q, want 404", p, rec.Code, rec.Header().Get("Location"))
+			continue
+		}
+		for _, want := range []string{"<!doctype html>", "<nav class=tabs", "<p>Diese Seite gibt es nicht.</p>", "<p><a href=/start>Zur Startseite</a></p>"} {
+			if !strings.Contains(body, want) {
+				t.Errorf("%s: the 404 lacks %q:\n%s", p, want, body)
+			}
+		}
+		if strings.Contains(body, p) {
+			t.Errorf("%s: the 404 repeats the path:\n%s", p, body)
+		}
+	}
+	if rec := page(h, "/"); rec.Code != http.StatusFound || rec.Header().Get("Location") != "/start" {
+		t.Fatalf("/ → %d %q, want 302 /start", rec.Code, rec.Header().Get("Location"))
 	}
 }
 
@@ -417,6 +445,26 @@ func TestPinAndSwitchThroughTheRoutes(t *testing.T) {
 	}
 	if rec := page(h, pages.FontPath); rec.Code != 200 || rec.Header().Get("Content-Type") != "font/woff2" {
 		t.Fatalf("the font → %d %q", rec.Code, rec.Header().Get("Content-Type"))
+	}
+}
+
+// haus#12: Haus serves Energie from the same choice of sensors as the
+// widgets' energy picture (the template's HAUS_ENERGY_*).
+func TestEnergiePageServedFromTheWidgetsSensors(t *testing.T) {
+	s, fake, _ := fullSite(t)
+	fake.Set("sensor.inverter", "2500", map[string]any{"friendly_name": "Inverter", "device_class": "power", "unit_of_measurement": "W"})
+	s.napi.Energy = napi.EnergyMap{Flow: map[string]string{"pv": "sensor.inverter"}}
+	rec := page(routes(s), "/energie")
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "<b class=zustand>2,5 kW</b> <span class=k>erzeugt</span>") {
+		t.Fatalf("/energie → %d:\n%s", rec.Code, rec.Body.String())
+	}
+}
+
+// A path under Energie that Haus does not serve is a 404 with the way back.
+func TestEnergieSubpathIsA404(t *testing.T) {
+	s, _, _ := fullSite(t)
+	if rec := page(routes(s), "/energie/heute"); rec.Code != http.StatusNotFound || !strings.Contains(rec.Body.String(), "<a href=/energie>Energie</a>") {
+		t.Fatalf("/energie/heute → %d:\n%s", rec.Code, rec.Body.String())
 	}
 }
 

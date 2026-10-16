@@ -25,6 +25,7 @@ type Row struct {
 	Off    bool    `json:"off,omitempty"`
 	Level  int     `json:"level,omitempty"` // 1–100: a lamp's brightness, a cover's position; 0, no bar
 	Action *Action `json:"action,omitempty"`
+	Pin    *Pin    `json:"pin,omitempty"`
 	// Also are more buttons after Action (a player's Leiser, Lauter,
 	// haus#12); when Also is set, even empty, the row puts its buttons on
 	// a line of their own
@@ -43,6 +44,16 @@ type Action struct {
 	Back   string `json:"back"`
 	Switch bool   `json:"switch,omitempty"`
 	On     bool   `json:"on,omitempty"`
+}
+
+// Pin is a row's ☆ (haus#12): a form that POSTs to the thing's own page
+// and puts it on the person's Start, or, On, takes it off; Name is the
+// thing's name for a screen reader, Back where the page lands after.
+type Pin struct {
+	Entity string `json:"entity"`
+	Name   string `json:"name"`
+	On     bool   `json:"on,omitempty"`
+	Back   string `json:"back"`
 }
 
 // Link is where the card leads.
@@ -138,11 +149,22 @@ func (c Card) HTML() string {
 			for _, a := range r.Also {
 				b.WriteString(a.form())
 			}
+			if r.Pin != nil {
+				b.WriteString(r.Pin.form()) // the ☆ last, as on any row
+			}
 			b.WriteString("</div></li>")
-		case r.Action != nil:
+		case r.Action != nil && r.Pin == nil:
 			b.WriteString("<li class=tu><div>")
 			what(&b, r)
 			b.WriteString("</div>" + r.Action.form() + "</li>")
+		case r.Pin != nil:
+			b.WriteString("<li class=tu><div>")
+			what(&b, r)
+			b.WriteString("</div><div class=knoepfe>")
+			if r.Action != nil {
+				b.WriteString(r.Action.form())
+			}
+			b.WriteString(r.Pin.form() + "</div></li>") // the ☆ last: one column down the card
 		case c.Look == Tiles || c.Look == Times: // a line across, not a tile or a time
 			b.WriteString("<li class=voll>")
 			what(&b, r)
@@ -221,6 +243,17 @@ func (a *Action) form() string {
 	return b.String()
 }
 
+// form is the ☆: a POST to the thing's own page, stern an or aus.
+func (p *Pin) form() string {
+	value, star, says := "an", "☆", " auf Start zeigen"
+	if p.On {
+		value, star, says = "aus", "★", " von Start nehmen"
+	}
+	return `<form method=post action="` + html.EscapeString(ThingPage(p.Entity)) + `"><input type=hidden name=stern value=` + value +
+		`><input type=hidden name=zurueck value="` + html.EscapeString(p.Back) + `"><button class="anheften` + map[bool]string{true: " an"}[p.On] +
+		`" aria-label="` + html.EscapeString(p.Name+says) + `">` + star + "</button></form>"
+}
+
 // Style is the cards' CSS, for a page's head: the house palette's
 // variables (the page frame sets them), a row a finger hits as a whole.
 const Style = `<style>.karte{margin:22px 0 0}
@@ -232,6 +265,7 @@ const Style = `<style>.karte{margin:22px 0 0}
 .karte li.tu{display:flex;align-items:center;justify-content:space-between;gap:12px}.karte form{position:relative;z-index:1;flex:none;display:flex}
 .knoepfe{position:relative;z-index:1;flex:none;display:flex;align-items:center;gap:2px}
 .karte li.viele{flex-wrap:wrap;gap:8px}.karte li.viele>div:first-child{flex:1 1 100%}.viele .knoepfe{gap:8px;flex-wrap:wrap}
+.anheften{width:44px;min-height:44px;padding:0;background:none;border-radius:50%;color:var(--muted);font-size:1.35rem;font-weight:400;line-height:1}.anheften.an{color:var(--state)}
 .einzeln ul{background:none;border:0;border-radius:0;display:grid;gap:6px}.einzeln li,.einzeln li:first-child{background:var(--card);border:1px solid var(--edge);border-radius:14px}
 .kacheln ul{background:none;border:0;border-radius:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
 .kacheln li,.kacheln li:first-child{background:var(--tile);border:1px solid var(--edge);border-radius:20px;padding:10px 12px 12px;display:grid;gap:4px;align-content:start;min-width:0}
