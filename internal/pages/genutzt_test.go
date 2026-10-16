@@ -226,8 +226,9 @@ func aMonth(fake *usagefake.Fake) {
 	fake.SetSummary(map[string]any{"days": 30, "from": "2026-09-17", "total": 300, "knownApps": []string{"bote", "haus", "stimme"},
 		"apps": []any{
 			map[string]any{"app": "bote", "total": 61, "events": []any{
-				map[string]any{"event": "unbeantwortet", "count": 3}, map[string]any{"event": "werkzeug.mcp_haushalt_kalender", "count": 12},
-				map[string]any{"event": "werkzeug.mcp_ha_HassTurnOff", "count": 6}, map[string]any{"event": "zug", "count": 40}}},
+				map[string]any{"event": "unbeantwortet", "count": 3}, map[string]any{"event": "werkzeug.haushalt.kalender", "count": 12},
+				map[string]any{"event": "werkzeug.ha.hassturnoff", "count": 6}, map[string]any{"event": "werkzeug.memory", "count": 5},
+				map[string]any{"event": "werkzeug.laib.status", "count": 1}, map[string]any{"event": "zug", "count": 40}}},
 			map[string]any{"app": "haus", "total": 200, "events": []any{
 				map[string]any{"event": "gestoert.start.licht", "count": 4}, map[string]any{"event": "napi.portal.state", "count": 31},
 				map[string]any{"event": "schalten.light.turn_off", "count": 17}, map[string]any{"event": "seite.raeume", "count": 22},
@@ -257,7 +258,7 @@ func TestBoxCardWhatIsUsed(t *testing.T) {
 		"Am meisten genutzt", "Start geöffnet", "120", "Räume geöffnet", "Licht ausgeschaltet", "17", "Vom Widget „Gerät“ aus geöffnet",
 		"Kaum oder nie genutzt", "Kalender geöffnet", "Energie geöffnet",
 		"Was nicht antwortete", saysNoHouse, "auf Start", "4×",
-		"Im Chat", "40 Anfragen", "3 davon nicht beantwortet", "haushalt kalender",
+		"Im Chat", "40 Anfragen", "3 davon nicht beantwortet", "Haushalt: kalender (12)", "Geräte: turnoff (6)", "Gedächtnis (5)",
 		"Per Stimme", "30 hat Home Assistant selbst verstanden", "5 an die KI weitergereicht", "4 hat niemand verstanden",
 		"Was niemand beantworten konnte", "Wann kommt der Müll?", "9×", "im Chat", "Mach die &lt;Musik&gt; lauter", "per Stimme", "30 Tage", "ohne Namen",
 		"Was läuft"} {
@@ -266,6 +267,9 @@ func TestBoxCardWhatIsUsed(t *testing.T) {
 		}
 	}
 	text := regexpTags.ReplaceAllString(page, " ")
+	if strings.Contains(text, "hassturnoff") || strings.Contains(text, "memory") {
+		t.Error("a Bote tool is shown by its raw name")
+	}
 	for _, raw := range []string{"seite.start", "gestoert.", "napi.", "werkzeug.", "von.widget", "nicht-erkannt", "mcp_"} {
 		if strings.Contains(text, raw) {
 			t.Errorf("the card shows the raw id %q", raw)
@@ -337,5 +341,30 @@ func TestBoxCardSaysWhyVoiceIsNotCounted(t *testing.T) {
 	page := get(boxWithUsage(t, c, v), "admins")
 	if !strings.Contains(page, "Sprachbefehle werden nicht gezählt") || !strings.Contains(page, "Administrator") {
 		t.Errorf("the refusal is not said:\n%s", page)
+	}
+}
+
+// The Bote's tools as laib's plugin counts them (laib#275):
+// werkzeug.<server>.<tool> from Hermes' mcp__<server>__<tool>, Hermes' own
+// without a server; the card says the server in words.
+func TestBoteToolsInWords(t *testing.T) {
+	for event, want := range map[string]string{
+		"werkzeug.haushalt.kalender":      "Haushalt: kalender",
+		"werkzeug.haushalt.notiz_anlegen": "Haushalt: notiz anlegen",
+		"werkzeug.ha.hassturnoff":         "Geräte: turnoff",
+		"werkzeug.ha.getlivecontext":      "Geräte: getlivecontext",
+		"werkzeug.laib.status":            "Box: status",
+		"werkzeug.frage.frage":            "Websuche: frage",
+		"werkzeug.automat.entitaeten":     "Automationen: entitaeten",
+		"werkzeug.memory":                 "Gedächtnis",
+		"werkzeug.todo":                   "Aufgabenliste",
+		"werkzeug.session_search":         "Gesprächssuche",
+		"werkzeug.clarify":                "Rückfrage",
+		"werkzeug.neu.etwas_tun":          "neu: etwas tun",
+		"werkzeug.eigenes_werkzeug":       "eigenes werkzeug",
+	} {
+		if got := toolSays(strings.TrimPrefix(event, "werkzeug.")); got != want {
+			t.Errorf("%s → %q, want %q", event, got, want)
+		}
 	}
 }
