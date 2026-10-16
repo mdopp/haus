@@ -1,7 +1,7 @@
 // Package hafake is a fake Home Assistant for tests: the REST calls Haus
 // makes (/api/states, /api/services, /api/history/period,
 // /api/camera_proxy) and the WebSocket
-// (/api/websocket: auth, subscribe_events, the three registries). Its frame
+// (/api/websocket: auth, subscribe_events, the three registries, the Assist pipelines' debug store). Its frame
 // code is written for the server side on purpose, so it shares nothing with
 // the client it tests. Never a live box.
 package hafake
@@ -51,6 +51,108 @@ type HA struct {
 	tempUnit string // /api/config's unit_system.temperature; "" makes /api/config fail
 	subs     []*conn
 	cameras  map[string]camera
+	assist   []Pipeline
+	notAdmin bool
+}
+
+// Pipeline is one Assist pipeline and the runs HA keeps of it (its debug
+// store: the last ten, in memory).
+type Pipeline struct {
+	ID   string
+	Runs []AssistRun
+}
+
+// AssistRun is one Assist run as HA's pipeline debug store holds it.
+type AssistRun struct {
+	ID       string
+	Time     time.Time
+	Sentence string // intent-start's intent_input
+	Local    bool   // intent-end's processed_locally
+	Code     string // "" answered; else the error response's data.code (no_intent_match, …)
+	Open     bool   // still running: no intent-end yet
+}
+
+// SetAssist sets the Assist pipelines and their stored runs.
+func (h *HA) SetAssist(ps []Pipeline) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.assist = ps
+}
+
+// AssistAdmin(false) makes the token's user no administrator: HA refuses
+// the pipeline commands (websocket_api.require_admin, "unauthorized").
+func (h *HA) AssistAdmin(admin bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.notAdmin = !admin
+}
+
+// assistCmd answers the assist_pipeline commands as HA does
+// (assist_pipeline/websocket_api.py, pipeline.py, 2026-10).
+func (h *HA) assistCmd(m map[string]any) (result any, code string, handled bool) {
+	switch m["type"] {
+	case "assist_pipeline/pipeline/list", "assist_pipeline/pipeline_debug/list", "assist_pipeline/pipeline_debug/get":
+	default:
+		return nil, "", false
+	}
+	if h.notAdmin && m["type"] != "assist_pipeline/pipeline/list" {
+		return nil, "unauthorized", true
+	}
+	var p *Pipeline
+	for i := range h.assist {
+		if h.assist[i].ID == m["pipeline_id"] {
+			p = &h.assist[i]
+		}
+	}
+	switch m["type"] {
+	case "assist_pipeline/pipeline/list":
+		ps := []any{}
+		for _, p := range h.assist {
+			ps = append(ps, map[string]any{"id": p.ID, "name": p.ID, "language": "de", "conversation_engine": "conversation.home_assistant"})
+		}
+		pref := ""
+		if len(h.assist) > 0 {
+			pref = h.assist[0].ID
+		}
+		return map[string]any{"pipelines": ps, "preferred_pipeline": pref}, "", true
+	case "assist_pipeline/pipeline_debug/list":
+		runs := []any{}
+		if p != nil {
+			for _, r := range p.Runs {
+				runs = append(runs, map[string]any{"pipeline_run_id": r.ID, "timestamp": r.Time.UTC().Format("2006-01-02T15:04:05.000000+00:00")})
+			}
+		}
+		return map[string]any{"pipeline_runs": runs}, "", true
+	}
+	if p == nil {
+		return nil, "not_found", true
+	}
+	for _, r := range p.Runs {
+		if r.ID != m["pipeline_run_id"] {
+			continue
+		}
+		ts := r.Time.UTC().Format("2006-01-02T15:04:05.000000+00:00")
+		ev := func(t string, data any) map[string]any {
+			return map[string]any{"type": t, "data": data, "timestamp": ts}
+		}
+		events := []any{
+			ev("run-start", map[string]any{"pipeline": p.ID, "language": "de", "conversation_id": "01JCONV", "runner_data": map[string]any{"stt_binary_handler_id": 1}}),
+			ev("stt-end", map[string]any{"stt_output": map[string]any{"text": r.Sentence}}),
+			ev("intent-start", map[string]any{"engine": "conversation.home_assistant", "language": "de", "intent_input": r.Sentence,
+				"conversation_id": "01JCONV", "device_id": "dev-kueche-satellit", "satellite_id": "assist_satellite.kueche", "prefer_local_intents": true}),
+		}
+		if !r.Open {
+			resp := map[string]any{"speech": map[string]any{"plain": map[string]any{"speech": "Erledigt"}}, "response_type": "action_done", "data": map[string]any{"targets": []any{}}, "language": "de"}
+			if r.Code != "" {
+				resp = map[string]any{"speech": map[string]any{"plain": map[string]any{"speech": "Das habe ich nicht verstanden"}}, "response_type": "error", "data": map[string]any{"code": r.Code}, "language": "de"}
+			}
+			events = append(events,
+				ev("intent-end", map[string]any{"processed_locally": r.Local, "intent_output": map[string]any{"response": resp, "conversation_id": "01JCONV", "continue_conversation": false}}),
+				ev("run-end", nil))
+		}
+		return map[string]any{"events": events}, "", true
+	}
+	return nil, "not_found", true
 }
 
 type camera struct {
@@ -429,6 +531,15 @@ func (h *HA) websocket(w http.ResponseWriter, r *http.Request) {
 		if h.regsDown && strings.HasSuffix(fmt.Sprint(m["type"]), "_registry/list") {
 			h.mu.Unlock()
 			c.send(map[string]any{"id": m["id"], "type": "result", "success": false, "error": map[string]any{"code": "unknown_error", "message": "registry broken"}})
+			continue
+		}
+		if res, code, ok := h.assistCmd(m); ok {
+			h.mu.Unlock()
+			if code != "" {
+				c.send(map[string]any{"id": m["id"], "type": "result", "success": false, "error": map[string]any{"code": code, "message": map[string]string{"unauthorized": "Unauthorized", "not_found": "not found"}[code]}})
+			} else {
+				c.send(map[string]any{"id": m["id"], "type": "result", "success": true, "result": res})
+			}
 			continue
 		}
 		var result any
