@@ -14,6 +14,8 @@ import (
 	"github.com/mdopp/haus/internal/judge/proxyfake"
 	"github.com/mdopp/haus/internal/library"
 	"github.com/mdopp/haus/internal/notes"
+	"github.com/mdopp/haus/internal/paperless"
+	"github.com/mdopp/haus/internal/paperless/paperlessfake"
 	"github.com/mdopp/haus/internal/qmd"
 	"github.com/mdopp/haus/internal/qmd/qmdfake"
 )
@@ -409,5 +411,85 @@ func TestNotizenTidyUp(t *testing.T) {
 		if r.Path == "/api/model-lease" && r.Method != "GET" {
 			t.Fatalf("the page took the lease: %s", r.Method)
 		}
+	}
+}
+
+// The household's documents in the library (haus#13): Paperless, and
+// qmd's copy of them as `haus export-documents` writes it.
+func documents13(t *testing.T, f *qmdfake.Server) *paperlessfake.Server {
+	t.Helper()
+	p := paperlessfake.New("pl-token")
+	t.Cleanup(p.Close)
+	p.Correspondent(3, "Stadtwerke Musterstadt")
+	p.Add(paperlessfake.Doc{ID: 7, Title: "Stromvertrag <b>", Content: "Vertragslaufzeit bis 31.12.2027.", Correspondent: 3, Created: "2025-03-14"})
+	f.Add(qmdfake.Doc{Collection: "dokumente", Path: "7.md", Title: "Stromvertrag", Body: "Vertragslaufzeit bis 31.12.2027.\n\n# Stromvertrag\nDatum: 14.03.2025",
+		Means: []string{"lebensmittel", "laufzeit"}, Vec: 0.5})
+	return p
+}
+
+// haus#13: with the documents in the library, the one search field finds
+// notes and documents. A document shows its date, sender and the passage
+// that matched, and leads to its page on Haus, which sends the person on
+// to Paperless; the notes stay as they were.
+func TestNotizenFindsDocuments(t *testing.T) {
+	dir, nd := shelf(t)
+	f := library13(t, dir)
+	p := documents13(t, f)
+	cfg := StartConfig{Notes: nd, Library: &qmd.Client{URL: f.URL, Collection: "notizen", Documents: "dokumente"},
+		Docs: &paperless.Client{URL: p.URL, Token: "pl-token", PublicURL: "https://paperless.example"}}
+	code, body, _ := familyPage(t, Notizen, cfg, "GET", "/notizen?q=Lebensmittel", "")
+	if code != 200 {
+		t.Fatalf("status %d", code)
+	}
+	mustContain(t, body, `placeholder="Notizen und Dokumente durchsuchen"`, "Notizen zu „Lebensmittel“", "Dokumente zu „Lebensmittel“",
+		`<a href="/notizen/einkaufsliste.md">Einkaufsliste</a>`,
+		`<a href="/dokumente/7">Stromvertrag &lt;b&gt;</a>`, "14.03.2025 · Stadtwerke Musterstadt · Vertragslaufzeit bis 31.12.2027.")
+	mustNotContain(t, body, "<b>", saysNoDocuments, saysWordsOnly, "Datum: 14.03.2025", "Treffer für")
+	before(t, body, "Notizen zu", "Dokumente zu")
+	mustNotLeak(t, body, p.URL, "paperless.example", "Paperless", "qmd", "7.md")
+
+	// documents only: no empty notes card
+	_, body, _ = familyPage(t, Notizen, cfg, "GET", "/notizen?q=Laufzeit", "")
+	mustContain(t, body, `<a href="/dokumente/7">`)
+	mustNotContain(t, body, "Notizen zu", "Nichts gefunden")
+
+	// without Paperless's public address there is no page to lead to
+	cfg.Docs.PublicURL = ""
+	_, body, _ = familyPage(t, Notizen, cfg, "GET", "/notizen?q=Laufzeit", "")
+	mustContain(t, body, "Stromvertrag &lt;b&gt;")
+	mustNotContain(t, body, `href="/dokumente/7"`)
+}
+
+// Paperless not answering: the notes are found as ever, and the page says
+// once, in one plain line, that the documents do not answer — never
+// Paperless's name or its error (haus#13, haus#33).
+func TestNotizenSaysWhenDocumentsDoNotAnswer(t *testing.T) {
+	old := library.Wait
+	library.Wait = 150 * time.Millisecond
+	defer func() { library.Wait = old }()
+	for _, qmdDown := range []bool{false, true} {
+		dir, nd := shelf(t)
+		f := library13(t, dir)
+		p := documents13(t, f)
+		p.Close()
+		if qmdDown {
+			f.Status = 500
+		}
+		cfg := StartConfig{Notes: nd, Library: &qmd.Client{URL: f.URL, Collection: "notizen", Documents: "dokumente"},
+			Docs: &paperless.Client{URL: p.URL, Token: "pl-token", PublicURL: "https://paperless.example"}}
+		q := "/notizen?q=Lebensmittel"
+		if qmdDown {
+			q = "/notizen?q=Apfel"
+		}
+		code, body, _ := familyPage(t, Notizen, cfg, "GET", q, "")
+		if code != 200 {
+			t.Fatalf("qmd down %v: status %d", qmdDown, code)
+		}
+		if n := strings.Count(body, "<p class=k>"+saysNoDocuments+"</p>"); n != 1 {
+			t.Fatalf("qmd down %v: said %d times:\n%s", qmdDown, n, body)
+		}
+		mustContain(t, body, `<a href="/notizen/rezepte/apfelkuchen.md">Apfelkuchen</a>`)
+		mustNotContain(t, body, "Stromvertrag", "Dokumente zu", saysNoNotes)
+		mustNotLeak(t, body, p.URL, "Paperless", "qmd", "refused")
 	}
 }

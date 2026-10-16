@@ -394,3 +394,46 @@ func TestFakeRefusesLikeTheVermittler(t *testing.T) {
 		t.Fatalf("%v %v", hits, err)
 	}
 }
+
+// haus#13: with the documents' collection set, a search covers both
+// collections and says of each hit which one it is from; another
+// collection's hits stay out, and a status names each collection's counts.
+func TestDocumentsCollection(t *testing.T) {
+	var asked map[string]any
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/status" {
+			w.Write([]byte(`{"collections":[{"name":"notizen","documents":4,"embedded":4},{"name":"dokumente","documents":9,"embedded":3},{"name":"fremd","documents":1,"embedded":1}]}`))
+			return
+		}
+		json.NewDecoder(r.Body).Decode(&asked)
+		w.Write([]byte(`{"results":[` +
+			`{"file":"qmd://dokumente/7.md","title":"Stromvertrag","snippet":"1: a","vec":0.5},` +
+			`{"file":"qmd://notizen/a.md","title":"A","snippet":"1: b","vec":0.4},` +
+			`{"file":"qmd://fremd/7.md","title":"Fremd","snippet":"1: c","vec":0.9},` +
+			`{"file":"qmd://dokumente/..%2F7.md","title":"Raus","snippet":"1: d","vec":0.9}]}`))
+	}))
+	defer s.Close()
+	c := &Client{URL: s.URL, Collection: "notizen", Documents: "dokumente"}
+	hits, err := c.Search(context.Background(), "Laufzeit", 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(asked["collections"], []any{"notizen", "dokumente"}) {
+		t.Fatalf("asked %v", asked["collections"])
+	}
+	got := fmt.Sprintf("%s/%s %s/%s", hits[0].Collection, hits[0].Path, hits[1].Collection, hits[1].Path)
+	if len(hits) != 2 || got != "dokumente/7.md notizen/a.md" {
+		t.Fatalf("%d hits: %s", len(hits), got)
+	}
+	notes, docs, err := c.Statuses(context.Background())
+	if err != nil || notes != (Status{4, 4}) || docs != (Status{9, 3}) {
+		t.Fatalf("%+v %+v %v", notes, docs, err)
+	}
+	// without it: the notes only, as before
+	c.Documents = ""
+	hits, _ = c.Search(context.Background(), "Laufzeit", 5)
+	if !reflect.DeepEqual(asked["collections"], []any{"notizen"}) || len(hits) != 1 || hits[0].Path != "a.md" {
+		t.Fatalf("notes only: %v %+v", asked["collections"], hits)
+	}
+}

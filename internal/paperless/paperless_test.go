@@ -2,8 +2,10 @@ package paperless
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -233,5 +235,71 @@ func TestTags(t *testing.T) {
 	docs, _, err = c.Search(context.Background(), "rechnung", 20)
 	if err != nil || len(docs) != 3 || len(docs[0].Tags) != 0 || docs[0].Title != "Rechnung März" {
 		t.Fatalf("tags unreadable: %+v %v", docs, err)
+	}
+}
+
+// haus#13: ByIDs reads the documents with these ids in one request, those
+// still there; Stamps lists every document page by page, all or an
+// error; Texts reads documents with their OCR text.
+func TestByIDsStampsTexts(t *testing.T) {
+	fake := paperlessfake.New(token)
+	defer fake.Close()
+	fake.Correspondent(3, "Stadtwerke")
+	for i := 1; i <= 205; i++ {
+		fake.Add(paperlessfake.Doc{ID: i, Title: fmt.Sprintf("Brief %d", i), Content: "Text " + strconv.Itoa(i), Correspondent: 3, Modified: "2026-10-01T12:00:00.5+02:00"})
+	}
+	c := &Client{URL: fake.URL, Token: token, PublicURL: "https://paperless.example"}
+	docs, err := c.ByIDs(context.Background(), []int{9, 300, 4})
+	if err != nil || len(docs) != 2 || docs[0].ID != 4 || docs[1].ID != 9 || docs[0].Correspondent != "Stadtwerke" || docs[0].Link == "" {
+		t.Fatalf("%+v %v", docs, err)
+	}
+	// the start of the text only: Paperless cuts it at 550 characters
+	if q := fake.Seen()[0].URL.Query(); q.Get("id__in") != "9,300,4" || !strings.Contains(q.Get("fields"), "content") || q.Get("truncate_content") != "true" {
+		t.Fatalf("asked %s", fake.Seen()[0].URL)
+	}
+	if docs[0].Start != "Text 4" {
+		t.Fatalf("start: %q", docs[0].Start)
+	}
+	if docs, err := c.ByIDs(context.Background(), nil); err != nil || docs != nil {
+		t.Fatalf("no ids: %v %v", docs, err)
+	}
+	stamps, err := c.Stamps(context.Background())
+	if err != nil || len(stamps) != 205 || stamps[204].ID != 205 || stamps[0].Modified.UTC().Format(time.RFC3339) != "2026-10-01T10:00:00Z" {
+		t.Fatalf("%d stamps %v", len(stamps), err)
+	}
+	texts, err := c.Texts(context.Background(), []int{5, 6})
+	if err != nil || len(texts) != 2 || texts[0].Content != "Text 5" || texts[1].Title != "Brief 6" || texts[1].Modified.IsZero() || texts[0].Start != "" {
+		t.Fatalf("%+v %v", texts, err)
+	}
+	// a page that fails is no listing at all
+	fake.FailPath = "/api/documents/"
+	if s, err := c.Stamps(context.Background()); err == nil || s != nil {
+		t.Fatalf("failing: %v %v", s, err)
+	}
+}
+
+// A listing that ends short of the count Paperless gave (a page lost, a
+// server cutting it) is an error, never a part: what it left out, a
+// mirror would delete. A listing that never ends is cut off too.
+func TestStampsAllOrNothing(t *testing.T) {
+	f := paperlessfake.New("tok")
+	defer f.Close()
+	for i := 1; i <= 120; i++ {
+		f.Add(paperlessfake.Doc{ID: i, Modified: "2026-01-01T00:00:00Z"})
+	}
+	c := &Client{URL: f.URL, Token: "tok"}
+	if got, err := c.Stamps(context.Background()); err != nil || len(got) != 120 {
+		t.Fatalf("%d %v", len(got), err)
+	}
+	f.CountMore = 5
+	if got, err := c.Stamps(context.Background()); err == nil {
+		t.Fatalf("short listing taken: %d", len(got))
+	}
+	f.CountMore = 0
+	old := maxPages
+	maxPages = 1
+	defer func() { maxPages = old }()
+	if _, err := c.Stamps(context.Background()); err == nil {
+		t.Fatal("a listing past maxPages taken")
 	}
 }

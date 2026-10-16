@@ -36,6 +36,10 @@ const (
 	saysWordsOnly  = "Die Suche nach Bedeutung geht gerade nicht; gesucht wird nur nach den Wörtern."
 	saysNoMatch    = "Keine Notiz passt wirklich zu deiner Frage."
 	byWordsTitle   = "Notizen mit Wörtern aus deiner Frage"
+	// with the documents in the library (haus#13)
+	saysNothingMatches = "Keine Notiz und kein Dokument passt wirklich zu deiner Frage."
+	docsByWordsTitle   = "Dokumente mit Wörtern aus deiner Frage"
+	saysNoDocuments    = "Die Dokumente antworten gerade nicht."
 	// what to do when a search finds nothing (haus#13): no example word,
 	// since every word of the query has just failed
 	saysTryAnother  = "Versuch es mit einem anderen Wort, das in der Notiz stehen könnte."

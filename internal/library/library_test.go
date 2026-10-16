@@ -72,7 +72,7 @@ func TestFindsByMeaning(t *testing.T) {
 		t.Fatalf("the word search finds it too; the test proves nothing: %+v", r)
 	}
 	c := &qmd.Client{URL: f.URL, Collection: "notizen"}
-	got, err := Find(bg, c, Tidy{}, d, "Schornsteinfeger", 10)
+	got, err := Find(bg, c, Tidy{}, d, nil, "Schornsteinfeger", 10)
 	if err != nil || got.Reduced {
 		t.Fatalf("%+v %v", got, err)
 	}
@@ -84,14 +84,14 @@ func TestFindsByMeaning(t *testing.T) {
 		t.Fatalf("first hit: %+v", k)
 	}
 	// folders and umlauts reach their file
-	if got, _ := Find(bg, c, Tidy{}, d, "Teig", 10); names(got.Hits) != "rezepte/pfannkuchen.md" || got.Hits[0].Title != "Pfannkuchen" {
+	if got, _ := Find(bg, c, Tidy{}, d, nil, "Teig", 10); names(got.Hits) != "rezepte/pfannkuchen.md" || got.Hits[0].Title != "Pfannkuchen" {
 		t.Fatalf("folder: %+v", got)
 	}
-	if got, _ := Find(bg, c, Tidy{}, d, "Kleidung", 10); names(got.Hits) != "Größen Kinder.md" || got.Hits[0].Title != "Größenliste Kinder" {
+	if got, _ := Find(bg, c, Tidy{}, d, nil, "Kleidung", 10); names(got.Hits) != "Größen Kinder.md" || got.Hits[0].Title != "Größenliste Kinder" {
 		t.Fatalf("umlaut: %+v", got)
 	}
 	// at most max, asked of qmd as its limit
-	if got, _ := Find(bg, c, Tidy{}, d, "Schornsteinfeger", 1); len(got.Hits) != 1 {
+	if got, _ := Find(bg, c, Tidy{}, d, nil, "Schornsteinfeger", 1); len(got.Hits) != 1 {
 		t.Fatalf("max: %+v", got)
 	}
 	last := f.Seen()[len(f.Seen())-1]
@@ -101,7 +101,7 @@ func TestFindsByMeaning(t *testing.T) {
 	// a qmd that answers more than it was asked for is cut at max
 	f.Results = `{"results":[` + strings.Repeat(`{"docid":"#a","file":"qmd://notizen/kaminkehrer.md","title":"K","score":1,"context":null,"line":1,"snippet":"1: x","vec":0.5},`, 4) +
 		`{"docid":"#b","file":"qmd://notizen/heizung.md","title":"H","score":1,"context":null,"line":1,"snippet":"1: y","vec":0.5}]}`
-	if got, _ := Find(bg, c, Tidy{}, d, "Schornsteinfeger", 2); len(got.Hits) != 2 || got.Total != 2 {
+	if got, _ := Find(bg, c, Tidy{}, d, nil, "Schornsteinfeger", 2); len(got.Hits) != 2 || got.Total != 2 {
 		t.Fatalf("cut at max: %+v", got)
 	}
 	f.Results = ""
@@ -122,7 +122,7 @@ func TestOnlyNotesInsideTheFolder(t *testing.T) {
 		`{"docid":"#d","vec":0.9,"file":"qmd://notizen/geloescht.md","title":"Gelöscht","score":0.25,"context":null,"line":1,"snippet":` + snip("GEHEIM-GELOESCHT") + `},` +
 		`{"docid":"#e","vec":0.9,"file":"qmd://andere/kaminkehrer.md","title":"Andere","score":0.2,"context":null,"line":1,"snippet":` + snip("GEHEIM-ANDERE") + `},` +
 		`{"docid":"#f","vec":0.5,"file":"qmd://notizen/kaminkehrer.md","title":"Kaminkehrer","score":0.17,"context":null,"line":1,"snippet":` + snip("Herr Brandl") + `}]}`
-	got, err := Find(bg, &qmd.Client{URL: f.URL, Collection: "notizen"}, Tidy{}, d, "Schornstein", 10)
+	got, err := Find(bg, &qmd.Client{URL: f.URL, Collection: "notizen"}, Tidy{}, d, nil, "Schornstein", 10)
 	if err != nil || got.Reduced {
 		t.Fatalf("%+v %v", got, err)
 	}
@@ -167,7 +167,7 @@ func TestReducedToWords(t *testing.T) {
 		_, d, f := shelf(t)
 		cl := c.set(f)
 		start := time.Now()
-		got, err := Find(bg, cl, Tidy{}, d, "Brandl", 10)
+		got, err := Find(bg, cl, Tidy{}, d, nil, "Brandl", 10)
 		if err != nil || !got.Reduced || got.NoMatch {
 			t.Fatalf("%s: %+v %v", c.name, got, err)
 		}
@@ -178,7 +178,7 @@ func TestReducedToWords(t *testing.T) {
 			t.Fatalf("%s: took %v; qmd gets Wait, not the page's whole budget", c.name, d)
 		}
 		// meaning is not there: a word that is not written finds nothing, said plainly
-		if got, err := Find(bg, cl, Tidy{}, d, "Schornsteinfeger", 10); err != nil || !got.Reduced || got.Total != 0 {
+		if got, err := Find(bg, cl, Tidy{}, d, nil, "Schornsteinfeger", 10); err != nil || !got.Reduced || got.Total != 0 {
 			t.Fatalf("%s: %+v %v", c.name, got, err)
 		}
 	}
@@ -191,7 +191,7 @@ func TestSlowQmdLeavesTimeForWords(t *testing.T) {
 	f.Hang = 5 * time.Second
 	ctx, cancel := context.WithTimeout(bg, 600*time.Millisecond)
 	defer cancel()
-	got, err := Find(ctx, &qmd.Client{URL: f.URL, Collection: "notizen"}, Tidy{}, d, "Brandl", 10)
+	got, err := Find(ctx, &qmd.Client{URL: f.URL, Collection: "notizen"}, Tidy{}, d, nil, "Brandl", 10)
 	if err != nil || !got.Reduced || names(got.Hits) != "kaminkehrer.md" {
 		t.Fatalf("%+v %v", got, err)
 	}
@@ -206,12 +206,12 @@ func TestUnreadableFolderIsAnError(t *testing.T) {
 		if down {
 			f.Close()
 		}
-		if got, err := Find(bg, &qmd.Client{URL: f.URL, Collection: "notizen"}, Tidy{}, d, "Schornsteinfeger", 10); err == nil {
+		if got, err := Find(bg, &qmd.Client{URL: f.URL, Collection: "notizen"}, Tidy{}, d, nil, "Schornsteinfeger", 10); err == nil {
 			t.Fatalf("qmd down %v: %+v, want an error", down, got)
 		}
 	}
 	_, d, f := shelf(t)
-	if _, err := Find(bg, &qmd.Client{URL: f.URL, Collection: "notizen"}, Tidy{}, d, "  ", 10); err == nil {
+	if _, err := Find(bg, &qmd.Client{URL: f.URL, Collection: "notizen"}, Tidy{}, d, nil, "  ", 10); err == nil {
 		t.Fatal("a blank search is an error, as the word search's")
 	}
 }
@@ -228,7 +228,7 @@ func TestPassagesArePlain(t *testing.T) {
 	// the fake's passage is the note's first three lines: heading, blank, the table's header row
 	f.Add(qmdfake.Doc{Path: "handwerker.md", Title: "Handwerker", Body: table, Means: []string{"monteur"}},
 		qmdfake.Doc{Path: "packliste.md", Title: "Packliste", Body: list, Means: []string{"monteur"}})
-	got, err := Find(bg, &qmd.Client{URL: f.URL, Collection: "notizen"}, Tidy{}, d, "Monteur", 10)
+	got, err := Find(bg, &qmd.Client{URL: f.URL, Collection: "notizen"}, Tidy{}, d, nil, "Monteur", 10)
 	if err != nil || got.Reduced || len(got.Hits) != 2 {
 		t.Fatalf("%+v %v", got, err)
 	}
@@ -318,24 +318,24 @@ func TestNothingCloseIsTheWordSearch(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "everest.md"), []byte("# Berge\n\nDer Mount Everest ist hoch.\n"), 0o644)
 	f.Add(qmdfake.Doc{Path: "everest.md", Title: "Berge", Body: "# Berge\n\nDer Mount Everest ist hoch.\n", Vec: 0.29})
 	c := &qmd.Client{URL: f.URL, Collection: "notizen"}
-	got, err := Find(bg, c, Tidy{}, d, "Everest", 10)
+	got, err := Find(bg, c, Tidy{}, d, nil, "Everest", 10)
 	if err != nil || got.Reduced || !got.NoMatch || names(got.Hits) != "everest.md" {
 		t.Fatalf("%+v %v", got, err)
 	}
 	// the real nonsense answer (its best, "Größen Kinder.md", is in the
 	// folder at 0.175): words
 	f.Results = string(mustRead(t, filepath.Join("..", "qmd", "testdata", "cut-everest.json")))
-	got, err = Find(bg, c, Tidy{}, d, "Wie hoch ist der Gipfel?", 10)
+	got, err = Find(bg, c, Tidy{}, d, nil, "Wie hoch ist der Gipfel?", 10)
 	if err != nil || got.Reduced || !got.NoMatch || names(got.Hits) != "everest.md" {
 		t.Fatalf("real nonsense scores: %+v %v", got, err)
 	}
 	// and nothing by words either: said as nothing, not as an error
-	if got, err := Find(bg, c, Tidy{}, d, "Quantenchromodynamik", 10); err != nil || got.Reduced || !got.NoMatch || got.Total != 0 {
+	if got, err := Find(bg, c, Tidy{}, d, nil, "Quantenchromodynamik", 10); err != nil || got.Reduced || !got.NoMatch || got.Total != 0 {
 		t.Fatalf("nothing at all: %+v %v", got, err)
 	}
 	// a library that answers with close notes is neither
 	f.Results = ""
-	if got, err := Find(bg, c, Tidy{}, d, "Schornsteinfeger", 10); err != nil || got.Reduced || got.NoMatch || got.Total != 2 {
+	if got, err := Find(bg, c, Tidy{}, d, nil, "Schornsteinfeger", 10); err != nil || got.Reduced || got.NoMatch || got.Total != 2 {
 		t.Fatalf("close: %+v %v", got, err)
 	}
 }

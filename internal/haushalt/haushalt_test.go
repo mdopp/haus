@@ -49,6 +49,7 @@ type want struct {
 	cal, notes, contacts, docs bool
 	library                    bool   // HAUS_QMD_URL: the memory library (haus#13)
 	llm                        bool   // HAUS_LLM_*: the house model tidies its hits (haus#13)
+	documents                  bool   // HAUS_QMD_DOCUMENTS: Paperless's documents in the library (haus#13)
 	country                    string // HAUS_PHONE_COUNTRY; "" the default
 	noPublic                   bool   // no HAUS_PUBLIC_URL: no links to Haus's pages
 	noPaperlessPublic          bool   // no HAUS_PAPERLESS_PUBLIC_URL: Haus's document page is a 404
@@ -98,6 +99,9 @@ func newSetup(t *testing.T, w want) setup {
 		s.qmd = qmdfake.New("notizen")
 		t.Cleanup(s.qmd.Close)
 		cfg.Library = &qmd.Client{URL: s.qmd.URL, Collection: "notizen"}
+		if w.documents {
+			cfg.Library.Documents = "dokumente"
+		}
 	}
 	if w.llm {
 		s.llm = proxyfake.New("gemma-4-e4b")
@@ -1210,5 +1214,62 @@ func TestFindNotesNothingClose(t *testing.T) {
 				t.Fatalf("%s: says %q: %q", q, never, text)
 			}
 		}
+	}
+}
+
+// haus#13: with the documents in the library, notizen_finden finds notes
+// and documents in one search: a document with its title, date and
+// sender as Paperless has them, the passage that matched, and its page on
+// Haus. The tool says it covers documents.
+func TestFindNotesAndDocuments(t *testing.T) {
+	s := newSetup(t, want{notes: true, library: true, docs: true, documents: true})
+	os.WriteFile(filepath.Join(s.notes, "kaminkehrer.md"), []byte("# Kaminkehrer\n\nHerr Brandl kommt im Oktober.\n"), 0o644)
+	s.qmd.Add(qmdfake.Doc{Path: "kaminkehrer.md", Title: "Kaminkehrer", Body: "# Kaminkehrer\n\nHerr Brandl kommt im Oktober.\n", Means: []string{"termin"}, Vec: 0.5},
+		qmdfake.Doc{Collection: "dokumente", Path: "7.md", Title: "Stromvertrag", Body: "Vertragslaufzeit bis 31.12.2027.\n# Stromvertrag\nDatum: 14.03.2025",
+			Means: []string{"termin"}, Vec: 0.48})
+	s.docs.Correspondent(3, "Stadtwerke Musterstadt")
+	s.docs.Add(paperlessfake.Doc{ID: 7, Title: "Stromvertrag", Content: "Vertragslaufzeit bis 31.12.2027.", Correspondent: 3, Created: "2025-03-14"})
+	text, isErr := call(t, s.h, "notizen_finden", map[string]any{"text": "Termin"})
+	want := "## Kaminkehrer (kaminkehrer.md)\nHerr Brandl kommt im Oktober.\nhttps://haus.example/notizen/kaminkehrer.md\n\n" +
+		"## Dokument: Stromvertrag (14.03.2025, Stadtwerke Musterstadt)\nVertragslaufzeit bis 31.12.2027.\nhttps://haus.example/dokumente/7"
+	if isErr || text != want {
+		t.Fatalf("%q\nwant\n%q", text, want)
+	}
+	_, out := rpc(t, s.h, tok, "tools/list", nil)
+	if b, _ := json.Marshal(out); !strings.Contains(string(b), "Findet Notizen und Dokumente der Familie") {
+		t.Fatalf("description: %s", b)
+	}
+	// nothing at all: said for both
+	if text, _ := call(t, s.h, "notizen_finden", map[string]any{"text": "Quantenchromodynamik"}); !strings.HasPrefix(text, "Keine Notiz und kein Dokument passt") {
+		t.Fatalf("%q", text)
+	}
+	// Paperless down: the notes, and one line first that the documents did not answer
+	s.docs.Close()
+	text, isErr = call(t, s.h, "notizen_finden", map[string]any{"text": "Termin"})
+	if isErr || !strings.HasPrefix(text, "Die Dokumente antworten gerade nicht; gesucht wurde nur in den Notizen.\n\n## Kaminkehrer") || strings.Contains(text, "Stromvertrag") {
+		t.Fatalf("down: %q", text)
+	}
+	if strings.Contains(text, s.docs.URL) || strings.Contains(text, "Paperless") || strings.Contains(text, plToken) {
+		t.Fatalf("leaks: %q", text)
+	}
+}
+
+// HAUS_QMD_DOCUMENTS names the documents' collection; it counts only with
+// Paperless set, and it is never the notes' own.
+func TestFromEnvDocumentsCollection(t *testing.T) {
+	t.Setenv("HAUS_NOTES_DIR", t.TempDir())
+	t.Setenv("HAUS_QMD_URL", "http://127.0.0.1:8181")
+	t.Setenv("HAUS_QMD_DOCUMENTS", "dokumente")
+	if cfg, err := FromEnv(); err != nil || cfg.Library == nil || cfg.Library.Documents != "" {
+		t.Fatalf("without Paperless: %+v %v", cfg.Library, err)
+	}
+	t.Setenv("HAUS_PAPERLESS_URL", "http://host.containers.internal:8000")
+	t.Setenv("HAUS_PAPERLESS_TOKEN", "pl")
+	if cfg, err := FromEnv(); err != nil || cfg.Library == nil || cfg.Library.Documents != "dokumente" {
+		t.Fatalf("with Paperless: %+v %v", cfg.Library, err)
+	}
+	t.Setenv("HAUS_QMD_DOCUMENTS", "notizen")
+	if _, err := FromEnv(); err == nil {
+		t.Fatal("the notes' collection taken for the documents'")
 	}
 }

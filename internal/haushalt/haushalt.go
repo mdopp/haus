@@ -67,7 +67,8 @@ func httpURL(u string) bool {
 
 // FromEnv reads HAUS_HAUSHALT_TOKEN, HAUS_RADICALE_URL (+ _USER,
 // _PASSWORD, optional _CALENDAR and _ADDRESSBOOK), HAUS_NOTES_DIR,
-// HAUS_QMD_URL (+ optional _COLLECTION, default notizen),
+// HAUS_QMD_URL (+ optional _COLLECTION, default notizen, and _DOCUMENTS,
+// the documents' collection),
 // HAUS_PAPERLESS_URL (+ _TOKEN, optional _PUBLIC_URL), HAUS_PHONE_COUNTRY,
 // HAUS_PUBLIC_URL and TZ. A malformed backend address or country code
 // refuses to start; a missing backend only leaves its tools out. Haus's own
@@ -144,6 +145,17 @@ func FromEnv() (Config, error) {
 		} else {
 			cfg.Library = &qmd.Client{URL: u, Collection: coll}
 			cfg.Judge = judge.FromEnv() // optional: a box without the model role has none
+			// haus#13: Paperless's documents, mirrored by `haus export-documents`
+			if docs := strings.TrimSpace(os.Getenv("HAUS_QMD_DOCUMENTS")); docs != "" {
+				switch {
+				case docs == coll:
+					return cfg, fmt.Errorf("HAUS_QMD_DOCUMENTS %q: the notes' collection, not the documents'", docs)
+				case cfg.Documents == nil:
+					log.Printf("haus: HAUS_QMD_DOCUMENTS is set but Paperless is not: the library holds no documents")
+				default:
+					cfg.Library.Documents = docs
+				}
+			}
 		}
 	}
 	return cfg, nil
@@ -265,13 +277,20 @@ func Tools(cfg Config) []mcpserver.Tool {
 		)
 		if lib := cfg.Library; lib != nil {
 			pub := strings.TrimRight(cfg.PublicURL, "/")
+			desc := "Findet Notizen der Familie nach ihrer Bedeutung, auch wenn andere Wörter darin stehen " +
+				"(„wann kommt der Schornsteinfeger“ findet die Notiz zum Kaminkehrer). Zeigt Titel, Dateiname, eine passende Stelle und die Seite der Notiz."
+			if lib.Documents != "" && cfg.Documents != nil {
+				desc = "Findet Notizen und Dokumente der Familie (Briefe, Rechnungen, Verträge aus Paperless) nach ihrer Bedeutung, " +
+					"auch wenn andere Wörter darin stehen („wann kommt der Schornsteinfeger“ findet die Notiz zum Kaminkehrer, " +
+					"„bis wann läuft die Autoversicherung“ den Vertrag). Zeigt bei Notizen Titel, Dateiname, eine passende Stelle und ihre Seite, " +
+					"bei Dokumenten Titel, Datum, Absender, eine passende Stelle und ihre Seite."
+			}
 			out = append(out, mcpserver.Tool{
-				Name: "notizen_finden",
-				Description: "Findet Notizen der Familie nach ihrer Bedeutung, auch wenn andere Wörter darin stehen " +
-					"(„wann kommt der Schornsteinfeger“ findet die Notiz zum Kaminkehrer). Zeigt Titel, Dateiname, eine passende Stelle und die Seite der Notiz.",
-				Schema: obj(map[string]any{"text": str("Wonach gesucht wird, in eigenen Worten")}, "text"),
+				Name:        "notizen_finden",
+				Description: desc,
+				Schema:      obj(map[string]any{"text": str("Wonach gesucht wird, in eigenen Worten")}, "text"),
 				Call: func(ctx context.Context, a map[string]any) (string, error) {
-					return notizenFinden(ctx, lib, cfg.Judge, n, pub, a)
+					return notizenFinden(ctx, lib, cfg.Judge, n, cfg.Documents, pub, a)
 				},
 			})
 		}
@@ -564,31 +583,42 @@ const maxFound = 8
 // cannot answer and the words did (haus#13).
 const reducedNote = "Die Suche nach Bedeutung geht gerade nicht; gesucht wurde nur nach den Wörtern."
 
-// notizenFinden is the memory library's search: title, file, a passage
-// and, with Haus's address, the note's page.
-func notizenFinden(ctx context.Context, lib *qmd.Client, j *judge.Client, n *notes.Dir, pub string, a map[string]any) (string, error) {
+// docsDownNote says the documents did not answer and the notes did.
+const docsDownNote = "Die Dokumente antworten gerade nicht; gesucht wurde nur in den Notizen."
+
+// notizenFinden is the memory library's search: for a note its title,
+// file, a passage and, with Haus's address, its page; for a document its
+// title, date, sender, a passage and its page (haus#13).
+func notizenFinden(ctx context.Context, lib *qmd.Client, j *judge.Client, n *notes.Dir, pl *paperless.Client, pub string, a map[string]any) (string, error) {
 	q := mcpserver.Str(a, "text")
-	res, err := library.Find(ctx, lib, library.Tidy{Judge: j, Wait: library.BoteTidy}, n, q, maxFound)
+	res, err := library.Find(ctx, lib, library.Tidy{Judge: j, Wait: library.BoteTidy}, n, pl, q, maxFound)
 	if err != nil {
 		return "", err
+	}
+	none, byWords := "Keine Notiz", "Notizen"
+	if lib != nil && lib.Documents != "" && pl != nil {
+		none, byWords = "Keine Notiz und kein Dokument", "Notizen und Dokumente"
 	}
 	var b strings.Builder
 	if res.Reduced {
 		b.WriteString(reducedNote + "\n\n")
 	}
+	if res.DocsDown {
+		b.WriteString(docsDownNote + "\n\n")
+	}
 	if res.NoMatch {
-		// the search worked; no note is close to the question
-		b.WriteString("Keine Notiz passt wirklich zu „" + cut(q, MaxField) + "“.")
-		if len(res.Hits) == 0 {
+		// the search worked; nothing is close to the question
+		b.WriteString(none + " passt wirklich zu „" + cut(q, MaxField) + "“.")
+		if len(res.Hits) == 0 && len(res.Docs) == 0 {
 			return b.String(), nil
 		}
-		b.WriteString(" Notizen mit Wörtern aus der Frage:\n\n")
+		b.WriteString(" " + byWords + " mit Wörtern aus der Frage:\n\n")
 	}
-	if len(res.Hits) == 0 {
+	if len(res.Hits) == 0 && len(res.Docs) == 0 {
 		if res.Reduced {
-			b.WriteString("Keine Notiz enthält „" + cut(q, MaxField) + "“.")
+			b.WriteString(none + " enthält „" + cut(q, MaxField) + "“.")
 		} else {
-			b.WriteString("Keine Notiz passt zu „" + cut(q, MaxField) + "“.")
+			b.WriteString(none + " passt zu „" + cut(q, MaxField) + "“.")
 		}
 		return b.String(), nil
 	}
@@ -604,6 +634,31 @@ func notizenFinden(ctx context.Context, lib *qmd.Client, j *judge.Client, n *not
 	}
 	if res.Partial {
 		b.WriteString("Nur ein Teil der Notizen ist durchsucht (zu viele oder zu große Dateien); such genauer.\n")
+	}
+	for _, d := range res.Docs {
+		var about []string
+		if !d.Created.IsZero() {
+			about = append(about, d.Created.Format("02.01.2006"))
+		}
+		if c := oneLine(d.Correspondent); c != "" {
+			about = append(about, cut(c, 100))
+		}
+		head := "## Dokument: " + orDash(oneLine(d.Title))
+		if len(about) > 0 {
+			head += " (" + strings.Join(about, ", ") + ")"
+		}
+		b.WriteString(head + "\n")
+		for _, l := range d.Lines {
+			b.WriteString(l + "\n")
+		}
+		// Haus's page sends the person on to Paperless (haus#28)
+		if pub != "" && d.Link != "" {
+			b.WriteString(pub + cards.DocumentPage(d.ID) + "\n")
+		}
+		b.WriteString("\n")
+	}
+	if res.DocsMore > 0 {
+		fmt.Fprintf(&b, "… und %d weitere Dokumente; such genauer.\n", res.DocsMore)
 	}
 	return strings.TrimRight(b.String(), "\n"), nil
 }
