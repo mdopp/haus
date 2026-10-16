@@ -26,6 +26,10 @@ type Row struct {
 	Level  int     `json:"level,omitempty"` // 1–100: a lamp's brightness, a cover's position; 0, no bar
 	Action *Action `json:"action,omitempty"`
 	Pin    *Pin    `json:"pin,omitempty"`
+	// Also are more buttons after Action (a player's Leiser, Lauter,
+	// haus#12); when Also is set, even empty, the row puts its buttons on
+	// a line of their own
+	Also []*Action `json:"also,omitempty"`
 }
 
 // Action is a row's one button (haus#35): a form that POSTs to
@@ -138,6 +142,17 @@ func (c Card) HTML() string {
 			b.WriteString("<li><time>" + html.EscapeString(r.When) + "</time><div>")
 			what(&b, r)
 			b.WriteString("</div></li>")
+		case r.Action != nil && r.Also != nil:
+			b.WriteString(`<li class="tu viele"><div>`)
+			what(&b, r)
+			b.WriteString("</div><div class=knoepfe>" + r.Action.form())
+			for _, a := range r.Also {
+				b.WriteString(a.form())
+			}
+			if r.Pin != nil {
+				b.WriteString(r.Pin.form()) // the ☆ last, as on any row
+			}
+			b.WriteString("</div></li>")
 		case r.Action != nil && r.Pin == nil:
 			b.WriteString("<li class=tu><div>")
 			what(&b, r)
@@ -249,6 +264,7 @@ const Style = `<style>.karte{margin:22px 0 0}
 .karte li .k{display:block;font-size:.82rem;margin-top:1px}
 .karte li.tu{display:flex;align-items:center;justify-content:space-between;gap:12px}.karte form{position:relative;z-index:1;flex:none;display:flex}
 .knoepfe{position:relative;z-index:1;flex:none;display:flex;align-items:center;gap:2px}
+.karte li.viele{flex-wrap:wrap;gap:8px}.karte li.viele>div:first-child{flex:1 1 100%}.viele .knoepfe{gap:8px;flex-wrap:wrap}
 .anheften{width:44px;min-height:44px;padding:0;background:none;border-radius:50%;color:var(--muted);font-size:1.35rem;font-weight:400;line-height:1}.anheften.an{color:var(--state)}
 .einzeln ul{background:none;border:0;border-radius:0;display:grid;gap:6px}.einzeln li,.einzeln li:first-child{background:var(--card);border:1px solid var(--edge);border-radius:14px}
 .kacheln ul{background:none;border:0;border-radius:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}

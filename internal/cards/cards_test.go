@@ -86,3 +86,23 @@ func TestCardsFitAPhone(t *testing.T) {
 		}
 	}
 }
+
+// A row with more buttons (a player's Leiser, Lauter) and a ☆ keeps them
+// all in one row of buttons, the ☆ last; without a ☆ there is none
+// (haus#12: Medien's Also meets Räume's Pin).
+func TestRowWithMoreButtonsAndAPin(t *testing.T) {
+	act := func(l string) *Action {
+		return &Action{Label: l, Entity: "media_player.wz", Do: "media_player." + l, Back: "/medien"}
+	}
+	r := Row{Text: "Sonos", Action: act("pause"), Also: []*Action{act("leiser"), act("lauter")}}
+	got := Card{Title: "Läuft", Rows: []Row{r}}.HTML()
+	if strings.Contains(got, "anheften") || !strings.Contains(got, `<li class="tu viele">`) {
+		t.Fatalf("no ☆ asked for:\n%s", got)
+	}
+	r.Pin = &Pin{Entity: "media_player.wz", Name: "Sonos", Back: "/medien"}
+	got = Card{Title: "Läuft", Rows: []Row{r}}.HTML()
+	i, j, k := strings.Index(got, ">pause<"), strings.Index(got, ">lauter<"), strings.Index(got, `class="anheften"`)
+	if !strings.Contains(got, `<li class="tu viele">`) || i < 0 || j < i || k < j || strings.Count(got, "<div class=knoepfe>") != 1 {
+		t.Fatalf("buttons then the ☆, in one row of buttons:\n%s", got)
+	}
+}

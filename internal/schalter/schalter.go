@@ -4,7 +4,7 @@
 // Only actuator domains; a call names its one entity; sensitive actions
 // (any lock, an unlock or open anywhere, a garage, door or gate cover
 // doing anything but closing or stopping) want confirmed; a media player
-// only pauses.
+// only pauses, goes on and steps its volume.
 package schalter
 
 import (
@@ -24,9 +24,10 @@ var (
 	domains = set("light", "switch", "cover", "climate", "lock", "media_player")
 	// a domain listed here does only these services; the rest are refused
 	only = map[string]map[string]bool{
-		// Start's "Pause" (haus#35); playing a URL on the speakers, the
-		// volume, turning a player off stay out
-		"media_player": set("media_pause"),
+		// Start's "Pause" (haus#35), Medien's Weiter, Leiser, Lauter
+		// (haus#12); playing a URL on the speakers, setting a volume,
+		// muting, stopping, a source, turning a player off stay out
+		"media_player": set("media_pause", "media_play", "volume_down", "volume_up"),
 	}
 	// sensitive: these need confirmed, or the call is refused
 	sensitiveDomains      = set("lock", "alarm_control_panel")

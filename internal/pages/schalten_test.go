@@ -207,7 +207,9 @@ func TestSchaltenGoesBackOnlyToHaus(t *testing.T) {
 	for _, back := range []string{"https://boese.example/", "//boese.example", "/raeume/../box", "/box", "/raeume/lock.haustuer?x", "javascript:alert(1)", "/start#x",
 		"/raeume/person.anna", "/raeume/automation.alles", "/raeume/", "/raeume#x", "/raeume#karte-", `/raeume#karte-"><b>`, "/raeume#karte-K",
 		"/raeume?x", "/raeume/#karte-kueche", "/raeume#karte-kueche#x", "/raeume#karte-kueche/../box",
-		"https://boese.example/raeume", "//boese.example/raeume#karte-kueche", `/\boese.example/raeume`, "/%2F/boese.example/raeume", " /raeume", "/raeume\n"} {
+		"https://boese.example/raeume", "//boese.example/raeume#karte-kueche", `/\boese.example/raeume`, "/%2F/boese.example/raeume", " /raeume", "/raeume\n",
+		"/medien/", "/medien#x", "/medienx", "/medien?x", "/Medien", "/medien/../box", "//boese.example/medien", "https://boese.example/medien", `/\boese.example/medien`,
+		"/medien#karte-kueche", " /medien", "/medien\n"} {
 		rec := post(t, h, "/schalten", url.Values{"geraet": {"light.buero"}, "tun": {"light.turn_off"}, "zurueck": {back}}, "anna", nil)
 		if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/start" {
 			t.Errorf("zurueck %q → %d %q, want /start", back, rec.Code, rec.Header().Get("Location"))
@@ -373,4 +375,14 @@ func familyPageAs(t *testing.T, page func(StartConfig) http.HandlerFunc, cfg Sta
 	rec := httptest.NewRecorder()
 	page(cfg).ServeHTTP(rec, req)
 	return rec.Code, rec.Body.String(), rec.Header()
+}
+
+// What a page may ask HA to do is exactly this list (haus#35, haus#12):
+// package schalter would refuse more, but a page never asks for it.
+func TestAPageDoesExactlyThis(t *testing.T) {
+	want := map[string]bool{"light.turn_on": true, "light.turn_off": true, "switch.turn_on": true, "switch.turn_off": true,
+		"media_player.media_pause": true, "media_player.media_play": true, "media_player.volume_down": true, "media_player.volume_up": true}
+	if !reflect.DeepEqual(pageDoes, want) {
+		t.Fatalf("a page does %v, want %v", pageDoes, want)
+	}
 }

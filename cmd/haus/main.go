@@ -64,6 +64,8 @@ func routes(s site) http.Handler {
 	pagesMux.HandleFunc("/raeume", pages.Raeume(family))
 	pagesMux.HandleFunc("/energie", pages.Energie(family))
 	pagesMux.HandleFunc("/energie/", pages.Energie(family)) // a path it does not serve: 404 and the way back
+	pagesMux.HandleFunc("/medien", pages.Medien(family))
+	pagesMux.HandleFunc("/medien/", pages.Medien(family)) // a path it does not serve: 404 and the way back
 	pagesMux.HandleFunc("/kalender", pages.Kalender(family))
 	pagesMux.HandleFunc("/notizen", pages.Notizen(family))
 	// each thing's and each tool item's own page, which the widgets name (haus#28)
