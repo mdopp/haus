@@ -41,6 +41,20 @@ type Target struct {
 	// DryRun reads the archive and counts, and writes nothing.
 	DryRun bool
 	Loc    *time.Location // how a Keep note's dates are written; nil: time.Local
+
+	// seen is what this run has written or found there, by kind and
+	// name: an entry the archive lists twice is there the second time,
+	// in a dry run too, which therefore counts as the run would.
+	seen map[string]bool
+}
+
+// again says whether this run has had key already, and from now on has.
+func (t Target) again(key string) bool {
+	if t.seen[key] {
+		return true
+	}
+	t.seen[key] = true
+	return false
 }
 
 // Count is what became of one kind of entry.
@@ -147,6 +161,7 @@ func Import(ctx context.Context, zips []string, t Target, log io.Writer) (Report
 	if t.Loc == nil {
 		t.Loc = time.Local
 	}
+	t.seen = map[string]bool{}
 	if t.Radicale != nil {
 		for _, name := range a.names {
 			if ext(name) != ".ics" {
@@ -373,6 +388,10 @@ func calendar(ctx context.Context, a *archive, file string, t Target, rep *Repor
 		}
 		for _, uid := range order {
 			g := groups[uid]
+			if t.again("ics\x00" + uid) {
+				rep.Events.There++
+				continue
+			}
 			if t.DryRun {
 				rep.Events.New++
 				continue
@@ -386,6 +405,7 @@ func calendar(ctx context.Context, a *archive, file string, t Target, rep *Repor
 			case fatal(ctx, err):
 				return err
 			default:
+				delete(t.seen, "ics\x00"+uid) // not written: a second listing may be
 				rep.Events.Failed++
 				fmt.Fprintf(log, "Termin %q (%s): %v\n", summary(g.blocks[0]), name, err)
 			}
@@ -496,6 +516,10 @@ func contacts(ctx context.Context, a *archive, file string, t Target, rep *Repor
 			uid = "takeout-" + id(key)
 			c.lines = insert(c.lines, "UID:"+uid)
 		}
+		if t.again("vcf\x00" + uid) {
+			rep.Contacts.There++
+			continue
+		}
 		if t.DryRun {
 			rep.Contacts.New++
 			continue
@@ -509,6 +533,7 @@ func contacts(ctx context.Context, a *archive, file string, t Target, rep *Repor
 		case fatal(ctx, err):
 			return err
 		default:
+			delete(t.seen, "vcf\x00"+uid)
 			rep.Contacts.Failed++
 			fmt.Fprintf(log, "Kontakt %q: %v\n", name, err)
 		}
@@ -667,12 +692,17 @@ func keep(ctx context.Context, a *archive, t Target, rep *Report, log io.Writer)
 			}
 			rel := Attachments + "/" + base
 			atts = append(atts, rel)
+			if t.again("att\x00" + rel) {
+				rep.Attachments.There++
+				continue
+			}
 			if t.DryRun {
 				rep.Attachments.New++
 				continue
 			}
 			data, err := a.read(src, maxAttachment)
 			if err != nil {
+				delete(t.seen, "att\x00"+rel)
 				rep.Attachments.Failed++
 				fmt.Fprintf(log, "Anhang %s: %v\n", base, err)
 				continue
