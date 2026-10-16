@@ -94,12 +94,19 @@ func Mirror(ctx context.Context, c *paperless.Client, dir string) (Report, error
 			return rep, err
 		}
 		have[id] = info.ModTime()
+		if info.Size() == 0 {
+			// never a file Markdown wrote: a power cut before its text
+			// reached the disk. Its time says nothing; it is written again.
+			have[id] = time.Time{}
+		}
 	}
 	keep := map[int]bool{}
 	var todo []int
 	for _, s := range stamps {
 		keep[s.ID] = true
-		if at, ok := have[s.ID]; ok && !s.Modified.IsZero() && at.Unix() == s.Modified.Unix() {
+		// to the microsecond, as Paperless keeps it: an edit within the
+		// second a run mirrored the document is an edit
+		if at, ok := have[s.ID]; ok && !s.Modified.IsZero() && at.UnixMicro() == s.Modified.UnixMicro() {
 			rep.Unchanged++
 			continue
 		}
@@ -130,8 +137,9 @@ func Mirror(ctx context.Context, c *paperless.Client, dir string) (Report, error
 	return rep, nil
 }
 
-// write puts one document's file in place whole: written aside, its time
-// set to the document's last change, then renamed over the old one.
+// write puts one document's file in place whole: written aside and
+// synced, its time set to the document's last change, then renamed over
+// the old one.
 func write(root *os.Root, t paperless.Text) error {
 	name := Name(t.ID)
 	tmp := "." + name + ".tmp"
@@ -141,6 +149,11 @@ func write(root *os.Root, t paperless.Text) error {
 	}
 	defer root.Remove(tmp)
 	_, werr := f.WriteString(Markdown(t))
+	// on the disk before the rename: a power cut must not leave the name
+	// with the document's time and none of its text
+	if serr := f.Sync(); werr == nil {
+		werr = serr
+	}
 	if cerr := f.Close(); werr == nil {
 		werr = cerr
 	}

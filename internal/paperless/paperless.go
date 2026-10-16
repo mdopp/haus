@@ -216,10 +216,9 @@ type Stamp struct {
 }
 
 // pageSize is a listing's page; maxPages bounds the listing.
-const (
-	pageSize = 100
-	maxPages = 2000
-)
+const pageSize = 100
+
+var maxPages = 2000
 
 // Stamps lists every document this user may see, id and last change, page
 // by page in id order. It is all of them or an error, never a part: what
