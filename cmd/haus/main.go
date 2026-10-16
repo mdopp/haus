@@ -78,7 +78,7 @@ func routes(s site) http.Handler {
 	pagesMux.HandleFunc("/box/", pages.BoxWith(s.ops, s.laibURL, s.tickets))
 	pagesMux.HandleFunc("/persona/icon.svg", pages.Icon())
 	pagesMux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
-	pagesMux.HandleFunc("/", pages.ToStart()) // "/" and every path not served land on Start
+	pagesMux.HandleFunc("/", pages.Elsewhere(family)) // "/" is Start; every path not served is a 404 with the way there
 	mux.Handle("/", pages.RequireProxy(s.proxySecret, pagesMux))
 	return mux
 }
