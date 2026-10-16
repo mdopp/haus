@@ -1,9 +1,12 @@
 package pages
 
 import (
+	"context"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -60,10 +63,11 @@ func TestStartHasTheSprechenField(t *testing.T) {
 	mustNotContain(t, body, "/sprechen", "Sprechen", "Bote")
 }
 
-// haus#12: the field is on every family page through the tab bar —
-// Sprechen, between Notizen and Box, marked on its own page — and only
-// with the Bote.
-func TestSprechenIsATab(t *testing.T) {
+// haus#12 (owner): Sprechen is no tab — the bar is full (Start · Räume ·
+// Energie · Medien · Kalender · Notizen · Box). The field is on Start, and
+// /sprechen, where its reply comes back, belongs to Start: Start is the
+// tab marked there.
+func TestSprechenIsNoTab(t *testing.T) {
 	_, bc := fakeBote(t)
 	nd := notesDir(t, map[string]time.Duration{"Einkaufsliste": time.Hour})
 	cfg := StartConfig{Notes: nd, Bote: bc}
@@ -72,14 +76,15 @@ func TestSprechenIsATab(t *testing.T) {
 		path string
 	}{{Start, "/start"}, {Notizen, "/notizen"}} {
 		_, body, _ := familyPage(t, p.page, cfg, "GET", p.path, "family,admins")
-		mustContain(t, body, "href=/sprechen><svg")
-		before(t, body, "href=/notizen", "href=/sprechen")
-		before(t, body, "href=/sprechen", "href=/box")
+		mustContain(t, body, "<nav class=tabs", "href=/box")
+		mustNotContain(t, body, "href=/sprechen")
 	}
 	_, body, _ := talkPage(t, Sprechen(cfg), "anna")
-	mustContain(t, body, "href=/sprechen aria-current=page>")
-	_, body, _ = familyPage(t, Start, StartConfig{Notes: nd}, "GET", "/start", "family")
+	mustContain(t, body, "<nav class=tabs", "href=/start aria-current=page>")
 	mustNotContain(t, body, "href=/sprechen")
+	if n := strings.Count(body, "aria-current=page"); n != 1 {
+		t.Fatalf("%d tabs marked on /sprechen", n)
+	}
 }
 
 // haus#12, haus#1: a sentence goes to the Bote as the person who wrote it
@@ -277,4 +282,56 @@ func TestSprechenEmptySaysWhatItIsFor(t *testing.T) {
 	_, bc := fakeBote(t)
 	_, body, _ := talkPage(t, Sprechen(StartConfig{Bote: bc}), "anna")
 	mustContain(t, body, "Was du hier schreibst, liest Joshua. Die Antwort erscheint hier; das kann einen Moment dauern.")
+}
+
+// A person who leaves the page while the Bote thinks (the phone locks,
+// the tab closes) does not stop what they asked for: Hermes runs the turn
+// on anyway, so Haus waits on for the reply and keeps it — "antwortet
+// nicht" would make them send it twice.
+func TestSprechenKeepsTheReplyWhenThePageIsLeft(t *testing.T) {
+	House = persona.Persona{Display: "Joshua"}
+	defer func() { House = persona.Default() }()
+	fake, bc := fakeBote(t)
+	fake.Reply = "Der Wecker steht auf sieben."
+	fake.Hang = 300 * time.Millisecond
+	h := Sprechen(StartConfig{Bote: bc})
+	ctx, leave := context.WithCancel(context.Background())
+	req := httptest.NewRequestWithContext(ctx, "POST", "/sprechen", strings.NewReader(url.Values{"nachricht": {"Weck mich um sieben"}}.Encode()))
+	req.Host = "haus.box.test"
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	req.Header.Set("Remote-User", "anna")
+	time.AfterFunc(50*time.Millisecond, leave)
+	h.ServeHTTP(httptest.NewRecorder(), req)
+	_, body, _ := talkPage(t, h, "anna")
+	mustContain(t, body, "Weck mich um sieben", ">Joshua<", "Der Wecker steht auf sieben.")
+	mustNotContain(t, body, "antwortet gerade nicht")
+}
+
+// The Bote's key is Haus's alone: never on a page, never in the log —
+// not when the Bote answers, not when it refuses or is not there.
+func TestSprechenNeverShowsTheKey(t *testing.T) {
+	var logged strings.Builder
+	log.SetOutput(&logged)
+	defer log.SetOutput(os.Stderr)
+	fake, bc := fakeBote(t)
+	closed := botefake.New(fake.Key)
+	closed.Close()
+	for _, status := range []int{0, 401, 502} {
+		fake.Status = status
+		for _, c := range []*bote.Client{bc, {URL: closed.Base(), Key: fake.Key}} {
+			h := Sprechen(StartConfig{Bote: c})
+			say(t, h, "anna", "Hallo", nil)
+			_, body, _ := talkPage(t, h, "anna")
+			_, start := startPage(t, StartConfig{Bote: c}, "family")
+			for what, s := range map[string]string{"/sprechen": body, "Start": start} {
+				if strings.Contains(s, fake.Key) {
+					t.Fatalf("%s shows the key", what)
+				}
+			}
+		}
+	}
+	if logged.Len() == 0 || strings.Contains(logged.String(), fake.Key) {
+		t.Fatalf("the log (%d bytes) carries the key:\n%s", logged.Len(), logged.String())
+	}
 }
