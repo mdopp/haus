@@ -14,6 +14,7 @@ import (
 
 	"github.com/mdopp/haus/internal/caldav"
 	"github.com/mdopp/haus/internal/cards"
+	"github.com/mdopp/haus/internal/energie"
 	"github.com/mdopp/haus/internal/favoriten"
 	"github.com/mdopp/haus/internal/ha"
 	"github.com/mdopp/haus/internal/judge"
@@ -30,6 +31,7 @@ type StartConfig struct {
 	Laib      *laib.Client
 	LaibURL   string // where Rückgängig lives (the guarantees, admins only)
 	HA        *ha.Client
+	Energy    energie.Map // which sensors Energie reads (haus#12); empty: by friendly name
 	Calendar  *caldav.Client
 	Contacts  *caldav.Client // a contact's page (haus#28)
 	Notes     *notes.Dir

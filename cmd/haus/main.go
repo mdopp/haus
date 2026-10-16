@@ -58,10 +58,12 @@ func routes(s site) http.Handler {
 	pagesMux := http.NewServeMux()
 	// the family's pages (haus#12): each card only from a backend that is set; a
 	// page whose backend is not set lands on Start
-	family := pages.StartConfig{Laib: s.ops, LaibURL: s.laibURL, HA: s.napi.HA, Calendar: s.hh.Calendar, Contacts: s.hh.Contacts,
+	family := pages.StartConfig{Laib: s.ops, LaibURL: s.laibURL, HA: s.napi.HA, Energy: s.napi.Energy, Calendar: s.hh.Calendar, Contacts: s.hh.Contacts,
 		Notes: s.hh.Notes, Library: s.hh.Library, Judge: s.hh.Judge, Docs: s.hh.Documents, Loc: s.hh.Loc, Favorites: s.favorites}
 	pagesMux.HandleFunc("/start", pages.Start(family))
 	pagesMux.HandleFunc("/raeume", pages.Raeume(family))
+	pagesMux.HandleFunc("/energie", pages.Energie(family))
+	pagesMux.HandleFunc("/energie/", pages.Energie(family)) // a path it does not serve: 404 and the way back
 	pagesMux.HandleFunc("/kalender", pages.Kalender(family))
 	pagesMux.HandleFunc("/notizen", pages.Notizen(family))
 	// each thing's and each tool item's own page, which the widgets name (haus#28)

@@ -39,6 +39,7 @@ type HA struct {
 	order    []string
 	calls    []Call
 	history  map[string][]map[string]any
+	histDown bool
 	queries  []url.Values
 	starts   []string
 	down     bool
@@ -136,6 +137,14 @@ func (h *HA) SetHistory(entityID string, points []map[string]any) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.history[entityID] = points
+}
+
+// HistoryDown makes /api/history/period answer 500 (the recorder in
+// trouble) while the states still answer.
+func (h *HA) HistoryDown(down bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.histDown = down
 }
 
 // HistoryQueries are the history requests: the start (path) and the query.
@@ -269,6 +278,10 @@ func (h *HA) serve(w http.ResponseWriter, r *http.Request) {
 	case r.Method == "GET" && strings.HasPrefix(r.URL.Path, "/api/history/period/"):
 		h.starts = append(h.starts, strings.TrimPrefix(r.URL.Path, "/api/history/period/"))
 		h.queries = append(h.queries, r.URL.Query())
+		if h.histDown {
+			http.Error(w, "500: recorder boom", http.StatusInternalServerError)
+			return
+		}
 		pts, ok := h.history[r.URL.Query().Get("filter_entity_id")]
 		if !ok {
 			w.Write([]byte(`[]`))
