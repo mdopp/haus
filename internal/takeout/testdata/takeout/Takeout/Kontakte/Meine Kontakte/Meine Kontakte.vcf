@@ -1,0 +1,9 @@
+BEGIN:VCARD
+VERSION:3.0
+FN:Anna Beispiel
+N:Beispiel;Anna;;;
+EMAIL;TYPE=INTERNET;TYPE=HOME:anna.beispiel@example.org
+TEL;TYPE=CELL:+49 170 0000001
+BDAY:1985-04-12
+CATEGORIES:myContacts
+END:VCARD

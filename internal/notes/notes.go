@@ -160,6 +160,55 @@ func (d *Dir) Create(title, text string) (string, error) {
 	return "", fmt.Errorf("Notizen: zu viele Notizen namens %s", slug)
 }
 
+// PutNew writes content as name, a path inside the directory (its
+// folders made as needed), unless name is taken: then it writes nothing
+// and says so (false). An import that runs twice (haus#13) finds its
+// files there. The file appears whole or not at all, like Create's, and
+// never replaces one; a name that leaves the directory or is hidden is
+// refused.
+func (d *Dir) PutNew(name string, content []byte) (bool, error) {
+	clean, err := checkName(name)
+	if err != nil {
+		return false, err
+	}
+	root, err := os.OpenRoot(d.path)
+	if err != nil {
+		return false, err
+	}
+	defer root.Close()
+	dir := path.Dir(clean)
+	if dir != "." {
+		if err := root.MkdirAll(dir, 0o755); err != nil {
+			return false, err
+		}
+	}
+	rnd := make([]byte, 8)
+	rand.Read(rnd)
+	tmp := path.Join(dir, ".haus-"+hex.EncodeToString(rnd)+".tmp")
+	f, err := root.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if err != nil {
+		return false, err
+	}
+	defer root.Remove(tmp)
+	_, werr := f.Write(content)
+	if serr := f.Sync(); werr == nil {
+		werr = serr
+	}
+	if cerr := f.Close(); werr == nil {
+		werr = cerr
+	}
+	if werr != nil {
+		return false, werr
+	}
+	if err := link(root, tmp, clean); err != nil {
+		if errors.Is(err, fs.ErrExist) {
+			return false, nil
+		}
+		return false, fmt.Errorf("Notizen: %s lässt sich nicht anlegen: %w", clean, err)
+	}
+	return true, nil
+}
+
 // Hit is one search result.
 type Hit struct {
 	Name  string   // the file, relative to the directory

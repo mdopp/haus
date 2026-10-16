@@ -1,0 +1,29 @@
+BEGIN:VCARD
+VERSION:3.0
+FN:Anna Beispiel
+N:Beispiel;Anna;;;
+EMAIL;TYPE=INTERNET;TYPE=HOME:anna.beispiel@example.org
+TEL;TYPE=CELL:+49 170 0000001
+BDAY:1985-04-12
+CATEGORIES:myContacts
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+FN:Bernd Muster
+N:Muster;Bernd;;;
+item1.EMAIL;TYPE=INTERNET:bernd@example.org
+item1.X-ABLabel:Arbeit
+TEL;TYPE=HOME:089 0000002
+ADR;TYPE=HOME:;;Beispielweg 1;Musterstadt;;12345;
+NOTE:Kennt sich mit Heizungen aus\, hat einen sehr langen Notiztext der über d
+ ie Zeilengrenze hinausgeht.
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+N:Klempner;Karl;;;
+TEL;TYPE=WORK:0170 0000003
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+NOTE:nur eine Notiz\, sonst nichts
+END:VCARD

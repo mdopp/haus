@@ -473,3 +473,34 @@ func TestExcerpt(t *testing.T) {
 		t.Fatalf("long line: %d", len(got))
 	}
 }
+
+// PutNew (haus#13, the Takeout import) writes a file under the name it is
+// given, folders made as needed, and never over one that is there: a
+// second import finds its files and writes nothing. No name leaves the
+// folder or is hidden.
+func TestPutNew(t *testing.T) {
+	dir := t.TempDir()
+	d, _ := Open(dir)
+	ok, err := d.PutNew("Google Notizen/einkauf-1a2b.md", []byte("# Einkauf\n"))
+	if err != nil || !ok {
+		t.Fatalf("%v %v", ok, err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, "Google Notizen", "einkauf-1a2b.md")); string(b) != "# Einkauf\n" {
+		t.Fatalf("%q", b)
+	}
+	if ok, err := d.PutNew("Google Notizen/einkauf-1a2b.md", []byte("anders")); err != nil || ok {
+		t.Fatalf("written over: %v %v", ok, err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, "Google Notizen", "einkauf-1a2b.md")); string(b) != "# Einkauf\n" {
+		t.Fatalf("changed: %q", b)
+	}
+	for _, bad := range []string{"../draussen.md", "/etc/x.md", ".versteckt/x.md", "a/.x.md", `a\b.md`} {
+		if ok, err := d.PutNew(bad, []byte("x")); err == nil || ok {
+			t.Fatalf("%s: %v %v", bad, ok, err)
+		}
+	}
+	entries, _ := os.ReadDir(filepath.Join(dir, "Google Notizen"))
+	if len(entries) != 1 {
+		t.Fatalf("left behind: %v", entries)
+	}
+}

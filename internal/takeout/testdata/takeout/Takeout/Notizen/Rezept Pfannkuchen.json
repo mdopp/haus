@@ -1,0 +1,29 @@
+{
+ "color": "YELLOW",
+ "isTrashed": false,
+ "isPinned": false,
+ "isArchived": true,
+ "title": "Rezept Pfannkuchen",
+ "textContent": "250 g Mehl, 500 ml Milch, 3 Eier.\nAlles verrühren und 10 Minuten ruhen lassen.",
+ "attachments": [
+  {
+   "filePath": "Pfannkuchen.jpg",
+   "mimetype": "image/jpeg"
+  }
+ ],
+ "annotations": [
+  {
+   "description": "",
+   "source": "WEBLINK",
+   "title": "Grundrezept",
+   "url": "https://example.org/pfannkuchen"
+  }
+ ],
+ "labels": [
+  {
+   "name": "Rezepte"
+  }
+ ],
+ "userEditedTimestampUsec": 1755000000000000,
+ "createdTimestampUsec": 1740000000000000
+}
