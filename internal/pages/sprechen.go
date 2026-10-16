@@ -87,7 +87,7 @@ func Sprechen(cfg StartConfig) http.HandlerFunc {
 				return
 			}
 			e, ok := t.get(person)
-			b := familyHead(r, cfg, "Sprechen", "Sprechen")
+			b := familyHead(r, cfg, "Sprechen", "Start") // no tab of its own: the field is Start's (haus#12)
 			b.WriteString("<h1>Sprechen</h1><form method=post action=/sprechen class=sprechen>" + sprechenInput)
 			if ok {
 				b.WriteString(e.html())
@@ -117,7 +117,9 @@ func Sprechen(cfg StartConfig) http.HandlerFunc {
 				missing{http.StatusOK, saysDown(House.Display), "Sprechen", "/start", "Zurück zu Start"}.write(w, r, cfg)
 				return
 			}
-			ctx, cancel := context.WithTimeout(r.Context(), boteWait)
+			// leaving the page does not stop the turn (Hermes runs it on): Haus
+			// waits on for the reply and keeps it, only boteWait ends the wait
+			ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), boteWait)
 			defer cancel()
 			reply, err := cfg.Bote.Ask(ctx, bote.Person{User: person, Name: r.Header.Get("Remote-Name")}, text)
 			e := exchange{said: text, reply: reply}

@@ -70,14 +70,23 @@ func oneLine(s string, n int) string {
 	return s
 }
 
-// who is the system line that names the person.
+// who is the system line that names the person: the login first, which
+// Authelia vouches for; then, quoted, the display name, which a person may
+// set themselves — without quotes or brackets of its own, so it cannot
+// pass as another login.
 func who(p Person) string {
 	user := oneLine(p.User, 64)
-	name := oneLine(p.Name, 80)
-	if name == "" || name == user {
-		return "Diese Nachricht kommt aus dem Sprechen-Feld auf der Haus-Seite. Es schreibt " + user + "."
+	name := oneLine(strings.Map(func(r rune) rune {
+		if strings.ContainsRune(`"'„“”‚‘’«»‹›()[]{}`, r) {
+			return -1
+		}
+		return r
+	}, p.Name), 80)
+	line := "Diese Nachricht kommt aus dem Sprechen-Feld auf der Haus-Seite. Es schreibt die Anmeldung „" + user + "“"
+	if name != "" && name != user {
+		line += " (Name: „" + name + "“)"
 	}
-	return "Diese Nachricht kommt aus dem Sprechen-Feld auf der Haus-Seite. Es schreibt " + name + " (Anmeldung: " + user + ")."
+	return line + "."
 }
 
 // Ask sends text as p and returns the Bote's reply. Anything but a chat

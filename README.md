@@ -383,14 +383,17 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     a passage missed the answer, not when the note did.
 
 - The Sprechen field (haus#12, laib ADR 0016): on Start under the day,
-  above the cards, and as its own tab, *Sprechen*, while the Bote is set
+  above the cards, while the Bote is set (no tab of its own: `/sprechen`
+  belongs to Start)
   (`HAUS_BOTE_URL`, the Bote's OpenAI base `http://host.containers.internal:8642/v1`,
   and `HAUS_BOTE_KEY`, Hermes' `API_SERVER_KEY`; laib renders the key only
   with the Bote installed, laib#215: no key, no field, no word about it).
   One line and *Senden*, a plain form post, no script. `POST /sprechen`
   takes it only from a person on Haus's own page (#35's rule) and sends it
   to the Bote's `/chat/completions` as one chat completion: the person's
-  name and login (`Remote-Name`, `Remote-User`) in a system line, because
+  login (`Remote-User`) and, quoted after it without quotes or brackets
+  of its own, their name (`Remote-Name`, which a person may set
+  themselves) in a system line, because
   Hermes' API server has no per-person field and layers system lines on
   top of the Bote's SOUL, and `X-Hermes-Session-Key: haus:<login>`, the
   person's memory scope. No model named, no stream, one sentence at a time:
@@ -398,7 +401,8 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   `/sprechen`, which shows the person's last exchange (in memory, per
   person): their words, the reply under the persona's name, as text (code
   blocks kept, **bold** bold, nothing else rendered). Haus relays and
-  decides nothing (haus#1). It waits 60 s; then, in the house persona's name, *Joshua hat nach einer Minute
+  decides nothing (haus#1). Leaving the page does not stop the wait: the
+  reply is kept for the person's next look. It waits 60 s; then, in the house persona's name, *Joshua hat nach einer Minute
   noch nicht geantwortet. Vielleicht passiert es trotzdem noch: schau nach,
   bevor du es noch einmal schickst.* A Bote down, refusing the key or
   failing its run: *Joshua antwortet gerade nicht. Versuch es später noch

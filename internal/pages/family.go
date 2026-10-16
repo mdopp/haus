@@ -49,15 +49,15 @@ var tabs = []struct{ name, href, icon string }{
 	{"Räume", "/raeume", `<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>`},
 	{"Kalender", "/kalender", `<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>`},
 	{"Notizen", "/notizen", `<path d="M6 4h9l3 3v13H6z"/><path d="M9 11h6M9 15h6"/>`},
-	{"Sprechen", "/sprechen", `<path d="M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-8l-4 4v-4H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/>`},
 	{"Box", "/box", `<rect x="3" y="7" width="18" height="12" rx="2"/><path d="M3 11h18M8 15h2"/>`},
 }
 
-// familyNav is the tab bar (haus#35): Start · Räume · Kalender · Notizen ·
-// Sprechen, each only when its backend is set, and Box for admins; the page itself
-// (current, by name) is marked.
+// familyNav is the tab bar (haus#35): Start · Räume · Kalender · Notizen,
+// each only when its backend is set, and Box for admins; the page itself
+// (current, by name) is marked. Sprechen is no tab (haus#12): its field is
+// on Start.
 func familyNav(r *http.Request, cfg StartConfig, current string) string {
-	show := map[string]bool{"Start": true, "Räume": cfg.HA != nil, "Kalender": cfg.Calendar != nil, "Notizen": cfg.Notes != nil, "Sprechen": cfg.Bote != nil, "Box": isAdmin(r)}
+	show := map[string]bool{"Start": true, "Räume": cfg.HA != nil, "Kalender": cfg.Calendar != nil, "Notizen": cfg.Notes != nil, "Box": isAdmin(r)}
 	var b strings.Builder
 	b.WriteString("<nav class=tabs aria-label=Seiten>")
 	for _, t := range tabs {
@@ -216,7 +216,7 @@ type missing struct {
 
 func (m missing) write(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
 	tab := m.page
-	if tab == "Zuhause" {
+	if tab == "Zuhause" || tab == "Sprechen" { // Sprechen is Start's field, no tab (haus#12)
 		tab = "Start"
 	}
 	b := familyHead(r, cfg, m.page, tab)
