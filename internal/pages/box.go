@@ -13,6 +13,7 @@ import (
 
 	"github.com/mdopp/haus/internal/laib"
 	"github.com/mdopp/haus/internal/persona"
+	"github.com/mdopp/haus/internal/usage"
 	"github.com/mdopp/haus/internal/werkstatt"
 )
 
@@ -63,6 +64,21 @@ func Box(c *laib.Client, laibURL string) http.HandlerFunc { return BoxWith(c, la
 
 // BoxWith is Box with the Werkstatt's tickets as a card (haus#15); nil, no card.
 func BoxWith(c *laib.Client, laibURL string, tickets *werkstatt.Tickets) http.HandlerFunc {
+	return BoxPage(BoxConfig{Laib: c, LaibURL: laibURL, Tickets: tickets})
+}
+
+// BoxConfig is what the Box page reads.
+type BoxConfig struct {
+	Laib    *laib.Client
+	LaibURL string
+	Tickets *werkstatt.Tickets // the Werkstatt card (haus#15); nil, no card
+	Family  StartConfig        // what this box has, and Usage: the "Was wird genutzt" card (haus#50); nil Usage, no card
+	Voice   *usage.Voice       // the voice control's counting, to say when HA refuses it
+}
+
+// BoxPage is the Box page with all its cards.
+func BoxPage(cfg BoxConfig) http.HandlerFunc {
+	c, laibURL, tickets := cfg.Laib, cfg.LaibURL, cfg.Tickets
 	return func(w http.ResponseWriter, r *http.Request) {
 		user := r.Header.Get("Remote-User")
 		ctx := r.Context()
@@ -114,6 +130,7 @@ func BoxWith(c *laib.Client, laibURL string, tickets *werkstatt.Tickets) http.Ha
 		// the window reaches back to yesterday's report; the journal table stays at 24h
 		es, jerr := c.Journal(ctx, "36h")
 		b.WriteString(morningReport(es, jerr))
+		b.WriteString(usageCard(ctx, cfg.Family, cfg.Voice))
 		if tickets != nil {
 			b.WriteString(werkstattCard(r.Context(), tickets))
 		}

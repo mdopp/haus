@@ -126,19 +126,20 @@ func TestDegradedLinesShownAreCounted(t *testing.T) {
 	}
 }
 
-// A tap from a widget arrives with ?von=widget.<kind>: counted by kind;
-// anything that is not that shape is ignored, never stored raw.
+// A tap from a widget arrives with ?von=widget.<kind>: counted by kind,
+// only for the app's nine widgets (haus-android#181); anything else is no
+// source tag, never stored raw.
 func TestWidgetTapsBySource(t *testing.T) {
 	fake, c := metrics(t)
 	h := Counted(c, pagesLike(map[string]int{"/gibtsnicht": 404}, nil))
-	for _, q := range []string{"widget.geraet", "widget.geraet", "widget.kalender.termin", "widget.Gerät", "widget.", "../etc", "src",
-		"widget." + strings.Repeat("a", 33), "widget.a b", "anna"} {
+	for _, q := range []string{"widget.device", "widget.device", "widget.energy-stats", "widget.geraet", "widget.Device", "widget.", "../etc", "src",
+		"widget." + strings.Repeat("a", 33), "widget.a b", "anna", "device", "widget.device.x"} {
 		serve(h, "GET", "/start?von="+url.QueryEscape(q), "anna")
 	}
-	serve(h, "GET", "/gibtsnicht?von=widget.geraet", "anna")
+	serve(h, "GET", "/gibtsnicht?von=widget.device", "anna")
 	got := events(t, fake, c)
 	delete(got, "seite.start")
-	if want := map[string]int64{"von.widget.geraet": 2, "von.widget.kalender.termin": 1}; !reflect.DeepEqual(got, want) {
+	if want := map[string]int64{"von.widget.device": 2, "von.widget.energy-stats": 1}; !reflect.DeepEqual(got, want) {
 		t.Errorf("taps %v, want %v", got, want)
 	}
 }
@@ -230,7 +231,7 @@ func aMonth(fake *usagefake.Fake) {
 			map[string]any{"app": "haus", "total": 200, "events": []any{
 				map[string]any{"event": "gestoert.start.licht", "count": 4}, map[string]any{"event": "napi.portal.state", "count": 31},
 				map[string]any{"event": "schalten.light.turn_off", "count": 17}, map[string]any{"event": "seite.raeume", "count": 22},
-				map[string]any{"event": "seite.start", "count": 120}, map[string]any{"event": "von.widget.geraet", "count": 6}}},
+				map[string]any{"event": "seite.start", "count": 120}, map[string]any{"event": "von.widget.device", "count": 6}}},
 			map[string]any{"app": "stimme", "total": 39, "events": []any{
 				map[string]any{"event": "erkannt", "count": 30}, map[string]any{"event": "nicht-erkannt", "count": 4}, map[string]any{"event": "weitergereicht", "count": 5}}},
 		}})
@@ -253,11 +254,11 @@ func TestBoxCardWhatIsUsed(t *testing.T) {
 	aMonth(fake)
 	page := get(boxWithUsage(t, c, nil), "admins")
 	for _, want := range []string{"Was wird genutzt", "letzten 30 Tage", "nie, wer",
-		"Am meisten genutzt", "Start geöffnet", "120", "Räume geöffnet", "Licht ausgeschaltet", "17",
+		"Am meisten genutzt", "Start geöffnet", "120", "Räume geöffnet", "Licht ausgeschaltet", "17", "Vom Widget „Gerät“ aus geöffnet",
 		"Kaum oder nie genutzt", "Kalender geöffnet", "Energie geöffnet",
 		"Was nicht antwortete", saysNoHouse, "auf Start", "4×",
 		"Im Chat", "40 Anfragen", "3 davon nicht beantwortet", "haushalt kalender",
-		"Per Stimme", "30 verstanden", "4 nicht verstanden",
+		"Per Stimme", "30 hat Home Assistant selbst verstanden", "5 an die KI weitergereicht", "4 hat niemand verstanden",
 		"Was niemand beantworten konnte", "Wann kommt der Müll?", "9×", "im Chat", "Mach die &lt;Musik&gt; lauter", "per Stimme", "30 Tage", "ohne Namen",
 		"Was läuft"} {
 		if !strings.Contains(page, want) {

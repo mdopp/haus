@@ -20,6 +20,7 @@ import (
 	"github.com/mdopp/haus/internal/haushalt"
 	"github.com/mdopp/haus/internal/laib"
 	"github.com/mdopp/haus/internal/persona"
+	"github.com/mdopp/haus/internal/usage"
 )
 
 // Validator says whether a bearer is a paired device.
@@ -41,6 +42,26 @@ type Config struct {
 	// UploadDir: where /napi/upload stores (upload.go), the share's Paperless
 	// consume folder; "" = 404
 	UploadDir string
+	// Usage counts each paired phone's request by path (haus#50): which
+	// widgets refresh how often, never which phone; nil counts nothing
+	Usage *usage.Counter
+}
+
+// refreshed is the event a /napi request counts as: its pattern's path,
+// the wildcards left out ("GET /napi/portal/camera/{entity_id}/snapshot"
+// is napi.portal.camera.snapshot), so no entity or name rides along.
+func refreshed(pattern string) string {
+	_, path, _ := strings.Cut(pattern, " ")
+	var parts []string
+	for _, p := range strings.Split(strings.TrimPrefix(path, "/napi/"), "/") {
+		if p != "" && !strings.HasPrefix(p, "{") {
+			parts = append(parts, p)
+		}
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return "napi." + strings.Join(parts, ".")
 }
 
 // Handler serves /napi/*.
@@ -53,6 +74,9 @@ func Handler(c Config) http.Handler {
 				w.Header().Set("WWW-Authenticate", "Bearer")
 				http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 				return
+			}
+			if r.Pattern != "/napi/" { // a path Haus does not serve is no widget's
+				c.Usage.Count(refreshed(r.Pattern))
 			}
 			next(w, r)
 		}
