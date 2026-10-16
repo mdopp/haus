@@ -215,10 +215,30 @@ func eventSays(event string) string {
 	return ""
 }
 
-// toolSays is a Bote tool's name as the admin reads it: Hermes' MCP prefix
-// off, words for underscores.
+// toolServers and ownTools are the Bote's tools in the admin's words:
+// laib's plugin counts werkzeug.<server>.<tool> from Hermes'
+// mcp__<server>__<tool>, and Hermes' own tools without a server (laib#275).
+var toolServers = map[string]string{"haushalt": "Haushalt", "ha": "Geräte", "laib": "Box", "frage": "Websuche", "automat": "Automationen"}
+var ownTools = map[string]string{"memory": "Gedächtnis", "todo": "Aufgabenliste", "session_search": "Gesprächssuche", "clarify": "Rückfrage"}
+
+// toolSays is a Bote tool as the admin reads it: "Haushalt: kalender",
+// "Geräte: turnoff" (HA's Assist intents lose their leading hass),
+// "Gedächtnis"; an unknown server as it is, underscores as spaces.
 func toolSays(tool string) string {
-	return strings.ReplaceAll(strings.TrimPrefix(tool, "mcp_"), "_", " ")
+	server, name, ok := strings.Cut(tool, ".")
+	if !ok {
+		if s := ownTools[tool]; s != "" {
+			return s
+		}
+		return strings.ReplaceAll(tool, "_", " ")
+	}
+	if server == "ha" {
+		name = strings.TrimPrefix(name, "hass")
+	}
+	if s := toolServers[server]; s != "" {
+		server = s
+	}
+	return server + ": " + strings.ReplaceAll(name, "_", " ")
 }
 
 const usageDays = 30

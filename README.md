@@ -498,7 +498,9 @@ days from usage-metrics' `GET /summary?days=30` and `GET /misses?days=30` —
 the five most used things, what this box has and nobody or hardly anybody
 used (*nie*), which plain lines the family saw where, the Bote's turns,
 unanswered turns and most used tools (app `bote`: `zug`, `unbeantwortet`,
-`werkzeug.<tool>`, counted by laib's Bote template) and the voice's
+`werkzeug.<server>.<tool>` and Hermes' own `werkzeug.<tool>`, counted by
+laib's Bote template, laib#275; shown as *Haushalt: kalender*, *Geräte:
+turnoff*, *Gedächtnis*) and the voice's
 numbers, and the sentences nobody could answer (*im Chat*, *per Stimme*;
 kept 30 days, without names). usage-metrics not answering is one plain
 line; nothing counted yet says so and since when Haus counts.
