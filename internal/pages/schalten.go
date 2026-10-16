@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/mdopp/haus/internal/cards"
@@ -88,9 +89,12 @@ func Schalten(cfg StartConfig) http.HandlerFunc {
 	}
 }
 
-// backTo is where a switch lands: Start, or the page of a thing that has
-// one; anything else is Start.
+// backTo is where a switch lands: Start, Räume (one room on it), or the
+// page of a thing that has one; anything else is Start.
 func backTo(path string) string {
+	if inRaeume.MatchString(path) {
+		return path
+	}
 	if id, ok := strings.CutPrefix(path, cards.ThingPages); ok && ha.EntityRE.MatchString(id) {
 		if domain, _, _ := strings.Cut(id, "."); cards.Domains[domain] {
 			return cards.ThingPage(id)
@@ -98,3 +102,6 @@ func backTo(path string) string {
 	}
 	return "/start"
 }
+
+// inRaeume is Räume, or one room's card on it (cards.Card.ID).
+var inRaeume = regexp.MustCompile(`^/raeume(#karte(-[a-z0-9]+)*)?$`)

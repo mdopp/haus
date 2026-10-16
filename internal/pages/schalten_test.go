@@ -75,6 +75,8 @@ func TestSchaltenSwitchesAndGoesBack(t *testing.T) {
 	}{
 		{"light.buero", "light.turn_off", "/start", "/start"},
 		{"light.flur", "light.turn_on", "/raeume/light.flur", "/raeume/light.flur"},
+		{"light.kueche", "light.turn_off", "/raeume#karte-kueche", "/raeume#karte-kueche"}, // a lamp switched in Räume (haus#12)
+		{"light.flur", "light.turn_off", "/raeume", "/raeume"},
 		{"switch.kaffee", "switch.turn_off", "", "/start"},
 		{"media_player.wohnzimmer", "media_player.media_pause", "/start", "/start"},
 	} {
@@ -83,7 +85,7 @@ func TestSchaltenSwitchesAndGoesBack(t *testing.T) {
 			t.Errorf("%s %s → %d %q, want 303 %s", c.tun, c.geraet, rec.Code, rec.Header().Get("Location"), c.back)
 		}
 	}
-	want := []string{"light.turn_off light.buero", "light.turn_on light.flur", "switch.turn_off switch.kaffee", "media_player.media_pause media_player.wohnzimmer"}
+	want := []string{"light.turn_off light.buero", "light.turn_on light.flur", "light.turn_off light.kueche", "light.turn_off light.flur", "switch.turn_off switch.kaffee", "media_player.media_pause media_player.wohnzimmer"}
 	if got := calls(fake); !reflect.DeepEqual(got, want) {
 		t.Fatalf("HA got %v, want %v", got, want)
 	}
@@ -197,13 +199,15 @@ func TestSchaltenOnlyFromHausItself(t *testing.T) {
 	}
 }
 
-// Back leads only to Haus's own Start or the thing's page: anything else
-// lands on Start.
+// Back leads only to Haus's own Start, Räume (a room on it), or the
+// thing's page: anything else lands on Start.
 func TestSchaltenGoesBackOnlyToHaus(t *testing.T) {
 	_, cfg := switchHouse(t)
 	h := Schalten(cfg)
 	for _, back := range []string{"https://boese.example/", "//boese.example", "/raeume/../box", "/box", "/raeume/lock.haustuer?x", "javascript:alert(1)", "/start#x",
-		"/raeume/person.anna", "/raeume/automation.alles", "/raeume/", "/raeume"} {
+		"/raeume/person.anna", "/raeume/automation.alles", "/raeume/", "/raeume#x", "/raeume#karte-", `/raeume#karte-"><b>`, "/raeume#karte-K",
+		"/raeume?x", "/raeume/#karte-kueche", "/raeume#karte-kueche#x", "/raeume#karte-kueche/../box",
+		"https://boese.example/raeume", "//boese.example/raeume#karte-kueche", `/\boese.example/raeume`, "/%2F/boese.example/raeume", " /raeume", "/raeume\n"} {
 		rec := post(t, h, "/schalten", url.Values{"geraet": {"light.buero"}, "tun": {"light.turn_off"}, "zurueck": {back}}, "anna", nil)
 		if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/start" {
 			t.Errorf("zurueck %q → %d %q, want /start", back, rec.Code, rec.Header().Get("Location"))
@@ -338,6 +342,12 @@ func TestDingPinSaysABrokenFilePlainly(t *testing.T) {
 	}
 	mustContain(t, body, "Deine Favoriten lassen sich gerade nicht lesen.", "<p><a href=/raeume/light.buero>Zurück zum Gerät</a></p>")
 	mustNotLeak(t, body, "favoriten.json", "unexpected", "JSON")
+	if _, err := cfg.Favorites.For("anna"); err == nil {
+		t.Fatal("the broken file was written over")
+	}
+	// from Räume, the way back is to the room (haus#12)
+	rec = post(t, Ding(cfg), "/raeume/light.buero", url.Values{"stern": {"an"}, "zurueck": {"/raeume#karte-buero"}}, "anna", nil)
+	mustContain(t, rec.Body.String(), "Deine Favoriten lassen sich gerade nicht lesen.", "<p><a href=/raeume#karte-buero>Zurück zu den Räumen</a></p>")
 	if _, err := cfg.Favorites.For("anna"); err == nil {
 		t.Fatal("the broken file was written over")
 	}
