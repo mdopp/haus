@@ -91,7 +91,9 @@ func TestCardsFitAPhone(t *testing.T) {
 // all in one row of buttons, the ☆ last; without a ☆ there is none
 // (haus#12: Medien's Also meets Räume's Pin).
 func TestRowWithMoreButtonsAndAPin(t *testing.T) {
-	act := func(l string) *Action { return &Action{Label: l, Entity: "media_player.wz", Do: "media_player." + l, Back: "/medien"} }
+	act := func(l string) *Action {
+		return &Action{Label: l, Entity: "media_player.wz", Do: "media_player." + l, Back: "/medien"}
+	}
 	r := Row{Text: "Sonos", Action: act("pause"), Also: []*Action{act("leiser"), act("lauter")}}
 	got := Card{Title: "Läuft", Rows: []Row{r}}.HTML()
 	if strings.Contains(got, "anheften") || !strings.Contains(got, `<li class="tu viele">`) {
