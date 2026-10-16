@@ -361,7 +361,10 @@ func TestPortalActive(t *testing.T) {
 }
 
 // the realtime stream: a device's watch-set decides which card_state frames
-// it gets, from HA's state_changed over the WebSocket.
+// it gets, from HA's state_changed over the WebSocket. Nothing here waits
+// on the clock (haus#39): a stream that answered is listening, a frame that
+// must come is waited for with patience, and a frame that must not come is
+// ruled out by one that comes after it on the same stream.
 func TestWatchAndEvents(t *testing.T) {
 	fake, h := house(t)
 	srv := httptest.NewServer(h)
@@ -398,7 +401,7 @@ func TestWatchAndEvents(t *testing.T) {
 		t.Fatal("Haus never subscribed to state_changed")
 	}
 	// once subscribed, Haus sends each watched entity's current card
-	resync := readFrames(t, l1, 2, 2*time.Second)
+	resync := readFrames(t, l1, 2, patience)
 	if len(resync) != 2 || !strings.Contains(resync[0].data+resync[1].data, `"state":"on"`) || !strings.Contains(resync[0].data+resync[1].data, `"cover.rollo"`) {
 		t.Fatalf("resync on subscribe: %+v", resync)
 	}
@@ -407,7 +410,7 @@ func TestWatchAndEvents(t *testing.T) {
 	fake.Change("light.kueche", "off", map[string]any{"friendly_name": "Küche"}) // the same card again: nothing new
 	fake.Change("cover.rollo", "open", map[string]any{"friendly_name": "Rollo", "device_class": "shutter", "current_position": 100})
 
-	frames := readFrames(t, l1, 2, 2*time.Second)
+	frames := readFrames(t, l1, 2, patience)
 	if frames[0].event != "card_state" || frames[1].event != "card_state" {
 		t.Fatalf("frames: %+v", frames)
 	}
@@ -423,22 +426,35 @@ func TestWatchAndEvents(t *testing.T) {
 	if f.EntityID != "cover.rollo" || f.Card["current_position"] != 100.0 {
 		t.Fatalf("second frame (the duplicate kitchen card must be dropped): %s", frames[1].data)
 	}
-	// dev2 watches nothing: only keepalive comments reach it
-	if got := readFrames(t, l2, 1, 300*time.Millisecond); len(got) != 0 {
+	// dev2 watched nothing while those changed: only keepalive comments
+	// reached it. One stream's frames keep their order, so the first frame
+	// it gets once it watches the coffee machine is that one, or another
+	// device's frame came before it.
+	raw(t, h, "POST", "/napi/portal/watch", "dev2", `{"entity_ids":["switch.kaffee"]}`)
+	fake.Change("switch.kaffee", "off", map[string]any{"friendly_name": "Kaffeemaschine"})
+	got := readFrames(t, l2, 1, patience)
+	if len(got) == 1 {
+		json.Unmarshal([]byte(got[0].data), &f)
+	}
+	if len(got) != 1 || f.EntityID != "switch.kaffee" {
 		t.Fatalf("dev2 got another device's frames: %+v", got)
 	}
-	if !sawPing(l2, time.Second) {
+	if !sawPing(l2, patience) {
 		t.Fatal("no ': ping' keepalive comment")
 	}
 	// a watch is replaced, not added to
 	raw(t, h, "POST", "/napi/portal/watch", "dev1", `{"entity_ids":["light.flur"]}`)
 	fake.Change("light.kueche", "on", map[string]any{"friendly_name": "Küche"})
 	fake.Change("light.flur", "off", map[string]any{"friendly_name": "Flur"})
-	frames = readFrames(t, l1, 1, 2*time.Second)
+	frames = readFrames(t, l1, 1, patience)
 	if len(frames) != 1 || !strings.Contains(frames[0].data, `"light.flur"`) {
 		t.Fatalf("after replacing the watch-set: %+v", frames)
 	}
 }
+
+// patience bounds a wait for something that must come: it ends as soon as
+// it came, so only a broken stream ever waits it out, however busy the CPU.
+const patience = 30 * time.Second
 
 // haus#28: a device that shows the active devices says so in its watch
 // (active: true) and gets an active_set frame whenever the set of things

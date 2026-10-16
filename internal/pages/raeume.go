@@ -25,11 +25,13 @@ const noRoom = "Ohne Raum"
 
 // Raeume is one card per Home Assistant area (haus#12): its lights,
 // heating, covers and media, the area the entity's own or else its
-// device's; what has none in one "Ohne Raum" card at the end. A thing is
-// switched and pinned on its own page (haus#35). HA not
-// answering, or its rooms not readable yet, leaves the cards out for one
-// plain line (haus#33): a card that put every lamp in "Ohne Raum" because
-// the registry failed would be wrong, not just short.
+// device's; what has none in one "Ohne Raum" card at the end. A lamp is
+// switched right on its row, and every thing is put on the person's
+// Start with its ☆ (haus#12) — the forms of the thing's own page
+// (haus#35), landing back on the thing's room. HA not answering, or its
+// rooms not readable yet, leaves the cards out for one plain line
+// (haus#33): a card that put every lamp in "Ohne Raum" because the
+// registry failed would be wrong, not just short.
 func Raeume(cfg StartConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !showOnly(w, r, "Räume") {
@@ -44,11 +46,19 @@ func Raeume(cfg StartConfig) http.HandlerFunc {
 			haErr   error
 			reg     ha.Registry
 			roomsOK bool
+			favs    []string
+			favErr  error
 		)
-		fetch(r,
+		person := r.Header.Get("Remote-User")
+		pins := cfg.Favorites != nil && person != ""
+		reads := []func(context.Context){
 			func(ctx context.Context) { states, haErr = cfg.HA.States(ctx) },
-			func(ctx context.Context) { reg, roomsOK = cfg.HA.CachedRegistry(ctx) })
-		logErrs("räume", map[string]error{"home assistant": haErr})
+			func(ctx context.Context) { reg, roomsOK = cfg.HA.CachedRegistry(ctx) }}
+		if pins {
+			reads = append(reads, func(context.Context) { favs, favErr = cfg.Favorites.For(person) })
+		}
+		fetch(r, reads...)
+		logErrs("räume", map[string]error{"home assistant": haErr, "favorites": favErr})
 		if haErr == nil && !roomsOK {
 			log.Printf("haus: räume page: home assistant's rooms are not known yet; the cards are left out")
 		}
@@ -60,7 +70,18 @@ func Raeume(cfg StartConfig) http.HandlerFunc {
 		case !roomsOK:
 			b.WriteString("<p class=k>" + saysNoRooms + "</p>")
 		default:
-			for _, c := range roomCards(states, reg) {
+			var pinned map[string]bool
+			switch {
+			case pins && favErr != nil:
+				b.WriteString("<p class=k>" + saysNoFavorites + "</p>")
+			case pins:
+				b.WriteString("<p class=k>" + saysPinWhat + "</p>")
+				pinned = map[string]bool{}
+				for _, id := range favs {
+					pinned[id] = true
+				}
+			}
+			for _, c := range roomCards(states, reg, pinned) {
 				b.WriteString(c.HTML())
 			}
 		}
@@ -68,13 +89,19 @@ func Raeume(cfg StartConfig) http.HandlerFunc {
 	}
 }
 
+// saysPinWhat is what Räume's ☆ does, once above the rooms.
+const saysPinWhat = "Mit ☆ steht ein Gerät auf Start unter „Meine Geräte“."
+
 // roomCards groups the states by room: rooms by name, "Ohne Raum" last;
 // in a room lights, heating, covers, media, each by name, each leading to
-// its own page. What HA hides (hidden, config, diagnostic) is left out.
-func roomCards(states []ha.State, reg ha.Registry) []cards.Card {
+// its own page; a lamp HA reaches with its switch. pinned is the person's
+// Start (nil: no ☆). What HA hides (hidden, config, diagnostic) is left
+// out.
+func roomCards(states []ha.State, reg ha.Registry, pinned map[string]bool) []cards.Card {
 	type thing struct {
 		kind             int
 		id, name, detail string
+		state            ha.State
 	}
 	byRoom := map[string][]thing{}
 	for _, s := range states {
@@ -90,7 +117,7 @@ func roomCards(states []ha.State, reg ha.Registry) []cards.Card {
 			continue
 		}
 		room := oneLine(reg.Rooms[s.EntityID])
-		byRoom[room] = append(byRoom[room], thing{kind, s.EntityID, friendly(s), roomDetail(domain, s, reg.TempUnit)})
+		byRoom[room] = append(byRoom[room], thing{kind, s.EntityID, friendly(s), roomDetail(domain, s, reg.TempUnit), s})
 	}
 	names := make([]string, 0, len(byRoom))
 	for n := range byRoom {
@@ -116,11 +143,19 @@ func roomCards(states []ha.State, reg ha.Registry) []cards.Card {
 			title = noRoom
 		}
 		c := cards.Card{Title: title}
+		back := "/raeume#" + c.ID()
 		for i, t := range things {
 			if i == maxRoomRows {
 				break
 			}
-			c.AddLink(t.name, t.detail, cards.ThingPage(t.id))
+			row := cards.Row{Text: t.name, Detail: t.detail, Href: cards.ThingPage(t.id)}
+			if domain, _, _ := strings.Cut(t.id, "."); domain == "light" {
+				row.Action = tile(domain, t.state, reg.TempUnit, back).Action
+			}
+			if pinned != nil {
+				row.Pin = &cards.Pin{Entity: t.id, Name: t.name, On: pinned[t.id], Back: back}
+			}
+			c.Rows = append(c.Rows, row)
 		}
 		more(&c, len(things)-maxRoomRows)
 		out = append(out, c)

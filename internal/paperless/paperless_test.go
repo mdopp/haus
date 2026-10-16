@@ -277,3 +277,29 @@ func TestByIDsStampsTexts(t *testing.T) {
 		t.Fatalf("failing: %v %v", s, err)
 	}
 }
+
+// A listing that ends short of the count Paperless gave (a page lost, a
+// server cutting it) is an error, never a part: what it left out, a
+// mirror would delete. A listing that never ends is cut off too.
+func TestStampsAllOrNothing(t *testing.T) {
+	f := paperlessfake.New("tok")
+	defer f.Close()
+	for i := 1; i <= 120; i++ {
+		f.Add(paperlessfake.Doc{ID: i, Modified: "2026-01-01T00:00:00Z"})
+	}
+	c := &Client{URL: f.URL, Token: "tok"}
+	if got, err := c.Stamps(context.Background()); err != nil || len(got) != 120 {
+		t.Fatalf("%d %v", len(got), err)
+	}
+	f.CountMore = 5
+	if got, err := c.Stamps(context.Background()); err == nil {
+		t.Fatalf("short listing taken: %d", len(got))
+	}
+	f.CountMore = 0
+	old := maxPages
+	maxPages = 1
+	defer func() { maxPages = old }()
+	if _, err := c.Stamps(context.Background()); err == nil {
+		t.Fatal("a listing past maxPages taken")
+	}
+}

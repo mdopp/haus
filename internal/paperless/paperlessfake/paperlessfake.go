@@ -48,6 +48,9 @@ type Server struct {
 	// IgnorePageSize answers with every hit, as a server that does not
 	// honour page_size would.
 	IgnorePageSize bool
+	// CountMore is added to the count a listing gives, as a listing that
+	// loses documents on the way would.
+	CountMore int
 }
 
 // New starts a fake that accepts token.
@@ -225,7 +228,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 			}
 			results = append(results, m)
 		}
-		json.NewEncoder(w).Encode(map[string]any{"count": len(hits), "next": next, "previous": nil, "results": results})
+		json.NewEncoder(w).Encode(map[string]any{"count": len(hits) + s.CountMore, "next": next, "previous": nil, "results": results})
 	case "/api/correspondents/", "/api/tags/":
 		names := s.correspondents
 		if r.URL.Path == "/api/tags/" {

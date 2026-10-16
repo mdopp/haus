@@ -229,3 +229,81 @@ func TestMarkdownCapsTheText(t *testing.T) {
 		t.Fatalf("%q", got)
 	}
 }
+
+// Paperless keeps a document's last change to the microsecond: an edit
+// within the same second as the run that mirrored it is still an edit,
+// and the next run reads the text again.
+func TestMirrorSeesAChangeWithinTheSameSecond(t *testing.T) {
+	f, c := archive(t)
+	dir := t.TempDir()
+	f.Change(paperlessfake.Doc{ID: 8, Title: "Zeugnis", Content: "Mathematik: gut", Modified: "2026-07-25T08:00:00.100000Z"})
+	if _, err := Mirror(bg, c, dir); err != nil {
+		t.Fatal(err)
+	}
+	f.Change(paperlessfake.Doc{ID: 8, Title: "Zeugnis", Content: "Mathematik: sehr gut", Modified: "2026-07-25T08:00:00.700000Z"})
+	rep, err := Mirror(bg, c, dir)
+	if err != nil || rep != (Report{Written: 1, Unchanged: 2}) || !strings.Contains(read(t, filepath.Join(dir, "8.md")), "sehr gut") {
+		t.Fatalf("%+v %v", rep, err)
+	}
+}
+
+// A power cut can leave a file empty whose time the run had already set:
+// it is no copy of the document, and the next run writes it again rather
+// than taking it as up to date. What a run left halfway aside is cleared.
+func TestMirrorRepairsWhatAPowerCutLeft(t *testing.T) {
+	_, c := archive(t)
+	dir := t.TempDir()
+	if _, err := Mirror(bg, c, dir); err != nil {
+		t.Fatal(err)
+	}
+	p := filepath.Join(dir, "7.md")
+	st, _ := os.Stat(p)
+	if err := os.Truncate(p, 0); err != nil {
+		t.Fatal(err)
+	}
+	os.Chtimes(p, st.ModTime(), st.ModTime())
+	os.WriteFile(filepath.Join(dir, ".8.md.tmp"), []byte("halb"), 0o644)
+	rep, err := Mirror(bg, c, dir)
+	if err != nil || rep != (Report{Written: 1, Unchanged: 2}) || !strings.Contains(read(t, p), "Vertragslaufzeit") {
+		t.Fatalf("%+v %v", rep, err)
+	}
+	if got := strings.Join(files(t, dir), ","); got != "12.md,7.md,8.md" {
+		t.Fatalf("files: %s", got)
+	}
+}
+
+// Only a plain file is a mirrored document: a folder or a link that
+// happens to be named <id>.md is not the mirror's, and does not stop it.
+func TestMirrorLeavesWhatIsNoFile(t *testing.T) {
+	_, c := archive(t)
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "13.md", "drin"), 0o755)
+	outside := filepath.Join(t.TempDir(), "draussen.md")
+	os.WriteFile(outside, []byte("nicht meins"), 0o644)
+	os.Symlink(outside, filepath.Join(dir, "14.md"))
+	rep, err := Mirror(bg, c, dir)
+	if err != nil || rep != (Report{Written: 3}) {
+		t.Fatalf("%+v %v", rep, err)
+	}
+	if read(t, outside) != "nicht meins" {
+		t.Fatal("wrote through a link")
+	}
+	if _, err := os.Lstat(filepath.Join(dir, "14.md")); err != nil {
+		t.Fatal("removed a link it does not own")
+	}
+}
+
+// Each line the file puts above a document's text is one a hit leaves
+// out; a line of the text is not.
+func TestHeadLine(t *testing.T) {
+	for _, l := range []string{"# Stromvertrag", "Datum: 14.03.2025", "Von: Stadtwerke", "Schlagworte: Strom, Vertrag", "  Von: eingerückt"} {
+		if !HeadLine(l) {
+			t.Fatalf("%q is a head line", l)
+		}
+	}
+	for _, l := range []string{"Vertragslaufzeit bis 2027", "Vonovia schreibt", "Datum der Kündigung", "## Abschnitt", ""} {
+		if HeadLine(l) {
+			t.Fatalf("%q is text", l)
+		}
+	}
+}

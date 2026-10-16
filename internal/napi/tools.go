@@ -23,7 +23,7 @@ import (
 // Haus's catalog is the Haushalt source's backends that are set: reminders,
 // contacts, documents, notes. Haus has no page for creating or opening an
 // item, so no def names one (tool-compose-path, tool-item-id-field): a
-// guessed route would land on Start.
+// guessed route would be a 404.
 
 // maxRows is what a widget shows at most (ToolDefs.MAX_ROWS).
 const maxRows = 40

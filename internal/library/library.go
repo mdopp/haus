@@ -199,12 +199,17 @@ func byWords(ctx context.Context, d *notes.Dir, pl *paperless.Client, docs bool,
 
 // AnyWord is q as Paperless's full text search finds a document holding
 // any of its meaningful words (Whoosh's OR): a question, as people ask it,
-// is not a phrase every word of which a document holds. A q of only common
-// words is asked as written.
+// is not a phrase every word of which a document holds. The words go in
+// lower case (Whoosh finds them in any case): a word that is one of its
+// operators (NOT, AND) stays a word. A q of only common words is asked as
+// written.
 func AnyWord(q string) string {
 	ws := notes.Words(q)
 	if len(ws) == 0 {
 		return strings.TrimSpace(q)
+	}
+	for i, w := range ws {
+		ws[i] = strings.ToLower(w)
 	}
 	return strings.Join(ws, " OR ")
 }

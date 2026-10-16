@@ -1,7 +1,10 @@
 package library
 
 import (
+	"context"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -204,7 +207,7 @@ func TestDocumentsByWordsWhenReduced(t *testing.T) {
 		t.Fatalf("%+v %v", got, err)
 	}
 	last := p.Seen()[0].URL.Query().Get("query")
-	if last != "läuft OR Versicherung" {
+	if last != "läuft OR versicherung" {
 		t.Fatalf("asked Paperless %q", last)
 	}
 	// nothing close: the words of both, said as such
@@ -235,5 +238,71 @@ func TestNoDocumentsWithoutTheirCollection(t *testing.T) {
 	}
 	if n := len(p.Seen()); n != 0 {
 		t.Fatalf("Paperless asked %d times", n)
+	}
+}
+
+// The words' answer says how many more documents Paperless counted than
+// it shows; a question's words go to Paperless in lower case, so a word
+// that is one of its search operators (NOT, AND) is a word.
+func TestDocumentsByWordsCountsTheRest(t *testing.T) {
+	old := Wait
+	Wait = 150 * time.Millisecond
+	defer func() { Wait = old }()
+	_, d, f := shelf(t)
+	p := archive(t, f)
+	for i := 20; i < 30; i++ {
+		p.Add(paperlessfake.Doc{ID: i, Title: "Versicherung", Content: "Versicherung"})
+	}
+	f.Status = http.StatusInternalServerError
+	cl := &qmd.Client{URL: f.URL, Collection: "notizen", Documents: "dokumente"}
+	got, err := Find(bg, cl, Tidy{}, d, &paperless.Client{URL: p.URL, Token: "pl-token"}, "Versicherung", 4)
+	if err != nil || len(got.Docs) != 2 || got.DocsMore != 9 {
+		t.Fatalf("%d docs, %d more: %+v %v", len(got.Docs), got.DocsMore, got, err)
+	}
+	if q := AnyWord("NOT AND Versicherung"); q != "not OR and OR versicherung" {
+		t.Fatalf("AnyWord: %q", q)
+	}
+}
+
+// What qmd names in the documents' collection is never read as a note,
+// also when the notes' folder holds a file of that name and Paperless is
+// not there to check the document against.
+func TestADocumentHitIsNoNote(t *testing.T) {
+	dir, d, f := shelf(t)
+	os.WriteFile(filepath.Join(dir, "7.md"), []byte("# Sieben\n\nGEHEIM-NOTIZ\n"), 0o644)
+	archive(t, f)
+	cl := &qmd.Client{URL: f.URL, Collection: "notizen", Documents: "dokumente"}
+	got, err := Find(bg, cl, Tidy{}, d, nil, "Laufzeit", 10)
+	if err == nil {
+		for _, h := range got.Hits {
+			if h.Name == "7.md" {
+				t.Fatalf("a document's hit read as the note 7.md: %+v", got)
+			}
+		}
+	}
+}
+
+// Paperless that hangs gets at most half the time the caller has left,
+// so the words still have theirs: a question only documents answer, with
+// Paperless hanging, ends in the notes' word search, not in nothing.
+func TestPaperlessSlowLeavesTheWordsTheirTime(t *testing.T) {
+	dir, d, f := shelf(t)
+	os.WriteFile(filepath.Join(dir, "vertrag.md"), []byte("# Vertrag\n\nDie Laufzeit steht im Brief.\n"), 0o644)
+	p := archive(t, f)
+	hang := make(chan struct{})
+	defer close(hang)
+	slow := &http.Client{Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
+		select {
+		case <-hang:
+		case <-r.Context().Done():
+		}
+		return nil, r.Context().Err()
+	})}
+	cl := &qmd.Client{URL: f.URL, Collection: "notizen", Documents: "dokumente"}
+	ctx, cancel := context.WithTimeout(bg, 1200*time.Millisecond)
+	defer cancel()
+	got, err := Find(ctx, cl, Tidy{}, d, &paperless.Client{URL: p.URL, Token: "pl-token", HTTP: slow}, "Laufzeit", 10)
+	if err != nil || !got.DocsDown || got.Partial || names(got.Hits) != "vertrag.md" {
+		t.Fatalf("%+v %v", got, err)
 	}
 }
