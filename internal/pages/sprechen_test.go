@@ -85,6 +85,12 @@ func TestSprechenIsNoTab(t *testing.T) {
 	if n := strings.Count(body, "aria-current=page"); n != 1 {
 		t.Fatalf("%d tabs marked on /sprechen", n)
 	}
+	for _, rec := range []*httptest.ResponseRecorder{
+		say(t, Sprechen(cfg), "anna", strings.Repeat("a", maxSay+1), nil), // too long
+		say(t, Sprechen(StartConfig{Notes: nd}), "anna", "Hallo", nil),    // the Bote went
+	} {
+		mustContain(t, rec.Body.String(), "<title>Sprechen · Zuhause</title>", "href=/start aria-current=page>")
+	}
 }
 
 // haus#12, haus#1: a sentence goes to the Bote as the person who wrote it
@@ -333,5 +339,41 @@ func TestSprechenNeverShowsTheKey(t *testing.T) {
 	}
 	if logged.Len() == 0 || strings.Contains(logged.String(), fake.Key) {
 		t.Fatalf("the log (%d bytes) carries the key:\n%s", logged.Len(), logged.String())
+	}
+}
+
+// The persona's name is the house's to set, the reply the Bote's: both
+// are text wherever they show — over the reply, in the line that says it
+// does not answer, in what the field is for — and so is a code block the
+// reply never closes. Two bold words are two, not one run.
+func TestSprechenEscapesThePersonaAndAnOpenBlock(t *testing.T) {
+	House = persona.Persona{Display: "<b>J&J</b>"}
+	defer func() { House = persona.Default() }()
+	fake, bc := fakeBote(t)
+	fake.Reply = "**eins** und **zwei**\n```\n<i>offen</i>"
+	h := Sprechen(StartConfig{Bote: bc})
+	_, body, _ := talkPage(t, h, "anna")
+	mustContain(t, body, "liest &lt;b&gt;J&amp;J&lt;/b&gt;.")
+	say(t, h, "anna", "Hallo", nil)
+	_, body, _ = talkPage(t, h, "anna")
+	mustContain(t, body, "<span class=wer>&lt;b&gt;J&amp;J&lt;/b&gt;</span>", "<strong>eins</strong> und <strong>zwei</strong>", "<pre>&lt;i&gt;offen&lt;/i&gt;</pre>")
+	fake.Status = 502
+	say(t, h, "anna", "Hallo", nil)
+	_, body, _ = talkPage(t, h, "anna")
+	mustContain(t, body, "<p class=keine>&lt;b&gt;J&amp;J&lt;/b&gt; antwortet gerade nicht.")
+	mustNotContain(t, body, "<b>J", "<i>")
+}
+
+// A body over what the field can send is not read: refused plainly, and
+// the Bote hears nothing.
+func TestSprechenReadsNoHugeBody(t *testing.T) {
+	fake, bc := fakeBote(t)
+	h := Sprechen(StartConfig{Bote: bc})
+	rec := say(t, h, "anna", strings.Repeat("a", 20<<10), nil)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "Das Formular ist nicht lesbar.") {
+		t.Fatalf("→ %d %s", rec.Code, rec.Body.String())
+	}
+	if n := len(fake.Seen()); n != 0 {
+		t.Fatalf("the Bote heard %d messages", n)
 	}
 }

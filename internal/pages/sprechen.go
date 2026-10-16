@@ -125,7 +125,7 @@ func Sprechen(cfg StartConfig) http.HandlerFunc {
 			e := exchange{said: text, reply: reply}
 			if err != nil {
 				log.Printf("haus: sprechen as %q: %v", person, err)
-				e.reply, e.line = "", saysDown(House.Display)
+				e.line = saysDown(House.Display) // Ask's reply is "" with an error
 				if errors.Is(err, context.DeadlineExceeded) {
 					e.line = saysSlow(House.Display)
 				}
