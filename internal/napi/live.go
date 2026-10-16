@@ -145,20 +145,22 @@ func (l *live) watch(w http.ResponseWriter, r *http.Request) {
 }
 
 // GET /napi/portal/events: text/event-stream, card_state frames and ': ping'.
+// The stream joins before it answers: a device that has the 200 listens, and
+// the resync of a subscription it started or raced into reaches it (haus#39).
 func (l *live) events(w http.ResponseWriter, r *http.Request) {
 	fl, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "no streaming", http.StatusInternalServerError)
 		return
 	}
+	me := &listener{device: deviceOf(r), ch: make(chan []byte, 64), kick: make(chan struct{})}
+	l.join(me)
+	defer l.leave(me)
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
 	fl.Flush()
-	me := &listener{device: deviceOf(r), ch: make(chan []byte, 64), kick: make(chan struct{})}
-	l.join(me)
-	defer l.leave(me)
 	tick := time.NewTicker(l.ping)
 	defer tick.Stop()
 	for {
