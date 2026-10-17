@@ -55,6 +55,9 @@ func Schalten(cfg StartConfig) http.HandlerFunc {
 			return
 		}
 		id, do := r.PostForm.Get("geraet"), r.PostForm.Get("tun")
+		if pageDoes[do] || do == allLightsOff && id == "" {
+			cfg.Usage.Count("schalten." + do) // what was pressed, never on what or by whom (haus#50)
+		}
 		back := backTo(r.PostForm.Get("zurueck"))
 		var err error
 		switch {

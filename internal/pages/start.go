@@ -23,6 +23,7 @@ import (
 	"github.com/mdopp/haus/internal/notes"
 	"github.com/mdopp/haus/internal/paperless"
 	"github.com/mdopp/haus/internal/qmd"
+	"github.com/mdopp/haus/internal/usage"
 )
 
 // StartConfig is what the family's pages read (Start, Räume, Kalender,
@@ -43,6 +44,7 @@ type StartConfig struct {
 	Bote      *bote.Client      // the Sprechen field's (haus#12); nil: no field, no tab
 	Loc       *time.Location    // the house's time zone; default time.Local
 	Now       func() time.Time  // for the tests; default time.Now
+	Usage     *usage.Counter    // what the family uses, anonymously (haus#50); nil: nothing counted
 }
 
 // backendWait is how long a page waits for any one backend: a slow one
