@@ -512,8 +512,9 @@ the five most used things, what this box has and nobody or hardly anybody
 used (*nie*), which plain lines the family saw where, the Bote's turns,
 unanswered turns and most used tools (app `bote`: `zug`, `unbeantwortet`,
 `werkzeug.<server>.<tool>` and Hermes' own `werkzeug.<tool>`, counted by
-laib's Bote template, laib#275; shown as *Haushalt: kalender*, *Geräte:
-turnoff*, *Gedächtnis*) and the voice's
+laib's Bote template, laib#275; shown as what was done, never a tool's
+name: *Termine nachgesehen*, *Geräte ausgeschaltet*, *Gedächtnis*; a tool
+not known yet as *Sonst etwas im Haushalt* or *Ein anderes Werkzeug*) and the voice's
 numbers, and the sentences nobody could answer (*im Chat*, *per Stimme*;
 kept 30 days, without names). usage-metrics not answering is one plain
 line; nothing counted yet says so and since when Haus counts.

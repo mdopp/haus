@@ -215,30 +215,52 @@ func eventSays(event string) string {
 	return ""
 }
 
-// toolServers and ownTools are the Bote's tools in the admin's words:
+// toolWords are the Bote's tools in the admin's words, never their names:
 // laib's plugin counts werkzeug.<server>.<tool> from Hermes'
 // mcp__<server>__<tool>, and Hermes' own tools without a server (laib#275).
-var toolServers = map[string]string{"haushalt": "Haushalt", "ha": "Geräte", "laib": "Box", "frage": "Websuche", "automat": "Automationen"}
-var ownTools = map[string]string{"memory": "Gedächtnis", "todo": "Aufgabenliste", "session_search": "Gesprächssuche", "clarify": "Rückfrage"}
+// HA's Assist intents arrive lower-case with their leading hass, laib's
+// verbs with their laib_.
+var toolWords = map[string]string{
+	"haushalt.termine": "Termine nachgesehen", "haushalt.termin_anlegen": "Termin eingetragen",
+	"haushalt.erinnerungen": "Erinnerungen nachgesehen", "haushalt.erinnerung_anlegen": "Erinnerung angelegt",
+	"haushalt.notiz_anlegen": "Notiz angelegt", "haushalt.notiz_lesen": "Notiz gelesen",
+	"haushalt.notizen_suchen": "In den Notizen gesucht", "haushalt.notizen_finden": "In den Notizen gesucht",
+	"haushalt.dokumente_suchen": "Dokumente gesucht", "haushalt.kontakte_suchen": "Kontakte gesucht",
+	"haushalt.kontakt_lesen": "Kontakt nachgesehen", "haushalt.kontakt_anlegen": "Kontakt angelegt",
+	"ha.hassturnon": "Geräte eingeschaltet", "ha.hassturnoff": "Geräte ausgeschaltet", "ha.hasstoggle": "Geräte umgeschaltet",
+	"ha.hasslightset": "Licht eingestellt", "ha.hasssetposition": "Rollläden bewegt", "ha.hasssetvolume": "Lautstärke geändert",
+	"ha.hassmediapause": "Musik angehalten", "ha.hassmediaunpause": "Musik weitergespielt", "ha.hassmedianext": "Nächstes Lied",
+	"ha.hassclimatesettemperature": "Heizung eingestellt", "ha.hassclimategettemperature": "Temperatur nachgesehen",
+	"ha.hassgetstate": "Nachgesehen, was im Haus an ist", "ha.getlivecontext": "Nachgesehen, was im Haus an ist",
+	"ha.hassstarttimer": "Timer gestellt",
+	"laib.status":       "Wie es der Box geht", "laib.inbox": "Offene Vorschläge nachgesehen", "laib.journal": "Im Box-Tagebuch nachgesehen",
+	"laib.propose": "Der Box etwas vorgeschlagen", "laib.note": "Der Box etwas notiert", "laib.escalate": "Claude gefragt",
+	"laib.wish": "Einen Wunsch notiert", "laib.diag": "Die Box geprüft", "laib.logs": "In die Protokolle geschaut",
+	"frage.frage":        "Im Netz gesucht",
+	"automat.entitaeten": "Geräte für Automationen nachgesehen", "automat.automationen": "Automationen nachgesehen",
+	"automat.automation_lesen": "Automation gelesen", "automat.automation_schreiben": "Automation geschrieben",
+	"automat.automation_loeschen": "Automation gelöscht", "automat.automation_schalten": "Automation an- oder ausgeschaltet",
+	"memory": "Gedächtnis", "todo": "Aufgabenliste", "session_search": "Frühere Gespräche durchsucht", "clarify": "Zurückgefragt",
+}
 
-// toolSays is a Bote tool as the admin reads it: "Haushalt: kalender",
-// "Geräte: turnoff" (HA's Assist intents lose their leading hass),
-// "Gedächtnis"; an unknown server as it is, underscores as spaces.
+// otherOf is a server's tool that toolWords does not know yet: still no name.
+var otherOf = map[string]string{"haushalt": "Sonst etwas im Haushalt", "ha": "Sonst etwas an den Geräten", "laib": "Sonst etwas an der Box",
+	"frage": "Im Netz gesucht", "automat": "Sonst etwas an den Automationen"}
+
+// toolSays is a Bote tool as the admin reads it: what was done, in German
+// words, never the tool's name.
 func toolSays(tool string) string {
-	server, name, ok := strings.Cut(tool, ".")
-	if !ok {
-		if s := ownTools[tool]; s != "" {
-			return s
-		}
-		return strings.ReplaceAll(tool, "_", " ")
+	server, name, _ := strings.Cut(tool, ".")
+	if server == "laib" {
+		tool = "laib." + strings.TrimPrefix(name, "laib_")
 	}
-	if server == "ha" {
-		name = strings.TrimPrefix(name, "hass")
+	if s := toolWords[tool]; s != "" {
+		return s
 	}
-	if s := toolServers[server]; s != "" {
-		server = s
+	if s := otherOf[server]; s != "" && name != "" {
+		return s
 	}
-	return server + ": " + strings.ReplaceAll(name, "_", " ")
+	return "Ein anderes Werkzeug"
 }
 
 const usageDays = 30
