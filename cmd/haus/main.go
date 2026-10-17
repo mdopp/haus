@@ -9,6 +9,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 	_ "time/tzdata" // the image is scratch: TZ needs the zone database inside the binary
 
@@ -23,6 +25,7 @@ import (
 	"github.com/mdopp/haus/internal/pages"
 	"github.com/mdopp/haus/internal/persona"
 	"github.com/mdopp/haus/internal/samba"
+	"github.com/mdopp/haus/internal/usage"
 	"github.com/mdopp/haus/internal/werkstatt"
 )
 
@@ -49,12 +52,15 @@ type site struct {
 	bote        *bote.Client       // haus#12: the Sprechen field's Bote; nil, no field
 	samba       *samba.Dir         // haus#52: the network drive's passwords; nil, no page
 	sambaHost   string
+	usage       *usage.Counter // haus#50: what the family uses, anonymously; nil, nothing counted
+	voice       *usage.Voice   // haus#50: the voice control's runs from HA; nil, not counted
 }
 
 // routes is Haus's whole surface: /napi for the app, /mcp/haushalt for the
 // Bote, and the pages behind the proxy secret.
 func routes(s site) http.Handler {
 	mux := http.NewServeMux()
+	s.napi.Usage = s.usage
 	mux.Handle("/napi/", napi.Handler(s.napi))
 	// the Bote's bearer, not the proxy secret: the Bote calls the host port from its pod
 	// (laib ADR 0012 §4; the template publishes 8650 lan:false, the firewall keeps
@@ -65,7 +71,7 @@ func routes(s site) http.Handler {
 	// page whose backend is not set lands on Start
 	family := pages.StartConfig{Laib: s.ops, LaibURL: s.laibURL, HA: s.napi.HA, Energy: s.napi.Energy, Calendar: s.hh.Calendar, Contacts: s.hh.Contacts,
 		Notes: s.hh.Notes, Library: s.hh.Library, Judge: s.hh.Judge, Docs: s.hh.Documents, Loc: s.hh.Loc, Favorites: s.favorites, Bote: s.bote,
-		Samba: s.samba, SambaHost: s.sambaHost}
+		Samba: s.samba, SambaHost: s.sambaHost, Usage: s.usage}
 	pagesMux.HandleFunc("/start", pages.Start(family))
 	pagesMux.HandleFunc("/raeume", pages.Raeume(family))
 	pagesMux.HandleFunc("/energie", pages.Energie(family))
@@ -84,14 +90,16 @@ func routes(s site) http.Handler {
 	pagesMux.HandleFunc("/sprechen", pages.Sprechen(family))         // the Sprechen field to the Bote, and its reply (haus#12)
 	pagesMux.HandleFunc("/netzlaufwerk", pages.Netzlaufwerk(family)) // each person's network-drive password (haus#52)
 	pagesMux.HandleFunc("/schrift/", pages.Font())                   // Geist, from Haus itself (haus#35)
-	pagesMux.HandleFunc("/box", pages.BoxWith(s.ops, s.laibURL, s.tickets))
+	box := pages.BoxPage(pages.BoxConfig{Laib: s.ops, LaibURL: s.laibURL, Tickets: s.tickets, Family: family, Voice: s.voice})
+	pagesMux.HandleFunc("/box", box)
 	pagesMux.HandleFunc("/box/geraete", pages.Geraete(s.store, s.publicURL))
 	pagesMux.HandleFunc("/pair-device", pages.PairDevice(s.store)) // the app's own pairing path (haus#6)
-	pagesMux.HandleFunc("/box/", pages.BoxWith(s.ops, s.laibURL, s.tickets))
+	pagesMux.HandleFunc("/box/", box)
 	pagesMux.HandleFunc("/persona/icon.svg", pages.Icon())
 	pagesMux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
 	pagesMux.HandleFunc("/", pages.Elsewhere(family)) // "/" is Start; every path not served is a 404 with the way there
-	mux.Handle("/", pages.RequireProxy(s.proxySecret, pagesMux))
+	// counted behind the proxy secret: only what Caddy let through is a page view (haus#50)
+	mux.Handle("/", pages.RequireProxy(s.proxySecret, pages.Counted(s.usage, pagesMux)))
 	return mux
 }
 
@@ -143,10 +151,34 @@ func main() {
 	}
 	laibURL := env("LAIB_PUBLIC_URL", "https://laib."+env("LAIB_DOMAIN", "example"))
 	b := bote.FromEnv() // the Sprechen field (haus#12): with the Bote's key only (laib#215)
+	// haus#50: counted for usage-metrics, flushed every five minutes; the voice
+	// from HA's Assist runs every minute, as HA keeps only the last ten
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, os.Interrupt)
+	defer stop()
+	counter := usage.FromEnv(os.Getenv)
+	var voice *usage.Voice
+	if counter != nil && cfg.HA != nil {
+		voice = &usage.Voice{HA: cfg.HA, Counter: counter, Since: time.Now(), Log: log.Printf}
+	}
+	flushed := make(chan struct{})
+	go func() { counter.Run(ctx, 5*time.Minute); close(flushed) }()
+	go voice.Run(ctx, time.Minute)
 	mux := routes(site{napi: cfg, hh: hh, store: store, ops: ops, proxySecret: proxySecret, laibURL: laibURL,
 		publicURL: os.Getenv("HAUS_PUBLIC_URL"), tickets: werkstatt.FromEnv(), favorites: favoriten.Open(dataDir), bote: b,
-		samba: samba.FromEnv(), sambaHost: os.Getenv("HAUS_SAMBA_HOST")})
+		samba: samba.FromEnv(), sambaHost: os.Getenv("HAUS_SAMBA_HOST"),
+		usage: counter, voice: voice})
 	addr := env("HAUS_LISTEN", "127.0.0.1:8650")
-	log.Printf("haus %s: listening on %s as %s, laib %s, home assistant %v, haushalt %d tools, memory library %v (tidy-up %v), uploads %q, the Bote %v, pages only behind the proxy secret", Version, addr, pages.House.Display, ops.URL, cfg.HA != nil, len(haushalt.Tools(hh)), hh.Library != nil, hh.Judge != nil, cfg.UploadDir, b != nil)
-	log.Fatal((&http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}).ListenAndServe())
+	log.Printf("haus %s: listening on %s as %s, laib %s, home assistant %v, haushalt %d tools, memory library %v (tidy-up %v), uploads %q, the Bote %v, counting %v (voice %v), pages only behind the proxy secret", Version, addr, pages.House.Display, ops.URL, cfg.HA != nil, len(haushalt.Tools(hh)), hh.Library != nil, hh.Judge != nil, cfg.UploadDir, b != nil, counter != nil, voice != nil)
+	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
+	go func() {
+		<-ctx.Done()
+		shut, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		srv.Shutdown(shut)
+	}()
+	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
+		log.Fatal(err)
+	}
+	stop()
+	<-flushed // the last counts go out before Haus does
 }

@@ -142,6 +142,7 @@ func pin(w http.ResponseWriter, r *http.Request, cfg StartConfig, id string) {
 		http.Error(w, "Anheften kennt nur an und aus.", http.StatusBadRequest)
 		return
 	}
+	cfg.Usage.Count("stern." + r.PostForm.Get("stern"))
 	back, backText := cards.ThingPage(id), "Zurück zum Gerät"
 	if z := r.PostForm.Get("zurueck"); inRaeume.MatchString(z) {
 		back, backText = z, "Zurück zu den Räumen"

@@ -117,6 +117,7 @@ func Sprechen(cfg StartConfig) http.HandlerFunc {
 				missing{http.StatusOK, saysDown(House.Display), "Sprechen", "/start", "Zurück zu Start"}.write(w, r, cfg)
 				return
 			}
+			cfg.Usage.Count("sprechen.senden") // that one was sent, never what (haus#50)
 			// leaving the page does not stop the turn (Hermes runs it on): Haus
 			// waits on for the reply and keeps it, only boteWait ends the wait
 			ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), boteWait)

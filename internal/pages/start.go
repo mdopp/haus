@@ -24,6 +24,7 @@ import (
 	"github.com/mdopp/haus/internal/paperless"
 	"github.com/mdopp/haus/internal/qmd"
 	"github.com/mdopp/haus/internal/samba"
+	"github.com/mdopp/haus/internal/usage"
 )
 
 // StartConfig is what the family's pages read (Start, Räume, Kalender,
@@ -46,6 +47,7 @@ type StartConfig struct {
 	SambaHost string            // the box's address in the house, shown as \\<host>\data; empty: no how-to
 	Loc       *time.Location    // the house's time zone; default time.Local
 	Now       func() time.Time  // for the tests; default time.Now
+	Usage     *usage.Counter    // what the family uses, anonymously (haus#50); nil: nothing counted
 }
 
 // backendWait is how long a page waits for any one backend: a slow one

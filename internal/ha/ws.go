@@ -243,6 +243,7 @@ func (w *wsConn) result(id int, out any) error {
 			Success bool            `json:"success"`
 			Result  json.RawMessage `json:"result"`
 			Error   struct {
+				Code    string `json:"code"`
 				Message string `json:"message"`
 			} `json:"error"`
 		}
@@ -251,6 +252,9 @@ func (w *wsConn) result(id int, out any) error {
 		}
 		if m.ID != id || m.Type != "result" {
 			continue
+		}
+		if !m.Success && m.Error.Code == "unauthorized" {
+			return fmt.Errorf("ha: command %d: %w", id, ErrNotAdmin)
 		}
 		if !m.Success {
 			return fmt.Errorf("ha: command %d: %s", id, m.Error.Message)
