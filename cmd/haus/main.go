@@ -22,6 +22,7 @@ import (
 	"github.com/mdopp/haus/internal/napi"
 	"github.com/mdopp/haus/internal/pages"
 	"github.com/mdopp/haus/internal/persona"
+	"github.com/mdopp/haus/internal/samba"
 	"github.com/mdopp/haus/internal/werkstatt"
 )
 
@@ -46,6 +47,8 @@ type site struct {
 	tickets     *werkstatt.Tickets // haus#15: the Werkstatt card; nil, no card
 	favorites   *favoriten.Store   // haus#12, haus#35: each person's things on Start, pinned with ☆
 	bote        *bote.Client       // haus#12: the Sprechen field's Bote; nil, no field
+	samba       *samba.Dir         // haus#52: the network drive's passwords; nil, no page
+	sambaHost   string
 }
 
 // routes is Haus's whole surface: /napi for the app, /mcp/haushalt for the
@@ -61,7 +64,8 @@ func routes(s site) http.Handler {
 	// the family's pages (haus#12): each card only from a backend that is set; a
 	// page whose backend is not set lands on Start
 	family := pages.StartConfig{Laib: s.ops, LaibURL: s.laibURL, HA: s.napi.HA, Energy: s.napi.Energy, Calendar: s.hh.Calendar, Contacts: s.hh.Contacts,
-		Notes: s.hh.Notes, Library: s.hh.Library, Judge: s.hh.Judge, Docs: s.hh.Documents, Loc: s.hh.Loc, Favorites: s.favorites, Bote: s.bote}
+		Notes: s.hh.Notes, Library: s.hh.Library, Judge: s.hh.Judge, Docs: s.hh.Documents, Loc: s.hh.Loc, Favorites: s.favorites, Bote: s.bote,
+		Samba: s.samba, SambaHost: s.sambaHost}
 	pagesMux.HandleFunc("/start", pages.Start(family))
 	pagesMux.HandleFunc("/raeume", pages.Raeume(family))
 	pagesMux.HandleFunc("/energie", pages.Energie(family))
@@ -75,10 +79,11 @@ func routes(s site) http.Handler {
 	pagesMux.HandleFunc(cards.ReminderPages, pages.Erinnerung(family))
 	pagesMux.HandleFunc(cards.ContactPages, pages.Kontakt(family))
 	pagesMux.HandleFunc(cards.DocumentPages, pages.Dokument(family))
-	pagesMux.HandleFunc(cards.NotePages, pages.Notizen(family))   // a note's own page
-	pagesMux.HandleFunc(cards.SwitchPath, pages.Schalten(family)) // a page's switch, the widgets' rule (haus#35)
-	pagesMux.HandleFunc("/sprechen", pages.Sprechen(family))      // the Sprechen field to the Bote, and its reply (haus#12)
-	pagesMux.HandleFunc("/schrift/", pages.Font())                // Geist, from Haus itself (haus#35)
+	pagesMux.HandleFunc(cards.NotePages, pages.Notizen(family))      // a note's own page
+	pagesMux.HandleFunc(cards.SwitchPath, pages.Schalten(family))    // a page's switch, the widgets' rule (haus#35)
+	pagesMux.HandleFunc("/sprechen", pages.Sprechen(family))         // the Sprechen field to the Bote, and its reply (haus#12)
+	pagesMux.HandleFunc("/netzlaufwerk", pages.Netzlaufwerk(family)) // each person's network-drive password (haus#52)
+	pagesMux.HandleFunc("/schrift/", pages.Font())                   // Geist, from Haus itself (haus#35)
 	pagesMux.HandleFunc("/box", pages.BoxWith(s.ops, s.laibURL, s.tickets))
 	pagesMux.HandleFunc("/box/geraete", pages.Geraete(s.store, s.publicURL))
 	pagesMux.HandleFunc("/pair-device", pages.PairDevice(s.store)) // the app's own pairing path (haus#6)
@@ -139,7 +144,8 @@ func main() {
 	laibURL := env("LAIB_PUBLIC_URL", "https://laib."+env("LAIB_DOMAIN", "example"))
 	b := bote.FromEnv() // the Sprechen field (haus#12): with the Bote's key only (laib#215)
 	mux := routes(site{napi: cfg, hh: hh, store: store, ops: ops, proxySecret: proxySecret, laibURL: laibURL,
-		publicURL: os.Getenv("HAUS_PUBLIC_URL"), tickets: werkstatt.FromEnv(), favorites: favoriten.Open(dataDir), bote: b})
+		publicURL: os.Getenv("HAUS_PUBLIC_URL"), tickets: werkstatt.FromEnv(), favorites: favoriten.Open(dataDir), bote: b,
+		samba: samba.FromEnv(), sambaHost: os.Getenv("HAUS_SAMBA_HOST")})
 	addr := env("HAUS_LISTEN", "127.0.0.1:8650")
 	log.Printf("haus %s: listening on %s as %s, laib %s, home assistant %v, haushalt %d tools, memory library %v (tidy-up %v), uploads %q, the Bote %v, pages only behind the proxy secret", Version, addr, pages.House.Display, ops.URL, cfg.HA != nil, len(haushalt.Tools(hh)), hh.Library != nil, hh.Judge != nil, cfg.UploadDir, b != nil)
 	log.Fatal((&http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}).ListenAndServe())

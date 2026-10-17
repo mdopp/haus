@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -63,7 +64,7 @@ func TestNetzlaufwerkSaysWhatItIsAndWhetherYouHaveOne(t *testing.T) {
 func TestNetzlaufwerkSetsYourOwnAndOnlyAnAdminSomeoneElses(t *testing.T) {
 	var logs bytes.Buffer
 	log.SetOutput(&logs)
-	defer log.SetOutput(nil)
+	defer log.SetOutput(os.Stderr)
 	fs, cfg := netzlaufwerk(t, true)
 	h := Netzlaufwerk(cfg)
 	pw := "Unser Haus 2026!"

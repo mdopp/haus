@@ -23,6 +23,7 @@ import (
 	"github.com/mdopp/haus/internal/notes"
 	"github.com/mdopp/haus/internal/paperless"
 	"github.com/mdopp/haus/internal/qmd"
+	"github.com/mdopp/haus/internal/samba"
 )
 
 // StartConfig is what the family's pages read (Start, Räume, Kalender,
@@ -41,6 +42,8 @@ type StartConfig struct {
 	Docs      *paperless.Client // a document's page sends on to Paperless (haus#28)
 	Favorites *favoriten.Store  // each person's things on Start (laib ADR 0017), pinned with ☆ (haus#35)
 	Bote      *bote.Client      // the Sprechen field's (haus#12); nil: no field, no tab
+	Samba     *samba.Dir        // the network drive's passwords (haus#52, laib#296); nil: no page
+	SambaHost string            // the box's address in the house, shown as \\<host>\data; empty: no how-to
 	Loc       *time.Location    // the house's time zone; default time.Local
 	Now       func() time.Time  // for the tests; default time.Now
 }
@@ -139,6 +142,7 @@ func Start(cfg StartConfig) http.HandlerFunc {
 			b.WriteString(agenda(events, evErr, todos, todoErr, now, loc).HTML())
 		}
 		b.WriteString(bottom)
+		b.WriteString(toNetzlaufwerk(cfg.Samba, person))
 		writePage(w, http.StatusOK, b)
 	}
 }

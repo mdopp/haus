@@ -444,6 +444,19 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   einmal.*, the error in the log. Over 1000 characters is refused plainly;
   empty sends nothing.
 
+- The Netzlaufwerk page (haus#52, laib#296): `/netzlaufwerk`, linked from
+  Start for a family member or admin (a to-do card while they have no
+  password, a quiet link after). Each person sets their own password for the
+  network drive (Samba): what it is for, how to connect (`\\<HAUS_SAMBA_HOST>\data`,
+  `smb://…/data`), that it may equal their family password. An admin sees
+  everyone's state, sets a new one for anyone or removes one. Until a person
+  sets one they have none. `POST /netzlaufwerk` takes it only from a person on
+  Haus's own page (#35's rule), for themselves or, as an admin, for anyone;
+  package `samba` writes one line (`set <name> <base64>`, `clear <name>`) into
+  file-share's FIFO in `HAUS_SAMBA_DIR` (non-blocking, never into a plain
+  file: no reader is "antwortet gerade nicht") and waits for its `status`.
+  The password is never logged, stored or echoed. Unset: no page, no link.
+
 Not yet: Start's *Häufig genutzt*; dictation in Notizen, timers in
 Kalender.
 
@@ -466,7 +479,8 @@ HAUS_PAPERLESS_URL=http://host.containers.internal:8000 HAUS_PAPERLESS_TOKEN=<a 
 HAUS_PAPERLESS_PUBLIC_URL=https://paperless.<domain> HAUS_NOTES_DIR=/notes \
 HAUS_QMD_URL=http://127.0.0.1:8181 HAUS_QMD_DOCUMENTS=dokumente HAUS_DOCUMENTS_DIR=/dokumente HAUS_UPLOAD_DIR=/consume \
 HAUS_LLM_URL=http://host.containers.internal:11435/v1 HAUS_LLM_MODEL=gemma-4-e4b HAUS_LLM_KEY=<the model key> \
-HAUS_BOTE_URL=http://host.containers.internal:8642/v1 HAUS_BOTE_KEY=<the Bote's API_SERVER_KEY> ./haus
+HAUS_BOTE_URL=http://host.containers.internal:8642/v1 HAUS_BOTE_KEY=<the Bote's API_SERVER_KEY> \
+HAUS_SAMBA_DIR=/samba-accounts HAUS_SAMBA_HOST=<the box's LAN address> ./haus
 ```
 
 `HAUS_DATA` (default `/data`) holds `devices.json` and `favoriten.json`; `HAUS_PUBLIC_URL` is the
