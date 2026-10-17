@@ -226,7 +226,7 @@ func aMonth(fake *usagefake.Fake) {
 	fake.SetSummary(map[string]any{"days": 30, "from": "2026-09-17", "total": 300, "knownApps": []string{"bote", "haus", "stimme"},
 		"apps": []any{
 			map[string]any{"app": "bote", "total": 61, "events": []any{
-				map[string]any{"event": "unbeantwortet", "count": 3}, map[string]any{"event": "werkzeug.haushalt.kalender", "count": 12},
+				map[string]any{"event": "unbeantwortet", "count": 3}, map[string]any{"event": "werkzeug.haushalt.termine", "count": 12},
 				map[string]any{"event": "werkzeug.ha.hassturnoff", "count": 6}, map[string]any{"event": "werkzeug.memory", "count": 5},
 				map[string]any{"event": "werkzeug.laib.status", "count": 1}, map[string]any{"event": "zug", "count": 40}}},
 			map[string]any{"app": "haus", "total": 200, "events": []any{
@@ -258,7 +258,7 @@ func TestBoxCardWhatIsUsed(t *testing.T) {
 		"Am meisten genutzt", "Start geöffnet", "120", "Räume geöffnet", "Licht ausgeschaltet", "17", "Vom Widget „Gerät“ aus geöffnet",
 		"Kaum oder nie genutzt", "Kalender geöffnet", "Energie geöffnet",
 		"Was nicht antwortete", saysNoHouse, "auf Start", "4×",
-		"Im Chat", "40 Anfragen", "3 davon nicht beantwortet", "Haushalt: kalender (12)", "Geräte: turnoff (6)", "Gedächtnis (5)",
+		"Im Chat", "40 Anfragen", "3 davon nicht beantwortet", "Termine nachgesehen (12)", "Geräte ausgeschaltet (6)", "Gedächtnis (5)",
 		"Per Stimme", "30 hat Home Assistant selbst verstanden", "5 an die KI weitergereicht", "4 hat niemand verstanden",
 		"Was niemand beantworten konnte", "Wann kommt der Müll?", "9×", "im Chat", "Mach die &lt;Musik&gt; lauter", "per Stimme", "30 Tage", "ohne Namen",
 		"Was läuft"} {
@@ -349,22 +349,35 @@ func TestBoxCardSaysWhyVoiceIsNotCounted(t *testing.T) {
 // without a server; the card says the server in words.
 func TestBoteToolsInWords(t *testing.T) {
 	for event, want := range map[string]string{
-		"werkzeug.haushalt.kalender":      "Haushalt: kalender",
-		"werkzeug.haushalt.notiz_anlegen": "Haushalt: notiz anlegen",
-		"werkzeug.ha.hassturnoff":         "Geräte: turnoff",
-		"werkzeug.ha.getlivecontext":      "Geräte: getlivecontext",
-		"werkzeug.laib.status":            "Box: status",
-		"werkzeug.frage.frage":            "Websuche: frage",
-		"werkzeug.automat.entitaeten":     "Automationen: entitaeten",
-		"werkzeug.memory":                 "Gedächtnis",
-		"werkzeug.todo":                   "Aufgabenliste",
-		"werkzeug.session_search":         "Gesprächssuche",
-		"werkzeug.clarify":                "Rückfrage",
-		"werkzeug.neu.etwas_tun":          "neu: etwas tun",
-		"werkzeug.eigenes_werkzeug":       "eigenes werkzeug",
+		"werkzeug.haushalt.termine":             "Termine nachgesehen",
+		"werkzeug.haushalt.termin_anlegen":      "Termin eingetragen",
+		"werkzeug.haushalt.notiz_anlegen":       "Notiz angelegt",
+		"werkzeug.haushalt.notizen_suchen":      "In den Notizen gesucht",
+		"werkzeug.haushalt.dokumente_suchen":    "Dokumente gesucht",
+		"werkzeug.haushalt.kontakte_suchen":     "Kontakte gesucht",
+		"werkzeug.ha.hassturnoff":               "Geräte ausgeschaltet",
+		"werkzeug.ha.hassturnon":                "Geräte eingeschaltet",
+		"werkzeug.ha.getlivecontext":            "Nachgesehen, was im Haus an ist",
+		"werkzeug.laib.laib_status":             "Wie es der Box geht",
+		"werkzeug.laib.laib_propose":            "Der Box etwas vorgeschlagen",
+		"werkzeug.frage.frage":                  "Im Netz gesucht",
+		"werkzeug.automat.automation_schreiben": "Automation geschrieben",
+		"werkzeug.memory":                       "Gedächtnis",
+		"werkzeug.todo":                         "Aufgabenliste",
+		"werkzeug.session_search":               "Frühere Gespräche durchsucht",
+		"werkzeug.clarify":                      "Zurückgefragt",
+		"werkzeug.haushalt.neu_dazu":            "Sonst etwas im Haushalt",
+		"werkzeug.ha.hassirgendwas":             "Sonst etwas an den Geräten",
+		"werkzeug.neu.etwas_tun":                "Ein anderes Werkzeug",
+		"werkzeug.eigenes_werkzeug":             "Ein anderes Werkzeug",
 	} {
-		if got := toolSays(strings.TrimPrefix(event, "werkzeug.")); got != want {
+		got := toolSays(strings.TrimPrefix(event, "werkzeug."))
+		if got != want {
 			t.Errorf("%s → %q, want %q", event, got, want)
+		}
+		_, name, _ := strings.Cut(strings.TrimPrefix(event, "werkzeug."), ".")
+		if strings.ContainsAny(got, "_:") || name != "" && strings.EqualFold(got, strings.ReplaceAll(name, "_", " ")) {
+			t.Errorf("%s shows the tool's name, not what was done: %q", event, got)
 		}
 	}
 }
