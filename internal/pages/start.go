@@ -48,6 +48,8 @@ type StartConfig struct {
 	Loc       *time.Location    // the house's time zone; default time.Local
 	Now       func() time.Time  // for the tests; default time.Now
 	Usage     *usage.Counter    // what the family uses, anonymously (haus#50); nil: nothing counted
+	PublicURL string            // Haus's own address, https://haus.<domain>: the apps' addresses on Willkommen (haus#56)
+	Welcome   bool              // Start sends a person to Willkommen the first time a device opens it (haus#56)
 }
 
 // backendWait is how long a page waits for any one backend: a slow one
@@ -81,7 +83,7 @@ const (
 // log, not on the page.
 func Start(cfg StartConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !showOnly(w, r, "Die Startseite") {
+		if !showOnly(w, r, "Die Startseite") || firstVisit(w, r, cfg) {
 			return
 		}
 		now, loc := cfg.clock()
@@ -145,6 +147,7 @@ func Start(cfg StartConfig) http.HandlerFunc {
 		}
 		b.WriteString(bottom)
 		b.WriteString(toNetzlaufwerk(cfg.Samba, person))
+		b.WriteString(toWillkommen(cfg))
 		writePage(w, http.StatusOK, b)
 	}
 }

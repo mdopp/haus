@@ -90,6 +90,7 @@ func TestSIGTERMFlushes(t *testing.T) {
 		req, _ := http.NewRequest("GET", "http://"+addr+"/start", nil)
 		req.Header.Set("X-Haus-Proxy", "geheim")
 		req.Header.Set("Remote-User", "anna")
+		req.AddCookie(&http.Cookie{Name: "haus_willkommen", Value: "gesehen"}) // not the first visit: Start, not Willkommen (haus#56)
 		if resp, err = http.DefaultClient.Do(req); err == nil {
 			break
 		}

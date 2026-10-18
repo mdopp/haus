@@ -78,10 +78,7 @@ type BoxConfig struct {
 
 // BoxPage is the Box page with all its cards.
 func BoxPage(cfg BoxConfig) http.HandlerFunc {
-	c, laibURL, tickets := cfg.Laib, cfg.LaibURL, cfg.Tickets
 	return func(w http.ResponseWriter, r *http.Request) {
-		user := r.Header.Get("Remote-User")
-		ctx := r.Context()
 		if r.Method == http.MethodPost {
 			http.Error(w, "Haus entscheidet nichts: Freigeben und Ablehnen gibt es nur auf der Laib-Seite", http.StatusForbidden)
 			return
@@ -89,72 +86,85 @@ func BoxPage(cfg BoxConfig) http.HandlerFunc {
 		if !adminOnly(w, r) {
 			return
 		}
-		ready, rows, err := c.Status(ctx)
-		var b strings.Builder
-		b.WriteString(head("Box"))
-		b.WriteString("<nav><a href=/box>Box</a><a href=/box/geraete>Geräte</a></nav>")
-		if err != nil {
-			fmt.Fprintf(&b, "<h1>Box</h1><p class=rot>Laib antwortet nicht: %s</p>", html.EscapeString(err.Error()))
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			w.Write([]byte(b.String()))
-			return
-		}
-		// the three guarantees, for everyone in the family (haus#2)
-		b.WriteString(guarantees(ready, rows, isAdmin(r), laibURL))
-		fmt.Fprintf(&b, "<h1>Box · <span class=%s>%s</span> <span class=k>· %d Dienste · %d grün · %d gelb · %d rot · Drift %d</span></h1>",
-			readyClass(ready), html.EscapeString(ready.State), ready.Services, ready.Green, ready.Yellow, ready.Red, ready.Drift)
-		fmt.Fprintf(&b, "<p>Operator: <span class=%s>%s</span></p>", operatorClass(ready.Operator), html.EscapeString(ready.Operator))
-		if ready.Lock != "" {
-			fmt.Fprintf(&b, "<p class=gelb>gesperrt: %s</p>", html.EscapeString(ready.Lock))
-		}
-		if user != "" {
-			fmt.Fprintf(&b, "<p class=k>angemeldet als %s</p>", html.EscapeString(user))
-		}
-		b.WriteString("<h2>Inbox</h2>")
-		if ps, err := c.Inbox(ctx); err != nil {
-			fmt.Fprintf(&b, "<p class=rot>%s</p>", html.EscapeString(err.Error()))
-		} else if len(ps) == 0 {
-			b.WriteString("<p class=k>leer</p>")
-		} else {
-			b.WriteString("<table>")
-			for _, p := range ps {
-				fmt.Fprintf(&b, "<tr><td class=k>#%d</td><td>%s<br><span class=k>%s · %s · %s · %s</span>", p.ID, html.EscapeString(p.Reason), html.EscapeString(p.Actor), p.Tier, p.Class, p.Created.Format("02.01. 15:04"))
-				for _, why := range p.Reasons {
-					fmt.Fprintf(&b, "<br><span class=gelb>%s</span>", html.EscapeString(why))
-				}
-				b.WriteString("</td></tr>")
+		writeBox(w, r, cfg, http.StatusOK, invitation{})
+	}
+}
+
+// writeBox renders the Box page; inv is what the invite card says after
+// a POST to /box/einladen (haus#56).
+func writeBox(w http.ResponseWriter, r *http.Request, cfg BoxConfig, code int, inv invitation) {
+	c, laibURL, tickets := cfg.Laib, cfg.LaibURL, cfg.Tickets
+	user := r.Header.Get("Remote-User")
+	ctx := r.Context()
+	ready, rows, err := c.Status(ctx)
+	var b strings.Builder
+	b.WriteString(head("Box"))
+	b.WriteString("<nav><a href=/box>Box</a><a href=/box/geraete>Geräte</a></nav>")
+	if err != nil {
+		fmt.Fprintf(&b, "<h1>Box</h1><p class=rot>Laib antwortet nicht: %s</p>", html.EscapeString(err.Error()))
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(code)
+		w.Write([]byte(b.String()))
+		return
+	}
+	// the three guarantees, for everyone in the family (haus#2)
+	b.WriteString(guarantees(ready, rows, isAdmin(r), laibURL))
+	fmt.Fprintf(&b, "<h1>Box · <span class=%s>%s</span> <span class=k>· %d Dienste · %d grün · %d gelb · %d rot · Drift %d</span></h1>",
+		readyClass(ready), html.EscapeString(ready.State), ready.Services, ready.Green, ready.Yellow, ready.Red, ready.Drift)
+	fmt.Fprintf(&b, "<p>Operator: <span class=%s>%s</span></p>", operatorClass(ready.Operator), html.EscapeString(ready.Operator))
+	if ready.Lock != "" {
+		fmt.Fprintf(&b, "<p class=gelb>gesperrt: %s</p>", html.EscapeString(ready.Lock))
+	}
+	if user != "" {
+		fmt.Fprintf(&b, "<p class=k>angemeldet als %s</p>", html.EscapeString(user))
+	}
+	b.WriteString("<h2>Inbox</h2>")
+	if ps, err := c.Inbox(ctx); err != nil {
+		fmt.Fprintf(&b, "<p class=rot>%s</p>", html.EscapeString(err.Error()))
+	} else if len(ps) == 0 {
+		b.WriteString("<p class=k>leer</p>")
+	} else {
+		b.WriteString("<table>")
+		for _, p := range ps {
+			fmt.Fprintf(&b, "<tr><td class=k>#%d</td><td>%s<br><span class=k>%s · %s · %s · %s</span>", p.ID, html.EscapeString(p.Reason), html.EscapeString(p.Actor), p.Tier, p.Class, p.Created.Format("02.01. 15:04"))
+			for _, why := range p.Reasons {
+				fmt.Fprintf(&b, "<br><span class=gelb>%s</span>", html.EscapeString(why))
 			}
-			b.WriteString("</table>")
-			fmt.Fprintf(&b, "<p><a href=\"%s/inbox\">Entscheiden auf der Laib-Seite</a> <span class=k>— die eine Stelle, an der freigegeben wird</span></p>", html.EscapeString(strings.TrimRight(laibURL, "/")))
-		}
-		// the window reaches back to yesterday's report; the journal table stays at 24h
-		es, jerr := c.Journal(ctx, "36h")
-		b.WriteString(morningReport(es, jerr))
-		b.WriteString(usageCard(ctx, cfg.Family, cfg.Voice))
-		if tickets != nil {
-			b.WriteString(werkstattCard(r.Context(), tickets))
-		}
-		b.WriteString("<h2>Was läuft</h2><table>")
-		for _, s := range rows {
-			fmt.Fprintf(&b, "<tr><td class=%s>%s</td><td>%s</td><td class=k>%s</td></tr>", cls(s.State), html.EscapeString(s.State), html.EscapeString(s.Name), html.EscapeString(s.Detail))
-		}
-		b.WriteString("</table><h2>Journal · 24h</h2><table>")
-		if jerr == nil {
-			shown := 0
-			for i := len(es) - 1; i >= 0 && shown < 25; i-- {
-				e := es[i]
-				if time.Since(e.T) > 24*time.Hour {
-					break
-				}
-				shown++
-				fmt.Fprintf(&b, "<tr><td class=k>%s</td><td>%s</td><td>%s</td><td class=%s>%s</td><td class=k>%s</td></tr>", e.T.Local().Format("02.01. 15:04"), html.EscapeString(e.Actor), html.EscapeString(e.Verb+" "+e.Service), result(e.Result), e.Result, html.EscapeString(trim(e.Reason+" "+e.Detail, 90)))
-			}
+			b.WriteString("</td></tr>")
 		}
 		b.WriteString("</table>")
-		fmt.Fprintf(&b, "<p class=k>Stand %s</p>", time.Now().Format("02.01.2006 15:04"))
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Write([]byte(b.String()))
+		fmt.Fprintf(&b, "<p><a href=\"%s/inbox\">Entscheiden auf der Laib-Seite</a> <span class=k>— die eine Stelle, an der freigegeben wird</span></p>", html.EscapeString(strings.TrimRight(laibURL, "/")))
 	}
+	b.WriteString(inviteCard(ctx, c, inv))
+	// the window reaches back to yesterday's report; the journal table stays at 24h
+	es, jerr := c.Journal(ctx, "36h")
+	b.WriteString(morningReport(es, jerr))
+	b.WriteString(usageCard(ctx, cfg.Family, cfg.Voice))
+	if tickets != nil {
+		b.WriteString(werkstattCard(r.Context(), tickets))
+	}
+	b.WriteString("<h2>Was läuft</h2><table>")
+	for _, s := range rows {
+		fmt.Fprintf(&b, "<tr><td class=%s>%s</td><td>%s</td><td class=k>%s</td></tr>", cls(s.State), html.EscapeString(s.State), html.EscapeString(s.Name), html.EscapeString(s.Detail))
+	}
+	b.WriteString("</table><h2>Journal · 24h</h2><table>")
+	if jerr == nil {
+		shown := 0
+		for i := len(es) - 1; i >= 0 && shown < 25; i-- {
+			e := es[i]
+			if time.Since(e.T) > 24*time.Hour {
+				break
+			}
+			shown++
+			fmt.Fprintf(&b, "<tr><td class=k>%s</td><td>%s</td><td>%s</td><td class=%s>%s</td><td class=k>%s</td></tr>", e.T.Local().Format("02.01. 15:04"), html.EscapeString(e.Actor), html.EscapeString(e.Verb+" "+e.Service), result(e.Result), e.Result, html.EscapeString(trim(e.Reason+" "+e.Detail, 90)))
+		}
+	}
+	b.WriteString("</table>")
+	fmt.Fprintf(&b, "<p class=k>Stand %s</p>", time.Now().Format("02.01.2006 15:04"))
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store") // an invitation's link may be on it
+	w.WriteHeader(code)
+	w.Write([]byte(b.String()))
 }
 
 // adminOnly lets admins through and sends everyone else to Start (303):

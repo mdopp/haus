@@ -72,9 +72,14 @@ func (v *Voice) Poll(ctx context.Context) {
 			v.Counter.CountIn(VoiceApp, "weitergereicht")
 		}
 	}
-	for id, at := range v.seen { // a run HA no longer keeps cannot come back
+	// a day-old run is forgotten, and Since moves past it: HA may still
+	// keep it (the last ten, of any age), and it must not count again
+	for id, at := range v.seen {
 		if time.Since(at) > 24*time.Hour {
 			delete(v.seen, id)
+			if !at.Before(v.Since) {
+				v.Since = at.Add(time.Nanosecond)
+			}
 		}
 	}
 }

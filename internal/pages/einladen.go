@@ -1,0 +1,264 @@
+package pages
+
+import (
+	"context"
+	"errors"
+	"html"
+	"log"
+	"net/http"
+	"regexp"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/mdopp/haus/internal/laib"
+)
+
+// What the Box card "Person einladen" says (haus#56, laib#360): an admin
+// invites someone new; Laib makes the account in its group and Authelia
+// mails the set-password link, or Laib hands the link back when the box
+// has no mail. No password passes through Haus.
+const (
+	invitePath        = "/box/einladen"
+	saysInviteWhat    = "Für jemanden, der neu dazukommt: Die Person bekommt ein eigenes Konto für alle Apps der Box und legt ihr Passwort selbst fest. Du siehst es nie."
+	saysUserHint      = "Damit meldet sich die Person an: Kleinbuchstaben, ohne Leerzeichen. Leer lassen, dann wird es der Vorname."
+	saysEmailHint     = "Dorthin schickt die Box den Link, mit dem die Person ihr Passwort festlegt."
+	saysFamilyOnly    = "Haus lädt nur in die Familie ein. Einen weiteren Admin legst du aus Sicherheitsgründen direkt an der Box an: laib person invite <benutzer> … --group admins"
+	saysInviteMissing = "Einladen geht auf dieser Box noch nicht: Laib kann es hier noch nicht. Bis zum nächsten Laib-Update legst du neue Personen wie bisher in LLDAP an."
+	saysNeedFirst     = "Bitte den Vornamen eintragen."
+	saysBadEmail      = "Die E-Mail-Adresse sieht nicht vollständig aus."
+	saysBadUser       = "Der Benutzername darf nur Kleinbuchstaben, Ziffern, Punkt, Bindestrich und Unterstrich haben und muss mit einem Buchstaben anfangen."
+	saysPendingTitle  = "Eingeladen, noch kein Passwort"
+	saysPendingNone   = "Die Liste der Eingeladenen lässt sich gerade nicht lesen."
+	saysWelcomeAfter  = "Nach dem ersten Anmelden zeigt Haus die Seite „Willkommen“: welche Apps es gibt und wie man sie einrichtet."
+)
+
+// invitation is what the card says after a POST: the result, or what
+// went wrong, and the form's values to keep.
+type invitation struct {
+	done    *laib.Invited
+	first   string
+	problem string
+	form    laib.Invite
+}
+
+var userRE = regexp.MustCompile(`^[a-z][a-z0-9._-]{1,31}$`)
+
+// suggestUser is a user name from a first name: lower case, umlauts
+// spelled out, nothing but letters and digits.
+func suggestUser(first string) string {
+	first = strings.ToLower(strings.TrimSpace(first))
+	first = strings.NewReplacer("ä", "ae", "ö", "oe", "ü", "ue", "ß", "ss", "é", "e", "è", "e", "à", "a", "ç", "c").Replace(first)
+	var b strings.Builder
+	for _, c := range first {
+		if c >= 'a' && c <= 'z' || c >= '0' && c <= '9' && b.Len() > 0 {
+			b.WriteRune(c)
+		}
+		if c == ' ' || c == '-' {
+			break // the first of two first names
+		}
+	}
+	return b.String()
+}
+
+// Einladen is the card's form (haus#56): admins only, from Haus's own
+// page only. It passes the invitation to Laib and shows the Box page
+// again with what Laib did; the link, if any, is in that answer only,
+// never in a URL or a log.
+func Einladen(cfg BoxConfig) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Redirect(w, r, "/box", http.StatusSeeOther)
+			return
+		}
+		if !isAdmin(r) {
+			http.Error(w, "Einladen dürfen nur Admins.", http.StatusForbidden)
+			return
+		}
+		if !fromHaus(r) {
+			http.Error(w, "Das geht nur von Haus' eigener Seite.", http.StatusForbidden)
+			return
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, 4<<10)
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "Das Formular ist nicht lesbar.", http.StatusBadRequest)
+			return
+		}
+		f := r.PostForm
+		in := laib.Invite{User: strings.TrimSpace(f.Get("benutzer")), First: oneLine(f.Get("vorname")), Last: oneLine(f.Get("nachname")),
+			Email: strings.TrimSpace(f.Get("email")), Group: "family", Resend: f.Get("erneut") == "1"}
+		inv := invitation{form: in, first: in.First}
+		if inv.first == "" {
+			inv.first = in.User
+		}
+		if in.User == "" && !in.Resend {
+			in.User = suggestUser(in.First)
+		}
+		switch {
+		case in.First == "" && !in.Resend:
+			inv.problem = saysNeedFirst
+		case !userRE.MatchString(in.User):
+			inv.problem = saysBadUser
+		case in.Resend:
+			in.Group = "" // the account is there; the group stays as it is
+		case !strings.Contains(in.Email, "@") || strings.HasSuffix(in.Email, "@") || strings.ContainsAny(in.Email, " \t,;<>"):
+			inv.problem = saysBadEmail
+		}
+		if inv.problem != "" {
+			writeBox(w, r, cfg, http.StatusBadRequest, inv)
+			return
+		}
+		inv.form = in
+		got, err := cfg.Laib.PersonInvite(r.Context(), in)
+		if err != nil {
+			log.Printf("haus: einladen: %s by %s: %v", in.User, r.Header.Get("Remote-User"), err) // no link is in an error
+			inv.problem = inviteProblem(err)
+			code := http.StatusBadGateway
+			if errors.Is(err, laib.ErrNoTool) {
+				code = http.StatusNotImplemented
+			}
+			writeBox(w, r, cfg, code, inv)
+			return
+		}
+		inv.done = &got
+		inv.form = laib.Invite{} // the form is empty again for the next one
+		log.Printf("haus: einladen: %s by %s: mailed %v", in.User, r.Header.Get("Remote-User"), got.Mailed)
+		writeBox(w, r, cfg, http.StatusOK, inv)
+	}
+}
+
+// inviteProblem is Laib's refusal as the admin reads it: its own sentence
+// ("anna gibt es schon"), without the tool's name in front.
+func inviteProblem(err error) string {
+	if errors.Is(err, laib.ErrNoTool) {
+		return saysInviteMissing
+	}
+	msg := err.Error()
+	for _, p := range []string{"laib person_invite: ", "laib: "} {
+		msg = strings.TrimPrefix(msg, p)
+	}
+	return "Nicht eingeladen: " + msg
+}
+
+const inviteStyle = `<style>.einladen label{display:block;margin:.6rem 0 .15rem}.einladen input,.einladen select{font:inherit;width:100%;max-width:26rem;padding:.35rem .5rem;border:1px solid #c9c3b6;border-radius:.4rem;background:#fff;box-sizing:border-box}
+.einladen .k{display:block;font-size:.85rem}.einladen button{margin-top:.8rem}.erfolg{border-left:3px solid #2b7a3d;padding:.2rem .7rem;margin:.6rem 0}.problem{border-left:3px solid #b3261e;padding:.2rem .7rem;margin:.6rem 0}
+.link{display:flex;gap:.4rem;flex-wrap:wrap;max-width:40rem}.link input{flex:1;min-width:12rem;font:13px ui-monospace,Menlo,Consolas,monospace;padding:.35rem .5rem;border:1px solid #c9c3b6;border-radius:.4rem}</style>`
+
+// inviteCard is the Box card: what Laib just did, the form, and who is
+// invited but has no password yet, each with "Erneut senden".
+func inviteCard(ctx context.Context, c *laib.Client, inv invitation) string {
+	var b strings.Builder
+	b.WriteString(inviteStyle + "<h2 id=einladen>Person einladen</h2>")
+	pending, perr := c.PersonPending(ctx)
+	if errors.Is(perr, laib.ErrNoTool) {
+		b.WriteString("<p class=k>" + html.EscapeString(saysInviteMissing) + "</p>")
+		return b.String()
+	}
+	if inv.done != nil {
+		b.WriteString(inviteDone(*inv.done, inv.first))
+	}
+	if inv.problem != "" {
+		b.WriteString("<p class=problem role=alert>" + html.EscapeString(inv.problem) + "</p>")
+	}
+	if inv.problem == saysInviteMissing {
+		return b.String()
+	}
+	f := inv.form
+	if f.Resend { // a failed resend does not fill the form for a new person
+		f = laib.Invite{}
+	}
+	b.WriteString("<p class=k>" + html.EscapeString(saysInviteWhat) + "</p>")
+	b.WriteString("<form class=einladen method=post action=" + invitePath + ">")
+	field := func(id, label, typ, value, extra, hint string) {
+		b.WriteString("<label for=" + id + ">" + label + "</label><input id=" + id + " name=" + id + " type=" + typ + " value=\"" + html.EscapeString(value) + "\"" + extra + ">")
+		if hint != "" {
+			b.WriteString("<span class=k>" + html.EscapeString(hint) + "</span>")
+		}
+	}
+	// the user name follows the first name as a suggestion until the admin types one
+	field("vorname", "Vorname", "text", f.First, " required autocomplete=off oninput=\"var u=document.getElementById('benutzer');u.placeholder=this.value.toLowerCase().replace(/ä/g,'ae').replace(/ö/g,'oe').replace(/ü/g,'ue').replace(/ß/g,'ss').split(/[ -]/)[0].replace(/[^a-z0-9]/g,'')\"", "")
+	field("nachname", "Nachname", "text", f.Last, " autocomplete=off", "")
+	field("benutzer", "Benutzername", "text", f.User, " autocomplete=off autocapitalize=none spellcheck=false pattern=\"[a-z][a-z0-9._\\-]{1,31}\" placeholder=\""+html.EscapeString(suggestUser(f.First))+"\"", saysUserHint)
+	field("email", "E-Mail", "email", f.Email, " required autocomplete=off", saysEmailHint)
+	b.WriteString("<button>Einladen</button></form><p class=k>" + html.EscapeString(saysFamilyOnly) + "</p>")
+	switch {
+	case perr != nil:
+		log.Printf("haus: einladen: pending: %v", perr)
+		b.WriteString("<p class=k>" + html.EscapeString(saysPendingNone) + "</p>")
+	case len(pending) > 0:
+		b.WriteString("<h3>" + html.EscapeString(saysPendingTitle) + "</h3><table>")
+		for _, p := range pending {
+			name := p.Name
+			if name == "" {
+				name = p.User
+			}
+			first, last, _ := strings.Cut(name, " ")
+			since := ""
+			if t, err := time.Parse(time.RFC3339, p.InvitedAt); err == nil {
+				since = "eingeladen am " + dayWords(t, time.Local)
+			}
+			b.WriteString("<tr><td>" + html.EscapeString(name) + "<br><span class=k>" + html.EscapeString(p.User+" · "+p.Email) + "</span></td><td class=k>" + html.EscapeString(since) + "</td><td>" +
+				"<form method=post action=" + invitePath + "><input type=hidden name=erneut value=1>" +
+				"<input type=hidden name=benutzer value=\"" + html.EscapeString(p.User) + "\"><input type=hidden name=email value=\"" + html.EscapeString(p.Email) + "\">" +
+				"<input type=hidden name=vorname value=\"" + html.EscapeString(first) + "\"><input type=hidden name=nachname value=\"" + html.EscapeString(last) + "\">" +
+				"<button aria-label=\"Link an " + html.EscapeString(name) + " erneut senden\">Erneut senden</button></form></td></tr>")
+		}
+		b.WriteString("</table>")
+	}
+	return b.String()
+}
+
+// inviteDone says what Laib did: its own sentence, else Haus's; without
+// mail the link to pass on, with a copy button, and how long it lasts.
+func inviteDone(got laib.Invited, first string) string {
+	if first == "" {
+		first = got.User
+	}
+	say := strings.TrimSpace(got.Message)
+	if say == "" {
+		if got.Mailed {
+			say = first + " bekommt eine Mail mit einem Link, um das eigene Passwort festzulegen."
+		} else {
+			say = "Auf dieser Box ist kein Mailversand eingerichtet. Schick " + first + " den Link unten, zum Beispiel per Signal."
+		}
+	}
+	var b strings.Builder
+	b.WriteString("<div class=erfolg role=status><p><b>" + html.EscapeString(say) + "</b></p>")
+	if got.Link != "" {
+		b.WriteString("<p>Mit diesem Link legt " + html.EscapeString(first) + " das eigene Passwort fest:</p><div class=link><input id=einladelink readonly value=\"" + html.EscapeString(got.Link) + "\" onfocus=\"this.select()\" aria-label=\"Link für " + html.EscapeString(first) + "\">" +
+			"<button type=button onclick=\"var l=document.getElementById('einladelink');l.select();(navigator.clipboard?navigator.clipboard.writeText(l.value):Promise.reject()).then(()=>{this.textContent='Kopiert'},()=>{document.execCommand('copy');this.textContent='Kopiert'})\">Link kopieren</button></div>")
+	}
+	if life := lifetime(got.Expires); life != "" {
+		b.WriteString("<p class=k>Der Link gilt " + html.EscapeString(life) + ". Danach hier unten „Erneut senden“.</p>")
+	}
+	b.WriteString("<p class=k>Danach meldet sich " + html.EscapeString(first) + " mit dem Benutzernamen „" + html.EscapeString(got.User) + "“ an. " + html.EscapeString(saysWelcomeAfter) + "</p></div>")
+	return b.String()
+}
+
+// lifetime is how long a link lasts, as the admin says it: "bis
+// 19. Oktober 2026, 18:30" for a time, "24 Stunden" for a duration,
+// Laib's own words otherwise.
+func lifetime(expires string) string {
+	expires = strings.TrimSpace(expires)
+	if expires == "" {
+		return ""
+	}
+	if t, err := time.Parse(time.RFC3339, expires); err == nil {
+		t = t.Local()
+		return "bis " + dayWords(t, time.Local) + ", " + t.Format("15:04") + " Uhr"
+	}
+	if d, err := time.ParseDuration(expires); err == nil && d > 0 {
+		switch {
+		case d%(24*time.Hour) == 0 && d >= 48*time.Hour:
+			return "noch " + strconv.Itoa(int(d/(24*time.Hour))) + " Tage"
+		case d%time.Hour == 0:
+			if d == time.Hour {
+				return "noch eine Stunde"
+			}
+			return "noch " + strconv.Itoa(int(d/time.Hour)) + " Stunden"
+		default:
+			return "noch " + strconv.Itoa(int(d.Round(time.Minute)/time.Minute)) + " Minuten"
+		}
+	}
+	return expires
+}
