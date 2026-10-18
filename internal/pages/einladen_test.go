@@ -93,6 +93,9 @@ func TestEinladenWithMailSaysWhatHappens(t *testing.T) {
 			t.Errorf("person_invite %s = %v, want %v (%v)", k, f.calls[0][k], v, f.calls[0])
 		}
 	}
+	if !strings.Contains(page, "--group admins") || strings.Contains(page, "name=gruppe") {
+		t.Errorf("no group choice; admins are made at the console")
+	}
 	if _, ok := f.calls[0]["resend"]; ok {
 		t.Errorf("a first invitation is no resend: %v", f.calls[0])
 	}
@@ -165,7 +168,6 @@ func TestEinladenOnlyAdminsAndOnlyComplete(t *testing.T) {
 		"vorname=&email=a@b.de&gruppe=family":                  saysNeedFirst,
 		"vorname=Anna&email=anna&gruppe=family":                saysBadEmail,
 		"vorname=Anna&benutzer=Anna+M&email=a@b.de&gruppe=fam": saysBadUser,
-		"vorname=Anna&email=a@b.de&gruppe=root":                saysBadGroup,
 	} {
 		v, _ := url.ParseQuery(form)
 		rec := invite(t, f, v, "admins")
@@ -181,6 +183,16 @@ func TestEinladenOnlyAdminsAndOnlyComplete(t *testing.T) {
 	h.ServeHTTP(rec, req)
 	if rec.Code != 303 || rec.Header().Get("Location") != "/box" {
 		t.Errorf("GET: %d %q", rec.Code, rec.Header().Get("Location"))
+	}
+}
+
+// laib#362: the haus hand invites to the family only; a forged
+// gruppe=admins still asks for family.
+func TestEinladenInvitesToTheFamilyOnly(t *testing.T) {
+	f := &inviteLaib{reply: map[string]any{"user": "anna", "mailed": true}}
+	v := url.Values{"vorname": {"Anna"}, "email": {"anna@example.org"}, "gruppe": {"admins"}}
+	if rec := invite(t, f, v, "admins"); rec.Code != 200 || len(f.calls) != 1 || f.calls[0]["group"] != "family" {
+		t.Fatalf("%d %v", rec.Code, f.calls)
 	}
 }
 

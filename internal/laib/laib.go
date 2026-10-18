@@ -222,7 +222,7 @@ type Invite struct {
 	First  string
 	Last   string
 	Email  string
-	Group  string // family | admins; empty on a resend
+	Group  string // family (Laib refuses admins from the haus hand, laib#362); empty on a resend
 	Resend bool
 }
 

@@ -23,12 +23,11 @@ const (
 	saysInviteWhat    = "Für jemanden, der neu dazukommt: Die Person bekommt ein eigenes Konto für alle Apps der Box und legt ihr Passwort selbst fest. Du siehst es nie."
 	saysUserHint      = "Damit meldet sich die Person an: Kleinbuchstaben, ohne Leerzeichen. Leer lassen, dann wird es der Vorname."
 	saysEmailHint     = "Dorthin schickt die Box den Link, mit dem die Person ihr Passwort festlegt."
-	saysAdminHint     = "Admins sehen auch diese Box-Seite und dürfen einladen."
+	saysFamilyOnly    = "Haus lädt nur in die Familie ein. Einen weiteren Admin legst du aus Sicherheitsgründen direkt an der Box an: laib person invite <benutzer> … --group admins"
 	saysInviteMissing = "Einladen geht auf dieser Box noch nicht: Laib kann es hier noch nicht. Bis zum nächsten Laib-Update legst du neue Personen wie bisher in LLDAP an."
 	saysNeedFirst     = "Bitte den Vornamen eintragen."
 	saysBadEmail      = "Die E-Mail-Adresse sieht nicht vollständig aus."
 	saysBadUser       = "Der Benutzername darf nur Kleinbuchstaben, Ziffern, Punkt, Bindestrich und Unterstrich haben und muss mit einem Buchstaben anfangen."
-	saysBadGroup      = "Bitte Familie oder Admin wählen."
 	saysPendingTitle  = "Eingeladen, noch kein Passwort"
 	saysPendingNone   = "Die Liste der Eingeladenen lässt sich gerade nicht lesen."
 	saysWelcomeAfter  = "Nach dem ersten Anmelden zeigt Haus die Seite „Willkommen“: welche Apps es gibt und wie man sie einrichtet."
@@ -87,7 +86,7 @@ func Einladen(cfg BoxConfig) http.HandlerFunc {
 		}
 		f := r.PostForm
 		in := laib.Invite{User: strings.TrimSpace(f.Get("benutzer")), First: oneLine(f.Get("vorname")), Last: oneLine(f.Get("nachname")),
-			Email: strings.TrimSpace(f.Get("email")), Group: f.Get("gruppe"), Resend: f.Get("erneut") == "1"}
+			Email: strings.TrimSpace(f.Get("email")), Group: "family", Resend: f.Get("erneut") == "1"}
 		inv := invitation{form: in, first: in.First}
 		if inv.first == "" {
 			inv.first = in.User
@@ -104,8 +103,6 @@ func Einladen(cfg BoxConfig) http.HandlerFunc {
 			in.Group = "" // the account is there; the group stays as it is
 		case !strings.Contains(in.Email, "@") || strings.HasSuffix(in.Email, "@") || strings.ContainsAny(in.Email, " \t,;<>"):
 			inv.problem = saysBadEmail
-		case in.Group != "family" && in.Group != "admins":
-			inv.problem = saysBadGroup
 		}
 		if inv.problem != "" {
 			writeBox(w, r, cfg, http.StatusBadRequest, inv)
@@ -183,15 +180,7 @@ func inviteCard(ctx context.Context, c *laib.Client, inv invitation) string {
 	field("nachname", "Nachname", "text", f.Last, " autocomplete=off", "")
 	field("benutzer", "Benutzername", "text", f.User, " autocomplete=off autocapitalize=none spellcheck=false pattern=\"[a-z][a-z0-9._\\-]{1,31}\" placeholder=\""+html.EscapeString(suggestUser(f.First))+"\"", saysUserHint)
 	field("email", "E-Mail", "email", f.Email, " required autocomplete=off", saysEmailHint)
-	b.WriteString("<label for=gruppe>Gruppe</label><select id=gruppe name=gruppe>")
-	for _, g := range [][2]string{{"family", "Familie"}, {"admins", "Admin"}} {
-		sel := ""
-		if f.Group == g[0] {
-			sel = " selected"
-		}
-		b.WriteString("<option value=" + g[0] + sel + ">" + g[1] + "</option>")
-	}
-	b.WriteString("</select><span class=k>" + html.EscapeString(saysAdminHint) + "</span><button>Einladen</button></form>")
+	b.WriteString("<button>Einladen</button></form><p class=k>" + html.EscapeString(saysFamilyOnly) + "</p>")
 	switch {
 	case perr != nil:
 		log.Printf("haus: einladen: pending: %v", perr)
