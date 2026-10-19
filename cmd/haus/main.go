@@ -69,7 +69,7 @@ func routes(s site) http.Handler {
 	mux.Handle("/mcp/haushalt", haushalt.Handler(s.hh))
 	pagesMux := http.NewServeMux()
 	// the family's pages (haus#12): each card only from a backend that is set; a
-	// page whose backend is not set lands on Start
+	// page whose backend is not set says what is missing (laib#418)
 	family := pages.StartConfig{Laib: s.ops, LaibURL: s.laibURL, HA: s.napi.HA, Energy: s.napi.Energy, Calendar: s.hh.Calendar, Contacts: s.hh.Contacts,
 		Notes: s.hh.Notes, Library: s.hh.Library, Judge: s.hh.Judge, Docs: s.hh.Documents, Loc: s.hh.Loc, Favorites: s.favorites, Bote: s.bote,
 		Samba: s.samba, SambaHost: s.sambaHost, Usage: s.usage, PublicURL: s.publicURL, Welcome: s.welcome}

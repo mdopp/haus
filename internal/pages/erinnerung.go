@@ -21,7 +21,7 @@ func Erinnerung(cfg StartConfig) http.HandlerFunc {
 			return
 		}
 		if cfg.Calendar == nil {
-			toStart(w, r)
+			notSetCalendar.write(w, r, cfg, "Kalender")
 			return
 		}
 		uid := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, cards.ReminderPages))

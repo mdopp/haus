@@ -83,7 +83,7 @@ func Sprechen(cfg StartConfig) http.HandlerFunc {
 		switch r.Method {
 		case http.MethodGet, http.MethodHead:
 			if cfg.Bote == nil {
-				toStart(w, r)
+				notSet{"Sprechen geht hier noch nicht: " + House.Display + " ist noch nicht eingerichtet.", "Für Admins: der Bote läuft nicht (laib add bote, mit einem Kanal; Haus bekommt BOTE_API_KEY)."}.write(w, r, cfg, "Sprechen")
 				return
 			}
 			e, ok := t.get(person)

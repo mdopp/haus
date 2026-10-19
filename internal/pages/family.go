@@ -17,7 +17,8 @@ import (
 // The family's pages (haus#12): Start, Räume, Kalender, Notizen. They read
 // one config (StartConfig), share one nav and the persona's header, and
 // show without changing anything (haus#1). A page whose backend is not set
-// is not served: it lands on Start. A path Haus does not serve at all is
+// has no tab and, reached anyway, says what is missing (notSet, laib#418).
+// A path Haus does not serve at all is
 // a 404 with the way to Start (Elsewhere).
 
 // What a family page says, in one plain line where the rows would be,
@@ -158,9 +159,36 @@ func showOnly(w http.ResponseWriter, r *http.Request, what string) bool {
 	return false
 }
 
-// toStart sends a page whose backend is not set to Start.
-func toStart(w http.ResponseWriter, r *http.Request) {
-	http.Redirect(w, r, "/start", http.StatusFound)
+// notSet is what a page says when this box does not have its backend
+// (laib#418): one sentence for the family, in their words, and for an
+// admin what to set up. The nav already hides such a page's tab; a link,
+// a bookmark or a widget still reaches it, and then it says so instead of
+// landing on Start without a word.
+type notSet struct{ say, admin string }
+
+var (
+	notSetHA       = notSet{"Licht und Geräte sind hier noch nicht eingerichtet.", "Für Admins: Home Assistant ist nicht verbunden (HAUS_HA_TOKEN, das home-assistant beim Einrichten erzeugt)."}
+	notSetCalendar = notSet{"Der Kalender ist hier noch nicht eingerichtet.", "Für Admins: Haus hat kein Radicale-Konto (RADICALE_USER in services/haus/values.yml, das Passwort HAUS_RADICALE_PASSWORD)."}
+	notSetContacts = notSet{"Die Kontakte sind hier noch nicht eingerichtet.", notSetCalendar.admin}
+	notSetNotes    = notSet{"Die Notizen sind hier noch nicht eingerichtet.", "Für Admins: Haus hat keinen Notizen-Ordner (HAUS_NOTES_DIR, von file-share)."}
+	notSetDocs     = notSet{"Die Dokumente sind hier noch nicht eingerichtet.", "Für Admins: Paperless ist nicht verbunden (HAUS_PAPERLESS_TOKEN)."}
+	notSetSamba    = notSet{"Das Netzlaufwerk ist hier noch nicht eingerichtet.", "Für Admins: file-share ist nicht installiert (laib add file-share)."}
+)
+
+// write is the page: its name, the sentence, for an admin what is missing,
+// and the way to Start; a 200, like every page that answers in words.
+func (n notSet) write(w http.ResponseWriter, r *http.Request, cfg StartConfig, page string) {
+	tab := page
+	if tab == "Sprechen" { // Start's field, no tab (haus#12)
+		tab = "Start"
+	}
+	b := familyHead(r, cfg, page, tab)
+	b.WriteString("<h1>" + html.EscapeString(page) + "</h1><p>" + html.EscapeString(n.say) + "</p>")
+	if isAdmin(r) {
+		b.WriteString("<p class=k>" + html.EscapeString(n.admin) + "</p>")
+	}
+	b.WriteString("<p><a href=/start>Zur Startseite</a></p>")
+	writePage(w, http.StatusOK, b)
 }
 
 // clock is the page's now, in the house's time zone.

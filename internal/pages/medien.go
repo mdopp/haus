@@ -42,7 +42,7 @@ func Medien(cfg StartConfig) http.HandlerFunc {
 			return
 		}
 		if cfg.HA == nil {
-			toStart(w, r)
+			notSetHA.write(w, r, cfg, "Medien")
 			return
 		}
 		if r.URL.Path != medienPath {

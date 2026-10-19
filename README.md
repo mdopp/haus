@@ -77,7 +77,9 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   read never written over); same guards as `/schalten`, then 303 back.
 - `GET /raeume`, `/kalender`, `/notizen` — the family's other pages
   (haus#12), from the same cards, in the family's frame. A page whose
-  backend is not set lands on Start; one
+  backend is not set has no tab and, reached anyway, says in one sentence
+  what is missing (an admin also reads what to set up), never a silent
+  redirect to Start (laib#418); one
   not answering within 4s is Start's plain line where its rows would be,
   once, never its name or error, which go to the log; the page is a 200
   (haus#33). Anything but GET/HEAD is 405.

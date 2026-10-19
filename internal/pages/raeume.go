@@ -38,7 +38,7 @@ func Raeume(cfg StartConfig) http.HandlerFunc {
 			return
 		}
 		if cfg.HA == nil {
-			toStart(w, r)
+			notSetHA.write(w, r, cfg, "Räume")
 			return
 		}
 		var (

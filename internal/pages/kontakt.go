@@ -21,7 +21,7 @@ func Kontakt(cfg StartConfig) http.HandlerFunc {
 			return
 		}
 		if cfg.Contacts == nil {
-			toStart(w, r)
+			notSetContacts.write(w, r, cfg, "Kontakte")
 			return
 		}
 		uid := strings.TrimPrefix(r.URL.Path, cards.ContactPages)

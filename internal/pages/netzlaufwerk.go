@@ -38,7 +38,7 @@ const (
 func Netzlaufwerk(cfg StartConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if cfg.Samba == nil {
-			toStart(w, r)
+			notSetSamba.write(w, r, cfg, "Netzlaufwerk")
 			return
 		}
 		w.Header().Set("Cache-Control", "no-store")
