@@ -189,9 +189,13 @@ func TestTheAppReadsTheHousePersona(t *testing.T) {
 	defer lb.Close()
 	h := Handler(Config{Laib: &laib.Client{URL: lb.URL, Token: "ops"}, Validate: StaticValidator([]string{"dev1"}),
 		House: persona.Persona{Display: "Joshua", Languages: []string{"de"}, Greeting: map[string]string{"de": "Hallo."}, Colors: map[string]string{"accent": "#3ddc84"}}})
+	// haus#58: the greeting belongs to the chat (an easter egg for its games), not the start screen
 	code, p := get(t, h, "GET", "/napi/persona", "dev1", "")
-	if code != 200 || p["display"] != "Joshua" || p["greeting"] != "Hallo." || p["accent"] != "#3ddc84" {
+	if code != 200 || p["display"] != "Joshua" || p["greeting"] != "" || p["accent"] != "#3ddc84" {
 		t.Fatalf("persona: %d %v", code, p)
+	}
+	if code, p := get(t, h, "GET", "/napi/persona?surface=chat", "dev1", ""); code != 200 || p["greeting"] != "Hallo." {
+		t.Fatalf("the chat's persona carries the greeting: %d %v", code, p)
 	}
 	if code, _ := get(t, h, "GET", "/napi/persona", "", ""); code != 401 {
 		t.Fatalf("without a token: %d", code)

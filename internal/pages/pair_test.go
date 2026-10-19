@@ -18,7 +18,7 @@ func TestPairDeviceFromThePhone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := PairDevice(store)
+	h := PairDevice(store, StartConfig{})
 	req := httptest.NewRequest("GET", "/pair-device", nil)
 	req.Header.Set("Remote-User", "anna")
 	rec := httptest.NewRecorder()
@@ -62,7 +62,7 @@ func TestGeraeteOffersWhatWorks(t *testing.T) {
 	req.Header.Set("Remote-User", "anna")
 	req.Header.Set("Remote-Groups", "admins")
 	rec := httptest.NewRecorder()
-	Geraete(store, "https://haus.example").ServeHTTP(rec, req)
+	Geraete(store, "https://haus.example", StartConfig{}).ServeHTTP(rec, req)
 	body := rec.Body.String()
 	if !strings.Contains(body, "cloud.dopp.haus://setup?server="+url.QueryEscape("https://haus.example")+"&amp;token=haus_device_") {
 		t.Fatalf("the QR content is the new app's setup URI:\n%s", body)

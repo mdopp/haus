@@ -21,20 +21,13 @@ import (
 // start; plain Haus without one.
 var House = persona.Default()
 
-// head opens a page: the title in the persona's name, a header with its
-// icon, name and greeting in its colours.
-func head(title string) string {
-	icon := ""
-	if len(House.Icon) > 0 {
-		icon = `<img src="/persona/icon.svg" alt="" width=28 height=28>`
-	}
-	greet := ""
-	if g := House.Greet("de"); g != "" {
-		greet = "<span class=gruss>" + html.EscapeString(g) + "</span>"
-	}
-	return "<!doctype html><html lang=de><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><title>" + html.EscapeString(title) + " · " + html.EscapeString(House.Display) + "</title>" + style +
-		"<style>header{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin:-1.2rem -1.2rem 1rem;padding:.6rem 1.2rem;background:" + House.Ground() + ";color:" + House.Accent() + "}header b{font-size:1.05rem}header .gruss{opacity:.85}</style>" +
-		"<header>" + icon + "<b>" + html.EscapeString(House.Display) + "</b>" + greet + "</header>"
+// adminHead opens an admin page (haus#58): the family pages' frame (#35)
+// with Box marked in the tab bar, the admin cards' style and Box's own two
+// links. No persona: it speaks only where you talk to it.
+func adminHead(r *http.Request, cfg StartConfig, title string) *strings.Builder {
+	b := familyHead(r, cfg, title, "Box")
+	b.WriteString(adminStyle)
+	return b
 }
 
 // Icon serves the persona's icon.svg.
@@ -50,12 +43,26 @@ func Icon() http.HandlerFunc {
 	}
 }
 
-const style = `<style>body{font:15px/1.45 system-ui,sans-serif;margin:0;padding:1.2rem;max-width:56rem;color:#1d1d1b;background:#faf9f6}
-h1{font-size:1.3rem;margin:.2rem 0 1rem}h2{font-size:1rem;margin:1.4rem 0 .4rem;letter-spacing:.02em;text-transform:uppercase;color:#6b665c}
-table{border-collapse:collapse;width:100%}td,th{text-align:left;padding:.3rem .5rem;border-bottom:1px solid #e6e2d8}
-.gruen{color:#2b7a3d}.gelb{color:#b07a00}.rot{color:#b3261e}.k{font-variant-numeric:tabular-nums;color:#6b665c}
-form{display:inline}button{font:inherit;padding:.25rem .7rem;border:1px solid #c9c3b6;border-radius:.4rem;background:#fff;cursor:pointer}
-nav a{margin-right:1rem}</style>`
+// adminStyle is the admin cards in the house palette: tables as cards,
+// section labels, the states' colours, Box's sub-links as pills.
+const adminStyle = `<style>.unter{display:flex;gap:8px;margin:18px 0 0}.unter a{display:inline-flex;align-items:center;min-height:40px;padding:0 16px;border-radius:999px;background:var(--card);border:1px solid var(--edge);color:var(--ink);text-decoration:none;font-size:.85rem}.unter a[aria-current]{color:var(--accent);border-color:var(--accent)}
+h2{font-size:.72rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:26px 2px 8px}
+table{width:100%;border-collapse:separate;border-spacing:0;background:var(--card);border:1px solid var(--edge);border-radius:14px;overflow:hidden}
+td,th{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top;overflow-wrap:anywhere}tr:last-child td{border-bottom:0}
+.gruen{color:var(--ok)}.gelb{color:var(--warn)}.rot{color:var(--danger)}.k{font-variant-numeric:tabular-nums}
+form{display:inline}input:not([type]),input[type=text],input[type=email]{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--edge);border-radius:999px;padding:0 16px;min-height:44px;max-width:100%}
+code{overflow-wrap:anywhere;font:.8rem ui-monospace,SFMono-Regular,Menlo,monospace}</style>`
+
+// unterNav is Box's two pages, the current one marked.
+func unterNav(current string) string {
+	mark := func(n string) string {
+		if n == current {
+			return " aria-current=page"
+		}
+		return ""
+	}
+	return "<nav class=unter><a href=/box" + mark("Box") + ">Box</a><a href=/box/geraete" + mark("Geräte") + ">Geräte</a></nav>"
+}
 
 // Box is the admins' page: readiness, the inbox (read-only — deciding
 // happens on Laib's own page, the one approval surface, ADR 0012), what
@@ -97,11 +104,10 @@ func writeBox(w http.ResponseWriter, r *http.Request, cfg BoxConfig, code int, i
 	user := r.Header.Get("Remote-User")
 	ctx := r.Context()
 	ready, rows, err := c.Status(ctx)
-	var b strings.Builder
-	b.WriteString(head("Box"))
-	b.WriteString("<nav><a href=/box>Box</a><a href=/box/geraete>Geräte</a></nav>")
+	b := adminHead(r, cfg.Family, "Box")
+	b.WriteString(unterNav("Box"))
 	if err != nil {
-		fmt.Fprintf(&b, "<h1>Box</h1><p class=rot>Laib antwortet nicht: %s</p>", html.EscapeString(err.Error()))
+		fmt.Fprintf(b, "<h1>Box</h1><p class=rot>Laib antwortet nicht: %s</p>", html.EscapeString(err.Error()))
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(code)
 		w.Write([]byte(b.String()))
@@ -109,31 +115,31 @@ func writeBox(w http.ResponseWriter, r *http.Request, cfg BoxConfig, code int, i
 	}
 	// the three guarantees, for everyone in the family (haus#2)
 	b.WriteString(guarantees(ready, rows, isAdmin(r), laibURL))
-	fmt.Fprintf(&b, "<h1>Box · <span class=%s>%s</span> <span class=k>· %d Dienste · %d grün · %d gelb · %d rot · Drift %d</span></h1>",
+	fmt.Fprintf(b, "<h1>Box · <span class=%s>%s</span> <span class=k>· %d Dienste · %d grün · %d gelb · %d rot · Drift %d</span></h1>",
 		readyClass(ready), html.EscapeString(ready.State), ready.Services, ready.Green, ready.Yellow, ready.Red, ready.Drift)
-	fmt.Fprintf(&b, "<p>Operator: <span class=%s>%s</span></p>", operatorClass(ready.Operator), html.EscapeString(ready.Operator))
+	fmt.Fprintf(b, "<p>Operator: <span class=%s>%s</span></p>", operatorClass(ready.Operator), html.EscapeString(ready.Operator))
 	if ready.Lock != "" {
-		fmt.Fprintf(&b, "<p class=gelb>gesperrt: %s</p>", html.EscapeString(ready.Lock))
+		fmt.Fprintf(b, "<p class=gelb>gesperrt: %s</p>", html.EscapeString(ready.Lock))
 	}
 	if user != "" {
-		fmt.Fprintf(&b, "<p class=k>angemeldet als %s</p>", html.EscapeString(user))
+		fmt.Fprintf(b, "<p class=k>angemeldet als %s</p>", html.EscapeString(user))
 	}
 	b.WriteString("<h2>Inbox</h2>")
 	if ps, err := c.Inbox(ctx); err != nil {
-		fmt.Fprintf(&b, "<p class=rot>%s</p>", html.EscapeString(err.Error()))
+		fmt.Fprintf(b, "<p class=rot>%s</p>", html.EscapeString(err.Error()))
 	} else if len(ps) == 0 {
 		b.WriteString("<p class=k>leer</p>")
 	} else {
 		b.WriteString("<table>")
 		for _, p := range ps {
-			fmt.Fprintf(&b, "<tr><td class=k>#%d</td><td>%s<br><span class=k>%s · %s · %s · %s</span>", p.ID, html.EscapeString(p.Reason), html.EscapeString(p.Actor), p.Tier, p.Class, p.Created.Format("02.01. 15:04"))
+			fmt.Fprintf(b, "<tr><td class=k>#%d</td><td>%s<br><span class=k>%s · %s · %s · %s</span>", p.ID, html.EscapeString(p.Reason), html.EscapeString(p.Actor), p.Tier, p.Class, p.Created.Format("02.01. 15:04"))
 			for _, why := range p.Reasons {
-				fmt.Fprintf(&b, "<br><span class=gelb>%s</span>", html.EscapeString(why))
+				fmt.Fprintf(b, "<br><span class=gelb>%s</span>", html.EscapeString(why))
 			}
 			b.WriteString("</td></tr>")
 		}
 		b.WriteString("</table>")
-		fmt.Fprintf(&b, "<p><a href=\"%s/inbox\">Entscheiden auf der Laib-Seite</a> <span class=k>— die eine Stelle, an der freigegeben wird</span></p>", html.EscapeString(strings.TrimRight(laibURL, "/")))
+		fmt.Fprintf(b, "<p><a href=\"%s/inbox\">Entscheiden auf der Laib-Seite</a> <span class=k>— die eine Stelle, an der freigegeben wird</span></p>", html.EscapeString(strings.TrimRight(laibURL, "/")))
 	}
 	b.WriteString(inviteCard(ctx, c, inv))
 	// the window reaches back to yesterday's report; the journal table stays at 24h
@@ -145,7 +151,7 @@ func writeBox(w http.ResponseWriter, r *http.Request, cfg BoxConfig, code int, i
 	}
 	b.WriteString("<h2>Was läuft</h2><table>")
 	for _, s := range rows {
-		fmt.Fprintf(&b, "<tr><td class=%s>%s</td><td>%s</td><td class=k>%s</td></tr>", cls(s.State), html.EscapeString(s.State), html.EscapeString(s.Name), html.EscapeString(s.Detail))
+		fmt.Fprintf(b, "<tr><td class=%s>%s</td><td>%s</td><td class=k>%s</td></tr>", cls(s.State), html.EscapeString(s.State), html.EscapeString(s.Name), html.EscapeString(s.Detail))
 	}
 	b.WriteString("</table><h2>Journal · 24h</h2><table>")
 	if jerr == nil {
@@ -156,11 +162,11 @@ func writeBox(w http.ResponseWriter, r *http.Request, cfg BoxConfig, code int, i
 				break
 			}
 			shown++
-			fmt.Fprintf(&b, "<tr><td class=k>%s</td><td>%s</td><td>%s</td><td class=%s>%s</td><td class=k>%s</td></tr>", e.T.Local().Format("02.01. 15:04"), html.EscapeString(e.Actor), html.EscapeString(e.Verb+" "+e.Service), result(e.Result), e.Result, html.EscapeString(trim(e.Reason+" "+e.Detail, 90)))
+			fmt.Fprintf(b, "<tr><td class=k>%s</td><td>%s</td><td>%s</td><td class=%s>%s</td><td class=k>%s</td></tr>", e.T.Local().Format("02.01. 15:04"), html.EscapeString(e.Actor), html.EscapeString(e.Verb+" "+e.Service), result(e.Result), e.Result, html.EscapeString(trim(e.Reason+" "+e.Detail, 90)))
 		}
 	}
 	b.WriteString("</table>")
-	fmt.Fprintf(&b, "<p class=k>Stand %s</p>", time.Now().Format("02.01.2006 15:04"))
+	fmt.Fprintf(b, "<p class=k>Stand %s</p>", time.Now().Format("02.01.2006 15:04"))
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store") // an invitation's link may be on it
 	w.WriteHeader(code)

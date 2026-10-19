@@ -93,7 +93,11 @@ func Handler(c Config) http.Handler {
 		if len(p.IconPNG) > 0 {
 			icon = "/napi/persona/icon.png"
 		}
-		writeJSON(w, map[string]any{"name": p.Name, "display": p.Display, "greeting": p.Greet(r.URL.Query().Get("lang")),
+		greeting := "" // the chat's alone, an easter egg for its games; not the start screen (haus#58)
+		if r.URL.Query().Get("surface") == "chat" {
+			greeting = p.Greet(r.URL.Query().Get("lang"))
+		}
+		writeJSON(w, map[string]any{"name": p.Name, "display": p.Display, "greeting": greeting,
 			"accent": p.Accent(), "ground": p.Ground(), "icon": icon})
 	}))
 	mux.HandleFunc("GET /napi/persona/icon.png", auth(func(w http.ResponseWriter, r *http.Request) {
