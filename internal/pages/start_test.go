@@ -668,7 +668,7 @@ func brokenLaib(t *testing.T) *laib.Client {
 func TestBoxIsForAdmins(t *testing.T) {
 	store, _ := devices.Open(t.TempDir())
 	box := Box(fakeLaib(t, allGreen(t), nil), "https://laib.box.test")
-	geraete := Geraete(store, "https://haus.example")
+	geraete := Geraete(store, "https://haus.example", StartConfig{})
 	for _, c := range []struct {
 		h      http.HandlerFunc
 		method string
@@ -709,7 +709,7 @@ func TestBoxIsForAdmins(t *testing.T) {
 	req.Header.Set("Remote-User", "ben")
 	req.Header.Set("Remote-Groups", "family")
 	rec := httptest.NewRecorder()
-	PairDevice(store).ServeHTTP(rec, req)
+	PairDevice(store, StartConfig{}).ServeHTTP(rec, req)
 	if rec.Code == http.StatusSeeOther || rec.Code == http.StatusFound {
 		t.Fatalf("pairing redirected a family member: %d %q", rec.Code, rec.Header().Get("Location"))
 	}

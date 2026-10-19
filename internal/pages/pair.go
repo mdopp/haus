@@ -13,7 +13,7 @@ import (
 // browser's Authelia session is. GET only asks; a prefetch mints nothing.
 // POST mints a device for the logged-in person and redirects to the app's
 // pair link with the token in the fragment, which never reaches a proxy log.
-func PairDevice(store *devices.Store) http.HandlerFunc {
+func PairDevice(store *devices.Store, family StartConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		user := r.Header.Get("Remote-User")
 		if user == "" {
@@ -23,7 +23,7 @@ func PairDevice(store *devices.Store) http.HandlerFunc {
 		w.Header().Set("Cache-Control", "no-store")
 		if r.Method != http.MethodPost {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			w.Write([]byte(head("Telefon koppeln") +
+			w.Write([]byte(adminHead(r, family, "Telefon koppeln").String() +
 				"<h1>Dieses Telefon koppeln</h1><p>Die App bekommt einen eigenen Zugang, der " + html.EscapeString(user) + " gehört. Entfernen geht jederzeit unter Box → Geräte.</p>" +
 				"<form method=post><input name=name placeholder='Name, z.B. Pixel von Anna'> <button>Koppeln</button></form>"))
 			return

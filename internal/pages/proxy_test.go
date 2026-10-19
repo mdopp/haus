@@ -67,7 +67,7 @@ func TestPairingPageSaysApp(t *testing.T) {
 	req.Header.Set("Remote-User", "anna")
 	req.Header.Set("Remote-Groups", "admins")
 	rec := httptest.NewRecorder()
-	Geraete(store, "https://haus.example").ServeHTTP(rec, req)
+	Geraete(store, "https://haus.example", StartConfig{}).ServeHTTP(rec, req)
 	if body := rec.Body.String(); !strings.Contains(body, "In der App") {
 		t.Fatalf("the pairing page names the app:\n%s", body)
 	}

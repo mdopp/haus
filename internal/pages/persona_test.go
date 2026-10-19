@@ -3,7 +3,6 @@ package pages
 import (
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/mdopp/haus/internal/devices"
