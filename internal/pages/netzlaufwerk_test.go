@@ -56,8 +56,8 @@ func TestNetzlaufwerkSaysWhatItIsAndWhetherYouHaveOne(t *testing.T) {
 	if !strings.Contains(admin, "Passwörter der Familie") || !strings.Contains(admin, "<option>ben</option>") || !strings.Contains(admin, "Entfernen") {
 		t.Errorf("an admin sees everyone's and can reset them:\n%s", admin)
 	}
-	if rec := getNetzlaufwerk(StartConfig{}, "anna", "family", ""); rec.Code != 302 {
-		t.Errorf("without file-share no page: %d", rec.Code)
+	if rec := getNetzlaufwerk(StartConfig{}, "anna", "family", ""); rec.Code != 200 || !strings.Contains(rec.Body.String(), "noch nicht eingerichtet") || strings.Contains(rec.Body.String(), "<form") {
+		t.Errorf("without file-share the page says so and has no form (laib#418): %d %s", rec.Code, rec.Body.String())
 	}
 }
 
