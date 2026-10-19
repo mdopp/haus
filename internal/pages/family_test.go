@@ -81,19 +81,29 @@ func TestFamilyTabBar(t *testing.T) {
 	mustNotContain(t, body, "href=/raeume", "href=/energie", "href=/medien", "href=/kalender", "href=/notizen", "Räume", "Energie", "Medien", "Kalender", "Notizen")
 }
 
-// A page whose backend is not set is not served: it lands on Start, like
-// every path Haus does not serve.
-func TestFamilyPagesWithoutBackendLandOnStart(t *testing.T) {
+// laib#418: a page whose backend this box does not have says so, in one
+// sentence, with the way to Start — never a silent redirect to Start (the
+// family tapped Kalender and landed on Start without a word). An admin also
+// reads what to set up; the family never reads a backend's name.
+func TestFamilyPagesWithoutBackendSayWhatIsMissing(t *testing.T) {
 	for _, p := range []struct {
-		page func(StartConfig) http.HandlerFunc
-		path string
-	}{{Raeume, "/raeume"}, {Energie, "/energie"}, {Medien, "/medien"}, {Kalender, "/kalender"}, {Notizen, "/notizen"}, {Notizen, "/notizen/einkaufsliste.md"},
-		{Ding, "/raeume/light.flur"}, {Erinnerung, "/kalender/erinnerung/a"}, {Kontakt, "/kontakte/a"}, {Dokument, "/dokumente/2"}} {
-		code, _, h := familyPage(t, p.page, StartConfig{}, "GET", p.path, "family")
-		if code != http.StatusFound || h.Get("Location") != "/start" {
-			t.Fatalf("%s without its backend → %d %q, want 302 /start", p.path, code, h.Get("Location"))
+		page       func(StartConfig) http.HandlerFunc
+		path, says string
+	}{{Raeume, "/raeume", "Licht und Geräte"}, {Energie, "/energie", "Licht und Geräte"}, {Medien, "/medien", "Licht und Geräte"},
+		{Kalender, "/kalender", "Der Kalender ist hier noch nicht eingerichtet."}, {Notizen, "/notizen", "Die Notizen"}, {Notizen, "/notizen/einkaufsliste.md", "Die Notizen"},
+		{Ding, "/raeume/light.flur", "Licht und Geräte"}, {Erinnerung, "/kalender/erinnerung/a", "Der Kalender"}, {Kontakt, "/kontakte/a", "Die Kontakte"},
+		{Dokument, "/dokumente/2", "Die Dokumente"}, {Netzlaufwerk, "/netzlaufwerk", "Das Netzlaufwerk"}} {
+		code, body, h := familyPage(t, p.page, StartConfig{}, "GET", p.path, "family")
+		if code != http.StatusOK || h.Get("Location") != "" {
+			t.Fatalf("%s without its backend → %d %q, want the page saying what is missing", p.path, code, h.Get("Location"))
 		}
+		mustContain(t, body, p.says, "noch nicht eingerichtet", "href=/start")
+		mustNotLeak(t, body, "Radicale", "Home Assistant", "Paperless", "HAUS_", "RADICALE_", "file-share", "laib add")
+		_, admin, _ := familyPage(t, p.page, StartConfig{}, "GET", p.path, "family,admins")
+		mustContain(t, admin, p.says, "Für Admins:")
 	}
+	_, admin, _ := familyPage(t, Kalender, StartConfig{}, "GET", "/kalender", "admins")
+	mustContain(t, admin, "RADICALE_USER", "HAUS_RADICALE_PASSWORD")
 }
 
 // haus#1: the family's pages show, they change nothing.

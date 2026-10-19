@@ -20,7 +20,7 @@ func Dokument(cfg StartConfig) http.HandlerFunc {
 			return
 		}
 		if cfg.Docs == nil {
-			toStart(w, r)
+			notSetDocs.write(w, r, cfg, "Dokumente")
 			return
 		}
 		to := ""

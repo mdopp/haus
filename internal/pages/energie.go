@@ -49,7 +49,7 @@ func Energie(cfg StartConfig) http.HandlerFunc {
 			return
 		}
 		if cfg.HA == nil {
-			toStart(w, r)
+			notSetHA.write(w, r, cfg, "Energie")
 			return
 		}
 		if r.URL.Path != "/energie" {

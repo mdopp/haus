@@ -31,7 +31,7 @@ func Ding(cfg StartConfig) http.HandlerFunc {
 			return
 		}
 		if cfg.HA == nil {
-			toStart(w, r)
+			notSetHA.write(w, r, cfg, "Räume")
 			return
 		}
 		id := strings.TrimPrefix(r.URL.Path, cards.ThingPages)

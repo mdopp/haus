@@ -265,15 +265,16 @@ func TestSprechenSaysABoteThatDoesNotAnswerPlainly(t *testing.T) {
 	}
 }
 
-// Without the Bote on the box: /sprechen lands on Start like every page
-// whose backend is not set, and a post from a page still open from before
-// says plainly that nobody answers — a 200, never a crash.
+// Without the Bote on the box: /sprechen says so in one sentence, like
+// every page whose backend is not set (laib#418), and a post from a page
+// still open from before says plainly that nobody answers — a 200, never a crash.
 func TestSprechenWithoutTheBote(t *testing.T) {
 	h := Sprechen(StartConfig{})
-	code, _, hdr := talkPage(t, h, "anna")
-	if code != http.StatusFound || hdr.Get("Location") != "/start" {
-		t.Fatalf("GET → %d %q, want 302 /start", code, hdr.Get("Location"))
+	code, body, hdr := talkPage(t, h, "anna")
+	if code != http.StatusOK || hdr.Get("Location") != "" || !strings.Contains(body, "noch nicht eingerichtet") || strings.Contains(body, "<form") {
+		t.Fatalf("GET → %d %q: want the sentence what is missing, no field\n%s", code, hdr.Get("Location"), body)
 	}
+	mustNotLeak(t, body, "Bote", "Hermes", "laib add")
 	rec := say(t, h, "anna", "Hallo", nil)
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Haus antwortet gerade nicht.") || !strings.Contains(rec.Body.String(), "href=/start") {
 		t.Fatalf("POST → %d %s", rec.Code, rec.Body.String())

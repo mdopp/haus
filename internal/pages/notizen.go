@@ -32,7 +32,7 @@ func Notizen(cfg StartConfig) http.HandlerFunc {
 			return
 		}
 		if cfg.Notes == nil {
-			toStart(w, r)
+			notSetNotes.write(w, r, cfg, "Notizen")
 			return
 		}
 		if ref := strings.TrimLeft(strings.TrimPrefix(r.URL.Path, "/notizen"), "/"); ref != "" {

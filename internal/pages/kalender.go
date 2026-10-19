@@ -25,7 +25,7 @@ func Kalender(cfg StartConfig) http.HandlerFunc {
 			return
 		}
 		if cfg.Calendar == nil {
-			toStart(w, r)
+			notSetCalendar.write(w, r, cfg, "Kalender")
 			return
 		}
 		now, loc := cfg.clock()
