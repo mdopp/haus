@@ -101,7 +101,6 @@ func BoxPage(cfg BoxConfig) http.HandlerFunc {
 // a POST to /box/einladen (haus#56).
 func writeBox(w http.ResponseWriter, r *http.Request, cfg BoxConfig, code int, inv invitation) {
 	c, laibURL, tickets := cfg.Laib, cfg.LaibURL, cfg.Tickets
-	user := r.Header.Get("Remote-User")
 	ctx := r.Context()
 	ready, rows, err := c.Status(ctx)
 	b := adminHead(r, cfg.Family, "Box")
@@ -120,9 +119,6 @@ func writeBox(w http.ResponseWriter, r *http.Request, cfg BoxConfig, code int, i
 	fmt.Fprintf(b, "<p>Operator: <span class=%s>%s</span></p>", operatorClass(ready.Operator), html.EscapeString(ready.Operator))
 	if ready.Lock != "" {
 		fmt.Fprintf(b, "<p class=gelb>gesperrt: %s</p>", html.EscapeString(ready.Lock))
-	}
-	if user != "" {
-		fmt.Fprintf(b, "<p class=k>angemeldet als %s</p>", html.EscapeString(user))
 	}
 	b.WriteString("<h2>Inbox</h2>")
 	if ps, err := c.Inbox(ctx); err != nil {

@@ -111,11 +111,12 @@ form[role=search]{display:flex;gap:8px;margin:16px 0 0}
 .stern{margin:20px 0 0}.stern p{margin:6px 2px 0;font-size:.85rem}
 .tabs{position:fixed;left:0;right:0;bottom:0;z-index:2;display:flex;justify-content:center;background:var(--panel);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
 .tabs a{flex:1;max-width:7.5rem;min-height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--muted);text-decoration:none;font-size:.72rem}
+.konto{display:flex;justify-content:flex-end;align-items:center;gap:12px;margin:10px 0 -14px;font-size:.8rem;color:var(--muted)}.konto .wer{font-weight:600;color:var(--ink)}.konto a{display:inline-flex;align-items:center;min-height:40px;padding:0 14px;border-radius:999px;background:var(--card);border:1px solid var(--edge);color:var(--accent);text-decoration:none;font-weight:600}
 .tabs a[aria-current]{color:var(--accent)}.tabs svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}</style>`
 
-// familyHead opens a family page: its title, the frame, the cards' style
-// and the tab bar (current marks the page's tab). The page writes its own
-// h1.
+// familyHead opens a family page: its title, the frame, the cards' style,
+// the tab bar (current marks the page's tab) and who is signed in, with
+// Abmelden (haus#61). The page writes its own h1.
 func familyHead(r *http.Request, cfg StartConfig, title, current string) *strings.Builder {
 	b := &strings.Builder{}
 	if title != "Zuhause" {
@@ -126,6 +127,7 @@ func familyHead(r *http.Request, cfg StartConfig, title, current string) *string
 	b.WriteString(frame)
 	b.WriteString(cards.Style)
 	b.WriteString(familyNav(r, cfg, current))
+	b.WriteString(konto(r))
 	return b
 }
 

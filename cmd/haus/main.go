@@ -91,6 +91,7 @@ func routes(s site) http.Handler {
 	pagesMux.HandleFunc("/sprechen", pages.Sprechen(family))         // the Sprechen field to the Bote, and its reply (haus#12)
 	pagesMux.HandleFunc("/netzlaufwerk", pages.Netzlaufwerk(family)) // each person's network-drive password (haus#52)
 	pagesMux.HandleFunc("/willkommen", pages.Willkommen(family))     // a new person's apps and how to set them up (haus#56)
+	pagesMux.HandleFunc("/abmelden", pages.Abmelden(s.publicURL))    // Authelia's logout, back to Haus (haus#61)
 	pagesMux.HandleFunc("/schrift/", pages.Font())                   // Geist, from Haus itself (haus#35)
 	boxCfg := pages.BoxConfig{Laib: s.ops, LaibURL: s.laibURL, Tickets: s.tickets, Family: family, Voice: s.voice}
 	box := pages.BoxPage(boxCfg)
