@@ -202,7 +202,7 @@ func TestStartIsZuhause(t *testing.T) {
 		"Alles in Ordnung · eure Daten sind von gestern Abend gesichert")
 	mustNotContain(t, body, "Joshua", "Wollen wir", "#3ddc84", "#0c120e", "/persona/icon.svg",
 		"Alles läuft", "Letzte Sicherung", "Orten", "Letzte Änderung", "Paperless wird installiert", "Operator", "Laib",
-		"Haushalt", "Jetzt</h2>", "Favoriten</h2>", "Einkaufsliste", "<script", "fonts.googleapis", "fonts.gstatic")
+		"Haushalt</h2>", "Jetzt</h2>", "Favoriten</h2>", "Einkaufsliste", "<script", "fonts.googleapis", "fonts.gstatic")
 	before(t, body, "<h1>Zuhause</h1>", "karte-im-haus")
 	before(t, body, "karte-im-haus", "karte-meine-geraete")
 	before(t, body, "karte-meine-geraete", "karte-heute-und-demnaechst")
@@ -354,7 +354,7 @@ func TestStartMeineGeraeteEmptySaysHow(t *testing.T) {
 	} {
 		_, body := startPage(t, StartConfig{HA: hc, Favorites: fav}, "")
 		g := section(t, body, "karte-meine-geraete")
-		if !strings.Contains(g, "Tippe in Räume bei einem Gerät auf ☆, dann erscheint es hier.") || !strings.Contains(g, `href="/raeume"`) {
+		if !strings.Contains(g, "Tippe unter Geräte bei einem Gerät auf ☆, dann erscheint es hier.") || !strings.Contains(g, `href="/raeume"`) {
 			t.Errorf("%s: Meine Geräte does not say how it fills:\n%s", name, g)
 		}
 	}
@@ -371,7 +371,7 @@ func TestStartMeineGeraeteEmptySaysHow(t *testing.T) {
 	fake.Down(true)
 	_, body := startPage(t, StartConfig{HA: hc, Favorites: favorites(t, `{"ben": ["light.buero"]}`)}, "")
 	mustContain(t, body, "Licht und Geräte antworten gerade nicht.")
-	mustNotContain(t, body, "karte-meine-geraete", "Tippe in Räume", "Favoriten")
+	mustNotContain(t, body, "karte-meine-geraete", "Tippe unter Geräte", "Favoriten")
 	// favorites without the house configured: nothing to draw them from, nothing said
 	for _, content := range []string{`{"anna": ["light.buero"]}`, `{"anna": [`} {
 		_, body := startPage(t, StartConfig{Favorites: favorites(t, content)}, "")
@@ -389,7 +389,7 @@ func TestStartSaysABrokenFavoritesFilePlainly(t *testing.T) {
 		t.Fatalf("status %d", code)
 	}
 	mustContain(t, section(t, body, "karte-meine-geraete"), "Deine Favoriten lassen sich gerade nicht lesen.")
-	mustNotContain(t, body, "unexpected", "JSON", "favoriten.json", "Tippe in Räume")
+	mustNotContain(t, body, "unexpected", "JSON", "favoriten.json", "Tippe unter Geräte")
 }
 
 // Many favorites: the first twelve, and how many more.

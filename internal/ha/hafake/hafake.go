@@ -1,6 +1,6 @@
 // Package hafake is a fake Home Assistant for tests: the REST calls Haus
 // makes (/api/states, /api/services, /api/history/period,
-// /api/camera_proxy) and the WebSocket
+// /api/camera_proxy, /api/stt) and the WebSocket
 // (/api/websocket: auth, subscribe_events, the three registries, the Assist pipelines' debug store). Its frame
 // code is written for the server side on purpose, so it shares nothing with
 // the client it tests. Never a live box.
@@ -53,6 +53,32 @@ type HA struct {
 	cameras  map[string]camera
 	assist   []Pipeline
 	notAdmin bool
+	stt      map[string]string // provider → the words it hears
+	heard    []Speech
+}
+
+// Speech is one request to HA's speech-to-text.
+type Speech struct {
+	Provider, Content string // X-Speech-Content
+	Body              []byte
+}
+
+// SetSTT makes provider a speech-to-text that hears words in any speech
+// (haus#63); "" hears nothing (HA's result "error").
+func (h *HA) SetSTT(provider, words string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.stt == nil {
+		h.stt = map[string]string{}
+	}
+	h.stt[provider] = words
+}
+
+// Heard is what the speech-to-text was sent so far.
+func (h *HA) Heard() []Speech {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return append([]Speech(nil), h.heard...)
 }
 
 // Pipeline is one Assist pipeline and the runs HA keeps of it (its debug
@@ -368,6 +394,24 @@ func (h *HA) serve(w http.ResponseWriter, r *http.Request) {
 		json.NewDecoder(r.Body).Decode(&data)
 		h.calls = append(h.calls, Call{Domain: parts[0], Service: parts[1], Data: data})
 		w.Write([]byte(`[]`))
+	case r.Method == "POST" && strings.HasPrefix(r.URL.Path, "/api/stt/"):
+		provider := strings.TrimPrefix(r.URL.Path, "/api/stt/")
+		words, ok := h.stt[provider]
+		if !ok {
+			http.Error(w, "404: Not Found", http.StatusNotFound)
+			return
+		}
+		body, _ := io.ReadAll(r.Body)
+		h.heard = append(h.heard, Speech{Provider: provider, Content: r.Header.Get("X-Speech-Content"), Body: body})
+		if !strings.Contains(r.Header.Get("X-Speech-Content"), "format=wav") {
+			http.Error(w, "415: Unsupported Media Type", http.StatusUnsupportedMediaType)
+			return
+		}
+		if words == "" {
+			w.Write([]byte(`{"text":null,"result":"error"}`))
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{"text": words, "result": "success"})
 	case r.Method == "GET" && strings.HasPrefix(r.URL.Path, "/api/camera_proxy/"):
 		c, ok := h.cameras[strings.TrimPrefix(r.URL.Path, "/api/camera_proxy/")]
 		if !ok {

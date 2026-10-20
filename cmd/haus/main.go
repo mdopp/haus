@@ -55,6 +55,7 @@ type site struct {
 	usage       *usage.Counter // haus#50: what the family uses, anonymously; nil, nothing counted
 	voice       *usage.Voice   // haus#50: the voice control's runs from HA; nil, not counted
 	welcome     bool           // haus#56: Start sends a device's first visit to /willkommen
+	stt         pages.STT      // haus#63: the Sprechen field's microphone through HA's speech-to-text; no provider, no microphone
 }
 
 // routes is Haus's whole surface: /napi for the app, /mcp/haushalt for the
@@ -72,8 +73,11 @@ func routes(s site) http.Handler {
 	// page whose backend is not set says what is missing (laib#418)
 	family := pages.StartConfig{Laib: s.ops, LaibURL: s.laibURL, HA: s.napi.HA, Energy: s.napi.Energy, Calendar: s.hh.Calendar, Contacts: s.hh.Contacts,
 		Notes: s.hh.Notes, Library: s.hh.Library, Judge: s.hh.Judge, Docs: s.hh.Documents, Loc: s.hh.Loc, Favorites: s.favorites, Bote: s.bote,
-		Samba: s.samba, SambaHost: s.sambaHost, Usage: s.usage, PublicURL: s.publicURL, Welcome: s.welcome}
-	pagesMux.HandleFunc("/start", pages.Start(family))
+		Samba: s.samba, SambaHost: s.sambaHost, Usage: s.usage, PublicURL: s.publicURL, Welcome: s.welcome, STT: s.stt}
+	start := pages.Start(family) // one: the page and its box line share laib's status (haus#67)
+	pagesMux.HandleFunc("/start", start)
+	pagesMux.HandleFunc(pages.StartBoxPath, start)
+	pagesMux.HandleFunc("/mehr", pages.Mehr(family)) // the bar's fourth entry, with Abmelden (haus#67)
 	pagesMux.HandleFunc("/raeume", pages.Raeume(family))
 	pagesMux.HandleFunc("/energie", pages.Energie(family))
 	pagesMux.HandleFunc("/energie/", pages.Energie(family)) // a path it does not serve: 404 and the way back
@@ -89,6 +93,7 @@ func routes(s site) http.Handler {
 	pagesMux.HandleFunc(cards.NotePages, pages.Notizen(family))      // a note's own page
 	pagesMux.HandleFunc(cards.SwitchPath, pages.Schalten(family))    // a page's switch, the widgets' rule (haus#35)
 	pagesMux.HandleFunc("/sprechen", pages.Sprechen(family))         // the Sprechen field to the Bote, and its reply (haus#12)
+	pagesMux.HandleFunc(pages.HoerenPath, pages.Hoeren(family))      // the field's microphone, HA's speech-to-text (haus#63)
 	pagesMux.HandleFunc("/netzlaufwerk", pages.Netzlaufwerk(family)) // each person's network-drive password (haus#52)
 	pagesMux.HandleFunc("/willkommen", pages.Willkommen(family))     // a new person's apps and how to set them up (haus#56)
 	pagesMux.HandleFunc("/abmelden", pages.Abmelden(s.publicURL))    // Authelia's logout, back to Haus (haus#61)
@@ -171,7 +176,8 @@ func main() {
 	mux := routes(site{napi: cfg, hh: hh, store: store, ops: ops, proxySecret: proxySecret, laibURL: laibURL,
 		publicURL: os.Getenv("HAUS_PUBLIC_URL"), tickets: werkstatt.FromEnv(), favorites: favoriten.Open(dataDir), bote: b,
 		samba: samba.FromEnv(), sambaHost: os.Getenv("HAUS_SAMBA_HOST"),
-		usage: counter, voice: voice, welcome: true})
+		usage: counter, voice: voice, welcome: true,
+		stt: pages.STT{Provider: os.Getenv("HAUS_STT_PROVIDER"), Language: env("HAUS_STT_LANGUAGE", "de")}})
 	addr := env("HAUS_LISTEN", "127.0.0.1:8650")
 	log.Printf("haus %s: listening on %s as %s, laib %s, home assistant %v, haushalt %d tools, memory library %v (tidy-up %v), uploads %q, the Bote %v, counting %v (voice %v), pages only behind the proxy secret", Version, addr, pages.House.Display, ops.URL, cfg.HA != nil, len(haushalt.Tools(hh)), hh.Library != nil, hh.Judge != nil, cfg.UploadDir, b != nil, counter != nil, voice != nil)
 	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}

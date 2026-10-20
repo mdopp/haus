@@ -43,12 +43,13 @@ func logoutURL(publicURL, reqHost string) string {
 	return "https://auth." + domain + "/logout?rd=" + url.QueryEscape(back)
 }
 
-// konto is the top of every family page (haus#61): who is signed in, from
-// Authelia's Remote-User, and Abmelden, the way to another account.
+// konto is the top of every family page (haus#61, haus#67): who is signed
+// in, small, from Authelia's Remote-User. Abmelden, the way to another
+// account, is under Mehr (on a wide window in the list on the right).
 func konto(r *http.Request) string {
-	who := ""
-	if u := r.Header.Get("Remote-User"); u != "" {
-		who = "<span>Angemeldet als <span class=wer>" + html.EscapeString(u) + "</span></span>"
+	u := r.Header.Get("Remote-User")
+	if u == "" {
+		return ""
 	}
-	return "<p class=konto>" + who + "<a href=/abmelden>Abmelden</a></p>"
+	return "<p class=konto><span class=wer>" + html.EscapeString(u) + "</span></p>"
 }

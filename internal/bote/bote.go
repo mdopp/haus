@@ -10,6 +10,7 @@
 package bote
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -89,30 +90,48 @@ func who(p Person) string {
 	return line + "."
 }
 
-// Ask sends text as p and returns the Bote's reply. Anything but a chat
-// completion with text is an error; Hermes' words stay out of it.
-func (c *Client) Ask(ctx context.Context, p Person, text string) (string, error) {
-	body, err := json.Marshal(map[string]any{"messages": []map[string]string{
-		{"role": "system", "content": who(p)}, {"role": "user", "content": text}}})
+// request is one chat completion for p's text; stream asks Hermes for the
+// reply in pieces (OpenAI's server-sent events).
+func (c *Client) request(ctx context.Context, p Person, text string, stream bool) (*http.Response, error) {
+	msg := map[string]any{"messages": []map[string]string{
+		{"role": "system", "content": who(p)}, {"role": "user", "content": text}}}
+	if stream {
+		msg["stream"] = true
+	}
+	body, err := json.Marshal(msg)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.URL+"/chat/completions", bytes.NewReader(body))
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+c.Key)
 	req.Header.Set("X-Hermes-Session-Key", "haus:"+oneLine(p.User, 64))
+	if stream {
+		req.Header.Set("Accept", "text/event-stream")
+	}
 	hc := c.HTTP
 	if hc == nil {
 		hc = noRedirects
 	}
-	resp, err := hc.Do(req)
+	return hc.Do(req)
+}
+
+// Ask sends text as p and returns the Bote's reply. Anything but a chat
+// completion with text is an error; Hermes' words stay out of it.
+func (c *Client) Ask(ctx context.Context, p Person, text string) (string, error) {
+	resp, err := c.request(ctx, p, text, false)
 	if err != nil {
 		return "", err
 	}
 	defer resp.Body.Close()
+	return completion(resp)
+}
+
+// completion reads one whole chat completion's text.
+func completion(resp *http.Response) (string, error) {
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxReply+1))
 	if err != nil {
 		return "", err
@@ -134,6 +153,79 @@ func (c *Client) Ask(ctx context.Context, p Person, text string) (string, error)
 		return "", fmt.Errorf("bote: not a chat completion")
 	}
 	reply := strings.TrimSpace(ans.Choices[0].Message.Content)
+	if reply == "" {
+		return "", ErrNoAnswer
+	}
+	return reply, nil
+}
+
+// Stream sends text as p and hands each piece of the reply to piece as it
+// comes (stream: true, haus#63): a long answer shows while it is written,
+// and a slow first word is told from a slow whole. It returns the whole
+// reply, or what came before an error with that error. A Bote that
+// answers in one piece anyway (no event stream) is one piece.
+func (c *Client) Stream(ctx context.Context, p Person, text string, piece func(string)) (string, error) {
+	resp, err := c.request(ctx, p, text, true)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if ct, _, _ := strings.Cut(resp.Header.Get("Content-Type"), ";"); resp.StatusCode != http.StatusOK || strings.TrimSpace(ct) != "text/event-stream" {
+		reply, err := completion(resp)
+		if err == nil && piece != nil {
+			piece(reply)
+		}
+		return reply, err
+	}
+	var all strings.Builder
+	sc := bufio.NewScanner(resp.Body)
+	sc.Buffer(make([]byte, 64<<10), maxReply)
+	for sc.Scan() {
+		data, ok := strings.CutPrefix(sc.Text(), "data:")
+		if !ok {
+			continue // an event name, an id, a comment, the blank line between events
+		}
+		data = strings.TrimSpace(data)
+		if data == "[DONE]" {
+			break
+		}
+		var ev struct {
+			Choices []struct {
+				Delta struct {
+					Content string `json:"content"`
+				} `json:"delta"`
+			} `json:"choices"`
+			Error json.RawMessage `json:"error"`
+		}
+		if err := json.Unmarshal([]byte(data), &ev); err != nil {
+			return strings.TrimSpace(all.String()), fmt.Errorf("bote: not a chat completion chunk")
+		}
+		if len(ev.Error) > 0 && string(ev.Error) != "null" {
+			return strings.TrimSpace(all.String()), fmt.Errorf("bote: the run failed")
+		}
+		for _, ch := range ev.Choices {
+			if ch.Delta.Content == "" {
+				continue
+			}
+			if all.Len()+len(ch.Delta.Content) > maxReply {
+				return strings.TrimSpace(all.String()), fmt.Errorf("bote: the reply is over %d bytes", maxReply)
+			}
+			if all.Len() == 0 { // the reply starts at its first word
+				ch.Delta.Content = strings.TrimLeft(ch.Delta.Content, " \t\r\n")
+				if ch.Delta.Content == "" {
+					continue
+				}
+			}
+			all.WriteString(ch.Delta.Content)
+			if piece != nil {
+				piece(ch.Delta.Content)
+			}
+		}
+	}
+	reply := strings.TrimSpace(all.String())
+	if err := sc.Err(); err != nil {
+		return reply, err
+	}
 	if reply == "" {
 		return "", ErrNoAnswer
 	}

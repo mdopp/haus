@@ -26,7 +26,11 @@ import (
 // path Haus does not serve) is no page view.
 var pagePaths = map[string]string{"/start": "start", "/raeume": "raeume", "/energie": "energie", "/medien": "medien",
 	"/kalender": "kalender", "/notizen": "notizen", "/sprechen": "sprechen", "/box": "box", "/box/geraete": "geraete",
-	"/pair-device": "koppeln", cards.SwitchPath: "schalten"}
+	"/pair-device": "koppeln", cards.SwitchPath: "schalten", "/mehr": "mehr"}
+
+// fragmentPaths are parts of a page fetched after it (haus#67): the plain
+// lines they show count for their page, a view does not.
+var fragmentPaths = map[string]string{StartBoxPath: "start"}
 
 var pagePrefixes = []struct{ prefix, page string }{
 	{cards.ReminderPages, "erinnerung"}, {cards.ThingPages, "ding"}, {cards.ContactPages, "kontakt"},
@@ -94,6 +98,10 @@ func Counted(c *usage.Counter, next http.Handler) http.Handler {
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		page := pageOf(r.URL.Path)
+		fragment := false
+		if page == "" {
+			page, fragment = fragmentPaths[r.URL.Path], true
+		}
 		if page == "" {
 			next.ServeHTTP(w, r)
 			return
@@ -103,7 +111,7 @@ func Counted(c *usage.Counter, next http.Handler) http.Handler {
 		if rec.code == http.StatusNotFound {
 			return
 		}
-		if r.Method == http.MethodGet {
+		if r.Method == http.MethodGet && !fragment {
 			if rec.code == http.StatusOK && page != "schalten" {
 				c.Count("seite." + page)
 				if page == "notizen" && strings.TrimSpace(r.URL.Query().Get("q")) != "" {
@@ -114,7 +122,7 @@ func Counted(c *usage.Counter, next http.Handler) http.Handler {
 				c.Count("von.widget." + kind)
 			}
 		}
-		body := rec.body.String()
+		body := withoutScripts(rec.body.String()) // a script's words are not lines the page shows
 		for _, l := range degradedLines {
 			if strings.Contains(body, l.says) {
 				c.Count("gestoert." + page + "." + l.key)
@@ -122,6 +130,21 @@ func Counted(c *usage.Counter, next http.Handler) http.Handler {
 			}
 		}
 	})
+}
+
+// withoutScripts is a page without its scripts.
+func withoutScripts(s string) string {
+	for {
+		i := strings.Index(s, "<script")
+		if i < 0 {
+			return s
+		}
+		j := strings.Index(s[i:], "</script>")
+		if j < 0 {
+			return s[:i]
+		}
+		s = s[:i] + s[i+j+len("</script>"):]
+	}
 }
 
 // seenPage passes a page through and keeps what it said, up to a page's size.
@@ -135,6 +158,9 @@ func (s *seenPage) WriteHeader(code int) {
 	s.code = code
 	s.ResponseWriter.WriteHeader(code)
 }
+
+// Unwrap lets a streamed answer flush through (http.ResponseController).
+func (s *seenPage) Unwrap() http.ResponseWriter { return s.ResponseWriter }
 
 func (s *seenPage) Write(p []byte) (int, error) {
 	if s.body.Len() < 1<<20 {
@@ -175,7 +201,8 @@ var features = []feature{
 var says = map[string]string{
 	"seite.erinnerung": "Eine Erinnerung geöffnet", "seite.kontakt": "Einen Kontakt geöffnet", "seite.dokument": "Ein Dokument geöffnet",
 	"seite.notiz": "Eine Notiz geöffnet", "seite.sprechen": "Sprechen geöffnet", "seite.box": "Box geöffnet", "seite.geraete": "Box · Geräte geöffnet",
-	"seite.koppeln":          "Ein Telefon gekoppelt",
+	"seite.koppeln": "Ein Telefon gekoppelt", "seite.mehr": "Mehr geöffnet",
+	"sprechen.mikrofon":      "Ins Mikrofon gesprochen",
 	"schalten.light.turn_on": "Licht eingeschaltet", "schalten.light.turn_off": "Licht ausgeschaltet",
 	"schalten.switch.turn_on": "Schalter eingeschaltet", "schalten.switch.turn_off": "Schalter ausgeschaltet",
 	"schalten.media_player.media_pause": "Musik oder Film angehalten", "schalten.media_player.media_play": "Musik oder Film weiterlaufen lassen",
@@ -202,7 +229,7 @@ func init() {
 var pageIn = map[string]string{"start": "auf Start", "raeume": "in Räume", "ding": "auf der Seite eines Geräts", "energie": "in Energie",
 	"medien": "in Medien", "kalender": "im Kalender", "erinnerung": "bei einer Erinnerung", "kontakt": "bei einem Kontakt",
 	"dokument": "bei einem Dokument", "notizen": "in Notizen", "notiz": "bei einer Notiz", "sprechen": "im Sprechen-Feld",
-	"schalten": "beim Schalten", "box": "auf der Box-Seite", "geraete": "bei den Geräten", "koppeln": "beim Koppeln"}
+	"schalten": "beim Schalten", "mehr": "in Mehr", "box": "auf der Box-Seite", "geraete": "bei den Geräten", "koppeln": "beim Koppeln"}
 
 // eventSays is a Haus event in words, "" when the card does not show it.
 func eventSays(event string) string {

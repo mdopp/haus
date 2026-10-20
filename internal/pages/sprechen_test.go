@@ -43,8 +43,8 @@ func say(t *testing.T, h http.HandlerFunc, user, text string, hdr map[string]str
 }
 
 // haus#12: Start has the Sprechen field at the top, under the day and
-// above the cards: one plain field and Senden, posting to Haus itself, no
-// script. It names no persona: the persona speaks where you talk to it
+// above the cards: one plain field and Senden, posting to Haus itself, a
+// plain form without script (haus#63: with it, the answer has its page). It names no persona: the persona speaks where you talk to it
 // (haus#35). Without the Bote there is no field and no word about it.
 func TestStartHasTheSprechenField(t *testing.T) {
 	House = persona.Persona{Display: "Joshua", Greeting: map[string]string{"de": "Wollen wir ein Spiel spielen?"}}
@@ -54,17 +54,18 @@ func TestStartHasTheSprechenField(t *testing.T) {
 	_, bc := fakeBote(t)
 	_, body := startPage(t, StartConfig{HA: hc, Bote: bc}, "family")
 	mustContain(t, body, "<form method=post action=/sprechen class=sprechen>", ">Sprechen</label>", "name=nachricht", "maxlength=1000",
-		"required", "<button>Senden</button>")
+		"required", "<button class=senden>Senden</button>")
 	before(t, body, "class=datum", "action=/sprechen")
 	before(t, body, "action=/sprechen", "karte-im-haus")
-	mustNotContain(t, body, "<script", "Joshua", "Wollen wir", "Bote", "Hermes", "8642")
+	// the script hands the sentence on to /sprechen; the form works without it
+	mustNotContain(t, body, "Joshua", "Wollen wir", "Bote", "Hermes", "8642", "class=mikro")
 
 	_, body = startPage(t, StartConfig{HA: hc}, "family")
 	mustNotContain(t, body, "/sprechen", "Sprechen", "Bote")
 }
 
-// haus#12 (owner): Sprechen is no tab — the bar is full (Start · Räume ·
-// Energie · Medien · Kalender · Notizen · Box). The field is on Start, and
+// haus#12 (owner): Sprechen is no tab — the bar has four at most (haus#67:
+// Start · Geräte · Haushalt · Mehr). The field is on Start, and
 // /sprechen, where its reply comes back, belongs to Start: Start is the
 // tab marked there.
 func TestSprechenIsNoTab(t *testing.T) {
@@ -145,7 +146,7 @@ func TestSprechenShowsTheReplyAsText(t *testing.T) {
 	say(t, h, "anna", "Menü <i>bitte</i>", nil)
 	_, body, _ := talkPage(t, h, "anna")
 	mustContain(t, body, "Menü &lt;i&gt;bitte&lt;/i&gt;", "<strong>Menü</strong>", "<pre>JOSHUA&gt; 1 HAUS\n        2 SPIELE</pre>", "&lt;script&gt;alert(1)&lt;/script&gt;", "&lt;a href=x&gt;")
-	mustNotContain(t, body, "<script", "<a href=x>", "<i>", "```", "**")
+	mustNotContain(t, body, "<script>alert", "<a href=x>", "<i>", "```", "**")
 }
 
 // Only a person, only from Haus's own page (the #35 rule): no Remote-User,
@@ -225,7 +226,7 @@ func TestSprechenSaysASlowBotePlainly(t *testing.T) {
 		t.Fatalf("→ %d", rec.Code)
 	}
 	_, body, _ := talkPage(t, h, "anna")
-	mustContain(t, body, "Wie wird das Wetter?", "Joshua hat nach einer Minute noch nicht geantwortet.", "bevor du es noch einmal schickst")
+	mustContain(t, body, "Wie wird das Wetter?", "Joshua hat nach zweieinhalb Minuten noch nicht geantwortet.", "bevor du es noch einmal schickst")
 	mustNotContain(t, body, "Erledigt", ">Joshua<") // Haus says it, not in the persona's name
 	mustNotLeak(t, body, "deadline", "context", "timeout", "Bote", "Hermes")
 }
@@ -259,7 +260,7 @@ func TestSprechenSaysABoteThatDoesNotAnswerPlainly(t *testing.T) {
 		if code != 200 {
 			t.Fatalf("%s: page %d", what, code)
 		}
-		mustContain(t, body, "Hallo", "Joshua antwortet gerade nicht. Versuch es später noch einmal.")
+		mustContain(t, body, "Hallo", "Joshua antwortet gerade nicht. Versuch es gleich noch einmal.")
 		mustNotContain(t, body, ">Joshua<")
 		mustNotLeak(t, body, "502", "Agent run", "Invalid API key", "agent_incomplete", "Bote", "Hermes", "8642", "refused")
 	}
@@ -312,7 +313,7 @@ func TestSprechenKeepsTheReplyWhenThePageIsLeft(t *testing.T) {
 	h.ServeHTTP(httptest.NewRecorder(), req)
 	_, body, _ := talkPage(t, h, "anna")
 	mustContain(t, body, "Weck mich um sieben", ">Joshua<", "Der Wecker steht auf sieben.")
-	mustNotContain(t, body, "antwortet gerade nicht")
+	mustNotContain(t, withoutScripts(body), "antwortet gerade nicht")
 }
 
 // The Bote's key is Haus's alone: never on a page, never in the log —
