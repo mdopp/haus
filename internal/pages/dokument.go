@@ -19,6 +19,10 @@ func Dokument(cfg StartConfig) http.HandlerFunc {
 		if !showOnly(w, r, "Das Dokument") {
 			return
 		}
+		if r.URL.Path == cards.DocumentPages { // no id: the Dokumente page (haus#68)
+			http.Redirect(w, r, DokumentePath, http.StatusFound)
+			return
+		}
 		if cfg.Docs == nil {
 			notSetDocs.write(w, r, cfg, "Dokumente")
 			return

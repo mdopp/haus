@@ -143,130 +143,11 @@ type staged struct{ tmp, name, ext string }
 
 // POST /napi/upload → {ok, id} for one file, {ok, files:[{ok, id}]} for several.
 func (u *uploads) upload(w http.ResponseWriter, r *http.Request) {
-	select {
-	case u.slots <- struct{}{}:
-		defer func() { <-u.slots }()
-	default:
-		refuse(w, http.StatusTooManyRequests, "busy")
+	placed, code, reason := u.store(w, r)
+	if code != 0 {
+		refuse(w, code, reason)
 		return
 	}
-	if free, err := freeSpace(u.dir); err != nil {
-		log.Printf("haus: upload: free space of %s: %v", u.dir, err)
-	} else if free < uploadMinFree() {
-		log.Printf("haus: upload: %s has %d bytes free, wants %d", u.dir, free, uploadMinFree())
-		refuse(w, http.StatusInsufficientStorage, "insufficient_storage")
-		return
-	}
-	// not supported by every ResponseWriter (a test recorder); the server's is
-	http.NewResponseController(w).SetReadDeadline(time.Now().Add(uploadReadTimeout))
-	r.Body = http.MaxBytesReader(w, r.Body, uploadMaxBody)
-	mr, err := r.MultipartReader()
-	if err != nil {
-		refuse(w, http.StatusBadRequest, "expected multipart/form-data")
-		return
-	}
-	root, err := os.OpenRoot(u.dir)
-	if err != nil {
-		log.Printf("haus: upload: %v", err)
-		refuse(w, http.StatusServiceUnavailable, "upload_unavailable")
-		return
-	}
-	defer root.Close()
-	var parts []staged
-	defer func() {
-		for _, p := range parts {
-			root.Remove(p.tmp) // gone already once placed by rename
-		}
-	}()
-	fail := func(err error) {
-		var ue *uploadErr
-		var mbe *http.MaxBytesError
-		var de *diskErr
-		switch {
-		case errors.As(err, &ue):
-			refuse(w, ue.code, ue.msg)
-		case errors.As(err, &mbe):
-			refuse(w, http.StatusRequestEntityTooLarge, "request too large")
-		case errors.As(err, &de):
-			log.Printf("haus: upload into %s: %v", u.dir, err)
-			if errors.Is(err, syscall.ENOSPC) || errors.Is(err, syscall.EDQUOT) {
-				refuse(w, http.StatusInsufficientStorage, "insufficient_storage")
-			} else {
-				refuse(w, http.StatusInternalServerError, "store_failed")
-			}
-		case errors.Is(err, os.ErrDeadlineExceeded):
-			refuse(w, http.StatusRequestTimeout, "too_slow")
-		default:
-			log.Printf("haus: upload: %v", err)
-			refuse(w, http.StatusBadRequest, "malformed multipart")
-		}
-	}
-	chosen := ""
-	for {
-		p, err := mr.NextPart()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			fail(err)
-			return
-		}
-		switch p.FormName() {
-		case "filename":
-			b, err := io.ReadAll(io.LimitReader(p, 1<<10))
-			if err != nil {
-				fail(err)
-				return
-			}
-			chosen = string(b)
-		case "file":
-			if len(parts) == uploadMaxFiles {
-				refuse(w, http.StatusBadRequest, "too many files")
-				return
-			}
-			s, err := stage(root, p)
-			if s.tmp != "" {
-				parts = append(parts, s)
-			}
-			if err != nil {
-				fail(err)
-				return
-			}
-		default:
-			if _, err := io.Copy(io.Discard, p); err != nil {
-				fail(err)
-				return
-			}
-		}
-	}
-	if len(parts) == 0 {
-		refuse(w, http.StatusBadRequest, "no file part")
-		return
-	}
-	dir, err := root.Open(".")
-	if err != nil {
-		fail(&diskErr{err})
-		return
-	}
-	defer dir.Close()
-	var placed []string
-	for _, p := range parts {
-		name := p.name
-		if chosen != "" {
-			name = chosen
-		}
-		final, err := place(root, dir, p.tmp, stem(name), p.ext)
-		if err != nil {
-			log.Printf("haus: upload into %s: %v", u.dir, err)
-			for _, f := range placed { // all or nothing: these are ours, just made
-				root.Remove(f)
-			}
-			refuse(w, http.StatusInternalServerError, "store_failed")
-			return
-		}
-		placed = append(placed, final)
-	}
-	log.Printf("haus: upload stored %s", strings.Join(placed, ", "))
 	if len(placed) == 1 {
 		answer(w, http.StatusOK, map[string]any{"ok": true, "id": placed[0]})
 		return
@@ -276,6 +157,142 @@ func (u *uploads) upload(w http.ResponseWriter, r *http.Request) {
 		files = append(files, map[string]any{"ok": true, "id": f})
 	}
 	answer(w, http.StatusOK, map[string]any{"ok": true, "files": files})
+}
+
+// Uploads is the same way into Paperless's inbox for Haus's own Dokumente
+// page (haus#68): one request's files, all or nothing, as the app's.
+type Uploads struct{ u *uploads }
+
+// NewUploads stores into dir, the share's consume folder.
+func NewUploads(dir string) *Uploads { return &Uploads{newUploads(dir)} }
+
+// Store reads r's multipart form ("file" parts, an optional "filename")
+// into the folder: the names it placed, or the status and the reason
+// (napi's words, "unsupported type", "busy" …) when nothing was stored.
+func (u *Uploads) Store(w http.ResponseWriter, r *http.Request) ([]string, int, string) {
+	return u.u.store(w, r)
+}
+
+// store is one upload request: the names placed, or a status and its
+// reason (code 0 when stored).
+func (u *uploads) store(w http.ResponseWriter, r *http.Request) ([]string, int, string) {
+	select {
+	case u.slots <- struct{}{}:
+		defer func() { <-u.slots }()
+	default:
+		return nil, http.StatusTooManyRequests, "busy"
+	}
+	if free, err := freeSpace(u.dir); err != nil {
+		log.Printf("haus: upload: free space of %s: %v", u.dir, err)
+	} else if free < uploadMinFree() {
+		log.Printf("haus: upload: %s has %d bytes free, wants %d", u.dir, free, uploadMinFree())
+		return nil, http.StatusInsufficientStorage, "insufficient_storage"
+	}
+	// not supported by every ResponseWriter (a test recorder); the server's is
+	http.NewResponseController(w).SetReadDeadline(time.Now().Add(uploadReadTimeout))
+	r.Body = http.MaxBytesReader(w, r.Body, uploadMaxBody)
+	mr, err := r.MultipartReader()
+	if err != nil {
+		return nil, http.StatusBadRequest, "expected multipart/form-data"
+	}
+	root, err := os.OpenRoot(u.dir)
+	if err != nil {
+		log.Printf("haus: upload: %v", err)
+		return nil, http.StatusServiceUnavailable, "upload_unavailable"
+	}
+	defer root.Close()
+	var parts []staged
+	defer func() {
+		for _, p := range parts {
+			root.Remove(p.tmp) // gone already once placed by rename
+		}
+	}()
+	fail := func(err error) (int, string) {
+		var ue *uploadErr
+		var mbe *http.MaxBytesError
+		var de *diskErr
+		switch {
+		case errors.As(err, &ue):
+			return ue.code, ue.msg
+		case errors.As(err, &mbe):
+			return http.StatusRequestEntityTooLarge, "request too large"
+		case errors.As(err, &de):
+			log.Printf("haus: upload into %s: %v", u.dir, err)
+			if errors.Is(err, syscall.ENOSPC) || errors.Is(err, syscall.EDQUOT) {
+				return http.StatusInsufficientStorage, "insufficient_storage"
+			}
+			return http.StatusInternalServerError, "store_failed"
+		case errors.Is(err, os.ErrDeadlineExceeded):
+			return http.StatusRequestTimeout, "too_slow"
+		default:
+			log.Printf("haus: upload: %v", err)
+			return http.StatusBadRequest, "malformed multipart"
+		}
+	}
+	chosen := ""
+	for {
+		p, err := mr.NextPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			code, why := fail(err)
+			return nil, code, why
+		}
+		switch p.FormName() {
+		case "filename":
+			b, err := io.ReadAll(io.LimitReader(p, 1<<10))
+			if err != nil {
+				code, why := fail(err)
+				return nil, code, why
+			}
+			chosen = string(b)
+		case "file":
+			if len(parts) == uploadMaxFiles {
+				return nil, http.StatusBadRequest, "too many files"
+			}
+			s, err := stage(root, p)
+			if s.tmp != "" {
+				parts = append(parts, s)
+			}
+			if err != nil {
+				code, why := fail(err)
+				return nil, code, why
+			}
+		default:
+			if _, err := io.Copy(io.Discard, p); err != nil {
+				code, why := fail(err)
+				return nil, code, why
+			}
+		}
+	}
+	if len(parts) == 0 {
+		return nil, http.StatusBadRequest, "no file part"
+	}
+	dir, err := root.Open(".")
+	if err != nil {
+		code, why := fail(&diskErr{err})
+		return nil, code, why
+	}
+	defer dir.Close()
+	var placed []string
+	for _, p := range parts {
+		name := p.name
+		if strings.TrimSpace(chosen) != "" {
+			name = chosen
+		}
+		final, err := place(root, dir, p.tmp, stem(name), p.ext)
+		if err != nil {
+			log.Printf("haus: upload into %s: %v", u.dir, err)
+			for _, f := range placed { // all or nothing: these are ours, just made
+				root.Remove(f)
+			}
+			return nil, http.StatusInternalServerError, "store_failed"
+		}
+		placed = append(placed, final)
+	}
+	log.Printf("haus: upload stored %s", strings.Join(placed, ", "))
+	return placed, 0, ""
 }
 
 // stage writes one file part aside, checked: an allowed type whose first

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 	_ "time/tzdata" // the image is scratch: TZ needs the zone database inside the binary
@@ -58,6 +59,9 @@ type site struct {
 	stt         pages.STT       // haus#63: the Sprechen field's microphone through HA's speech-to-text; no provider, no microphone
 	haPublic    string          // haus#64: Home Assistant's public address, Geräte's "In Home Assistant öffnen"; empty, no link
 	inverted    map[string]bool // haus#64: covers wired the wrong way round, shown and set turned over
+	// haus#68: the Dokumente page's mail address, Paperless's public address and whether it is LAN-only
+	docsMail, paperlessPublic string
+	paperlessLAN              bool
 }
 
 // routes is Haus's whole surface: /napi for the app, /mcp/haushalt for the
@@ -76,7 +80,11 @@ func routes(s site) http.Handler {
 	family := pages.StartConfig{Laib: s.ops, LaibURL: s.laibURL, HA: s.napi.HA, Energy: s.napi.Energy, Calendar: s.hh.Calendar, Contacts: s.hh.Contacts,
 		Notes: s.hh.Notes, Library: s.hh.Library, Judge: s.hh.Judge, Docs: s.hh.Documents, Loc: s.hh.Loc, Favorites: s.favorites, Bote: s.bote,
 		Samba: s.samba, SambaHost: s.sambaHost, Usage: s.usage, PublicURL: s.publicURL, Welcome: s.welcome, STT: s.stt,
-		HAPublicURL: s.haPublic, Inverted: s.inverted}
+		HAPublicURL: s.haPublic, Inverted: s.inverted,
+		DocumentsMail: s.docsMail, PaperlessPublicURL: s.paperlessPublic, PaperlessLANOnly: s.paperlessLAN}
+	if s.napi.UploadDir != "" { // haus#68: the page's way into Paperless's inbox, the app's folder
+		family.Ablage = napi.NewUploads(s.napi.UploadDir)
+	}
 	start := pages.Start(family) // one: the page and its box line share laib's status (haus#67)
 	pagesMux.HandleFunc("/start", start)
 	pagesMux.HandleFunc(pages.StartBoxPath, start)
@@ -92,6 +100,7 @@ func routes(s site) http.Handler {
 	pagesMux.HandleFunc(cards.ThingPages, pages.Ding(family))
 	pagesMux.HandleFunc(cards.ReminderPages, pages.Erinnerung(family))
 	pagesMux.HandleFunc(cards.ContactPages, pages.Kontakt(family))
+	pagesMux.HandleFunc(pages.DokumentePath, pages.Dokumente(family)) // the ways into the archive (haus#68)
 	pagesMux.HandleFunc(cards.DocumentPages, pages.Dokument(family))
 	pagesMux.HandleFunc(cards.NotePages, pages.Notizen(family))      // a note's own page
 	pagesMux.HandleFunc(cards.SwitchPath, pages.Schalten(family))    // a page's switch, the widgets' rule (haus#35)
@@ -167,6 +176,12 @@ func main() {
 		log.Printf("haus: HAUS_HA_PUBLIC_URL %q is not an http(s) address: no link to Home Assistant", os.Getenv("HAUS_HA_PUBLIC_URL"))
 	}
 	laibURL := env("LAIB_PUBLIC_URL", "https://laib."+env("LAIB_DOMAIN", "example"))
+	docsMail := pages.MailAddress(os.Getenv("HAUS_DOCUMENTS_MAIL")) // haus#68
+	if docsMail == "" && os.Getenv("HAUS_DOCUMENTS_MAIL") != "" {
+		log.Printf("haus: HAUS_DOCUMENTS_MAIL %q is not one plain address: no mail button", os.Getenv("HAUS_DOCUMENTS_MAIL"))
+	}
+	paperlessPublic := pages.AppURL(os.Getenv("HAUS_PAPERLESS_PUBLIC_URL"))
+	paperlessLAN, _ := strconv.ParseBool(os.Getenv("HAUS_PAPERLESS_LAN_ONLY"))
 	b := bote.FromEnv() // the Sprechen field (haus#12): with the Bote's key only (laib#215)
 	// haus#50: counted for usage-metrics, flushed every five minutes; the voice
 	// from HA's Assist runs every minute, as HA keeps only the last ten
@@ -185,7 +200,8 @@ func main() {
 		samba: samba.FromEnv(), sambaHost: os.Getenv("HAUS_SAMBA_HOST"),
 		usage: counter, voice: voice, welcome: true,
 		stt:      pages.STT{Provider: os.Getenv("HAUS_STT_PROVIDER"), Language: env("HAUS_STT_LANGUAGE", "de")},
-		haPublic: haPublic, inverted: pages.InvertedFromList(os.Getenv("HAUS_COVER_INVERTED"))})
+		haPublic: haPublic, inverted: pages.InvertedFromList(os.Getenv("HAUS_COVER_INVERTED")),
+		docsMail: docsMail, paperlessPublic: paperlessPublic, paperlessLAN: paperlessLAN})
 	addr := env("HAUS_LISTEN", "127.0.0.1:8650")
 	log.Printf("haus %s: listening on %s as %s, laib %s, home assistant %v, haushalt %d tools, memory library %v (tidy-up %v), uploads %q, the Bote %v, counting %v (voice %v), pages only behind the proxy secret", Version, addr, pages.House.Display, ops.URL, cfg.HA != nil, len(haushalt.Tools(hh)), hh.Library != nil, hh.Judge != nil, cfg.UploadDir, b != nil, counter != nil, voice != nil)
 	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
