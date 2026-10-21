@@ -42,9 +42,30 @@ func before(t *testing.T, body, a, b string) {
 	}
 }
 
-// haus#12, haus#35: one tab bar on every family page, the item pages too
-// — Start · Räume · Kalender · Notizen, each with its icon and only when
-// its backend is set, Box for admins — with the page itself marked.
+// barOf is the nav's bar entries, without what Mehr holds.
+func barOf(t *testing.T, body string) string {
+	t.Helper()
+	i, j := strings.Index(body, "<nav class=tabs aria-label=Seiten>"), strings.Index(body, "<div class=mehr>")
+	if i < 0 || j < i {
+		t.Fatalf("no selection with Mehr:\n%s", body)
+	}
+	return body[i:j]
+}
+
+// mehrOf is what Mehr holds in the nav (a wide window shows it open).
+func mehrOf(t *testing.T, body string) string {
+	t.Helper()
+	i := strings.Index(body, "<div class=mehr>")
+	j := strings.Index(body[i:], "</nav>")
+	return body[i : i+j]
+}
+
+// haus#12, haus#35, haus#67: one selection on every family page, the item
+// pages too. The bar has at most four entries — Start · Geräte · Haushalt
+// · Mehr, each with its icon and only when its backend is set — and Mehr
+// holds Energie, Medien, Notizen and, for admins, Box, then who is signed
+// in and Abmelden. The page itself is marked, and its bar entry: Räume is
+// Geräte, Kalender is Haushalt, Energie is Mehr.
 func TestFamilyTabBar(t *testing.T) {
 	fake, hc := house(t)
 	fake.Set("light.flur", "on", map[string]any{"friendly_name": "Flurlicht"})
@@ -52,33 +73,65 @@ func TestFamilyTabBar(t *testing.T) {
 	nd := notesDir(t, map[string]time.Duration{"Einkaufsliste": time.Hour})
 	all := StartConfig{HA: hc, Calendar: cal, Notes: nd}
 	for _, p := range []struct {
-		page func(StartConfig) http.HandlerFunc
-		path string
-		self string
-	}{{Start, "/start", "/start"}, {Raeume, "/raeume", "/raeume"}, {Energie, "/energie", "/energie"}, {Medien, "/medien", "/medien"}, {Kalender, "/kalender", "/kalender"}, {Notizen, "/notizen", "/notizen"},
-		{Ding, "/raeume/light.flur", "/raeume"}, {Ding, "/raeume/light.gibtsnicht", "/raeume"}, {Notizen, "/notizen/einkaufsliste.md", "/notizen"}} {
+		page      func(StartConfig) http.HandlerFunc
+		path      string
+		bar, self string
+	}{{Start, "/start", "/start", ""}, {Raeume, "/raeume", "/raeume", ""}, {Kalender, "/kalender", "/kalender", ""},
+		{Energie, "/energie", "/mehr", "/energie"}, {Medien, "/medien", "/mehr", "/medien"}, {Notizen, "/notizen", "/mehr", "/notizen"},
+		{Mehr, "/mehr", "/mehr", ""}, {Ding, "/raeume/light.flur", "/raeume", ""}, {Ding, "/raeume/light.gibtsnicht", "/raeume", ""},
+		{Notizen, "/notizen/einkaufsliste.md", "/mehr", "/notizen"}} {
 		code, body, _ := familyPage(t, p.page, all, "GET", p.path, "family")
 		if code != 200 && code != 404 {
 			t.Fatalf("%s → %d", p.path, code)
 		}
-		mustContain(t, body, "<nav class=tabs aria-label=Seiten>", "href=/start", "href=/raeume", "href=/energie", "href=/medien", "href=/kalender", "href=/notizen",
-			"href="+p.self+" aria-current=page>", "<svg")
-		if n := strings.Count(body, "aria-current=page"); n != 1 {
-			t.Errorf("%s: %d tabs marked", p.path, n)
+		bar, more := barOf(t, body), mehrOf(t, body)
+		if n := strings.Count(bar, "<a "); n != 4 {
+			t.Errorf("%s: %d entries in the bar, want 4", p.path, n)
 		}
-		mustNotContain(t, body, "href=/box")
-		before(t, body, "href=/start", "href=/raeume")
-		before(t, body, "href=/raeume", "href=/energie")
-		before(t, body, "href=/energie", "href=/medien")
-		before(t, body, "href=/medien", "href=/kalender")
-		before(t, body, "href=/kalender", "href=/notizen")
+		mustContain(t, bar, ">Start</a>", ">Geräte</a>", ">Haushalt</a>", ">Mehr</a>", "<svg")
+		before(t, bar, "href=/start", "href=/raeume")
+		before(t, bar, "href=/raeume", "href=/kalender")
+		before(t, bar, "href=/kalender", "href=/mehr")
+		mustNotContain(t, bar, "href=/energie", "href=/medien", "href=/notizen", "href=/box", "Abmelden")
+		if !strings.Contains(bar, "href="+p.bar+" aria-current=page>") || strings.Count(bar, "aria-current=page") != 1 {
+			t.Errorf("%s: the bar marks not just %s:\n%s", p.path, p.bar, bar)
+		}
+		mustContain(t, more, ">Mehr</p>", ">Energie</a>", ">Medien</a>", ">Notizen</a>", "Angemeldet als <span class=wer>anna</span>", "href=/abmelden>")
+		before(t, more, "href=/energie", "href=/medien")
+		before(t, more, "href=/medien", "href=/notizen")
+		before(t, more, "href=/notizen", "href=/abmelden")
+		mustNotContain(t, more, "href=/box")
+		switch n := strings.Count(more, "aria-current=page"); {
+		case p.self == "" && n != 0, p.self != "" && (n != 1 || !strings.Contains(more, "href="+p.self+" aria-current=page>")):
+			t.Errorf("%s: Mehr marks %d, want %q", p.path, n, p.self)
+		}
 		_, body, _ = familyPage(t, p.page, all, "GET", p.path, "family,admins")
-		mustContain(t, body, "href=/box")
+		more = mehrOf(t, body)
+		mustContain(t, more, "href=/box")
+		before(t, more, "href=/notizen", "href=/box")
+		mustNotContain(t, barOf(t, body), "href=/box")
 	}
-	// nothing set: Start alone, and no word about the rest
+	// Box is under Mehr, for admins
+	_, body, _ := familyPage(t, func(c StartConfig) http.HandlerFunc {
+		return BoxPage(BoxConfig{Laib: fakeLaib(t, allGreen(t), nil), Family: c})
+	}, all, "GET", "/box", "admins")
+	mustContain(t, barOf(t, body), "href=/mehr aria-current=page>")
+	mustContain(t, mehrOf(t, body), "href=/box aria-current=page>")
+	// nothing set: Start and Mehr, and no word about the rest
+	_, body, _ = familyPage(t, Start, StartConfig{}, "GET", "/start", "family")
+	mustContain(t, body, "href=/start aria-current=page>", "href=/mehr>")
+	mustNotContain(t, body, "href=/raeume", "href=/energie", "href=/medien", "href=/kalender", "href=/notizen", "Räume", "Geräte", "Haushalt", "Energie", "Medien", "Kalender", "Notizen")
+}
+
+// haus#67: on the phone the bar is at the bottom; from 900 px it is a list
+// on the right, icon and name, the page marked, Mehr open in it (its own
+// entry the phone's only), and the cards in two columns beside it.
+func TestFamilySelectionOnAWideWindow(t *testing.T) {
 	_, body, _ := familyPage(t, Start, StartConfig{}, "GET", "/start", "family")
-	mustContain(t, body, "href=/start aria-current=page>")
-	mustNotContain(t, body, "href=/raeume", "href=/energie", "href=/medien", "href=/kalender", "href=/notizen", "Räume", "Energie", "Medien", "Kalender", "Notizen")
+	mustContain(t, body, ".tabs{position:fixed;left:0;right:0;bottom:0;", ".tabs .mehr{display:none}", "@media (min-width:900px){",
+		".tabs{top:0;left:auto;right:0;bottom:0;width:15rem;flex-direction:column;", ".tabs .zu-mehr{display:none}",
+		".tabs .mehr{display:flex;", "grid-template-columns:repeat(2,minmax(0,32rem))", "body>.karte{grid-column:auto}")
+	before(t, body, ".tabs .mehr{display:none}", "@media (min-width:900px){")
 }
 
 // laib#418: a page whose backend this box does not have says so, in one

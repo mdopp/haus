@@ -6,24 +6,33 @@ import (
 	"testing"
 )
 
-// haus#61: every family page, Box too, says who is signed in and has
-// Abmelden; /abmelden sends to Authelia's logout beside Haus, and the
-// login afterwards returns to Haus.
-func TestAbmeldenOnEveryPage(t *testing.T) {
+// haus#61, haus#67: every family page, Box too, says small at the top who
+// is signed in, and nothing more there; Abmelden is under Mehr — on the
+// Mehr page with the account, and in the list a wide window shows on the
+// right. /abmelden sends to Authelia's logout beside Haus, and the login
+// afterwards returns to Haus.
+func TestAbmeldenUnderMehr(t *testing.T) {
 	for _, groups := range []string{"family", "admins"} {
 		_, body, _ := familyPage(t, Start, StartConfig{}, "GET", "/start", groups)
-		if !strings.Contains(body, `Angemeldet als <span class=wer>anna</span>`) || !strings.Contains(body, `<a href=/abmelden>Abmelden</a>`) {
-			t.Errorf("%s: Start has no account line:\n%s", groups, body)
+		mustContain(t, body, `<p class=konto><span class=wer>anna</span></p>`, `<div class=mehr>`, `Angemeldet als <span class=wer>anna</span>`, `<a href=/abmelden>`)
+		before(t, body, "<div class=mehr>", "href=/abmelden")
+		if top := body[strings.Index(body, "<p class=konto>"):]; strings.Contains(top[:strings.Index(top, "</p>")], "Abmelden") {
+			t.Errorf("%s: Abmelden is still at the top", groups)
 		}
+		_, body, _ = familyPage(t, Mehr, StartConfig{}, "GET", "/mehr", groups)
+		mustContain(t, body, "<h1>Mehr</h1>", "<h2 id=karte-konto>Konto</h2>", "Angemeldet als anna", `<a href="/abmelden">Abmelden`)
 	}
 	_, body, _ := familyPage(t, Elsewhere, StartConfig{}, "GET", "/gibtsnicht", "family")
-	if !strings.Contains(body, `<a href=/abmelden>Abmelden</a>`) {
-		t.Errorf("a 404 page has no Abmelden:\n%s", body)
+	if !strings.Contains(body, `<a href=/abmelden>`) {
+		t.Errorf("a 404 page has no way to Abmelden:\n%s", body)
 	}
 	req := httptest.NewRequest("GET", "/start", nil)
 	req.Header.Set("Remote-User", `<x>`)
 	if got := konto(req); strings.Contains(got, "<x>") {
 		t.Errorf("the account is not escaped: %s", got)
+	}
+	if got := konto(httptest.NewRequest("GET", "/start", nil)); got != "" {
+		t.Errorf("nobody signed in, yet %q", got)
 	}
 }
 

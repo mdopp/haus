@@ -381,3 +381,32 @@ func TestBoteToolsInWords(t *testing.T) {
 		}
 	}
 }
+
+// haus#67: Start's box line, fetched after the page, is no page view of
+// its own; the plain line it shows counts for Start.
+func TestStartBoxLineCountsForStart(t *testing.T) {
+	fake, c := metrics(t)
+	h := Counted(c, pagesLike(nil, map[string]string{StartBoxPath: `{"unten":"<p>Wie es der Box geht, lässt sich gerade nicht sagen.</p>"}`}))
+	serve(h, "GET", StartBoxPath+"?ruhig=1", "anna")
+	got := events(t, fake, c)
+	if got["gestoert.start.box"] != 1 || got["seite.start"] != 0 {
+		t.Fatalf("counted %v", got)
+	}
+}
+
+// haus#63: the streamed answer flushes through the counting: each piece
+// reaches the page when it is written, not when the turn is over.
+func TestCountedLetsAStreamFlush(t *testing.T) {
+	_, c := metrics(t)
+	h := Counted(c, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("data: {}\n\n"))
+		if err := http.NewResponseController(w).Flush(); err != nil {
+			t.Errorf("flush: %v", err)
+		}
+	}))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("POST", "/sprechen", nil))
+	if !rec.Flushed {
+		t.Fatal("not flushed")
+	}
+}

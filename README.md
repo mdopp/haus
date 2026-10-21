@@ -26,12 +26,12 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   page load, in the person's order, at most twelve, the state in a word
   and a bar, a lamp's or a switch's switch on the tile; what a thing's page
   would not show (not a card domain, unknown to HA, hidden by HA) is left
-  out. None says how to get one (*Tippe in Räume bei einem Gerät auf ☆,
+  out. None says how to get one (*Tippe unter Geräte bei einem Gerät auf ☆,
   dann erscheint es hier.*); no `Remote-User`, no store: no part.
   *Heute und demnächst*: appointments and open reminders of the next 14
   days together, by time (overdue first, one without a date last,
   *offen*), at most six, each leading to its page; none says so and how it
-  fills. Notes are not on Start: they have their tab.
+  fills. Notes are not on Start: they are under Mehr.
   The box is one calm line at the bottom (*Alles in Ordnung · eure Daten
   sind von gestern Abend gesichert*; without *Alles in Ordnung* when a part
   of the page does not answer); a service down or the data not backed up
@@ -39,7 +39,13 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   erreichbar: Fotos.*, *Eure Daten sind seit 3 Tagen nicht gesichert.*) and
   who is on it: amber when the box mends it itself, red only when a person
   is needed (nobody automatic on it, or the data not backed up). The admin's words (services, places, the last change,
-  Rückgängig) are /box's.
+  Rückgängig) are /box's. Start does not wait for laib's status (a
+  second, haus#67): Haus keeps it 45 s and waits for a read at most
+  250 ms; a page served before laib answered has the line's two places
+  (*Wie es der Box geht, wird gerade nachgesehen …* at the bottom) and a
+  script that fetches `GET /start/box?ruhig=0|1` (`{oben, unten}`, the
+  same read, `ruhig` whether the rest of the page answered), or says
+  laib's plain line when that fails.
   Each part only when its backend is set (`HAUS_HA_URL` + `HAUS_HA_TOKEN`,
   `HAUS_RADICALE_*`); one not set is not mentioned. One not
   answering within 4s is one plain line where its rows would be (*Licht
@@ -59,8 +65,18 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   green and red only for a state, never alone), dark or light as the phone
   is, Geist served by Haus itself at `/schrift/…woff2` (OFL, vendored in
   `internal/pages/schrift`; no request to Google, the phone's own font
-  when it does not load), a tab bar with icons at the bottom of every
-  family page (Start · Räume · Kalender · Notizen, Box for admins). No
+  when it does not load), and one selection on every family page
+  (haus#67): on the phone a bar at the bottom with at most four entries,
+  icon and name — Start · Geräte (`/raeume`) · Haushalt (`/kalender`, the
+  appointments and reminders) · Mehr — Geräte and Haushalt only when their
+  backend is set. `GET /mehr` holds the rest: Energie, Medien, Notizen
+  (its place until the owner decides where notes go), Netzlaufwerk, Box
+  for admins, each only when this box has it, and *Konto* with who is
+  signed in and *Abmelden*. From 900 px wide the bar is a list on the
+  right, Mehr open in it (its entries, who is signed in, Abmelden; Mehr's
+  own entry is the phone's), the page and its entry marked, and the cards
+  in two columns beside it. At the top of a page only the login, small
+  (haus#61's Abmelden moved under Mehr). No
   persona on the family's pages: it speaks where you talk to it.
 - `POST /schalten` — a family page's button (haus#35): `geraet`, `tun`
   (`light|switch.turn_on|turn_off`, `media_player.media_pause`, or
@@ -425,7 +441,12 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   (`HAUS_BOTE_URL`, the Bote's OpenAI base `http://host.containers.internal:8642/v1`,
   and `HAUS_BOTE_KEY`, Hermes' `API_SERVER_KEY`; laib renders the key only
   with the Bote installed, laib#215: no key, no field, no word about it).
-  One line and *Senden*, a plain form post, no script. `POST /sprechen`
+  One line and *Senden*, a plain form post that works without script;
+  the page's script (haus#63) sends it in the background instead: from
+  Start it hands the sentence to `/sprechen`, which shows at once *Joshua
+  denkt nach …* with a running indicator and the seconds, then the reply
+  in pieces as it comes, then the exchange as a reload would show it — or
+  the plain line, never silence. `POST /sprechen`
   takes it only from a person on Haus's own page (#35's rule) and sends it
   to the Bote's `/chat/completions` as one chat completion: the person's
   login (`Remote-User`) and, quoted after it without quotes or brackets
@@ -433,18 +454,40 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   themselves) in a system line, because
   Hermes' API server has no per-person field and layers system lines on
   top of the Bote's SOUL, and `X-Hermes-Session-Key: haus:<login>`, the
-  person's memory scope. No model named, no stream, one sentence at a time:
-  the Bote does not see the page's earlier exchange. Then 303 to
+  person's memory scope. No model named, one sentence at a time: the Bote
+  does not see the page's earlier exchange. Haus asks with `stream: true`
+  and reads OpenAI's server-sent events (a Bote answering in one piece is
+  one piece). A post that accepts `text/event-stream` (the script) gets
+  server-sent events back: `{"angekommen":true}` at once, a comment beat
+  every 15 s while the Bote thinks, `{"stueck":…}` per piece, and
+  `{"fertig":…}`, the exchange's HTML. A plain post gets 303 to
   `/sprechen`, which shows the person's last exchange (in memory, per
   person): their words, the reply under the persona's name, as text (code
   blocks kept, **bold** bold, nothing else rendered). Haus relays and
   decides nothing (haus#1). Leaving the page does not stop the wait: the
-  reply is kept for the person's next look. It waits 60 s; then, in the house persona's name, *Joshua hat nach einer Minute
+  reply is kept for the person's next look. It waits 150 s for the first
+  word (the first message after a model reload takes 40–50 s, with a tool
+  more), and a reply under way up to 5 minutes in all; then, in the house persona's name, *Joshua hat nach zweieinhalb Minuten
   noch nicht geantwortet. Vielleicht passiert es trotzdem noch: schau nach,
-  bevor du es noch einmal schickst.* A Bote down, refusing the key or
-  failing its run: *Joshua antwortet gerade nicht. Versuch es später noch
+  bevor du es noch einmal schickst.* (a reply cut off keeps what came and
+  says *… ist mit der Antwort nicht fertig geworden; hier bricht sie ab.*).
+  A Bote down, refusing the key or
+  failing its run: *Joshua antwortet gerade nicht. Versuch es gleich noch
   einmal.*, the error in the log. Over 1000 characters is refused plainly;
   empty sends nothing.
+  The microphone beside the field (haus#63), with Home Assistant and
+  `HAUS_STT_PROVIDER` set (HA's speech-to-text, e.g. `stt.faster_whisper`,
+  Whisper on the box; `HAUS_STT_LANGUAGE` as the provider names it,
+  default `de`); without them, no button. The browser records (Web Audio,
+  no browser speech service), at most 30 s, as a 16 kHz 16-bit mono WAV,
+  and posts it to `POST /sprechen/hoeren` (a person, Haus's own page, at
+  most 2 MB); Haus passes it as it is to HA's `POST /api/stt/<provider>`
+  (`X-Speech-Content: format=wav; codec=pcm; sample_rate=…; bit_rate=16;
+  channel=1; language=…`) and answers `{ok:true, text}`, which the page
+  sends like typed words; nothing is kept. No words is one line
+  (`{ok:false, says}`): *Nichts verstanden. …*, *Die Spracherkennung
+  antwortet gerade nicht. …* (502, HA's detail in the log), *Die Aufnahme
+  ließ sich nicht lesen. …* (400), too long (413).
 
 - The Netzlaufwerk page (haus#52, laib#296): `/netzlaufwerk`, linked from
   Start for a family member or admin (a to-do card while they have no
@@ -484,11 +527,12 @@ says so once in the log; a page never waits for it.
 
 | Event | Counted when | The card says |
 |---|---|---|
-| `seite.<page>` | a page is shown (GET, 200; behind the proxy secret): `start`, `raeume`, `ding` (a thing's page), `energie`, `medien`, `kalender`, `erinnerung`, `kontakt`, `dokument`, `notizen`, `notiz`, `sprechen`, `box`, `geraete`, `koppeln` | *Start geöffnet*, … |
+| `seite.<page>` | a page is shown (GET, 200; behind the proxy secret): `start`, `raeume`, `ding` (a thing's page), `energie`, `medien`, `kalender`, `erinnerung`, `kontakt`, `dokument`, `notizen`, `notiz`, `sprechen`, `mehr`, `box`, `geraete`, `koppeln`; Start's box line fetched later (`/start/box`) is no view, its plain line counts for `start`; a script's words are not lines | *Start geöffnet*, … |
 | `schalten.<domain>.<service>`, `schalten.alle-lichter-aus` | a page's switch past its guards (`light.turn_on` … `media_player.volume_up`) | *Licht ausgeschaltet*, *Alle Lichter ausgeschaltet*, … |
 | `stern.an`, `stern.aus` | the ☆ past its guards | *Ein Gerät auf Start geheftet (☆)* |
 | `suche.notizen` | a search on Notizen (never its words) | *In den Notizen gesucht* |
 | `sprechen.senden` | a sentence sent in the Sprechen field (never what) | *Im Sprechen-Feld geschrieben* |
+| `sprechen.mikrofon` | speech turned into words for the field (never what) | *Ins Mikrofon gesprochen* |
 | `gestoert.<page>.<line>` | a page showed a plain line because something did not answer: `licht`, `raeume`, `kalender`, `kontakte`, `notizen`, `bedeutung`, `dokumente`, `favoriten`, `favoriten-verdeckt`, `strom`, `strom-heute`, `lautsprecher`, `schalten`, `bote`, `bote-langsam`, `box`, `laib`, `github`, `dienste` | the line itself and where: *„Licht und Geräte antworten gerade nicht.“ auf Start* |
 | `napi.<path>` | a paired phone's `/napi` request, by path without wildcards (`napi.portal.state`, `napi.box.home`, `napi.ha.call`, …) | *Geräte-Widget aktualisiert*, … |
 | `von.widget.<kind>` | a page opened from a widget, `?von=widget.<kind>` (haus-android#181): `device`, `devices`, `active`, `energy`, `energy-stats`, `energy-totals`, `box-overview`, `box-services`, `tool`; any other value counts nothing | *Vom Widget „Gerät“ aus geöffnet* |
@@ -543,6 +587,7 @@ HAUS_PAPERLESS_PUBLIC_URL=https://paperless.<domain> HAUS_NOTES_DIR=/notes \
 HAUS_QMD_URL=http://127.0.0.1:8181 HAUS_QMD_DOCUMENTS=dokumente HAUS_DOCUMENTS_DIR=/dokumente HAUS_UPLOAD_DIR=/consume \
 HAUS_LLM_URL=http://host.containers.internal:11435/v1 HAUS_LLM_MODEL=gemma-4-e4b HAUS_LLM_KEY=<the model key> \
 HAUS_BOTE_URL=http://host.containers.internal:8642/v1 HAUS_BOTE_KEY=<the Bote's API_SERVER_KEY> \
+HAUS_STT_PROVIDER=stt.faster_whisper HAUS_STT_LANGUAGE=de \
 HAUS_SAMBA_DIR=/samba-accounts HAUS_SAMBA_HOST=<the box's LAN address> \
 
 HAUS_USAGE_URL=http://host.containers.internal:8094 HAUS_USAGE_TOKEN=<usage-metrics' USAGE_METRICS_TOKEN> ./haus

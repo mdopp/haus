@@ -14,8 +14,8 @@ import (
 	"github.com/mdopp/haus/internal/cards"
 )
 
-// The family's pages (haus#12): Start, Räume, Kalender, Notizen. They read
-// one config (StartConfig), share one nav and the persona's header, and
+// The family's pages (haus#12): Start, Räume, Kalender, Notizen and what
+// Mehr holds. They read one config (StartConfig), share one nav, and
 // show without changing anything (haus#1). A page whose backend is not set
 // has no tab and, reached anyway, says what is missing (notSet, laib#418).
 // A path Haus does not serve at all is
@@ -48,36 +48,100 @@ const (
 	saysFavsUnseen  = "Deine Favoriten sind gerade nicht zu sehen."
 )
 
-// tabs are the family's pages in the tab bar, in this order: the name,
-// where it is, its icon (24×24, stroked).
-var tabs = []struct{ name, href, icon string }{
+// tab is one entry of the family's selection: its name, where it is, its
+// icon (24×24, stroked).
+type tab struct{ name, href, icon string }
+
+// tabs are the bar (haus#67): at most four — Start, Geräte, Haushalt (the
+// calendar with its reminders), Mehr — each only when its backend is set;
+// Mehr always, it holds the account.
+var tabs = []tab{
 	{"Start", "/start", `<path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z"/>`},
-	{"Räume", "/raeume", `<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>`},
+	{"Geräte", "/raeume", `<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>`},
+	{"Haushalt", "/kalender", `<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>`},
+	{"Mehr", mehrPath, `<circle cx="5.5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="18.5" cy="12" r="1.3"/>`},
+}
+
+// mehr is what Mehr holds (haus#67), in this order, each only when its
+// backend is set, Box for admins; then the account with Abmelden. Notizen
+// keeps a place of its own here until the owner decides where it goes.
+var mehr = []tab{
 	{"Energie", "/energie", `<path d="M13 3L5 13.5h6L10 21l8-10.5h-6z"/>`},
 	{"Medien", "/medien", `<circle cx="12" cy="12" r="9"/><path d="M10 8.5v7l6-3.5z"/>`},
-	{"Kalender", "/kalender", `<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>`},
 	{"Notizen", "/notizen", `<path d="M6 4h9l3 3v13H6z"/><path d="M9 11h6M9 15h6"/>`},
+	{"Netzlaufwerk", "/netzlaufwerk", `<rect x="3" y="5" width="18" height="6" rx="1.5"/><rect x="3" y="13" width="18" height="6" rx="1.5"/><path d="M7 8h.01M7 16h.01"/>`},
 	{"Box", "/box", `<rect x="3" y="7" width="18" height="12" rx="2"/><path d="M3 11h18M8 15h2"/>`},
 }
 
-// familyNav is the tab bar (haus#35): Start · Räume · Energie · Medien ·
-// Kalender · Notizen, each only when its backend is set, and Box for
-// admins; the page itself (current, by name) is marked.
+// abmeldenIcon is the way out's.
+const abmeldenIcon = `<path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4M10 16l-4-4 4-4M6 12h10"/>`
+
+// tabOf is the bar entry a page belongs to: Räume is Geräte, Kalender is
+// Haushalt, what Mehr holds is Mehr.
+func tabOf(page string) string {
+	switch page {
+	case "Räume":
+		return "Geräte"
+	case "Kalender":
+		return "Haushalt"
+	}
+	for _, m := range mehr {
+		if m.name == page {
+			return "Mehr"
+		}
+	}
+	return page
+}
+
+// shows says which entries this box and this person have.
+func shows(r *http.Request, cfg StartConfig) map[string]bool {
+	return map[string]bool{"Start": true, "Geräte": cfg.HA != nil, "Haushalt": cfg.Calendar != nil, "Mehr": true,
+		"Energie": cfg.HA != nil, "Medien": cfg.HA != nil, "Notizen": cfg.Notes != nil,
+		"Netzlaufwerk": cfg.Samba != nil && r.Header.Get("Remote-User") != "", "Box": isAdmin(r)}
+}
+
+func navLink(b *strings.Builder, t tab, class string, current bool) {
+	b.WriteString("<a")
+	if class != "" {
+		b.WriteString(" class=" + class)
+	}
+	b.WriteString(" href=" + t.href)
+	if current {
+		b.WriteString(" aria-current=page")
+	}
+	b.WriteString("><svg viewBox=\"0 0 24 24\" aria-hidden=true>" + t.icon + "</svg>" + t.name + "</a>")
+}
+
+// familyNav is the family's selection (haus#35, haus#67): on the phone the
+// bar at the bottom, Start · Geräte · Haushalt · Mehr; on a wide window a
+// list on the right with Mehr open in it (its entries, who is signed in,
+// Abmelden), so Mehr's own entry is the phone's only. The page (current,
+// by name) is marked, and its bar entry.
 func familyNav(r *http.Request, cfg StartConfig, current string) string {
-	show := map[string]bool{"Start": true, "Räume": cfg.HA != nil, "Energie": cfg.HA != nil, "Medien": cfg.HA != nil, "Kalender": cfg.Calendar != nil, "Notizen": cfg.Notes != nil, "Box": isAdmin(r)}
+	show, in := shows(r, cfg), tabOf(current)
 	var b strings.Builder
 	b.WriteString("<nav class=tabs aria-label=Seiten>")
 	for _, t := range tabs {
 		if !show[t.name] {
 			continue
 		}
-		b.WriteString("<a href=" + t.href)
-		if t.name == current {
-			b.WriteString(" aria-current=page")
+		class := ""
+		if t.name == "Mehr" {
+			class = "zu-mehr"
 		}
-		b.WriteString("><svg viewBox=\"0 0 24 24\" aria-hidden=true>" + t.icon + "</svg>" + t.name + "</a>")
+		navLink(&b, t, class, t.name == in)
 	}
-	b.WriteString("</nav>")
+	b.WriteString("<div class=mehr><p class=mehr-titel>Mehr</p>")
+	for _, t := range mehr {
+		if show[t.name] {
+			navLink(&b, t, "", t.name == current)
+		}
+	}
+	if u := r.Header.Get("Remote-User"); u != "" {
+		b.WriteString("<p class=mehr-wer>Angemeldet als <span class=wer>" + html.EscapeString(u) + "</span></p>")
+	}
+	navLink(&b, tab{"Abmelden", "/abmelden", abmeldenIcon}, "", false)
+	b.WriteString("</div></nav>")
 	return b.String()
 }
 
@@ -111,12 +175,24 @@ form[role=search]{display:flex;gap:8px;margin:16px 0 0}
 .stern{margin:20px 0 0}.stern p{margin:6px 2px 0;font-size:.85rem}
 .tabs{position:fixed;left:0;right:0;bottom:0;z-index:2;display:flex;justify-content:center;background:var(--panel);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
 .tabs a{flex:1;max-width:7.5rem;min-height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--muted);text-decoration:none;font-size:.72rem}
-.konto{display:flex;justify-content:flex-end;align-items:center;gap:12px;margin:10px 0 -14px;font-size:.8rem;color:var(--muted)}.konto .wer{font-weight:600;color:var(--ink)}.konto a{display:inline-flex;align-items:center;min-height:40px;padding:0 14px;border-radius:999px;background:var(--card);border:1px solid var(--edge);color:var(--accent);text-decoration:none;font-weight:600}
-.tabs a[aria-current]{color:var(--accent)}.tabs svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}</style>`
+.tabs a[aria-current]{color:var(--accent)}.tabs svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.tabs .mehr{display:none}
+.konto{display:flex;justify-content:flex-end;margin:10px 0 -14px;font-size:.78rem;color:var(--muted)}.konto .wer{font-weight:600}
+button[disabled]{opacity:.55;cursor:default}.sprechen .hinweis{margin:8px 4px 0;font-size:.82rem;color:var(--muted)}.sprechen .hinweis:empty{display:none}
+.mikro{width:44px;min-height:44px;padding:0;display:inline-flex;align-items:center;justify-content:center;flex:none}.mikro[hidden]{display:none}.mikro svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round}.mikro.an{background:var(--danger-soft);color:var(--danger)}
+.gespraech .denkt{display:flex;align-items:center;gap:8px;margin:12px 0 0;padding:12px 0 0;border-top:1px solid var(--line);color:var(--muted)}.antwort+.denkt{border-top:0;padding-top:0}.denkt .sek{font-size:.8rem;font-variant-numeric:tabular-nums}
+.laeuft{flex:none;width:14px;height:14px;border-radius:50%;border:2px solid var(--accent-soft);border-top-color:var(--accent);animation:dreht 1s linear infinite}@keyframes dreht{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.laeuft{animation:none;background:var(--accent)}}
+@media (min-width:900px){body{max-width:none;margin:0;padding:0 calc(15rem + 40px) 48px 40px;display:grid;grid-template-columns:repeat(2,minmax(0,32rem));column-gap:24px;align-content:start;align-items:start}
+body>*{grid-column:1/-1}body>.karte{grid-column:auto}body>.karte.kacheln{grid-column:1/-1}.konto{display:none}
+.tabs{top:0;left:auto;right:0;bottom:0;width:15rem;flex-direction:column;justify-content:flex-start;gap:2px;padding:20px 12px;border-top:0;border-left:1px solid var(--line);overflow-y:auto}
+.tabs a{flex:none;max-width:none;min-height:44px;flex-direction:row;justify-content:flex-start;gap:12px;padding:0 12px;border-radius:10px;font-size:.92rem;color:var(--ink)}.tabs a:hover{background:var(--card)}
+.tabs a[aria-current]{background:var(--accent-soft);color:var(--accent);font-weight:600}.tabs .zu-mehr{display:none}
+.tabs .mehr{display:flex;flex-direction:column;gap:2px;margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
+.mehr-titel{margin:0 12px 6px;font-size:.72rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}.mehr-wer{margin:14px 12px 2px;font-size:.8rem;color:var(--muted)}.mehr-wer .wer{color:var(--ink);font-weight:600}}</style>`
 
 // familyHead opens a family page: its title, the frame, the cards' style,
-// the tab bar (current marks the page's tab) and who is signed in, with
-// Abmelden (haus#61). The page writes its own h1.
+// the selection (current marks the page) and, small, who is signed in
+// (haus#61, haus#67: Abmelden is under Mehr). The page writes its own h1.
 func familyHead(r *http.Request, cfg StartConfig, title, current string) *strings.Builder {
 	b := &strings.Builder{}
 	if title != "Zuhause" {

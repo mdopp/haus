@@ -264,3 +264,63 @@ func TestAskWhoCannotAddAHeaderOrALine(t *testing.T) {
 		t.Fatalf("the login said twice: %q", sys)
 	}
 }
+
+// haus#63: Stream asks for the reply in pieces (stream: true, OpenAI's
+// server-sent events) and hands each to the page as it comes; the whole
+// reply is what came, trimmed. Same person, same key, same memory scope.
+func TestStreamHandsEachPiece(t *testing.T) {
+	fake := botefake.New("k-bote-0123456789abcdef")
+	defer fake.Close()
+	fake.Reply = "Das Licht im Flur ist an."
+	c := &Client{URL: fake.Base(), Key: fake.Key}
+	var pieces []string
+	got, err := c.Stream(context.Background(), Person{User: "anna", Name: "Anna Muster"}, "Mach das Licht an", func(s string) { pieces = append(pieces, s) })
+	if err != nil || got != "Das Licht im Flur ist an." {
+		t.Fatalf("Stream → %q, %v", got, err)
+	}
+	if len(pieces) < 2 || strings.Join(pieces, "") != got {
+		t.Fatalf("pieces %q", pieces)
+	}
+	r := fake.Seen()[0]
+	var body map[string]any
+	json.Unmarshal(r.Body, &body)
+	if body["stream"] != true || r.Auth != "Bearer "+fake.Key || r.SessionKey != "haus:anna" || !strings.Contains(r.Messages()[0]["content"], "Anna Muster") {
+		t.Fatalf("request %s, auth %q, session %q", r.Body, r.Auth, r.SessionKey)
+	}
+}
+
+// A Bote that answers in one piece anyway is one piece; one that fails is
+// an error without a piece, and an empty stream is ErrNoAnswer.
+func TestStreamWithoutPiecesOrAnswer(t *testing.T) {
+	fake := botefake.New("k")
+	defer fake.Close()
+	c := &Client{URL: fake.Base(), Key: "k"}
+	fake.NoStream, fake.Reply = true, "Erledigt."
+	var pieces []string
+	got, err := c.Stream(context.Background(), Person{User: "anna"}, "Hallo", func(s string) { pieces = append(pieces, s) })
+	if err != nil || got != "Erledigt." || len(pieces) != 1 {
+		t.Fatalf("one piece: %q %v %q", got, err, pieces)
+	}
+	fake.NoStream, fake.Reply = false, "   "
+	if _, err := c.Stream(context.Background(), Person{User: "anna"}, "Hallo", nil); !errors.Is(err, ErrNoAnswer) {
+		t.Fatalf("empty stream: %v", err)
+	}
+	fake.Status, pieces = http.StatusBadGateway, nil
+	if got, err := c.Stream(context.Background(), Person{User: "anna"}, "Hallo", func(s string) { pieces = append(pieces, s) }); err == nil || got != "" || len(pieces) != 0 {
+		t.Fatalf("failed run: %q %v %q", got, err, pieces)
+	}
+}
+
+// An event that is no chunk, or an error event, ends the stream with an
+// error and what came before it.
+func TestStreamStopsAtABrokenEvent(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Write([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"Der Anfang\"}}]}\n\n: ping\n\ndata: {\"error\":{\"message\":\"boom\"}}\n\n"))
+	}))
+	defer srv.Close()
+	got, err := (&Client{URL: srv.URL, Key: "k"}).Stream(context.Background(), Person{User: "anna"}, "Hallo", nil)
+	if err == nil || got != "Der Anfang" || strings.Contains(err.Error(), "boom") {
+		t.Fatalf("→ %q, %v", got, err)
+	}
+}

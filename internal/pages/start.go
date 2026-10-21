@@ -50,6 +50,7 @@ type StartConfig struct {
 	Usage     *usage.Counter    // what the family uses, anonymously (haus#50); nil: nothing counted
 	PublicURL string            // Haus's own address, https://haus.<domain>: the apps' addresses on Willkommen (haus#56)
 	Welcome   bool              // Start sends a person to Willkommen the first time a device opens it (haus#56)
+	STT       STT               // the Sprechen field's microphone, HA's speech-to-text (haus#63); no provider: no microphone
 }
 
 // backendWait is how long a page waits for any one backend: a slow one
@@ -68,7 +69,7 @@ const (
 // fills (haus#35, "leer heißt erklären").
 const (
 	saysNoSwitching = "Schalten geht im Moment nicht."
-	saysPinHow      = "Tippe in Räume bei einem Gerät auf ☆, dann erscheint es hier."
+	saysPinHow      = "Tippe unter Geräte bei einem Gerät auf ☆, dann erscheint es hier."
 	saysNothingDue  = "Nichts in den nächsten zwei Wochen."
 	saysAgendaHow   = "Termine und Erinnerungen aus dem Kalender stehen hier."
 )
@@ -82,7 +83,20 @@ const (
 // answering is one plain line where its rows would be, its error in the
 // log, not on the page.
 func Start(cfg StartConfig) http.HandlerFunc {
+	var box *boxStatus
+	if cfg.Laib != nil {
+		box = &boxStatus{laib: cfg.Laib}
+	}
 	return func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case StartBoxPath: // the box line, after the page (haus#67)
+			startBox(w, r, cfg, box)
+			return
+		case "/start", "":
+		default:
+			Elsewhere(cfg)(w, r)
+			return
+		}
 		if !showOnly(w, r, "Die Startseite") || firstVisit(w, r, cfg) {
 			return
 		}
@@ -92,6 +106,7 @@ func Start(cfg StartConfig) http.HandlerFunc {
 			ready    laib.Readiness
 			services []laib.Service
 			laibErr  error
+			boxOK    bool
 			states   []ha.State
 			haErr    error
 			reg      ha.Registry
@@ -104,8 +119,8 @@ func Start(cfg StartConfig) http.HandlerFunc {
 			reads    []func(context.Context)
 		)
 		person := r.Header.Get("Remote-User")
-		if cfg.Laib != nil {
-			reads = append(reads, func(ctx context.Context) { ready, services, laibErr = cfg.Laib.Status(ctx) })
+		if box != nil { // laib's status kept, waited for briefly (haus#67)
+			reads = append(reads, func(context.Context) { ready, services, laibErr, boxOK = box.read(boxInline) })
 		}
 		if cfg.HA != nil {
 			reads = append(reads,
@@ -130,11 +145,15 @@ func Start(cfg StartConfig) http.HandlerFunc {
 		var top, bottom string
 		if cfg.Laib != nil {
 			quiet := haErr == nil && evErr == nil && todoErr == nil && favErr == nil
-			top, bottom = familyBox(ready, services, laibErr, quiet, now, loc)
+			if boxOK {
+				top, bottom = familyBox(ready, services, laibErr, quiet, now, loc)
+			} else {
+				top, bottom = boxLater(quiet)
+			}
 		}
 		b.WriteString(top)
 		if cfg.Bote != nil {
-			b.WriteString(sprechenField)
+			b.WriteString(sprechenField(cfg, false))
 		}
 		if cfg.HA != nil {
 			b.WriteString(imHaus(states, haErr, reg.Hidden).HTML())

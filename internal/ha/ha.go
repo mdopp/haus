@@ -203,3 +203,47 @@ func (c *Client) Camera(ctx context.Context, entityID string, max int64) ([]byte
 	}
 	return b, ctype, nil
 }
+
+// STTProviderRE is a speech-to-text provider's name as HA's REST path
+// takes it: an entity (stt.faster_whisper) or a legacy platform (cloud).
+var STTProviderRE = regexp.MustCompile(`^[a-z0-9_]+(\.[a-z0-9_]+)?$`)
+
+// ErrNotUnderstood is speech HA's speech-to-text heard no words in.
+var ErrNotUnderstood = errors.New("ha: no words in the speech")
+
+// Transcribe passes recorded speech to HA's speech-to-text (POST
+// /api/stt/<provider>, haus#63): a 16-bit mono PCM WAV of rate Hz, in
+// language (de, de-DE: as the provider names it). Whisper on the box hears
+// it; nothing leaves the house. It returns the words, or ErrNotUnderstood.
+func (c *Client) Transcribe(ctx context.Context, provider, language string, rate int, wav []byte) (string, error) {
+	if !STTProviderRE.MatchString(provider) {
+		return "", fmt.Errorf("ha: %q is not a speech-to-text provider", provider)
+	}
+	req, err := http.NewRequestWithContext(ctx, "POST", strings.TrimRight(c.URL, "/")+"/api/stt/"+provider, bytes.NewReader(wav))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.Token)
+	req.Header.Set("Content-Type", "audio/wav")
+	req.Header.Set("X-Speech-Content", fmt.Sprintf("format=wav; codec=pcm; sample_rate=%d; bit_rate=16; channel=1; language=%s", rate, language))
+	resp, err := c.http().Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, 200))
+		return "", &Error{Status: resp.StatusCode, Detail: strings.TrimSpace(string(b))}
+	}
+	var out struct {
+		Text   *string `json:"text"`
+		Result string  `json:"result"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 64<<10)).Decode(&out); err != nil {
+		return "", fmt.Errorf("ha: speech-to-text: %w", err)
+	}
+	if out.Result != "success" || out.Text == nil || strings.TrimSpace(*out.Text) == "" {
+		return "", ErrNotUnderstood
+	}
+	return strings.TrimSpace(*out.Text), nil
+}

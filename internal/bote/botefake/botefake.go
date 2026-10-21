@@ -8,9 +8,11 @@ package botefake
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"time"
 )
@@ -46,6 +48,11 @@ type Server struct {
 	Status int
 	// Hang holds every chat completion that long.
 	Hang time.Duration
+	// A request with stream: true gets Reply as server-sent events, a
+	// word a chunk, Gap between them (haus#63); with NoStream, the whole
+	// completion anyway, as a Bote without streaming would.
+	Gap      time.Duration
+	NoStream bool
 }
 
 // New starts a fake Bote whose API key is key.
@@ -70,7 +77,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	s.seen = append(s.seen, Request{Method: r.Method, Path: r.URL.Path, Auth: r.Header.Get("Authorization"),
 		SessionKey: r.Header.Get("X-Hermes-Session-Key"), Body: body})
-	reply, status, hang := s.Reply, s.Status, s.Hang
+	reply, status, hang, gap, noStream := s.Reply, s.Status, s.Hang, s.Gap, s.NoStream
 	s.mu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
 	if r.Header.Get("Authorization") != "Bearer "+s.Key {
@@ -96,6 +103,31 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("X-Hermes-Session-Id", "sess-1")
+	var asked struct {
+		Stream bool `json:"stream"`
+	}
+	json.Unmarshal(body, &asked)
+	if asked.Stream && !noStream {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fl, _ := w.(http.Flusher)
+		for i, word := range strings.SplitAfter(reply, " ") {
+			if i > 0 && gap > 0 {
+				select {
+				case <-time.After(gap):
+				case <-r.Context().Done():
+					return
+				}
+			}
+			b, _ := json.Marshal(map[string]any{"id": "chatcmpl-1", "object": "chat.completion.chunk",
+				"choices": []map[string]any{{"index": 0, "delta": map[string]any{"content": word}}}})
+			fmt.Fprintf(w, "data: %s\n\n", b)
+			if fl != nil {
+				fl.Flush()
+			}
+		}
+		io.WriteString(w, "data: [DONE]\n\n")
+		return
+	}
 	json.NewEncoder(w).Encode(map[string]any{"id": "chatcmpl-1", "object": "chat.completion", "created": 1, "model": "hermes-agent",
 		"choices": []map[string]any{{"index": 0, "finish_reason": "stop", "message": map[string]any{"role": "assistant", "content": reply}}},
 		"usage":   map[string]any{"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2}})
