@@ -58,12 +58,16 @@ func Raeume(cfg StartConfig) http.HandlerFunc {
 			reads = append(reads, func(context.Context) { favs, favErr = cfg.Favorites.For(person) })
 		}
 		fetch(r, reads...)
+		states = cfg.allAsSeen(states) // a cover wired the wrong way round, turned over (haus#64)
 		logErrs("räume", map[string]error{"home assistant": haErr, "favorites": favErr})
 		if haErr == nil && !roomsOK {
 			log.Printf("haus: räume page: home assistant's rooms are not known yet; the cards are left out")
 		}
 		b := familyHead(r, cfg, "Räume", "Räume")
 		b.WriteString("<h1>Räume</h1>")
+		if haErr == nil { // the way on only while HA answers: a line about it never names it (laib ADR 0021)
+			b.WriteString(cfg.homeAssistant().Weiter("/", saysInHA))
+		}
 		switch {
 		case haErr != nil:
 			b.WriteString("<p class=k>" + saysNoHouse + "</p>")
@@ -91,6 +95,9 @@ func Raeume(cfg StartConfig) http.HandlerFunc {
 
 // saysPinWhat is what Räume's ☆ does, once above the rooms.
 const saysPinWhat = "Mit ☆ steht ein Gerät auf Start unter „Meine Geräte“."
+
+// saysInHA is what Home Assistant has that Haus does not (haus#64).
+const saysInHA = "Für alles, was Haus nicht kann: Automationen, Einstellungen, Verlauf."
 
 // roomCards groups the states by room: rooms by name, "Ohne Raum" last;
 // in a room lights, heating, covers, media, each by name, each leading to
@@ -149,8 +156,15 @@ func roomCards(states []ha.State, reg ha.Registry, pinned map[string]bool) []car
 				break
 			}
 			row := cards.Row{Text: t.name, Detail: t.detail, Href: cards.ThingPage(t.id)}
-			if domain, _, _ := strings.Cut(t.id, "."); domain == "light" {
+			switch domain, _, _ := strings.Cut(t.id, "."); domain {
+			case "light": // a tap switches; a dimmer has its slider too (haus#64)
 				row.Action = tile(domain, t.state, reg.TempUnit, back).Action
+				row.Slider = dimmer(t.state, back)
+			case "cover": // Hoch, Stopp, Runter and the position (haus#64)
+				if bs := coverButtons(t.state, back); len(bs) > 0 {
+					row.Also = bs
+				}
+				row.Slider = coverSlider(t.state, back)
 			}
 			if pinned != nil {
 				row.Pin = &cards.Pin{Entity: t.id, Name: t.name, On: pinned[t.id], Back: back}

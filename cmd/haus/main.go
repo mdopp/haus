@@ -52,10 +52,12 @@ type site struct {
 	bote        *bote.Client       // haus#12: the Sprechen field's Bote; nil, no field
 	samba       *samba.Dir         // haus#52: the network drive's passwords; nil, no page
 	sambaHost   string
-	usage       *usage.Counter // haus#50: what the family uses, anonymously; nil, nothing counted
-	voice       *usage.Voice   // haus#50: the voice control's runs from HA; nil, not counted
-	welcome     bool           // haus#56: Start sends a device's first visit to /willkommen
-	stt         pages.STT      // haus#63: the Sprechen field's microphone through HA's speech-to-text; no provider, no microphone
+	usage       *usage.Counter  // haus#50: what the family uses, anonymously; nil, nothing counted
+	voice       *usage.Voice    // haus#50: the voice control's runs from HA; nil, not counted
+	welcome     bool            // haus#56: Start sends a device's first visit to /willkommen
+	stt         pages.STT       // haus#63: the Sprechen field's microphone through HA's speech-to-text; no provider, no microphone
+	haPublic    string          // haus#64: Home Assistant's public address, Geräte's "In Home Assistant öffnen"; empty, no link
+	inverted    map[string]bool // haus#64: covers wired the wrong way round, shown and set turned over
 }
 
 // routes is Haus's whole surface: /napi for the app, /mcp/haushalt for the
@@ -73,7 +75,8 @@ func routes(s site) http.Handler {
 	// page whose backend is not set says what is missing (laib#418)
 	family := pages.StartConfig{Laib: s.ops, LaibURL: s.laibURL, HA: s.napi.HA, Energy: s.napi.Energy, Calendar: s.hh.Calendar, Contacts: s.hh.Contacts,
 		Notes: s.hh.Notes, Library: s.hh.Library, Judge: s.hh.Judge, Docs: s.hh.Documents, Loc: s.hh.Loc, Favorites: s.favorites, Bote: s.bote,
-		Samba: s.samba, SambaHost: s.sambaHost, Usage: s.usage, PublicURL: s.publicURL, Welcome: s.welcome, STT: s.stt}
+		Samba: s.samba, SambaHost: s.sambaHost, Usage: s.usage, PublicURL: s.publicURL, Welcome: s.welcome, STT: s.stt,
+		HAPublicURL: s.haPublic, Inverted: s.inverted}
 	start := pages.Start(family) // one: the page and its box line share laib's status (haus#67)
 	pagesMux.HandleFunc("/start", start)
 	pagesMux.HandleFunc(pages.StartBoxPath, start)
@@ -159,6 +162,10 @@ func main() {
 			log.Printf("haus: HAUS_UPLOAD_DIR: sweeping staged parts: %v", err)
 		}
 	}
+	haPublic := pages.AppURL(os.Getenv("HAUS_HA_PUBLIC_URL")) // haus#64
+	if haPublic == "" && os.Getenv("HAUS_HA_PUBLIC_URL") != "" {
+		log.Printf("haus: HAUS_HA_PUBLIC_URL %q is not an http(s) address: no link to Home Assistant", os.Getenv("HAUS_HA_PUBLIC_URL"))
+	}
 	laibURL := env("LAIB_PUBLIC_URL", "https://laib."+env("LAIB_DOMAIN", "example"))
 	b := bote.FromEnv() // the Sprechen field (haus#12): with the Bote's key only (laib#215)
 	// haus#50: counted for usage-metrics, flushed every five minutes; the voice
@@ -177,7 +184,8 @@ func main() {
 		publicURL: os.Getenv("HAUS_PUBLIC_URL"), tickets: werkstatt.FromEnv(), favorites: favoriten.Open(dataDir), bote: b,
 		samba: samba.FromEnv(), sambaHost: os.Getenv("HAUS_SAMBA_HOST"),
 		usage: counter, voice: voice, welcome: true,
-		stt: pages.STT{Provider: os.Getenv("HAUS_STT_PROVIDER"), Language: env("HAUS_STT_LANGUAGE", "de")}})
+		stt:      pages.STT{Provider: os.Getenv("HAUS_STT_PROVIDER"), Language: env("HAUS_STT_LANGUAGE", "de")},
+		haPublic: haPublic, inverted: pages.InvertedFromList(os.Getenv("HAUS_COVER_INVERTED"))})
 	addr := env("HAUS_LISTEN", "127.0.0.1:8650")
 	log.Printf("haus %s: listening on %s as %s, laib %s, home assistant %v, haushalt %d tools, memory library %v (tidy-up %v), uploads %q, the Bote %v, counting %v (voice %v), pages only behind the proxy secret", Version, addr, pages.House.Display, ops.URL, cfg.HA != nil, len(haushalt.Tools(hh)), hh.Library != nil, hh.Judge != nil, cfg.UploadDir, b != nil, counter != nil, voice != nil)
 	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}

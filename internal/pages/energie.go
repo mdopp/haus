@@ -70,18 +70,53 @@ func Energie(cfg StartConfig) http.HandlerFunc {
 			return
 		}
 		legs, counters, _ := cfg.Energy.Pick(states)
-		if len(legs) == 0 && len(counters) == 0 {
+		stats := cfg.Energy.History(counters)
+		if len(legs) == 0 && len(counters) == 0 && !stats.Any() {
 			b.WriteString("<p class=k>" + saysNoMeters + "</p>")
 			writePage(w, http.StatusOK, b)
 			return
 		}
-		b.WriteString(jetztCard(legs).HTML())
+		now, loc := cfg.clock()
+		today := midnight(now, loc)
+		view := zeitraumOf(r)
+		var (
+			todayAdded      map[string]float64
+			histErr         error
+			daily, hourly   amounts
+			dailyE, hourlyE error
+		)
+		var reads []func(context.Context)
 		if len(counters) > 0 {
-			now, loc := cfg.clock()
-			y, m, d := now.Date()
-			today, err := addedSince(r, cfg.HA, counters, time.Date(y, m, d, 0, 0, 0, 0, loc), now)
-			logErrs("energie", map[string]error{"history": err})
-			b.WriteString(heuteCard(counters, today, err).HTML())
+			reads = append(reads, func(context.Context) {
+				todayAdded, histErr = addedSince(r, cfg.HA, counters, today, now)
+			})
+		}
+		if stats.Any() { // the history from HA's long-term statistics (haus#65)
+			reads = append(reads, func(ctx context.Context) {
+				// last year's January on: every comparison and the forecast
+				daily, dailyE = statsFor(ctx, cfg.HA, stats, time.Date(today.Year()-1, time.January, 1, 0, 0, 0, 0, loc), today.AddDate(0, 0, 1), "day", loc)
+			})
+			if view == "tag" {
+				reads = append(reads, func(ctx context.Context) {
+					hourly, hourlyE = statsFor(ctx, cfg.HA, stats, today, today.AddDate(0, 0, 1), "hour", loc)
+				})
+			}
+		}
+		fetch(r, reads...)
+		logErrs("energie", map[string]error{"history": histErr, "statistics": dailyE, "hourly statistics": hourlyE})
+		if len(legs) > 0 {
+			b.WriteString(jetztCard(legs).HTML())
+		}
+		if len(counters) > 0 {
+			b.WriteString(heuteCard(counters, todayAdded, histErr).HTML())
+		}
+		if stats.Any() {
+			err := dailyE
+			if err == nil {
+				err = hourlyE
+			}
+			b.WriteString(verlaufStyle + "<div id=verlauf></div>")
+			b.WriteString(verlaufHTML(view, now, loc, daily, hourly, err))
 		}
 		writePage(w, http.StatusOK, b)
 	}

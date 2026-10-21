@@ -11,7 +11,7 @@ const mehrPath = "/mehr"
 
 // What Mehr says of each of its pages, in a line.
 var mehrSays = map[string]string{
-	"Energie":      "Was das Dach erzeugt und das Haus gerade braucht",
+	"Energie":      "Was das Dach erzeugt und das Haus braucht, jetzt und im Verlauf",
 	"Medien":       "Was gerade spielt, lauter und leiser",
 	"Notizen":      "Die Notizen des Hauses lesen und durchsuchen",
 	"Netzlaufwerk": "Dein Passwort für das Netzlaufwerk",

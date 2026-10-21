@@ -252,7 +252,7 @@ func TestAThingPageSaysItsStateInWords(t *testing.T) {
 	for id, want := range map[string]string{
 		"switch.radio": "<li class=tu><div>aus ", "binary_sensor.haustuer": "<li>offen ", "binary_sensor.fenster": "<li>geschlossen ",
 		"binary_sensor.flur": "<li>an ", "lock.keller": "<li>verriegelt ", "lock.hof": "<li>offen ",
-		"sensor.temp": "<li>21.5 °C ", "light.decke": "<li class=tu><div>an · 50 % ",
+		"sensor.temp": "<li>21.5 °C ", "light.decke": `<li class="tu regelbar"><div>an · 50 % `, // a dimmer: its slider under the button (haus#64)
 	} {
 		rec := page(h, "/raeume/"+id)
 		if rec.Code != 200 || !strings.Contains(rec.Body.String(), want) {

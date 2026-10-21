@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/mdopp/haus/internal/cards"
@@ -17,7 +18,14 @@ import (
 // (haus#12) its going on and its volume a step down or up — narrower than
 // package schalter's rule, which every call still passes, never wider.
 var pageDoes = map[string]bool{"light.turn_on": true, "light.turn_off": true, "switch.turn_on": true, "switch.turn_off": true,
-	"media_player.media_pause": true, "media_player.media_play": true, "media_player.volume_down": true, "media_player.volume_up": true}
+	"media_player.media_pause": true, "media_player.media_play": true, "media_player.volume_down": true, "media_player.volume_up": true,
+	// Geräte's covers (haus#64): Hoch, Stopp, Runter and the position
+	"cover.open_cover": true, "cover.stop_cover": true, "cover.close_cover": true, "cover.set_cover_position": true}
+
+// takesWert is what a slider sets (haus#64), wert 0–100: a lamp's
+// brightness (light.turn_on's brightness_pct; 0 is off), a cover's
+// position. set_cover_position wants one; turn_on goes without.
+var takesWert = map[string]string{"light.turn_on": "brightness_pct", "cover.set_cover_position": "position"}
 
 // allLightsOff is Im Haus's "Alle aus": every lamp Start counted as on.
 const allLightsOff = "alle-lichter-aus"
@@ -56,7 +64,11 @@ func Schalten(cfg StartConfig) http.HandlerFunc {
 		}
 		id, do := r.PostForm.Get("geraet"), r.PostForm.Get("tun")
 		if pageDoes[do] || do == allLightsOff && id == "" {
-			cfg.Usage.Count("schalten." + do) // what was pressed, never on what or by whom (haus#50)
+			event := "schalten." + do // what was pressed, never on what or by whom (haus#50)
+			if do == "light.turn_on" && r.PostForm.Get("wert") != "" {
+				event = "schalten.light.dimmen" // a dimmer's slider (haus#64)
+			}
+			cfg.Usage.Count(event)
 		}
 		back := backTo(r.PostForm.Get("zurueck"))
 		var err error
@@ -72,7 +84,25 @@ func Schalten(cfg StartConfig) http.HandlerFunc {
 				}
 			}
 		case pageDoes[do]:
-			err = schalter.Do(r.Context(), cfg.HA, id, do, nil, false)
+			var data map[string]any
+			wert, given, ok := wertOf(r.PostForm.Get("wert"))
+			switch {
+			case !ok || given && takesWert[do] == "":
+				err = &schalter.Refusal{Code: http.StatusBadRequest, Reason: "wert is 0–100, for a slider only"}
+			case do == "cover.set_cover_position" && !given:
+				err = &schalter.Refusal{Code: http.StatusBadRequest, Reason: "set_cover_position wants wert"}
+			}
+			if err != nil {
+				break
+			}
+			call, wert := cfg.asHA(id, do, wert) // a cover wired the wrong way round (haus#64)
+			switch {
+			case call == "light.turn_on" && given && wert == 0:
+				call = "light.turn_off"
+			case given:
+				data = map[string]any{takesWert[call]: wert}
+			}
+			err = schalter.Do(r.Context(), cfg.HA, id, call, data, false)
 		default:
 			err = &schalter.Refusal{Code: http.StatusBadRequest, Reason: "not a page's"}
 		}
@@ -94,6 +124,18 @@ func Schalten(cfg StartConfig) http.HandlerFunc {
 		}
 		m.write(w, r, cfg)
 	}
+}
+
+// wertOf reads a slider's wert: 0–100 (ok), or none given (ok, !given).
+func wertOf(v string) (wert int, given, ok bool) {
+	if v == "" {
+		return 0, false, true
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 0 || n > 100 {
+		return 0, true, false
+	}
+	return n, true, true
 }
 
 // backTo is where a switch lands: Start, Räume (one room on it), Medien,

@@ -79,6 +79,7 @@ func Ding(cfg StartConfig) http.HandlerFunc {
 			unread.write(w, r, cfg)
 			return
 		}
+		s = cfg.asSeen(s) // a cover wired the wrong way round, turned over (haus#64)
 		now, loc := cfg.clock()
 		name := friendly(s)
 		b := familyHead(r, cfg, name, "Räume")
@@ -89,10 +90,25 @@ func Ding(cfg StartConfig) http.HandlerFunc {
 			row.Action = t.Action
 			row.Action.Switch, row.Action.Label = false, map[bool]string{true: "Ausschalten", false: "Einschalten"}[t.On]
 		}
-		if domain == "media_player" {
+		switch domain {
+		case "media_player":
 			row.Action, row.Also = playerButtons(s, cards.ThingPage(id))
+		case "light":
+			row.Slider = dimmer(s, cards.ThingPage(id)) // haus#64
+		case "cover":
+			if bs := coverButtons(s, cards.ThingPage(id)); len(bs) > 0 {
+				row.Also = bs
+			}
+			row.Slider = coverSlider(s, cards.ThingPage(id))
 		}
 		c.Rows = append(c.Rows, row)
+		if domain == "cover" && row.Also == nil && s.State != "unavailable" {
+			if dc, _ := s.Attributes["device_class"].(string); dc == "" {
+				c.Add(saysCoverWhat, "")
+			} else {
+				c.Add(saysGateInHA, "")
+			}
+		}
 		room := trimRunes(oneLine(reg.Rooms[s.EntityID]), 60)
 		if room == "" {
 			room = noRoom
@@ -102,10 +118,14 @@ func Ding(cfg StartConfig) http.HandlerFunc {
 		if cfg.Favorites != nil && person != "" {
 			b.WriteString(star(id, favs, favErr))
 		}
+		b.WriteString(cfg.homeAssistant().Weiter(haThing(id, reg.Devices[id]), saysThingInHA))
 		b.WriteString("<p><a href=/raeume>Alle Räume</a></p>")
 		writePage(w, http.StatusOK, b)
 	}
 }
+
+// saysThingInHA is what a thing's page in Home Assistant has (haus#64).
+const saysThingInHA = "Automationen, Einstellungen und Verlauf dieses Geräts"
 
 // star is the ☆ (haus#35): a plain form that pins the thing to the
 // person's Start, or takes it off, and says where it then shows.
@@ -144,8 +164,11 @@ func pin(w http.ResponseWriter, r *http.Request, cfg StartConfig, id string) {
 	}
 	cfg.Usage.Count("stern." + r.PostForm.Get("stern"))
 	back, backText := cards.ThingPage(id), "Zurück zum Gerät"
-	if z := r.PostForm.Get("zurueck"); inRaeume.MatchString(z) {
+	switch z := r.PostForm.Get("zurueck"); {
+	case inRaeume.MatchString(z):
 		back, backText = z, "Zurück zu den Räumen"
+	case z == "/start": // the ☆ on a tile of Meine Geräte (haus#64)
+		back, backText = z, "Zur Startseite"
 	}
 	err := cfg.Favorites.Set(r.Header.Get("Remote-User"), id, on)
 	if err == nil {

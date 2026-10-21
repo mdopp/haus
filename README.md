@@ -24,9 +24,12 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   (laib ADR 0017: favorites go to Haus): `HAUS_DATA/favoriten.json`,
   `{"<Remote-User>": ["light.buero", "cover.wohnzimmer", …]}`, read on each
   page load, in the person's order, at most twelve, the state in a word
-  and a bar, a lamp's or a switch's switch on the tile; what a thing's page
+  and a bar, a lamp's or a switch's switch on the tile, and its ★ that
+  takes it off again (haus#64, back to Start); what a thing's page
   would not show (not a card domain, unknown to HA, hidden by HA) is left
-  out. None says how to get one (*Tippe unter Geräte bei einem Gerät auf ☆,
+  out. With things on it, the card says at the top how more get there
+  (*Mit ☆ legst du Geräte auf die Startseite.*, to Geräte); none says how
+  to get one (*Tippe unter Geräte bei einem Gerät auf ☆,
   dann erscheint es hier.*); no `Remote-User`, no store: no part.
   *Heute und demnächst*: appointments and open reminders of the next 14
   days together, by time (overdue first, one without a date last,
@@ -79,8 +82,12 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   (haus#61's Abmelden moved under Mehr). No
   persona on the family's pages: it speaks where you talk to it.
 - `POST /schalten` — a family page's button (haus#35): `geraet`, `tun`
-  (`light|switch.turn_on|turn_off`, `media_player.media_pause`, or
-  `alle-lichter-aus`: every lamp *Im Haus* counts) and `zurueck` (Start or
+  (`light|switch.turn_on|turn_off`, `media_player.media_pause`, Geräte's
+  `cover.open_cover|stop_cover|close_cover|set_cover_position` (haus#64), or
+  `alle-lichter-aus`: every lamp *Im Haus* counts), a slider's `wert`
+  (0–100, haus#64: `light.turn_on`'s `brightness_pct`, 0 is
+  `light.turn_off`; `set_cover_position`'s `position`, which wants one; any
+  other `tun` with a `wert` is 400) and `zurueck` (Start or
   a thing's page; anything else is Start). Each call passes the widgets'
   own rule (`internal/schalter`, below); nothing else in the form rides
   along. Only with `Remote-User` and from Haus's own page
@@ -113,7 +120,32 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     the page says it is reading them rather than put everything in Ohne
     Raum. HA not answering: *Licht und Geräte antworten gerade nicht.* Each
     thing links to its own page, where a lamp or a switch is switched and
-    the ☆ pins it to Start.
+    the ☆ pins it to Start; every row has its ☆ here too.
+    A lamp HA can dim (a `brightness`, or a colour mode other than
+    `onoff`) has a slider 0–100 % beside its switch (haus#64; a tap on the
+    switch still switches); a cover with a `current_position` its slider,
+    and Hoch, Stopp and Runter as its `supported_features` allow. Both are
+    plain forms to `/schalten`, the slider sent when the finger lets go
+    (one `onchange` attribute; without script, its *Setzen* button). Only a
+    cover whose `device_class` is named and is no garage, door or gate gets
+    Hoch and the slider (`schalter.CoverFree`, the rule's own line); a
+    thing's page says why for any other (*Tore und Türen öffnet Haus
+    nicht …*, or, with no class, to set *Anzeigen als* in HA).
+    A cover wired the wrong way round is listed in `HAUS_COVER_INVERTED`
+    (cover entity ids, comma-separated): Haus shows it turned over (its
+    position 100 − HA's, open where HA says closed) and sends Hoch as HA's
+    `close_cover`, a position as 100 − the slider's, on every family page;
+    the widgets' `/napi` stays as HA says. It is a property of the house's
+    wiring, not of a person, so it lives in the template's config, not in
+    `favoriten.json`.
+    *Weiter in <App>* (haus#64), one pattern for every page that hands
+    over to another app of the box (`pages.App`, `Weiter`): a link *In
+    <App> öffnen* and a line of what is there, from that app's public
+    address in the config; no address, no link. Geräte has *In Home
+    Assistant öffnen* at the top (`HAUS_HA_PUBLIC_URL`, e.g.
+    `https://home.<domain>`; only while HA answers), and a thing's page
+    its device's page in HA (`/config/devices/device/<device_id>`, from the
+    entity registry), else the entity's history (`/history?entity_id=…`).
   - *Kalender*: *Heute* (the day's appointments with time and place),
     *Nächste 14 Tage*, *Erinnerungen* (open reminders, overdue said so; one
     due on a day, not at a time, shows the day and is overdue the day after),
@@ -225,6 +257,30 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   a paired device. The shapes are the ones the app's `data/ApiClient.kt` parses; no JSON `null` goes out
   (Android reads it as `"null"`). Every card names its thing's page
   (`page`, `/raeume/<entity_id>`).
+- *Energie* (`GET /energie`, under Mehr): *Jetzt* (the flow legs as
+  tiles), *Heute* (each counter since midnight), then the history
+  (haus#65) from HA's long-term statistics (WebSocket
+  `recorder/statistics_during_period`, `types: [change]`, in kWh):
+  `?zeitraum=tag|woche|monat|jahr` — today by the hour, the last seven
+  days, this month by day, this year by month — with the span's sums
+  (Solar, Eigenverbrauch = Solar − Einspeisung, Bezug, Einspeisung) and a
+  bar chart Haus draws itself (SVG, no script, no library; Eigenverbrauch
+  and Bezug above the line, Einspeisung below, each bar's numbers on
+  hover, a legend, the same as a table; three series colours of its own,
+  checked for colour blindness, dark and light). Then the comparisons,
+  whole days only (today is not over): this month against the same days
+  of the last and of the same month last year, the year so far against
+  last year's, and the forecast to the year's end, marked *geschätzt*:
+  what came so far plus the rest as it came last year, while HA does not
+  have last year's days the daily mean so far. A comparison whose earlier
+  days HA does not have says *Vergleich ab <Monat Jahr>*, never a zero;
+  one with part of them compares the days both have and says from which
+  day. The statistic ids are `HAUS_ENERGY_STATS`
+  (`bezug=sensor.…,einspeisung=sensor.…,solar=sensor.…`, any subset), else
+  the counters below (their fallback names or `HAUS_ENERGY_TOTALS`'
+  labels with *Bezug*, *Einspeis…*, *PV* or *Solar*). HA's statistics not
+  answering: *Der Verlauf lässt sich gerade nicht lesen.*, Jetzt and Heute
+  stay.
 - The energy picture reads the entities `HAUS_ENERGY_FLOW`
   (`pv=sensor.…,house=sensor.…,grid=sensor.…,battery=sensor.…`, any subset)
   and `HAUS_ENERGY_TOTALS` (`<Label>=sensor.…,…`, in that order) name;
@@ -528,12 +584,12 @@ says so once in the log; a page never waits for it.
 | Event | Counted when | The card says |
 |---|---|---|
 | `seite.<page>` | a page is shown (GET, 200; behind the proxy secret): `start`, `raeume`, `ding` (a thing's page), `energie`, `medien`, `kalender`, `erinnerung`, `kontakt`, `dokument`, `notizen`, `notiz`, `sprechen`, `mehr`, `box`, `geraete`, `koppeln`; Start's box line fetched later (`/start/box`) is no view, its plain line counts for `start`; a script's words are not lines | *Start geöffnet*, … |
-| `schalten.<domain>.<service>`, `schalten.alle-lichter-aus` | a page's switch past its guards (`light.turn_on` … `media_player.volume_up`) | *Licht ausgeschaltet*, *Alle Lichter ausgeschaltet*, … |
+| `schalten.<domain>.<service>`, `schalten.light.dimmen`, `schalten.alle-lichter-aus` | a page's switch past its guards (`light.turn_on` … `cover.set_cover_position`; a dimmer's slider is `light.dimmen`) | *Licht ausgeschaltet*, *Licht gedimmt*, *Rollladen hochgefahren*, *Alle Lichter ausgeschaltet*, … |
 | `stern.an`, `stern.aus` | the ☆ past its guards | *Ein Gerät auf Start geheftet (☆)* |
 | `suche.notizen` | a search on Notizen (never its words) | *In den Notizen gesucht* |
 | `sprechen.senden` | a sentence sent in the Sprechen field (never what) | *Im Sprechen-Feld geschrieben* |
 | `sprechen.mikrofon` | speech turned into words for the field (never what) | *Ins Mikrofon gesprochen* |
-| `gestoert.<page>.<line>` | a page showed a plain line because something did not answer: `licht`, `raeume`, `kalender`, `kontakte`, `notizen`, `bedeutung`, `dokumente`, `favoriten`, `favoriten-verdeckt`, `strom`, `strom-heute`, `lautsprecher`, `schalten`, `bote`, `bote-langsam`, `box`, `laib`, `github`, `dienste` | the line itself and where: *„Licht und Geräte antworten gerade nicht.“ auf Start* |
+| `gestoert.<page>.<line>` | a page showed a plain line because something did not answer: `licht`, `raeume`, `kalender`, `kontakte`, `notizen`, `bedeutung`, `dokumente`, `favoriten`, `favoriten-verdeckt`, `strom`, `strom-heute`, `verlauf`, `lautsprecher`, `schalten`, `bote`, `bote-langsam`, `box`, `laib`, `github`, `dienste` | the line itself and where: *„Licht und Geräte antworten gerade nicht.“ auf Start* |
 | `napi.<path>` | a paired phone's `/napi` request, by path without wildcards (`napi.portal.state`, `napi.box.home`, `napi.ha.call`, …) | *Geräte-Widget aktualisiert*, … |
 | `von.widget.<kind>` | a page opened from a widget, `?von=widget.<kind>` (haus-android#181): `device`, `devices`, `active`, `energy`, `energy-stats`, `energy-totals`, `box-overview`, `box-services`, `tool`; any other value counts nothing | *Vom Widget „Gerät“ aus geöffnet* |
 
@@ -580,6 +636,8 @@ HAUS_PROXY_SECRET=<what Caddy sends as X-Haus-Proxy> LAIB_PUBLIC_URL=https://lai
 HAUS_LISTEN=0.0.0.0:8650 \
 HAUS_HA_URL=http://host.containers.internal:8123 HAUS_HA_TOKEN=<a long-lived HA token> \
 HAUS_ENERGY_FLOW=pv=sensor.…,house=sensor.…,grid=sensor.…,battery=sensor.… HAUS_ENERGY_TOTALS=PV-Erzeugung=sensor.…,… \
+HAUS_ENERGY_STATS=bezug=sensor.…,einspeisung=sensor.…,solar=sensor.… \
+HAUS_HA_PUBLIC_URL=https://home.<domain> HAUS_COVER_INVERTED=cover.…,… \
 HAUS_HAUSHALT_TOKEN=<the Bote's bearer> TZ=Europe/Berlin \
 HAUS_RADICALE_URL=http://host.containers.internal:5232 HAUS_RADICALE_USER=<service account> HAUS_RADICALE_PASSWORD=<its password> \
 HAUS_PAPERLESS_URL=http://host.containers.internal:8000 HAUS_PAPERLESS_TOKEN=<a Paperless API token> \

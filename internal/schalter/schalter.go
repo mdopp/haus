@@ -98,6 +98,15 @@ func Do(ctx context.Context, c *ha.Client, entityID, service string, data map[st
 	return c.Call(ctx, domain, action, payload)
 }
 
+// CoverFree says a cover is one the rule lets open and be set without
+// confirmed (haus#64): its device_class is named and is not a garage, a
+// door or a gate. A page offers Hoch and a position only for such a
+// cover; Do still decides each call.
+func CoverFree(s ha.State) bool {
+	dc, _ := s.Attributes["device_class"].(string)
+	return dc != "" && !sensitiveCoverClasses[strings.ToLower(dc)]
+}
+
 // sensitive: any lock, an unlock or open anywhere, and on a cover whose
 // device_class is garage, door or gate anything but closing and stopping.
 // A cover whose class cannot be read (HA down, unknown entity, no class)
