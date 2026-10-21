@@ -40,6 +40,42 @@ var fallbackCounters = []struct{ Name, Label string }{
 type Map struct {
 	Flow   map[string]string
 	Totals []Total
+	Stats  Stats // the history's statistic ids (haus#65); empty: from the counters
+}
+
+// Stats are the statistic ids of HA's long-term statistics the history
+// reads (haus#65): what came from the grid, went into it, and what the sun
+// made, each a total_increasing energy sensor's id. Eigenverbrauch is
+// Solar − Einspeisung.
+type Stats struct{ Bezug, Einspeisung, Solar string }
+
+// Any says one is named.
+func (s Stats) Any() bool { return s.Bezug != "" || s.Einspeisung != "" || s.Solar != "" }
+
+// History is the statistic ids the history reads: HAUS_ENERGY_STATS when
+// set, else the counters Pick found — the fallback's by their friendly
+// names, the template's by their labels (Bezug, Einspeisung, PV or Solar).
+func (m Map) History(counters []Counter) Stats {
+	if m.Stats.Any() {
+		return m.Stats
+	}
+	var s Stats
+	for _, c := range counters {
+		name := strings.ToLower(c.Fallback)
+		if name == "" {
+			name = strings.ToLower(c.Label)
+		}
+		id := c.State.EntityID
+		switch {
+		case strings.Contains(name, "bezug") && s.Bezug == "":
+			s.Bezug = id
+		case strings.Contains(name, "einspeis") && s.Einspeisung == "":
+			s.Einspeisung = id
+		case (strings.Contains(name, "pv") || strings.Contains(name, "solar")) && s.Solar == "":
+			s.Solar = id
+		}
+	}
+	return s
 }
 
 // Total is one labelled lifetime counter.
@@ -48,8 +84,10 @@ type Total struct{ Label, Entity string }
 // Set says the template named the entities.
 func (m Map) Set() bool { return len(m.Flow) > 0 || len(m.Totals) > 0 }
 
-// FromEnv reads HAUS_ENERGY_FLOW (pv=sensor.x,house=…,grid=…,battery=…)
-// and HAUS_ENERGY_TOTALS (Label=sensor.y,…). Both unset: the fallback.
+// FromEnv reads HAUS_ENERGY_FLOW (pv=sensor.x,house=…,grid=…,battery=…),
+// HAUS_ENERGY_TOTALS (Label=sensor.y,…) and HAUS_ENERGY_STATS
+// (bezug=sensor.…,einspeisung=sensor.…,solar=sensor.…, haus#65). Unset: the
+// fallback.
 func FromEnv() (Map, error) {
 	m := Map{Flow: map[string]string{}}
 	legs := map[string]bool{}
@@ -80,6 +118,18 @@ func FromEnv() (Map, error) {
 			return Map{}, fmt.Errorf("HAUS_ENERGY_TOTALS %q: want <label>=<entity_id>", item)
 		}
 		m.Totals = append(m.Totals, Total{Label: l, Entity: e})
+	}
+	for _, item := range strings.Split(os.Getenv("HAUS_ENERGY_STATS"), ",") {
+		if item = strings.TrimSpace(item); item == "" {
+			continue
+		}
+		k, e, ok := strings.Cut(item, "=")
+		k, e = strings.ToLower(strings.TrimSpace(k)), strings.TrimSpace(e)
+		slot := map[string]*string{"bezug": &m.Stats.Bezug, "einspeisung": &m.Stats.Einspeisung, "solar": &m.Stats.Solar}[k]
+		if !ok || slot == nil || !ha.EntityRE.MatchString(e) {
+			return Map{}, fmt.Errorf("HAUS_ENERGY_STATS %q: want bezug|einspeisung|solar=<statistic id, sensor.…>", item)
+		}
+		*slot = e
 	}
 	return m, nil
 }

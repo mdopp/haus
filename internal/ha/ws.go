@@ -270,6 +270,7 @@ func (w *wsConn) result(id int, out any) error {
 type Registry struct {
 	Rooms    map[string]string // entity → its room's name: its own area, else its device's; absent without one
 	Hidden   map[string]bool   // entities HA hides: hidden_by set, or entity_category config or diagnostic
+	Devices  map[string]string // entity → its device's id, for its page in HA (haus#64); absent without one
 	TempUnit string            // the house's temperature unit (unit_system.temperature), "" when HA did not say
 }
 
@@ -334,7 +335,7 @@ func (c *Client) registries(ctx context.Context) (Registry, error) {
 	for _, d := range devices {
 		devArea[d.ID] = d.AreaID
 	}
-	reg := Registry{Rooms: map[string]string{}, Hidden: map[string]bool{}}
+	reg := Registry{Rooms: map[string]string{}, Hidden: map[string]bool{}, Devices: map[string]string{}}
 	for _, e := range entities {
 		if e.EntityID == "" {
 			continue
@@ -345,6 +346,9 @@ func (c *Client) registries(ctx context.Context) (Registry, error) {
 		}
 		if n := name[area]; n != "" {
 			reg.Rooms[e.EntityID] = n
+		}
+		if e.DeviceID != "" {
+			reg.Devices[e.EntityID] = e.DeviceID
 		}
 		if e.HiddenBy != "" || e.EntityCategory == "config" || e.EntityCategory == "diagnostic" {
 			reg.Hidden[e.EntityID] = true

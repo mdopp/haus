@@ -30,6 +30,22 @@ type Row struct {
 	// haus#12); when Also is set, even empty, the row puts its buttons on
 	// a line of their own
 	Also []*Action `json:"also,omitempty"`
+	// Slider is a level to set, 0–100 % (haus#64): a dimmer's brightness, a
+	// cover's position; drawn on a line of its own under the row's buttons
+	Slider *Slider `json:"slider,omitempty"`
+}
+
+// Slider is a row's level (haus#64): a form that POSTs to SwitchPath with
+// wert 0–100, sent when the finger lets go (a script of one attribute;
+// without script, its Setzen button). Label names what it sets, Name the
+// thing, for a screen reader.
+type Slider struct {
+	Label  string `json:"label"`
+	Name   string `json:"name"`
+	Entity string `json:"entity"`
+	Do     string `json:"do"`
+	Back   string `json:"back"`
+	Value  int    `json:"value"`
 }
 
 // Action is a row's one button (haus#35): a form that POSTs to
@@ -77,6 +93,10 @@ type Card struct {
 	Rows  []Row  `json:"rows"`
 	Link  *Link  `json:"link,omitempty"`
 	Look  string `json:"look,omitempty"`
+	// Note is one quiet line under the title (how the card fills, haus#64),
+	// leading to NoteHref when set
+	Note     string `json:"note,omitempty"`
+	NoteHref string `json:"note_href,omitempty"`
 }
 
 // Empty is a card with nothing to say.
@@ -133,7 +153,14 @@ func (c Card) HTML() string {
 	if c.Look != List {
 		class = `"karte ` + html.EscapeString(c.Look) + `"`
 	}
-	b.WriteString("<section class=" + class + " aria-labelledby=" + id + "><h2 id=" + id + ">" + html.EscapeString(c.Title) + "</h2><ul>")
+	b.WriteString("<section class=" + class + " aria-labelledby=" + id + "><h2 id=" + id + ">" + html.EscapeString(c.Title) + "</h2>")
+	switch {
+	case c.Note != "" && c.NoteHref != "":
+		b.WriteString(`<p class=hinweis><a href="` + html.EscapeString(c.NoteHref) + `">` + html.EscapeString(c.Note) + "</a></p>")
+	case c.Note != "":
+		b.WriteString("<p class=hinweis>" + html.EscapeString(c.Note) + "</p>")
+	}
+	b.WriteString("<ul>")
 	for _, r := range c.Rows {
 		switch {
 		case c.Look == Tiles && r.State != "":
@@ -142,10 +169,31 @@ func (c Card) HTML() string {
 			b.WriteString("<li><time>" + html.EscapeString(r.When) + "</time><div>")
 			what(&b, r)
 			b.WriteString("</div></li>")
-		case r.Action != nil && r.Also != nil:
+		case r.Slider != nil:
+			b.WriteString(`<li class="tu regelbar"><div>`)
+			what(&b, r)
+			b.WriteString("</div>")
+			if r.Action != nil || len(r.Also) > 0 || r.Pin != nil {
+				b.WriteString("<div class=knoepfe>")
+				if r.Action != nil {
+					b.WriteString(r.Action.form())
+				}
+				for _, a := range r.Also {
+					b.WriteString(a.form())
+				}
+				if r.Pin != nil {
+					b.WriteString(r.Pin.form())
+				}
+				b.WriteString("</div>")
+			}
+			b.WriteString(r.Slider.form() + "</li>")
+		case r.Also != nil && (r.Action != nil || len(r.Also) > 0):
 			b.WriteString(`<li class="tu viele"><div>`)
 			what(&b, r)
-			b.WriteString("</div><div class=knoepfe>" + r.Action.form())
+			b.WriteString("</div><div class=knoepfe>")
+			if r.Action != nil {
+				b.WriteString(r.Action.form())
+			}
 			for _, a := range r.Also {
 				b.WriteString(a.form())
 			}
@@ -211,8 +259,15 @@ func tile(b *strings.Builder, r Row) {
 	} else {
 		b.WriteString("<span>" + html.EscapeString(r.Text) + "</span>")
 	}
-	if r.Action != nil {
-		b.WriteString(r.Action.form())
+	if r.Action != nil || r.Pin != nil {
+		b.WriteString("<span class=knoepfe>")
+		if r.Action != nil {
+			b.WriteString(r.Action.form())
+		}
+		if r.Pin != nil {
+			b.WriteString(r.Pin.form()) // the ☆ on the tile too (haus#64)
+		}
+		b.WriteString("</span>")
 	}
 	b.WriteString("</div><p><b class=zustand>" + html.EscapeString(r.State) + "</b>")
 	if r.Detail != "" {
@@ -240,6 +295,21 @@ func (a *Action) form() string {
 		b.WriteString("<button>" + html.EscapeString(a.Label) + "</button>")
 	}
 	b.WriteString("</form>")
+	return b.String()
+}
+
+// form is the slider: a POST to SwitchPath with wert, sent when the
+// finger lets go; the number beside it follows the finger.
+func (s *Slider) form() string {
+	v := strconv.Itoa(max(0, min(s.Value, 100)))
+	var b strings.Builder
+	b.WriteString("<form method=post action=" + SwitchPath + " class=regler>")
+	b.WriteString(`<input type=hidden name=geraet value="` + html.EscapeString(s.Entity) + `">`)
+	b.WriteString(`<input type=hidden name=tun value="` + html.EscapeString(s.Do) + `">`)
+	b.WriteString(`<input type=hidden name=zurueck value="` + html.EscapeString(s.Back) + `">`)
+	b.WriteString(`<span class=k>` + html.EscapeString(s.Label) + `</span><input type=range name=wert min=0 max=100 step=1 value=` + v +
+		` aria-label="` + html.EscapeString(s.Name+" "+s.Label) + `" oninput="this.nextElementSibling.value=this.value+' %'" onchange="this.form.requestSubmit?this.form.requestSubmit():this.form.submit()">` +
+		`<output>` + v + ` %</output><noscript><button>Setzen</button></noscript></form>`)
 	return b.String()
 }
 
@@ -277,6 +347,11 @@ const Style = `<style>.karte{margin:22px 0 0}
 .schalter::before{content:"";position:absolute;left:8px;top:10px;width:36px;height:20px;border-radius:10px;background:var(--track)}
 .schalter::after{content:"";position:absolute;left:11px;top:13px;width:14px;height:14px;border-radius:50%;background:#fff}
 .schalter[aria-checked=true]::before{background:var(--state)}.schalter[aria-checked=true]::after{left:27px}
+.karte li.regelbar{flex-wrap:wrap;row-gap:4px}.regelbar>div:first-child{flex:1 1 9rem;min-width:0}.regelbar .knoepfe{flex-wrap:wrap;gap:6px}
+.karte form.regler{flex:1 1 100%;display:flex;align-items:center;gap:10px}.regler input[type=range]{flex:1;min-width:0;min-height:40px;margin:0;accent-color:var(--accent)}
+.regler output{min-width:3.4em;text-align:right;font-variant-numeric:tabular-nums;color:var(--muted);font-size:.85rem}.regler .k{font-size:.82rem}
+.karte .hinweis{margin:-2px 2px 8px;font-size:.85rem;color:var(--muted)}.karte .hinweis a{color:var(--accent)}
+.kacheln .kopf .knoepfe{gap:0}.kacheln .kopf .anheften{width:40px;min-height:40px;font-size:1.2rem}
 .zeiten li{display:grid;grid-template-columns:6.4rem 1fr;gap:10px;align-items:baseline}
 .zeiten time{font-size:.8rem;color:var(--muted);font-variant-numeric:tabular-nums}.zeiten li.voll{display:block}
 .kacheln li.voll,.kacheln li.voll:first-child{grid-column:1/-1;display:block;background:none;border:1px dashed var(--edge);border-radius:14px;padding:12px 14px;color:var(--muted);font-size:.9rem}</style>`

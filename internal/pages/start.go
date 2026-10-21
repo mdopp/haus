@@ -51,6 +51,12 @@ type StartConfig struct {
 	PublicURL string            // Haus's own address, https://haus.<domain>: the apps' addresses on Willkommen (haus#56)
 	Welcome   bool              // Start sends a person to Willkommen the first time a device opens it (haus#56)
 	STT       STT               // the Sprechen field's microphone, HA's speech-to-text (haus#63); no provider: no microphone
+	// HAPublicURL is Home Assistant's public address (HAUS_HA_PUBLIC_URL,
+	// https://home.<domain>): Geräte's "In Home Assistant öffnen" (haus#64); empty: no link
+	HAPublicURL string
+	// Inverted are the covers wired the wrong way round (HAUS_COVER_INVERTED,
+	// haus#64): Haus shows and sets them turned over, Hoch is HA's close
+	Inverted map[string]bool
 }
 
 // backendWait is how long a page waits for any one backend: a slow one
@@ -70,6 +76,7 @@ const (
 const (
 	saysNoSwitching = "Schalten geht im Moment nicht."
 	saysPinHow      = "Tippe unter Geräte bei einem Gerät auf ☆, dann erscheint es hier."
+	saysPinMore     = "Mit ☆ legst du Geräte auf die Startseite."
 	saysNothingDue  = "Nichts in den nächsten zwei Wochen."
 	saysAgendaHow   = "Termine und Erinnerungen aus dem Kalender stehen hier."
 )
@@ -138,6 +145,7 @@ func Start(cfg StartConfig) http.HandlerFunc {
 			reads = append(reads, func(context.Context) { favs, favErr = cfg.Favorites.For(person) })
 		}
 		fetch(r, reads...)
+		states = cfg.allAsSeen(states) // a cover wired the wrong way round, turned over (haus#64)
 		logErrs("start", map[string]error{"laib": laibErr, "home assistant": haErr, "calendar": evErr, "reminders": todoErr, "favorites": favErr})
 
 		b := familyHead(r, cfg, "Zuhause", "Start")
@@ -315,12 +323,16 @@ func meineGeraete(ids []string, err error, states []ha.State, haErr error, reg h
 			continue
 		}
 		if n++; n <= maxGeraete {
-			c.Rows = append(c.Rows, tile(domain, s, reg.TempUnit, "/start"))
+			row := tile(domain, s, reg.TempUnit, "/start")
+			row.Pin = &cards.Pin{Entity: id, Name: row.Text, On: true, Back: "/start"} // ★ takes it off again (haus#64)
+			c.Rows = append(c.Rows, row)
 		}
 	}
 	more(&c, n-maxGeraete)
 	if n == 0 {
 		c.AddLink(saysPinHow, "", "/raeume")
+	} else {
+		c.Note, c.NoteHref = saysPinMore, "/raeume" // how more get here, at the top (haus#64)
 	}
 	return c
 }

@@ -55,7 +55,7 @@ var degradedLines = func() []struct{ key, says string } {
 	ls := []struct{ key, says string }{
 		{"schalten", saysSwitchFailed}, {"licht", saysNoHouse}, {"raeume", saysNoRooms}, {"kalender", saysNoCalendar},
 		{"kontakte", saysNoContacts}, {"notizen", saysNoNotes}, {"bedeutung", saysWordsOnly}, {"dokumente", saysNoDocuments},
-		{"favoriten", saysNoFavorites}, {"favoriten-verdeckt", saysFavsUnseen}, {"strom", saysNoEnergy}, {"strom-heute", saysNoEnergyToday},
+		{"favoriten", saysNoFavorites}, {"favoriten-verdeckt", saysFavsUnseen}, {"strom", saysNoEnergy}, {"strom-heute", saysNoEnergyToday}, {"verlauf", saysNoEnergyHistory},
 		{"lautsprecher", saysNoPlayers}, {"bote", saysDown("")}, {"bote-langsam", saysSlow("")},
 		{"box", "Wie es der Box geht, lässt sich gerade nicht sagen."}, {"laib", "Laib antwortet nicht"},
 		{"github", "GitHub ist gerade nicht erreichbar."}, {"dienste", " gerade nicht erreichbar."},
@@ -207,6 +207,9 @@ var says = map[string]string{
 	"schalten.switch.turn_on": "Schalter eingeschaltet", "schalten.switch.turn_off": "Schalter ausgeschaltet",
 	"schalten.media_player.media_pause": "Musik oder Film angehalten", "schalten.media_player.media_play": "Musik oder Film weiterlaufen lassen",
 	"schalten.media_player.volume_up": "Lauter gestellt", "schalten.media_player.volume_down": "Leiser gestellt",
+	"schalten.light.dimmen":     "Licht gedimmt",
+	"schalten.cover.open_cover": "Rollladen hochgefahren", "schalten.cover.close_cover": "Rollladen heruntergefahren",
+	"schalten.cover.stop_cover": "Rollladen angehalten", "schalten.cover.set_cover_position": "Rollladen auf eine Position gestellt",
 	"stern.aus":         "Ein Gerät von Start genommen (☆)",
 	"napi.portal.state": "Geräte-Widget aktualisiert", "napi.portal.active": "Widget „Was ist an“ aktualisiert",
 	"napi.portal.energy": "Energie-Widget aktualisiert", "napi.portal.entity-history": "Verlauf im Widget angesehen",

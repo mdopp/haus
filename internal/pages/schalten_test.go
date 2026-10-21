@@ -52,6 +52,7 @@ func switchHouse(t *testing.T) (*hafake.HA, StartConfig) {
 	fake.Set("lock.haustuer", "locked", map[string]any{"friendly_name": "Haustür"})
 	fake.Set("cover.garage", "closed", map[string]any{"friendly_name": "Garage", "device_class": "garage"})
 	fake.Set("cover.rollo", "closed", map[string]any{"friendly_name": "Rollo", "device_class": "shutter"})
+	fake.Set("cover.irgendwas", "closed", map[string]any{"friendly_name": "Irgendwas"}) // HA does not say what it is
 	return fake, StartConfig{HA: hc}
 }
 
@@ -105,9 +106,11 @@ func TestSchaltenAllLightsOff(t *testing.T) {
 }
 
 // What a page may switch is narrower than the widgets' rule, never wider:
-// a lamp or a switch on and off, a player's pause. Anything else — a
-// lock, a garage door, a cover, playing a URL, a service of another
-// domain, another target in the data — is refused and HA hears nothing.
+// a lamp or a switch on and off, a player's pause, a blind's Hoch, Stopp,
+// Runter and position (haus#64). Anything else — a lock, a garage door
+// opening, a cover HA does not say what it is, playing a URL, a service
+// of another domain, another target in the data, a wert that is no
+// slider's — is refused and HA hears nothing.
 func TestSchaltenRefusesWhatAPageDoesNotSwitch(t *testing.T) {
 	fake, cfg := switchHouse(t)
 	h := Schalten(cfg)
@@ -115,7 +118,14 @@ func TestSchaltenRefusesWhatAPageDoesNotSwitch(t *testing.T) {
 		{"geraet": {"lock.haustuer"}, "tun": {"lock.unlock"}},
 		{"geraet": {"lock.haustuer"}, "tun": {"lock.lock"}},
 		{"geraet": {"cover.garage"}, "tun": {"cover.open_cover"}},
-		{"geraet": {"cover.rollo"}, "tun": {"cover.open_cover"}},
+		{"geraet": {"cover.garage"}, "tun": {"cover.set_cover_position"}, "wert": {"100"}},
+		{"geraet": {"cover.irgendwas"}, "tun": {"cover.open_cover"}},
+		{"geraet": {"cover.rollo"}, "tun": {"cover.set_cover_position"}},
+		{"geraet": {"cover.rollo"}, "tun": {"cover.set_cover_position"}, "wert": {"101"}},
+		{"geraet": {"cover.rollo"}, "tun": {"cover.set_cover_position"}, "wert": {"-1"}},
+		{"geraet": {"cover.rollo"}, "tun": {"cover.open_cover"}, "wert": {"50"}},
+		{"geraet": {"switch.kaffee"}, "tun": {"switch.turn_on"}, "wert": {"50"}},
+		{"geraet": {"light.buero"}, "tun": {"light.turn_on"}, "wert": {"halb"}},
 		{"geraet": {"light.buero"}, "tun": {"light.toggle"}},
 		{"geraet": {"media_player.wohnzimmer"}, "tun": {"media_player.play_media"}},
 		{"geraet": {"media_player.wohnzimmer"}, "tun": {"media_player.turn_off"}},
@@ -381,7 +391,8 @@ func familyPageAs(t *testing.T, page func(StartConfig) http.HandlerFunc, cfg Sta
 // package schalter would refuse more, but a page never asks for it.
 func TestAPageDoesExactlyThis(t *testing.T) {
 	want := map[string]bool{"light.turn_on": true, "light.turn_off": true, "switch.turn_on": true, "switch.turn_off": true,
-		"media_player.media_pause": true, "media_player.media_play": true, "media_player.volume_down": true, "media_player.volume_up": true}
+		"media_player.media_pause": true, "media_player.media_play": true, "media_player.volume_down": true, "media_player.volume_up": true,
+		"cover.open_cover": true, "cover.stop_cover": true, "cover.close_cover": true, "cover.set_cover_position": true}
 	if !reflect.DeepEqual(pageDoes, want) {
 		t.Fatalf("a page does %v, want %v", pageDoes, want)
 	}

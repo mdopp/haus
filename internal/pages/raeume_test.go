@@ -207,9 +207,13 @@ func TestRaeumeSwitchesLampsInPlace(t *testing.T) {
 	mustContain(t, wz, `name=geraet value="light.stehlampe"`, `name=tun value="light.turn_on"`, `name=zurueck value="/raeume#karte-wohnzimmer"`,
 		`role=switch aria-checked=false aria-label="Stehlampe"`)
 	mustContain(t, ohne, `name=geraet value="light.keller"`, `name=zurueck value="/raeume#karte-ohne-raum"`)
-	// one switch a lamp, nothing for the rest
-	if n := strings.Count(body, "action=/schalten"); n != 3 {
+	// one switch a lamp, nothing for the rest; the dimmer's slider is
+	// TestRaeumeDimsAndMovesCovers'
+	if n := strings.Count(body, "role=switch"); n != 3 {
 		t.Fatalf("%d switches, want 3 (Deckenlampe, Stehlampe, Kellerlicht):\n%s", n, body)
+	}
+	if n := strings.Count(body, "action=/schalten"); n != 4 {
+		t.Fatalf("%d forms, want 4 (three switches, Deckenlampe's slider):\n%s", n, body)
 	}
 	mustNotContain(t, body, `value="cover.`, `value="climate.`, `value="media_player.`, `value="light.eg"`, `value="light.garten"`,
 		"<script")

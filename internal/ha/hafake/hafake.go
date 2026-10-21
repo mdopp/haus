@@ -1,7 +1,8 @@
 // Package hafake is a fake Home Assistant for tests: the REST calls Haus
 // makes (/api/states, /api/services, /api/history/period,
 // /api/camera_proxy, /api/stt) and the WebSocket
-// (/api/websocket: auth, subscribe_events, the three registries, the Assist pipelines' debug store). Its frame
+// (/api/websocket: auth, subscribe_events, the three registries, the Assist pipelines' debug store,
+// the recorder's long-term statistics). Its frame
 // code is written for the server side on purpose, so it shares nothing with
 // the client it tests. Never a live box.
 package hafake
@@ -18,6 +19,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -55,6 +57,122 @@ type HA struct {
 	notAdmin bool
 	stt      map[string]string // provider → the words it hears
 	heard    []Speech
+	stats    map[string][]Stat // statistic id → what it added, per hour (or coarser)
+	statDown bool
+	statAsks []map[string]any
+}
+
+// Stat is what a statistic added in the hour (or the day) from Start.
+type Stat struct {
+	Start  time.Time
+	Change float64
+}
+
+// SetStatistics sets a statistic's long-term statistics (haus#65): what it
+// added from each Start; HA sums them into hours, days, weeks and months
+// in its time zone (Europe/Berlin here).
+func (h *HA) SetStatistics(id string, points []Stat) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.stats == nil {
+		h.stats = map[string][]Stat{}
+	}
+	h.stats[id] = append([]Stat(nil), points...)
+}
+
+// StatisticsDown makes recorder/statistics_during_period fail.
+func (h *HA) StatisticsDown(down bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.statDown = down
+}
+
+// StatisticsAsked are the statistics_during_period commands received.
+func (h *HA) StatisticsAsked() []map[string]any {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return append([]map[string]any(nil), h.statAsks...)
+}
+
+// haZone is the fake HA's time zone (/api/config), where it sums days.
+var haZone = func() *time.Location {
+	l, err := time.LoadLocation("Europe/Berlin")
+	if err != nil {
+		return time.UTC
+	}
+	return l
+}()
+
+// statistics answers recorder/statistics_during_period as HA does
+// (recorder/websocket_api.py, 2026-10): {id: [{start, end, change}]},
+// start and end in ms since the epoch, a period without rows left out,
+// an unknown id absent.
+func (h *HA) statistics(m map[string]any) (any, bool) {
+	h.statAsks = append(h.statAsks, m)
+	if h.statDown {
+		return nil, false
+	}
+	from, err1 := time.Parse(time.RFC3339, fmt.Sprint(m["start_time"]))
+	to, err2 := time.Parse(time.RFC3339, fmt.Sprint(m["end_time"]))
+	if err1 != nil || err2 != nil {
+		return nil, false
+	}
+	period := fmt.Sprint(m["period"])
+	bucket := func(t time.Time) time.Time {
+		t = t.In(haZone)
+		y, mo, d := t.Date()
+		switch period {
+		case "hour":
+			return t.Truncate(time.Hour)
+		case "day":
+			return time.Date(y, mo, d, 0, 0, 0, 0, haZone)
+		case "week":
+			return time.Date(y, mo, d-(int(t.Weekday())+6)%7, 0, 0, 0, 0, haZone)
+		default:
+			return time.Date(y, mo, 1, 0, 0, 0, 0, haZone)
+		}
+	}
+	next := func(t time.Time) time.Time {
+		switch period {
+		case "hour":
+			return t.Add(time.Hour)
+		case "day":
+			return t.AddDate(0, 0, 1)
+		case "week":
+			return t.AddDate(0, 0, 7)
+		}
+		return t.AddDate(0, 1, 0)
+	}
+	out := map[string]any{}
+	ids, _ := m["statistic_ids"].([]any)
+	for _, idv := range ids {
+		id := fmt.Sprint(idv)
+		pts, ok := h.stats[id]
+		if !ok {
+			continue
+		}
+		sums := map[time.Time]float64{}
+		var order []time.Time
+		for _, p := range pts {
+			b := bucket(p.Start)
+			if b.Before(bucket(from)) || !b.Before(to) {
+				continue
+			}
+			if _, seen := sums[b]; !seen {
+				order = append(order, b)
+			}
+			sums[b] += p.Change
+		}
+		sort.Slice(order, func(i, j int) bool { return order[i].Before(order[j]) })
+		rows := []any{}
+		for _, b := range order {
+			rows = append(rows, map[string]any{"start": float64(b.UnixMilli()), "end": float64(next(b).UnixMilli()), "change": sums[b]})
+		}
+		if len(rows) > 0 {
+			out[id] = rows
+		}
+	}
+	return out, true
 }
 
 // Speech is one request to HA's speech-to-text.
@@ -581,6 +699,16 @@ func (h *HA) websocket(w http.ResponseWriter, r *http.Request) {
 			h.mu.Unlock()
 			if code != "" {
 				c.send(map[string]any{"id": m["id"], "type": "result", "success": false, "error": map[string]any{"code": code, "message": map[string]string{"unauthorized": "Unauthorized", "not_found": "not found"}[code]}})
+			} else {
+				c.send(map[string]any{"id": m["id"], "type": "result", "success": true, "result": res})
+			}
+			continue
+		}
+		if m["type"] == "recorder/statistics_during_period" {
+			res, ok := h.statistics(m)
+			h.mu.Unlock()
+			if !ok {
+				c.send(map[string]any{"id": m["id"], "type": "result", "success": false, "error": map[string]any{"code": "invalid_format", "message": "recorder boom"}})
 			} else {
 				c.send(map[string]any{"id": m["id"], "type": "result", "success": true, "result": res})
 			}
