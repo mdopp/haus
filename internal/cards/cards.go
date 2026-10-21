@@ -7,6 +7,7 @@ package cards
 import (
 	"encoding/json"
 	"html"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -33,6 +34,9 @@ type Row struct {
 	// Slider is a level to set, 0–100 % (haus#64): a dimmer's brightness, a
 	// cover's position; drawn on a line of its own under the row's buttons
 	Slider *Slider `json:"slider,omitempty"`
+	// Color is the row's calendar colour (#rrggbb, haus#66), a dot before
+	// the text; never the only sign, the detail names the calendar
+	Color string `json:"color,omitempty"`
 }
 
 // Slider is a row's level (haus#64): a form that POSTs to SwitchPath with
@@ -233,6 +237,9 @@ func (c Card) HTML() string {
 
 // what is a row's text, leading where it leads, and its detail.
 func what(b *strings.Builder, r Row) {
+	if colorRE.MatchString(r.Color) {
+		b.WriteString(`<span class=farbe style="background:` + r.Color + `" aria-hidden=true></span>`)
+	}
 	if r.Href != "" {
 		b.WriteString(`<a href="` + html.EscapeString(r.Href) + `">` + html.EscapeString(r.Text) + "</a>")
 	} else {
@@ -326,7 +333,9 @@ func (p *Pin) form() string {
 
 // Style is the cards' CSS, for a page's head: the house palette's
 // variables (the page frame sets them), a row a finger hits as a whole.
-const Style = `<style>.karte{margin:22px 0 0}
+var colorRE = regexp.MustCompile(`^#[0-9a-f]{6}$`)
+
+const Style = `<style>.farbe{display:inline-block;width:.65em;height:.65em;border-radius:50%;margin-right:.45em;vertical-align:.05em}.karte{margin:22px 0 0}
 .karte h2{font-size:.72rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:0 0 8px}
 .karte ul{list-style:none;margin:0;padding:0;background:var(--card);border:1px solid var(--edge);border-radius:14px}
 .karte li{position:relative;padding:11px 14px;border-top:1px solid var(--line);overflow-wrap:anywhere;min-height:44px}.karte li:first-child{border-top:0}

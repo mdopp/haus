@@ -271,3 +271,48 @@ func (c *Client) PersonPending(ctx context.Context) ([]Pending, error) {
 	err = decodeJSON("person_pending", text, &out)
 	return out, err
 }
+
+// Abo is one calendar laib's kalender mirrors into Radicale (laib#495):
+// a Google calendar's secret iCal address (Kind google) or a public ICS
+// (abo). Laib keeps the address; no answer carries it.
+type Abo struct {
+	Person string `json:"person"`
+	Name   string `json:"name"`
+	Kind   string `json:"kind"`
+	Title  string `json:"title"`
+	Since  string `json:"since"`
+}
+
+// Abos is laib_calendar's answer: one German sentence, and the list.
+type Abos struct {
+	Message string `json:"message"`
+	Abos    []Abo  `json:"abos"`
+}
+
+func (c *Client) calendar(ctx context.Context, args map[string]any) (Abos, error) {
+	var out Abos
+	text, err := c.CallTyped(ctx, "calendar", args)
+	if err != nil {
+		return out, err
+	}
+	err = decodeJSON("calendar", text, &out)
+	return out, err
+}
+
+// CalendarSubscribe hands an address to laib, once: as the tool's stdin,
+// never as an argument, and never back (haus#66).
+func (c *Client) CalendarSubscribe(ctx context.Context, a Abo, address string) (Abos, error) {
+	return c.calendar(ctx, map[string]any{"action": "subscribe", "person": a.Person, "name": a.Name, "kind": a.Kind, "title": a.Title, "stdin": address + "\n"})
+}
+
+// CalendarUnsubscribe is Trennen: laib forgets the address, the next run
+// removes the copy.
+func (c *Client) CalendarUnsubscribe(ctx context.Context, person, name string) (Abos, error) {
+	return c.calendar(ctx, map[string]any{"action": "unsubscribe", "person": person, "name": name})
+}
+
+// CalendarList is every subscription, without addresses.
+func (c *Client) CalendarList(ctx context.Context) ([]Abo, error) {
+	out, err := c.calendar(ctx, map[string]any{"action": "list"})
+	return out.Abos, err
+}

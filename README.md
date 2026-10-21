@@ -152,7 +152,28 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     every calendar of the Radicale account, at most 50 rows a card. Each
     reminder links to its own page. Radicale not answering: *Der Kalender
     antwortet gerade nicht.* once, where the appointments would be, or in
-    *Erinnerungen* when only the reminders fail.
+    *Erinnerungen* when only the reminders fail. The calendars from outside
+    that laib's kalender mirrors (laib#495: each person's `google-*` and
+    `abo-*`, read only) are in it, and so are the Bote's *Termine*; a
+    calendar *nur für mich* (`<person>/privat-*`) only on that person's
+    page. A row names its calendar unless it is the Haushalt, in the colour
+    the person chose.
+  - *Deine Kalender* (`/kalender/verwalten`, haus#66), linked from
+    Kalender: every calendar with where it comes from (*aus Google, nur
+    lesen · verbunden seit … · zuletzt abgeglichen vor 5 min*, laib's
+    problem when there is one), a colour and *Ausblenden* (the person's own
+    view, `ansicht.json` in Haus's data folder; Radicale and the phones are
+    untouched), *Trennen* for a subscription, *Löschen* for a calendar
+    Haus made, and *Adresse fürs Telefon* (the CalDAV address from
+    `HAUS_RADICALE_PUBLIC_URL`, with the DAVx⁵/iPhone sentence; the same
+    for the address book). *Kalender hinzufügen* has three ways: *Google-
+    Kalender verbinden* (Google's *Geheime Adresse im iCal-Format*, handed
+    to laib once as `laib_calendar`'s stdin and never shown again),
+    *Öffentlichen Kalender abonnieren* (Feiertage or Schulferien of a
+    Bundesland from openholidaysapi.org, or any ICS address), *Neuen
+    Kalender anlegen* (`haus/familie-<name>` für die Familie,
+    `<person>/privat-<name>` nur für mich). *In Radicale öffnen* is the
+    page's *Weiter in <App>*.
   - *Notizen*: a search field (`GET /notizen?q=…`, the memory library
     below: 20 hits, by meaning) and the ten newest notes. When the library
     answers but no note is close to the question, the page says *Keine
@@ -652,7 +673,7 @@ HAUS_LISTEN=0.0.0.0:8650 \
 HAUS_HA_URL=http://host.containers.internal:8123 HAUS_HA_TOKEN=<a long-lived HA token> \
 HAUS_ENERGY_FLOW=pv=sensor.…,house=sensor.…,grid=sensor.…,battery=sensor.… HAUS_ENERGY_TOTALS=PV-Erzeugung=sensor.…,… \
 HAUS_ENERGY_STATS=bezug=sensor.…,einspeisung=sensor.…,solar=sensor.… \
-HAUS_HA_PUBLIC_URL=https://home.<domain> HAUS_COVER_INVERTED=cover.…,… \
+HAUS_HA_PUBLIC_URL=https://home.<domain> HAUS_COVER_INVERTED=cover.…,… HAUS_RADICALE_PUBLIC_URL=https://caldav.<domain> \
 HAUS_HAUSHALT_TOKEN=<the Bote's bearer> TZ=Europe/Berlin \
 HAUS_RADICALE_URL=http://host.containers.internal:5232 HAUS_RADICALE_USER=<service account> HAUS_RADICALE_PASSWORD=<its password> \
 HAUS_PAPERLESS_URL=http://host.containers.internal:8000 HAUS_PAPERLESS_TOKEN=<a Paperless API token> \
