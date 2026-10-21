@@ -1,5 +1,5 @@
 // Package davfake is a fake Radicale for tests: Basic auth, PROPFIND on the
-// account's home, REPORT calendar-query on a calendar and addressbook-query
+// account's home (and, with AddPrincipal, on the root and other homes), REPORT calendar-query on a calendar and addressbook-query
 // on an address book (each object with its ETag), PUT with If-None-Match
 // or If-Match, MKCALENDAR, and MKCOL
 // extended for an address book. It filters a calendar REPORT by component
@@ -49,7 +49,42 @@ type Server struct {
 	RaceOnPut string
 	// NoETag leaves the ETag out of REPORT answers, as a lax server might.
 	NoETag bool
-	behind map[string]col // made by "another client" right after the next PROPFIND
+	behind map[string]col  // made by "another client" right after the next PROPFIND
+	others map[string]bool // other accounts' homes the account may list (laib#495): /<name>/
+	synced map[string][2]string
+}
+
+// AddPrincipal makes another account's home, /<name>/, that this account
+// lists from the root and reads below (laib#495: Haus reads each person's
+// mirrors); calendars added under it are listed there, not in the home.
+func (s *Server) AddPrincipal(name string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.others == nil {
+		s.others = map[string]bool{}
+	}
+	s.others["/"+name+"/"] = true
+}
+
+// SetSynced gives a calendar laib's kalender properties (laib#495): when it
+// was last mirrored, and what went wrong since.
+func (s *Server) SetSynced(path, at, problem string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.synced == nil {
+		s.synced = map[string][2]string{}
+	}
+	s.synced[path] = [2]string{at, problem}
+}
+
+// foreign is a path under another account's home.
+func (s *Server) foreign(path string) bool {
+	for o := range s.others {
+		if strings.HasPrefix(path, o) {
+			return true
+		}
+	}
+	return false
 }
 
 // CreateAfterPropfind makes a calendar appear right after the next PROPFIND
@@ -188,16 +223,33 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	home := "/" + s.User + "/"
 	switch r.Method {
 	case "PROPFIND":
-		if r.URL.Path != home {
+		var b strings.Builder
+		b.WriteString(`<?xml version="1.0" encoding="utf-8"?><multistatus xmlns="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:CR="urn:ietf:params:xml:ns:carddav" xmlns:L="urn:laib:kalender">`)
+		if r.URL.Path == "/" && s.others != nil {
+			b.WriteString(`<response><href>/</href><propstat><prop><resourcetype><collection/></resourcetype></prop><status>HTTP/1.1 200 OK</status></propstat></response>`)
+			homes := []string{home}
+			for o := range s.others {
+				homes = append(homes, o)
+			}
+			sort.Strings(homes)
+			for _, h := range homes {
+				b.WriteString(`<response><href>` + h + `</href><propstat><prop><resourcetype><collection/></resourcetype></prop><status>HTTP/1.1 200 OK</status></propstat></response>`)
+			}
+			b.WriteString(`</multistatus>`)
+			w.WriteHeader(http.StatusMultiStatus)
+			io.WriteString(w, b.String())
+			return
+		}
+		if r.URL.Path != home && !s.others[r.URL.Path] {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		var b strings.Builder
-		b.WriteString(`<?xml version="1.0" encoding="utf-8"?><multistatus xmlns="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:CR="urn:ietf:params:xml:ns:carddav">`)
-		b.WriteString(`<response><href>` + home + `</href><propstat><prop><resourcetype><collection/></resourcetype></prop><status>HTTP/1.1 200 OK</status></propstat></response>`)
+		b.WriteString(`<response><href>` + r.URL.Path + `</href><propstat><prop><resourcetype><collection/></resourcetype></prop><status>HTTP/1.1 200 OK</status></propstat></response>`)
 		var paths []string
 		for k := range s.cols {
-			paths = append(paths, k)
+			if (r.URL.Path == home && !s.foreign(k)) || (r.URL.Path != home && strings.HasPrefix(k, r.URL.Path)) {
+				paths = append(paths, k)
+			}
 		}
 		sort.Strings(paths)
 		for _, k := range paths {
@@ -213,6 +265,9 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 					b.WriteString(`<C:comp name="` + cp + `"/>`)
 				}
 				b.WriteString(`</C:supported-calendar-component-set>`)
+			}
+			if st, ok := s.synced[k]; ok {
+				b.WriteString(`<L:abgleich>` + esc(st[0]) + `</L:abgleich><L:problem>` + esc(st[1]) + `</L:problem>`)
 			}
 			b.WriteString(`</prop><status>HTTP/1.1 200 OK</status></propstat></response>`)
 		}
@@ -332,6 +387,18 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		s.cols[r.URL.Path] = col{name: mk.Name, book: true}
 		w.WriteHeader(http.StatusCreated)
+	case http.MethodDelete:
+		if _, ok := s.cols[r.URL.Path]; !ok {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		delete(s.cols, r.URL.Path)
+		for k := range s.objs {
+			if strings.HasPrefix(k, r.URL.Path) {
+				delete(s.objs, k)
+			}
+		}
+		w.WriteHeader(http.StatusNoContent)
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}

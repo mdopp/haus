@@ -261,6 +261,8 @@ type Event struct {
 	Start    time.Time
 	End      time.Time
 	AllDay   bool
+	// the calendar it is in, as Events found it (haus#66: hidden, coloured)
+	Calendar, CalendarName string
 }
 
 // Todo is one VTODO: a reminder.

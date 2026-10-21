@@ -3,6 +3,7 @@ package pages
 import (
 	"context"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -28,6 +29,8 @@ func Kalender(cfg StartConfig) http.HandlerFunc {
 			notSetCalendar.write(w, r, cfg, "Kalender")
 			return
 		}
+		me := r.Header.Get("Remote-User")
+		view, viewErr := cfg.Views.For(me)
 		now, loc := cfg.clock()
 		y, m, d := now.Date()
 		today := time.Date(y, m, d, 0, 0, 0, 0, loc)
@@ -40,11 +43,12 @@ func Kalender(cfg StartConfig) http.HandlerFunc {
 		)
 		fetch(r,
 			func(ctx context.Context) {
-				// today and the 14 days after it: [today 00:00, the 15th day 00:00)
-				events, evErr = cfg.Calendar.Events(ctx, today, today.AddDate(0, 0, horizon+1))
+				// today and the 14 days after it: [today 00:00, the 15th day 00:00); the
+				// person's own calendars too, without the ones they hid (haus#66)
+				events, evErr = cfg.Calendar.PersonEvents(ctx, me, today, today.AddDate(0, 0, horizon+1))
 			},
 			func(ctx context.Context) { todos, todoErr = cfg.Calendar.OpenTodos(ctx) })
-		logErrs("kalender", map[string]error{"calendar": evErr, "reminders": todoErr})
+		logErrs("kalender", map[string]error{"calendar": evErr, "reminders": todoErr, "view": viewErr})
 
 		b := familyHead(r, cfg, "Kalender", "Kalender")
 		b.WriteString("<h1>Kalender</h1>")
@@ -55,9 +59,13 @@ func Kalender(cfg StartConfig) http.HandlerFunc {
 			next := cards.Card{Title: "Nächste 14 Tage"}
 			nToday, nNext := 0, 0
 			for _, e := range events {
+				where := calPath(e.Calendar)
+				if !view.Shows(where) {
+					continue
+				}
 				if e.Start.Before(tomorrow) {
 					if nToday++; nToday <= maxCalendarRows {
-						heute.Add(summary(e.Summary), withPlace(todaySpan(e, today, tomorrow, loc), e.Location))
+						heute.Rows = append(heute.Rows, cards.Row{Text: summary(e.Summary), Detail: fromCalendar(withPlace(todaySpan(e, today, tomorrow, loc), e.Location), e), Color: view.Color(where)})
 					}
 					continue
 				}
@@ -66,7 +74,7 @@ func Kalender(cfg StartConfig) http.HandlerFunc {
 					if e.AllDay {
 						when = dayWord(e.Start, now, loc) + " ganztägig"
 					}
-					next.Add(summary(e.Summary), withPlace(when, e.Location))
+					next.Rows = append(next.Rows, cards.Row{Text: summary(e.Summary), Detail: fromCalendar(withPlace(when, e.Location), e), Color: view.Color(where)})
 				}
 			}
 			more(&heute, nToday-maxCalendarRows)
@@ -103,8 +111,26 @@ func Kalender(cfg StartConfig) http.HandlerFunc {
 			}
 			b.WriteString(rem.HTML())
 		}
+		b.WriteString(`<p class=weiter-in><a href="` + kalenderVerwalten + `">Kalender hinzufügen und verwalten</a> <span class=k>Google verbinden, Feiertage abonnieren, Farben, Adresse fürs Telefon</span></p>`)
 		writePage(w, http.StatusOK, b)
 	}
+}
+
+// calPath is a calendar's path from its URL.
+func calPath(u string) string {
+	if p, err := url.Parse(u); err == nil {
+		return p.Path
+	}
+	return u
+}
+
+// fromCalendar names the calendar an appointment comes from, unless it is
+// the Haushalt: colour is never the only sign.
+func fromCalendar(detail string, e caldav.Event) string {
+	if e.CalendarName == "" || caldav.KindOf(e.Calendar) == "haushalt" || strings.EqualFold(e.CalendarName, caldav.WriteName) {
+		return detail
+	}
+	return strings.TrimPrefix(detail+" · "+e.CalendarName, " · ")
 }
 
 // todaySpan is an appointment's time within today: 13:00–14:00, ab 20:00,

@@ -14,6 +14,7 @@ import (
 	"time"
 	_ "time/tzdata" // the image is scratch: TZ needs the zone database inside the binary
 
+	"github.com/mdopp/haus/internal/ansicht"
 	"github.com/mdopp/haus/internal/bote"
 	"github.com/mdopp/haus/internal/cards"
 	"github.com/mdopp/haus/internal/devices"
@@ -58,6 +59,8 @@ type site struct {
 	stt         pages.STT       // haus#63: the Sprechen field's microphone through HA's speech-to-text; no provider, no microphone
 	haPublic    string          // haus#64: Home Assistant's public address, Geräte's "In Home Assistant öffnen"; empty, no link
 	inverted    map[string]bool // haus#64: covers wired the wrong way round, shown and set turned over
+	radicale    string          // haus#66: Radicale's public address, its web page and the phones' CalDAV addresses; empty, none
+	views       *ansicht.Store  // haus#66: each person's calendar colours and hidden calendars
 }
 
 // routes is Haus's whole surface: /napi for the app, /mcp/haushalt for the
@@ -76,7 +79,7 @@ func routes(s site) http.Handler {
 	family := pages.StartConfig{Laib: s.ops, LaibURL: s.laibURL, HA: s.napi.HA, Energy: s.napi.Energy, Calendar: s.hh.Calendar, Contacts: s.hh.Contacts,
 		Notes: s.hh.Notes, Library: s.hh.Library, Judge: s.hh.Judge, Docs: s.hh.Documents, Loc: s.hh.Loc, Favorites: s.favorites, Bote: s.bote,
 		Samba: s.samba, SambaHost: s.sambaHost, Usage: s.usage, PublicURL: s.publicURL, Welcome: s.welcome, STT: s.stt,
-		HAPublicURL: s.haPublic, Inverted: s.inverted}
+		HAPublicURL: s.haPublic, Inverted: s.inverted, RadicalePublicURL: s.radicale, Views: s.views}
 	start := pages.Start(family) // one: the page and its box line share laib's status (haus#67)
 	pagesMux.HandleFunc("/start", start)
 	pagesMux.HandleFunc(pages.StartBoxPath, start)
@@ -87,6 +90,9 @@ func routes(s site) http.Handler {
 	pagesMux.HandleFunc("/medien", pages.Medien(family))
 	pagesMux.HandleFunc("/medien/", pages.Medien(family)) // a path it does not serve: 404 and the way back
 	pagesMux.HandleFunc("/kalender", pages.Kalender(family))
+	pagesMux.HandleFunc("/kalender/verwalten", pages.KalenderVerwalten(family))     // Deine Kalender: hinzufügen, Farbe, Trennen (haus#66)
+	pagesMux.HandleFunc("/kalender/hinzufuegen", pages.KalenderHinzufuegen(family)) // Google, ein Abo, ein neuer Kalender
+	pagesMux.HandleFunc("/kalender/aendern", pages.KalenderAendern(family))         // one calendar's buttons
 	pagesMux.HandleFunc("/notizen", pages.Notizen(family))
 	// each thing's and each tool item's own page, which the widgets name (haus#28)
 	pagesMux.HandleFunc(cards.ThingPages, pages.Ding(family))
@@ -166,6 +172,10 @@ func main() {
 	if haPublic == "" && os.Getenv("HAUS_HA_PUBLIC_URL") != "" {
 		log.Printf("haus: HAUS_HA_PUBLIC_URL %q is not an http(s) address: no link to Home Assistant", os.Getenv("HAUS_HA_PUBLIC_URL"))
 	}
+	radicalePublic := pages.AppURL(os.Getenv("HAUS_RADICALE_PUBLIC_URL")) // haus#66
+	if radicalePublic == "" && os.Getenv("HAUS_RADICALE_PUBLIC_URL") != "" {
+		log.Printf("haus: HAUS_RADICALE_PUBLIC_URL %q is not an http(s) address: no link to Radicale, no addresses for the phone", os.Getenv("HAUS_RADICALE_PUBLIC_URL"))
+	}
 	laibURL := env("LAIB_PUBLIC_URL", "https://laib."+env("LAIB_DOMAIN", "example"))
 	b := bote.FromEnv() // the Sprechen field (haus#12): with the Bote's key only (laib#215)
 	// haus#50: counted for usage-metrics, flushed every five minutes; the voice
@@ -185,7 +195,8 @@ func main() {
 		samba: samba.FromEnv(), sambaHost: os.Getenv("HAUS_SAMBA_HOST"),
 		usage: counter, voice: voice, welcome: true,
 		stt:      pages.STT{Provider: os.Getenv("HAUS_STT_PROVIDER"), Language: env("HAUS_STT_LANGUAGE", "de")},
-		haPublic: haPublic, inverted: pages.InvertedFromList(os.Getenv("HAUS_COVER_INVERTED"))})
+		haPublic: haPublic, inverted: pages.InvertedFromList(os.Getenv("HAUS_COVER_INVERTED")),
+		radicale: radicalePublic, views: ansicht.Open(dataDir)})
 	addr := env("HAUS_LISTEN", "127.0.0.1:8650")
 	log.Printf("haus %s: listening on %s as %s, laib %s, home assistant %v, haushalt %d tools, memory library %v (tidy-up %v), uploads %q, the Bote %v, counting %v (voice %v), pages only behind the proxy secret", Version, addr, pages.House.Display, ops.URL, cfg.HA != nil, len(haushalt.Tools(hh)), hh.Library != nil, hh.Judge != nil, cfg.UploadDir, b != nil, counter != nil, voice != nil)
 	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}

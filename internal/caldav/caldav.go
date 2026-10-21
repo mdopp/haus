@@ -10,6 +10,7 @@
 package caldav
 
 import (
+	"cmp"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -51,6 +52,9 @@ type Collection struct {
 	Name  string
 	comps []string // the components a calendar takes; empty: all
 	book  bool     // an address book
+	// laib's kalender properties on a mirror (laib#495): its last good run
+	// (RFC 3339) and what went wrong since
+	synced, problem string
 }
 
 // WriteName is the calendar and the address book the Bote writes to when
@@ -183,6 +187,8 @@ type multistatus struct {
 					} `xml:"urn:ietf:params:xml:ns:caldav comp"`
 				} `xml:"urn:ietf:params:xml:ns:caldav supported-calendar-component-set"`
 				CalendarData string `xml:"urn:ietf:params:xml:ns:caldav calendar-data"`
+				Abgleich     string `xml:"urn:laib:kalender abgleich"`
+				Problem      string `xml:"urn:laib:kalender problem"`
 				ETag         string `xml:"DAV: getetag"`
 			} `xml:"DAV: prop"`
 		} `xml:"DAV: propstat"`
@@ -190,8 +196,8 @@ type multistatus struct {
 }
 
 const propfindBody = `<?xml version="1.0" encoding="utf-8"?>
-<D:propfind xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
-  <D:prop><D:resourcetype/><D:displayname/><C:supported-calendar-component-set/></D:prop>
+<D:propfind xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:L="urn:laib:kalender">
+  <D:prop><D:resourcetype/><D:displayname/><C:supported-calendar-component-set/><L:abgleich/><L:problem/></D:prop>
 </D:propfind>`
 
 // Calendars lists the account's calendars, sorted by address; one whose
@@ -207,6 +213,11 @@ func (c *Client) list(ctx context.Context, books bool) ([]Collection, error) {
 	if err != nil {
 		return nil, err
 	}
+	return c.listAt(ctx, home, books)
+}
+
+// listAt is the calendars, or the address books, in the home at home.
+func (c *Client) listAt(ctx context.Context, home string, books bool) ([]Collection, error) {
 	code, raw, err := c.do(ctx, "PROPFIND", home, "1", propfindBody, nil)
 	if err != nil {
 		return nil, err
@@ -223,9 +234,10 @@ func (c *Client) list(ctx context.Context, books bool) ([]Collection, error) {
 	}
 	var out []Collection
 	for _, r := range ms.Responses {
-		isCal, isBook, name := false, false, ""
+		isCal, isBook, name, synced, problem := false, false, "", "", ""
 		var cs []string
 		for _, ps := range r.Propstat {
+			synced, problem = cmp.Or(ps.Prop.Abgleich, synced), cmp.Or(ps.Prop.Problem, problem)
 			if ps.Prop.ResourceType.Calendar != nil {
 				isCal = true
 			}
@@ -249,7 +261,7 @@ func (c *Client) list(ctx context.Context, books bool) ([]Collection, error) {
 		if name == "" {
 			name = path.Base(strings.TrimRight(r.Href, "/"))
 		}
-		out = append(out, Collection{URL: u, Name: name, comps: cs, book: books})
+		out = append(out, Collection{URL: u, Name: name, comps: cs, book: books, synced: synced, problem: problem})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].URL < out[j].URL })
 	return out, nil
@@ -307,6 +319,13 @@ func (c *Client) readable(ctx context.Context, k kind, comp string) ([]Collectio
 			return nil, err
 		}
 		out, seen[col.URL] = append(out, col), true
+	}
+	if !k.book && comp == "VEVENT" { // the family's calendars from outside, in each person's home (laib#495)
+		mirrors, err := c.mirrors(ctx)
+		if err != nil {
+			return nil, err
+		}
+		cols = append(cols, mirrors...)
 	}
 	for _, col := range cols {
 		if (comp == "" || col.Takes(comp)) && !seen[col.URL] {
@@ -470,22 +489,29 @@ func (c *Client) Events(ctx context.Context, from, to time.Time) ([]Event, error
 	if err != nil {
 		return nil, err
 	}
+	return c.events(ctx, cols, from, to)
+}
+
+func (c *Client) events(ctx context.Context, cols []Collection, from, to time.Time) ([]Event, error) {
 	s, e := utc(from), utc(to)
 	body := `<?xml version="1.0" encoding="utf-8"?>
 <C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
   <D:prop><D:getetag/><C:calendar-data><C:expand start="` + s + `" end="` + e + `"/></C:calendar-data></D:prop>
   <C:filter><C:comp-filter name="VCALENDAR"><C:comp-filter name="VEVENT"><C:time-range start="` + s + `" end="` + e + `"/></C:comp-filter></C:comp-filter></C:filter>
 </C:calendar-query>`
-	roots, err := c.reportAll(ctx, cols, body)
-	if err != nil {
-		return nil, err
-	}
 	var out []Event
-	for _, r := range roots {
-		for _, ev := range Events(r, c.loc()) {
-			// the server filters already; this keeps a lax one honest
-			if ev.Start.Before(to) && (ev.End.After(from) || (ev.End.Equal(ev.Start) && !ev.Start.Before(from))) {
-				out = append(out, ev)
+	for _, col := range cols {
+		roots, err := c.reportAll(ctx, []Collection{col}, body)
+		if err != nil {
+			return nil, err
+		}
+		for _, r := range roots {
+			for _, ev := range Events(r, c.loc()) {
+				// the server filters already; this keeps a lax one honest
+				if ev.Start.Before(to) && (ev.End.After(from) || (ev.End.Equal(ev.Start) && !ev.Start.Before(from))) {
+					ev.Calendar, ev.CalendarName = col.URL, col.Name
+					out = append(out, ev)
+				}
 			}
 		}
 	}

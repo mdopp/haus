@@ -12,6 +12,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/mdopp/haus/internal/ansicht"
 	"github.com/mdopp/haus/internal/bote"
 	"github.com/mdopp/haus/internal/caldav"
 	"github.com/mdopp/haus/internal/cards"
@@ -57,6 +58,11 @@ type StartConfig struct {
 	// Inverted are the covers wired the wrong way round (HAUS_COVER_INVERTED,
 	// haus#64): Haus shows and sets them turned over, Hoch is HA's close
 	Inverted map[string]bool
+	// RadicalePublicURL is Radicale as phones reach it (HAUS_RADICALE_PUBLIC_URL,
+	// https://caldav.<domain>, haus#66): its web page and each calendar's
+	// address for the phone; empty: neither
+	RadicalePublicURL string
+	Views             *ansicht.Store // each person's colours and hidden calendars on Kalender (haus#66); nil: none
 }
 
 // backendWait is how long a page waits for any one backend: a slow one
