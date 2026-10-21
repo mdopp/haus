@@ -21,6 +21,7 @@ import (
 	"github.com/mdopp/haus/internal/ha"
 	"github.com/mdopp/haus/internal/judge"
 	"github.com/mdopp/haus/internal/laib"
+	"github.com/mdopp/haus/internal/napi"
 	"github.com/mdopp/haus/internal/notes"
 	"github.com/mdopp/haus/internal/paperless"
 	"github.com/mdopp/haus/internal/qmd"
@@ -63,6 +64,15 @@ type StartConfig struct {
 	// address for the phone; empty: neither
 	RadicalePublicURL string
 	Views             *ansicht.Store // each person's colours and hidden calendars on Kalender (haus#66); nil: none
+	// The Dokumente page (haus#68): the address mail is filed from
+	// (HAUS_DOCUMENTS_MAIL; empty: no mail button), the way into
+	// Paperless's inbox (HAUS_UPLOAD_DIR; nil: no upload), Paperless's
+	// public address (HAUS_PAPERLESS_PUBLIC_URL; empty: no link) and
+	// whether it opens only at home (HAUS_PAPERLESS_LAN_ONLY)
+	DocumentsMail      string
+	Ablage             *napi.Uploads
+	PaperlessPublicURL string
+	PaperlessLANOnly   bool
 }
 
 // backendWait is how long a page waits for any one backend: a slow one

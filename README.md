@@ -205,6 +205,21 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     rendering, never markup from the file. Outside the folder, hidden or
     missing is a 404. A folder that cannot be read: *Die Notizen lassen
     sich gerade nicht lesen.*, for the list, a search and a note alike.
+  - *Dokumente* (`/dokumente`, under Mehr; haus#68): the ways into
+    Paperless, each only when its config is set. *Per E-Mail ablegen*, a
+    `mailto:` to `HAUS_DOCUMENTS_MAIL` (one plain address, else no button)
+    with the hint that the attachments are filed and the subject becomes
+    the title (Paperless fetches that mailbox itself, laib#521). *Dokument
+    ablegen*, a file or the phone's camera and an optional title, stored
+    into `HAUS_UPLOAD_DIR` exactly as the app's `/napi/upload` (same
+    types, caps, all-or-nothing staging; `napi.Uploads`), then back to the
+    page with *Liegt in Paperless* or the reason in words. *In Paperless
+    öffnen* to `HAUS_PAPERLESS_PUBLIC_URL` (*Weiter in*); with
+    `HAUS_PAPERLESS_LAN_ONLY=true` the line says *Nur zu Hause im WLAN.*,
+    and from outside the house (the client address Caddy forwards is not
+    private) a sentence replaces the dead link. Last, one line on what
+    happens: OCR, then found under Notizen and by the Bote. None set: the
+    page says so. `/dokumente/` without an id leads here.
   - The item pages (haus#28), what a widget opens on a tap: `/raeume/<entity_id>`
     (a thing: its state in words, since when, its room; only an entity of
     a card domain, `cards.Domains`, that HA does not hide — a person, a
@@ -662,7 +677,7 @@ HAUS_HA_PUBLIC_URL=https://home.<domain> HAUS_COVER_INVERTED=cover.…,… HAUS_
 HAUS_HAUSHALT_TOKEN=<the Bote's bearer> TZ=Europe/Berlin \
 HAUS_RADICALE_URL=http://host.containers.internal:5232 HAUS_RADICALE_USER=<service account> HAUS_RADICALE_PASSWORD=<its password> \
 HAUS_PAPERLESS_URL=http://host.containers.internal:8000 HAUS_PAPERLESS_TOKEN=<a Paperless API token> \
-HAUS_PAPERLESS_PUBLIC_URL=https://paperless.<domain> HAUS_NOTES_DIR=/notes \
+HAUS_PAPERLESS_PUBLIC_URL=https://paperless.<domain> HAUS_PAPERLESS_LAN_ONLY=true HAUS_DOCUMENTS_MAIL=dokumente@<domain> HAUS_NOTES_DIR=/notes \
 HAUS_QMD_URL=http://127.0.0.1:8181 HAUS_QMD_DOCUMENTS=dokumente HAUS_DOCUMENTS_DIR=/dokumente HAUS_UPLOAD_DIR=/consume \
 HAUS_LLM_URL=http://host.containers.internal:11435/v1 HAUS_LLM_MODEL=gemma-4-e4b HAUS_LLM_KEY=<the model key> \
 HAUS_BOTE_URL=http://host.containers.internal:8642/v1 HAUS_BOTE_KEY=<the Bote's API_SERVER_KEY> \
