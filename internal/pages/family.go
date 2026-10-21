@@ -69,6 +69,7 @@ var mehr = []tab{
 	{"Energie", "/energie", `<path d="M13 3L5 13.5h6L10 21l8-10.5h-6z"/>`},
 	{"Medien", "/medien", `<circle cx="12" cy="12" r="9"/><path d="M10 8.5v7l6-3.5z"/>`},
 	{"Notizen", "/notizen", `<path d="M6 4h9l3 3v13H6z"/><path d="M9 11h6M9 15h6"/>`},
+	{"Dokumente", DokumentePath, `<path d="M4 7h6l2 2h8v10H4z"/><path d="M12 12v5M9.5 14.5L12 17l2.5-2.5"/>`},
 	{"Netzlaufwerk", "/netzlaufwerk", `<rect x="3" y="5" width="18" height="6" rx="1.5"/><rect x="3" y="13" width="18" height="6" rx="1.5"/><path d="M7 8h.01M7 16h.01"/>`},
 	{"Box", "/box", `<rect x="3" y="7" width="18" height="12" rx="2"/><path d="M3 11h18M8 15h2"/>`},
 }
@@ -96,7 +97,7 @@ func tabOf(page string) string {
 // shows says which entries this box and this person have.
 func shows(r *http.Request, cfg StartConfig) map[string]bool {
 	return map[string]bool{"Start": true, "Geräte": cfg.HA != nil, "Haushalt": cfg.Calendar != nil, "Mehr": true,
-		"Energie": cfg.HA != nil, "Medien": cfg.HA != nil, "Notizen": cfg.Notes != nil,
+		"Energie": cfg.HA != nil, "Medien": cfg.HA != nil, "Notizen": cfg.Notes != nil, "Dokumente": cfg.hasDocs(),
 		"Netzlaufwerk": cfg.Samba != nil && r.Header.Get("Remote-User") != "", "Box": isAdmin(r)}
 }
 
