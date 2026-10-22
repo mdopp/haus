@@ -1,9 +1,12 @@
 package pages
 
 import (
+	"context"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/mdopp/haus/internal/cards"
 )
@@ -23,6 +26,10 @@ func Dokument(cfg StartConfig) http.HandlerFunc {
 			http.Redirect(w, r, DokumentePath, http.StatusFound)
 			return
 		}
+		if mark, ok := strings.CutPrefix(r.URL.Path, FiledPages); ok {
+			filed(w, r, cfg, mark)
+			return
+		}
 		if cfg.Docs == nil {
 			notSetDocs.write(w, r, cfg, "Dokumente")
 			return
@@ -37,4 +44,37 @@ func Dokument(cfg StartConfig) http.HandlerFunc {
 		}
 		http.Redirect(w, r, to, http.StatusFound)
 	}
+}
+
+// filedWait is how long a filed file's link waits for Paperless: a short
+// look, then the newest documents rather than a page that hangs.
+var filedWait = 3 * time.Second
+
+// filed sends a filed file's link on (haus#68): Paperless has read it,
+// to its page; still being read, Paperless not answering or no API to
+// ask, to Paperless's newest documents, where it will appear. No
+// Paperless address: nowhere to send it, a 404, as a mark that is none.
+func filed(w http.ResponseWriter, r *http.Request, cfg StartConfig, mark string) {
+	newest := cfg.paperless()
+	if !markRE.MatchString(mark) || (!newest.Set() && cfg.Docs == nil) {
+		missing{http.StatusNotFound, "Dieses Dokument gibt es nicht.", "Dokumente", DokumentePath, "Dokumente"}.write(w, r, cfg)
+		return
+	}
+	if cfg.Docs != nil {
+		ctx, cancel := context.WithTimeout(r.Context(), filedWait)
+		defer cancel()
+		id, err := cfg.Docs.Filed(ctx, mark)
+		if err != nil {
+			log.Printf("haus: dokumente: filed %s: %v", mark, err)
+		}
+		if to := cfg.Docs.Page(id); id > 0 && to != "" {
+			http.Redirect(w, r, to, http.StatusFound)
+			return
+		}
+	}
+	if !newest.Set() {
+		missing{http.StatusNotFound, "Dieses Dokument gibt es nicht.", "Dokumente", DokumentePath, "Dokumente"}.write(w, r, cfg)
+		return
+	}
+	http.Redirect(w, r, newest.href(newestPath), http.StatusFound)
 }

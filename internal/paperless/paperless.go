@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -289,6 +290,33 @@ func (c *Client) Texts(ctx context.Context, ids []int) ([]Text, error) {
 		out[i] = Text{Doc: d, Content: page.Results[i].Content, Modified: modified(page.Results[i].Modified)}
 	}
 	return out, nil
+}
+
+// markRE is the random part Haus puts in a filed file's name
+// (<stem>-<mark>.<ext>, napi's place).
+var markRE = regexp.MustCompile(`^[0-9a-f]{8}$`)
+
+// Filed is the document Paperless made of the file Haus filed with mark
+// in its name (haus#68): Paperless keeps the consumed file's name as the
+// document's original_filename. 0 while it is still being read, or when
+// the mark is not exactly one document; an error for a mark that is none
+// (nothing asked) or Paperless failing.
+func (c *Client) Filed(ctx context.Context, mark string) (int, error) {
+	if !markRE.MatchString(mark) {
+		return 0, errors.New("Paperless: keine Ablage-Marke")
+	}
+	var page struct {
+		Count   int      `json:"count"`
+		Results []apiDoc `json:"results"`
+	}
+	q := url.Values{"original_filename__icontains": {"-" + mark + "."}, "fields": {"id"}, "page_size": {"2"}}
+	if err := c.get(ctx, "/api/documents/", q, &page); err != nil {
+		return 0, err
+	}
+	if page.Count != 1 || len(page.Results) != 1 {
+		return 0, nil
+	}
+	return page.Results[0].ID, nil
 }
 
 // Page is Paperless's own page for a document; "" without PublicURL.

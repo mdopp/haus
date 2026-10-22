@@ -303,3 +303,45 @@ func TestStampsAllOrNothing(t *testing.T) {
 		t.Fatal("a listing past maxPages taken")
 	}
 }
+
+// A document filed by Haus is found by the mark Haus put in its file name
+// (<stem>-<mark>.<ext>, haus#68): one GET with only that mark and the id
+// field, never the title. Not yet consumed, or the mark not one document,
+// is 0: no guess.
+func TestFiled(t *testing.T) {
+	fake := paperlessfake.New(token)
+	defer fake.Close()
+	fake.Add(
+		paperlessfake.Doc{ID: 7, Title: "Stromrechnung Oktober", OriginalFileName: "Stromrechnung Oktober-0a1b2c3d.pdf"},
+		paperlessfake.Doc{ID: 8, Title: "Brief", OriginalFileName: "Brief-ffff0000.jpg"},
+		paperlessfake.Doc{ID: 9, Title: "Kopie", OriginalFileName: "Kopie-ffff0000.pdf"},
+	)
+	c := &Client{URL: fake.URL, Token: token, PublicURL: "https://paperless.example"}
+	if id, err := c.Filed(context.Background(), "0a1b2c3d"); err != nil || id != 7 {
+		t.Fatalf("filed: %d %v", id, err)
+	}
+	r := fake.Seen()[0]
+	q := r.URL.Query()
+	if r.URL.Path != "/api/documents/" || q.Get("original_filename__icontains") != "-0a1b2c3d." || q.Get("fields") != "id" || strings.Contains(r.URL.RawQuery, "Strom") {
+		t.Fatalf("request: %s", r.URL)
+	}
+	if id, err := c.Filed(context.Background(), "12345678"); err != nil || id != 0 {
+		t.Errorf("still being read: %d %v", id, err)
+	}
+	if id, _ := c.Filed(context.Background(), "ffff0000"); id != 0 {
+		t.Errorf("two documents for one mark: %d", id)
+	}
+	n := len(fake.Seen())
+	for _, bad := range []string{"", "0A1B2C3D", "0a1b2c3", "../x/../", "0a1b2c3d&id__in=8"} {
+		if id, err := c.Filed(context.Background(), bad); id != 0 || err == nil {
+			t.Errorf("mark %q: %d %v", bad, id, err)
+		}
+	}
+	if len(fake.Seen()) != n {
+		t.Error("a mark that is none was asked about")
+	}
+	fake.Status = http.StatusInternalServerError
+	if _, err := c.Filed(context.Background(), "0a1b2c3d"); err == nil {
+		t.Error("Paperless failing is an error")
+	}
+}
