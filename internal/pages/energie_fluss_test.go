@@ -211,42 +211,76 @@ func TestEnergieDeltasSayGoodOrBad(t *testing.T) {
 	mustContain(t, body, "--e-gut:", "--e-schlecht:", ".delta.gut{", ".delta.schlecht{", "font-variant-numeric:tabular-nums")
 }
 
-// The forecast as a chart (the owner: "ein Diagramm, das die weiteren
-// Monate prognostiziert darstellt"): this year's months, measured ones
-// solid, the rest hatched and marked geschätzt, the month of today half
-// and half with a "heute" line, last year's months as a stroke when HA
-// has them; the year-end figures above it as the headline, each a link
-// that picks the chart's series.
-func TestEnergieForecastAsAChart(t *testing.T) {
+// The forecast in the history's own chart (the owner, on #73: "warum
+// nicht direkt ins erste Diagramm mit allen Werten?"): in Jahr the months
+// still to come, and the rest of this month, are drawn hatched in the
+// same stacked shape, each series in its colour, said "geschätzt" in the
+// tooltip, the table and the legend; a "heute" line; last year's month a
+// stroke when HA has all of it. The estimate is the forecast's: the rest
+// at the daily mean so far here (HA starts on 2 June), today's part
+// already measured taken off. The year-end figures are the chart's
+// headline, right under it; the span's flow picture stays "bis heute".
+func TestEnergieYearChartCarriesTheForecast(t *testing.T) {
 	fake, hc := house(t)
 	cfg := senecSince2June(t, fake)
 	cfg.HA = hc
-	_, body, _ := familyPage(t, Energie, cfg, "GET", "/energie?zeitraum=monat", "family")
-	mustContain(t, body, `<section class="karte prognose" id=prognose aria-labelledby=karte-prognose-bis-jahresende-2026-geschaetzt>`)
-	f := section(t, body, "karte-prognose-bis-jahresende-2026-geschaetzt")
-	// Bezug: 281 kWh in 134 days, the 79 left at that mean: 446,7
-	mustContain(t, f, `<a href="/energie?zeitraum=monat&amp;prognose=bezug#prognose" aria-current=true><span class=name>Bezug</span> <b class=zahl>etwa 447 kWh</b> <span class=k>bisher 281 kWh</span></a>`,
-		`<a href="/energie?zeitraum=monat&amp;prognose=solar#prognose"><span class=name>Solar</span> <b class=zahl>etwa 2.130 kWh</b>`,
-		"<p class=hinweis>Bis gestern gemessen, der Rest geschätzt nach dem Tagesmittel bisher · gezählt ab dem 2. Juni · Vergleich mit dem Vorjahr ab 2028</p>",
-		`aria-label="Bezug 2026 Monat für Monat: gemessen bis gestern, danach geschätzt; die Zahlen stehen in der Tabelle darunter"`,
-		`<g class="monat leer"><title>Mai 2026: keine Werte</title>`,
-		`<g class="monat gemessen"><title>Juni 2026: 58 kWh gemessen</title>`,
-		`<g class="monat teils"><title>Oktober 2026: 39 kWh gemessen, dazu etwa 38 kWh geschätzt</title>`,
-		`<g class="monat geschaetzt"><title>November 2026: etwa 63 kWh geschätzt</title>`,
-		"<line class=heute", ">heute</text>",
-		"<tr><th scope=row>Dezember 2026</th><td>–</td><td>etwa 65 kWh</td><td>–</td></tr>",
-		"<tr><th scope=row>Juni 2026</th><td>58 kWh</td><td>–</td><td>–</td></tr>")
-	mustNotContain(t, f, "<line class=vorjahr", "Januar 2026</th>", "delta")
-	if strings.Count(f, `class="schaetzung bezug"`) < 3 {
-		t.Fatalf("October, November and December want a hatched bar:\n%s", f)
+	_, body, _ := familyPage(t, Energie, cfg, "GET", "/energie?zeitraum=jahr", "family")
+	fig := between(t, body, "<figure class=verlauf>", "</figure>")
+	mustContain(t, fig,
+		`aria-label="Das Jahr 2026 als Balken, der Rest des Jahres geschätzt (schraffiert); die Zahlen stehen in der Tabelle darunter"`,
+		"<title>Juni 2026: Solar 290 kWh · Eigenverbrauch 116 kWh · Bezug 58 kWh · Einspeisung 174 kWh</title>",
+		"<title>Oktober 2026: Solar 133 kWh · Eigenverbrauch 54 kWh · Bezug 41 kWh · Einspeisung 79 kWh; dazu geschätzt: Solar etwa 177 kWh · Eigenverbrauch etwa 70 kWh · Bezug etwa 36 kWh · Einspeisung etwa 107 kWh</title>",
+		"<g class=geschaetzt><title>November 2026, geschätzt: Solar etwa 300 kWh · Eigenverbrauch etwa 120 kWh · Bezug etwa 63 kWh · Einspeisung etwa 180 kWh</title>",
+		`<rect class="schaetzung eigen"`, `<rect class="schaetzung bezug"`, `<rect class="schaetzung einsp"`,
+		"<line class=heute", ">heute</text>", "<li><i class=schaetzung></i>geschätzt</li>",
+		"<tr><th scope=row>November 2026</th><td>etwa 300 kWh</td><td>etwa 120 kWh</td><td>etwa 63 kWh</td><td>etwa 180 kWh</td></tr>",
+		"<tr><th scope=row>Oktober 2026</th><td>133 kWh + etwa 177 kWh</td><td>54 kWh + etwa 70 kWh</td><td>41 kWh + etwa 36 kWh</td><td>79 kWh + etwa 107 kWh</td></tr>")
+	mustNotContain(t, fig, "class=vorjahr", "<th scope=col>Vorjahr</th>", "<th scope=row>Mai 2026</th>")
+	if n := strings.Count(fig, `<rect class="schaetzung bezug"`); n != 3 {
+		t.Fatalf("%d hatched Bezug bars, want October, November and December", n)
 	}
+	// the span's own numbers are measured only, and say so
+	mustContain(t, section(t, body, "karte-das-jahr-2026-bis-heute"), "<tr><th scope=row>Netz bezogen</th><td>283 kWh</td></tr>")
+	// the year-end figures: the chart's headline, right under it, no switch
+	f := section(t, body, "karte-prognose-bis-jahresende-2026-geschaetzt")
+	mustContain(t, f, "<li><span class=name>Bezug</span> <b class=zahl>etwa 447 kWh</b> <span class=k>bisher 281 kWh</span></li>",
+		"<li><span class=name>Solar</span> <b class=zahl>etwa 2.130 kWh</b>")
+	before(t, body, "<figure class=verlauf>", "karte-prognose-bis-jahresende-2026-geschaetzt")
+	before(t, body, "karte-prognose-bis-jahresende-2026-geschaetzt", "karte-dieser-monat-und-der-letzte")
+	mustNotContain(t, body, "prognose=", "prognosebild", "<a href=\"/energie?zeitraum=jahr&amp;")
 
-	// the series named: the chart draws Solar
-	_, body, _ = familyPage(t, Energie, cfg, "GET", "/energie?zeitraum=monat&prognose=solar", "family")
-	f = section(t, body, "karte-prognose-bis-jahresende-2026-geschaetzt")
-	mustContain(t, f, `aria-label="Solar 2026 Monat für Monat:`, `prognose=solar#prognose" aria-current=true>`, `class="ist solar"`)
-	// one it does not know: Bezug, the first
-	_, body, _ = familyPage(t, Energie, cfg, "GET", "/energie?zeitraum=monat&prognose=%3Cx%3E", "family")
-	mustContain(t, section(t, body, "karte-prognose-bis-jahresende-2026-geschaetzt"), `aria-label="Bezug 2026 Monat für Monat:`)
-	mustNotContain(t, body, "<x>")
+	// Monat: the days still to come hatched, by the same rule
+	_, body, _ = familyPage(t, Energie, cfg, "GET", "/energie?zeitraum=monat", "family")
+	fig = between(t, body, "<figure class=verlauf>", "</figure>")
+	mustContain(t, fig, "<g class=geschaetzt><title>15. Oktober, geschätzt: Solar etwa 10 kWh · Eigenverbrauch etwa 4 kWh · Bezug etwa 2,1 kWh · Einspeisung etwa 6 kWh</title>",
+		"<line class=heute", `<rect class="schaetzung bezug"`)
+	mustContain(t, body, `aria-labelledby=karte-oktober-2026-bis-heute>`)
+	before(t, body, "karte-dieser-monat-und-der-letzte", "karte-prognose-bis-jahresende-2026-geschaetzt")
+	// Woche and Tag are what was, nothing estimated in them
+	for _, z := range []string{"woche", "tag"} {
+		_, body, _ = familyPage(t, Energie, cfg, "GET", "/energie?zeitraum="+z, "family")
+		mustNotContain(t, between(t, body, "<figure class=verlauf>", "</figure>"), "geschätzt", "schaetzung", "class=heute")
+	}
+}
+
+// With last year's days in HA the rest is last year's same days, and each
+// month's column carries last year's total as a stroke.
+func TestEnergieYearChartWithLastYear(t *testing.T) {
+	fake, hc := house(t)
+	loc := berlin(t)
+	statDays(t, fake, "sensor.bezug", time.Date(2025, 1, 1, 0, 0, 0, 0, loc), time.Date(2026, 10, 14, 0, 0, 0, 0, loc),
+		func(d time.Time) float64 { return float64(d.Year() - 2024) }, nil) // 1 a day in 2025, 2 in 2026
+	cfg := StartConfig{HA: hc, Energy: energie.Map{Stats: energie.Stats{Bezug: "sensor.bezug"}}}
+	_, body, _ := familyPage(t, Energie, cfg, "GET", "/energie?zeitraum=jahr", "family")
+	fig := between(t, body, "<figure class=verlauf>", "</figure>")
+	mustContain(t, fig, "<title>Januar 2026: Bezug 62 kWh · Vorjahr 31 kWh</title>",
+		"<title>Oktober 2026: Bezug 26 kWh; dazu geschätzt: Bezug etwa 18 kWh · Vorjahr 31 kWh</title>",
+		"<title>November 2026, geschätzt: Bezug etwa 30 kWh · Vorjahr 30 kWh</title>",
+		"<line class=vorjahr", "<li><i class=vorjahr></i>2025</li>", "<th scope=col>Vorjahr</th>",
+		"<tr><th scope=row>November 2026</th><td>etwa 30 kWh</td><td>30 kWh</td></tr>")
+	if n := strings.Count(fig, "<line class=vorjahr"); n != 12 {
+		t.Fatalf("%d strokes for last year, want 12", n)
+	}
+	mustContain(t, section(t, body, "karte-prognose-bis-jahresende-2026-geschaetzt"),
+		`<b class=zahl>etwa 651 kWh</b> <span class="delta schlecht"><span aria-hidden=true>▲</span> +78 % · schlechter</span> <span class=k>bisher 572 kWh · 2025: 365 kWh</span>`)
 }

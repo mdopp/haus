@@ -96,9 +96,9 @@ func TestEnergieHistoryByDayWeekMonthYear(t *testing.T) {
 	mustContain(t, body, "<title>Mittwoch, 14. Oktober: Solar 3 kWh")
 	// the month and the year
 	_, body, _ = familyPage(t, Energie, cfg, "GET", "/energie?zeitraum=monat", "family")
-	mustContain(t, section(t, body, "karte-oktober-2026"), "<tr><th scope=row>Netz bezogen</th><td>41 kWh</td></tr>") // Bezug 13×3+2
+	mustContain(t, section(t, body, "karte-oktober-2026-bis-heute"), "<tr><th scope=row>Netz bezogen</th><td>41 kWh</td></tr>") // Bezug 13×3+2
 	_, body, _ = familyPage(t, Energie, cfg, "GET", "/energie?zeitraum=jahr", "family")
-	year := section(t, body, "karte-das-jahr-2026")
+	year := section(t, body, "karte-das-jahr-2026-bis-heute")
 	mustContain(t, year, "<tr><th scope=row>Netz bezogen</th><td>283 kWh</td></tr>") // Bezug 121×2 + 13×3 + 2
 	mustContain(t, body, "<th scope=row>Juni 2026</th>", "<title>Januar 2026</title>")
 	mustNotContain(t, body, "<th scope=row>Januar 2026</th>") // no row for a month without values
@@ -153,11 +153,7 @@ func TestEnergieComparesWithLastYear(t *testing.T) {
 	f := section(t, body, "karte-prognose-bis-jahresende-2026-geschaetzt")
 	// 572 so far, the rest as last year's 79 days; last year 365: +78 %
 	mustContain(t, f, `<span class=name>Bezug</span> <b class=zahl>etwa 651 kWh</b> <span class="delta schlecht"><span aria-hidden=true>▲</span> +78 % · schlechter</span> <span class=k>bisher 572 kWh · 2025: 365 kWh</span>`,
-		"<p class=hinweis>Bis gestern gemessen, der Rest geschätzt wie im Vorjahr</p>",
-		`<g class="monat geschaetzt"><title>November 2026: etwa 30 kWh geschätzt · Vorjahr 30 kWh</title>`, "<line class=vorjahr",
-		"<tr><th scope=row>November 2026</th><td>–</td><td>etwa 30 kWh</td><td>30 kWh</td></tr>",
-		"<tr><th scope=row>Januar 2026</th><td>62 kWh</td><td>–</td><td>31 kWh</td></tr>",
-		"<tr><th scope=row>Oktober 2026</th><td>26 kWh</td><td>etwa 18 kWh</td><td>31 kWh</td></tr>")
+		"<p class=hinweis>Bis gestern gemessen, der Rest geschätzt wie im Vorjahr</p>")
 	mustNotContain(t, f, "gezählt ab", "Vergleich mit dem Vorjahr ab")
 	// only Bezug named: no other series, no Eigenverbrauch without Solar and Einspeisung
 	mustNotContain(t, body, "Solar", "Eigenverbrauch")
