@@ -220,6 +220,36 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     private) a sentence replaces the dead link. Last, one line on what
     happens: OCR, then found under Notizen and by the Bote. None set: the
     page says so. `/dokumente/` without an id leads here.
+    *Scannen* (haus#76, laib#568) reads Laib's `laib_scan status` (the scan
+    service's status file) and says its state in a word: *Bereit*, *Scannt*
+    with the page, *Nach Blatt n abgebrochen* with where the rest goes in,
+    *Trennt die Dokumente*, *Legt die Dokumente ab*, *Fertig*, or the
+    service's own sentence after an error; a stack running or waiting puts
+    the section first, and while it moves on by itself the page reloads
+    every 5 s. *Stapel scannen* only with a SANE scanner (`scanner: true`)
+    and nothing running; after a jam *Weiter*, *Abschließen*, *Verwerfen*.
+    Each button is `POST /scannen`, one `laib_scan` order for the person who
+    pressed it (#35's rule), then back. Below, the inbox folder for a
+    scanner that scans to the network drive
+    (`\\<HAUS_SAMBA_HOST>\data\scan-eingang`) and the last five stacks with
+    their documents, each a link to Paperless's search by its title where
+    Paperless opens. A box without the service shows the family no section;
+    a Laib before v0.20.0, or a policy.yml without `scan` for the haus hand,
+    tells an admin so.
+    *Scanner einrichten* (haus#77, laib#571), admins only, folded unless no
+    scanner is set, a search runs or an order just came back: the last
+    check (`pruefung`: *Scanner antwortet*, or the service's reason) with
+    *Erneut prüfen* and *Probeseite* (orders `pruefen`, `probe`); *Scanner
+    suchen* (`suchen`), and while it runs the page reloads, then each find
+    of `suche.funde` with *Diesen einrichten*; *Adresse von Hand*
+    (`epson2:net:<ip>`, refused unless laib#571 would take it); and for a
+    scanner that scans to a folder what goes into its own menu (the share
+    `\\<HAUS_SAMBA_HOST>\data`, the folder, a Netzlaufwerk account).
+    Einrichten is `laib_scan einrichten [--geraet]`: one proposal, the
+    service with that scanner on a box without it (*Scannen einrichten*),
+    its `SCANNER` otherwise; back with a fixed sentence (no device in the
+    URL) and the way to the inbox with the proposal's number. Haus decides
+    nothing: Laib's dial and the owner do.
   - The item pages (haus#28), what a widget opens on a tap: `/raeume/<entity_id>`
     (a thing: its state in words, since when, its room; only an entity of
     a card domain, `cards.Domains`, that HA does not hide — a person, a
