@@ -198,7 +198,8 @@ func TestEnergieDeltasSayGoodOrBad(t *testing.T) {
 			cfg := StartConfig{HA: hc, Energy: energie.Map{Stats: energie.Stats{Solar: "sensor.solar", Einspeisung: "sensor.einsp", Bezug: "sensor.bezug"}}}
 			_, body, _ := familyPage(t, Energie, cfg, "GET", "/energie?zeitraum=monat", "family")
 			last := section(t, body, "karte-dieser-monat-und-der-letzte")
-			mustContain(t, last, `<section class="karte vergleich"`, "<p class=hinweis>Verglichen mit September bis zum 13.</p>")
+			mustContain(t, body, `<section class="karte vergleich" aria-labelledby=karte-dieser-monat-und-der-letzte>`)
+			mustContain(t, last, "<p class=hinweis>Verglichen mit September bis zum 13.</p>")
 			mustContain(t, last, c.want...)
 		})
 	}

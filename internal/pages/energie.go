@@ -22,10 +22,6 @@ const (
 	saysNoEnergyToday = "Was heute zusammenkam, lässt sich gerade nicht lesen."
 )
 
-// legWords are the flow legs in the family's words, in the order Jetzt
-// shows them: what the house uses first.
-var legWords = []struct{ key, name string }{{"house", "Haus"}, {"pv", "Solaranlage"}, {"grid", "Stromnetz"}, {"battery", "Akku"}}
-
 // counterWords are the fallback's counters in the family's words, by the
 // friendly name they were found by; the template's counters keep the
 // template's labels.
@@ -37,9 +33,10 @@ var counterWords = map[string]string{"PV Erzeugung": "Erzeugt", "Netzbezug": "Au
 var counterOrder = map[string]int{"PV Erzeugung": 1, "Netzbezug": 2, "Netzeinspeisung": 3, "Batterie laden": 4, "Batterie entladen": 5}
 
 // Energie is the house's power (haus#12): Jetzt, what the house uses and
-// what the sun, the grid and the battery do right now, as tiles in words;
-// Heute, what each counter added since midnight, and what the house used
-// from them. The sensors are package energie's choice, the widgets'
+// what the sun, the grid and the battery do right now, as the flow
+// picture (energie_fluss.go); Heute, what each counter added since
+// midnight, and what the house used from them, while the history does
+// not show today itself. The sensors are package energie's choice, the widgets'
 // energy picture's too. None found is one plain line; HA not answering is
 // one plain line; its history alone not answering keeps Jetzt. A path
 // under /energie/ is a 404 with the way back.
@@ -104,60 +101,26 @@ func Energie(cfg StartConfig) http.HandlerFunc {
 		}
 		fetch(r, reads...)
 		logErrs("energie", map[string]error{"history": histErr, "statistics": dailyE, "hourly statistics": hourlyE})
+		b.WriteString(verlaufStyle)
 		if len(legs) > 0 {
-			b.WriteString(jetztCard(legs).HTML())
+			b.WriteString(flussHTML(flussJetzt(legs)))
 		}
-		if len(counters) > 0 {
+		err := dailyE
+		if err == nil {
+			err = hourlyE
+		}
+		// the history's Tag says what Heute's tiles say, from the same
+		// counters: once is enough
+		shown := stats.Any() && err == nil && (len(daily) > 0 || len(hourly) > 0)
+		if len(counters) > 0 && !shown {
 			b.WriteString(heuteCard(counters, todayAdded, histErr).HTML())
 		}
 		if stats.Any() {
-			err := dailyE
-			if err == nil {
-				err = hourlyE
-			}
-			b.WriteString(verlaufStyle + "<div id=verlauf></div>")
-			b.WriteString(verlaufHTML(view, now, loc, daily, hourly, err))
+			b.WriteString("<div id=verlauf></div>")
+			b.WriteString(verlaufHTML(view, prognoseOf(r), now, loc, daily, hourly, err))
 		}
 		writePage(w, http.StatusOK, b)
 	}
-}
-
-// jetztCard is each flow leg as a tile: its size, and what it does in a
-// word, never a sign to read.
-func jetztCard(legs []energie.Leg) cards.Card {
-	c := cards.Card{Title: "Jetzt", Look: cards.Tiles}
-	byKey := map[string]ha.State{}
-	for _, l := range legs {
-		byKey[l.Key] = l.State
-	}
-	for _, lw := range legWords {
-		s, ok := byKey[lw.key]
-		if !ok {
-			continue
-		}
-		row := cards.Row{Text: lw.name}
-		w, known := watts(s)
-		switch {
-		case s.State == "unavailable":
-			row.State, row.Off = "Nicht erreichbar", true
-		case !known:
-			row.State, row.Off = "Unbekannt", true
-		default:
-			row.State = powerWords(math.Abs(w))
-			switch lw.key {
-			case "house":
-				row.Detail = "Verbrauch"
-			case "pv":
-				row.Detail = "erzeugt"
-			case "grid":
-				row.Detail = map[int]string{1: "bezogen", -1: "eingespeist", 0: "ruht"}[sign(w)]
-			case "battery":
-				row.Detail = map[int]string{1: "lädt", -1: "entlädt", 0: "ruht"}[sign(w)]
-			}
-		}
-		c.Rows = append(c.Rows, row)
-	}
-	return c
 }
 
 // heuteCard is what each counter added today, and first what the house
@@ -309,5 +272,19 @@ func powerWords(w float64) string {
 	return decimal(w/1000) + " kW"
 }
 
-// energyWords is an amount of energy: "12,4 kWh".
-func energyWords(kwh float64) string { return decimal(kwh) + " kWh" }
+// energyWords is an amount of energy: "12,4 kWh"; from 100 on whole,
+// with the thousands marked, as a report prints it: "2.130 kWh".
+func energyWords(kwh float64) string {
+	if math.Abs(kwh) < 99.95 {
+		return decimal(kwh) + " kWh"
+	}
+	n := int(math.Round(math.Abs(kwh)))
+	s := strconv.Itoa(n)
+	for i := len(s) - 3; i > 0; i -= 3 {
+		s = s[:i] + "." + s[i:]
+	}
+	if kwh < 0 {
+		s = "-" + s
+	}
+	return s + " kWh"
+}

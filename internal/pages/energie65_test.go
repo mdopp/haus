@@ -123,8 +123,12 @@ func TestEnergieComparesWhatItHas(t *testing.T) {
 		`<span class=name>Solar</span> <b class=zahl>130 kWh</b> <span class="delta gleich"><span aria-hidden=true>=</span> ±0 % · gleich</span> <span class=k>Vormonat 130 kWh</span>`,
 		`<span class=name>Eigenverbrauch</span> <b class=zahl>52 kWh</b>`)
 	prev := section(t, body, "karte-dieser-monat-und-der-im-vorjahr")
-	mustContain(t, prev, "<span class=name>Bezug</span> <b class=zahl>39 kWh</b> <span class=k>Vergleich ab Juni 2027</span>")
-	mustNotContain(t, prev, ">0 kWh", "delta")
+	// nothing to compare yet: one line for the card, not four tiles saying it
+	mustContain(t, prev, "Vergleich ab Juni 2027 <span class=k>HA hat die Werte ab dem 2. Juni 2026.</span>")
+	mustNotContain(t, prev, "kWh", "delta")
+	if n := strings.Count(prev, "Vergleich ab"); n != 1 {
+		t.Fatalf("said %d times, want once:\n%s", n, prev)
+	}
 	ytd := section(t, body, "karte-das-jahr-bis-heute-und-das-vorjahr")
 	mustContain(t, ytd, "Vergleich ab Juni 2027")
 	f := section(t, body, "karte-prognose-bis-jahresende-2026-geschaetzt")
