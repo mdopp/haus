@@ -455,7 +455,7 @@ func TestEnergiePageServedFromTheWidgetsSensors(t *testing.T) {
 	fake.Set("sensor.inverter", "2500", map[string]any{"friendly_name": "Inverter", "device_class": "power", "unit_of_measurement": "W"})
 	s.napi.Energy = napi.EnergyMap{Flow: map[string]string{"pv": "sensor.inverter"}}
 	rec := page(routes(s), "/energie")
-	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "<b class=zustand>2,5 kW</b> <span class=k>erzeugt</span>") {
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "<tr><th scope=row>Solar erzeugt</th><td>2,5 kW</td></tr>") {
 		t.Fatalf("/energie → %d:\n%s", rec.Code, rec.Body.String())
 	}
 }

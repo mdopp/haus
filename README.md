@@ -293,13 +293,18 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   a paired device. The shapes are the ones the app's `data/ApiClient.kt` parses; no JSON `null` goes out
   (Android reads it as `"null"`). Every card names its thing's page
   (`page`, `/raeume/<entity_id>`).
-- *Energie* (`GET /energie`, under Mehr): *Jetzt* (the flow legs as
-  tiles), *Heute* (each counter since midnight), then the history
+- *Energie* (`GET /energie`, under Mehr): *Jetzt* as a flow picture
+  (Solar, Netz, Akku, Haus as nodes; the ways the power takes, as thick
+  as they carry, the sun into the house first; Autarkie and
+  Eigenverbrauchsquote under it; a leg HA cannot reach drawn muted, never
+  a zero), *Heute* (each counter since midnight, while the history does
+  not show today), then the history
   (haus#65) from HA's long-term statistics (WebSocket
   `recorder/statistics_during_period`, `types: [change]`, in kWh):
   `?zeitraum=tag|woche|monat|jahr` — today by the hour, the last seven
   days, this month by day, this year by month — with the span's sums
-  (Solar, Eigenverbrauch = Solar − Einspeisung, Bezug, Einspeisung) and a
+  as the same flow picture (Solar, Eigenverbrauch = Solar − Einspeisung,
+  Bezug, Einspeisung) and a
   bar chart Haus draws itself (SVG, no script, no library; Eigenverbrauch
   and Bezug above the line, Einspeisung below, each bar's numbers on
   hover, a legend, the same as a table; three series colours of its own,
@@ -308,7 +313,14 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   of the last and of the same month last year, the year so far against
   last year's, and the forecast to the year's end, marked *geschätzt*:
   what came so far plus the rest as it came last year, while HA does not
-  have last year's days the daily mean so far. A comparison whose earlier
+  have last year's days the daily mean so far, drawn in the history's
+  own chart: in Jahr the months to come (Monat: the days) hatched in the
+  same stacked shape, a heute line, last year as dashed lines (use above
+  the zero line, Einspeisung below, gaps where HA lacks the month); the
+  year-end figures right under the Jahr chart. The span's flow picture
+  stays "bis heute". Each comparison is a headline number with a delta (arrow,
+  sign, word) coloured by what it means for the household: more Solar and
+  Eigenverbrauch good, more Bezug bad, Einspeisung neutral. A comparison whose earlier
   days HA does not have says *Vergleich ab <Monat Jahr>*, never a zero;
   one with part of them compares the days both have and says from which
   day. The statistic ids are `HAUS_ENERGY_STATS`
