@@ -1,6 +1,7 @@
 // Package paperlessfake is a fake Paperless-ngx REST API for tests:
 // "Authorization: Token …", GET /api/documents/ with query, id__in,
-// page_size, page (and next), fields and ordering (-created, id),
+// page_size, page (and next), fields, original_filename__icontains and
+// ordering (-created, id),
 // GET /api/correspondents/ and GET /api/tags/ with id__in. A query matches title and content, case-insensitively, the way
 // a full-text hit would look.
 package paperlessfake
@@ -25,6 +26,9 @@ type Doc struct {
 	Created       string // as the API answers it: "2025-03-14" or an RFC 3339 time
 	Tags          []int  // tag ids, as the API lists them
 	Modified      string // the last change, RFC 3339 as the API answers it; "": not said
+	// OriginalFileName is the name of the file Paperless consumed it from;
+	// original_filename__icontains finds it.
+	OriginalFileName string
 }
 
 // Server is the fake.
@@ -170,9 +174,13 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 				only[id] = true
 			}
 		}
+		named := strings.ToLower(q.Get("original_filename__icontains"))
 		var hits []Doc
 		for _, d := range s.docs {
 			if only != nil && !only[d.ID] {
+				continue
+			}
+			if named != "" && !strings.Contains(strings.ToLower(d.OriginalFileName), named) {
 				continue
 			}
 			if needle == "" || found(d, needle) {
