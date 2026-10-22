@@ -108,14 +108,16 @@ func routes(s site) http.Handler {
 	pagesMux.HandleFunc(cards.ContactPages, pages.Kontakt(family))
 	pagesMux.HandleFunc(pages.DokumentePath, pages.Dokumente(family)) // the ways into the archive (haus#68)
 	pagesMux.HandleFunc(cards.DocumentPages, pages.Dokument(family))
-	pagesMux.HandleFunc(cards.NotePages, pages.Notizen(family))      // a note's own page
-	pagesMux.HandleFunc(cards.SwitchPath, pages.Schalten(family))    // a page's switch, the widgets' rule (haus#35)
-	pagesMux.HandleFunc("/sprechen", pages.Sprechen(family))         // the Sprechen field to the Bote, and its reply (haus#12)
-	pagesMux.HandleFunc(pages.HoerenPath, pages.Hoeren(family))      // the field's microphone, HA's speech-to-text (haus#63)
-	pagesMux.HandleFunc("/netzlaufwerk", pages.Netzlaufwerk(family)) // each person's network-drive password (haus#52)
-	pagesMux.HandleFunc("/willkommen", pages.Willkommen(family))     // a new person's apps and how to set them up (haus#56)
-	pagesMux.HandleFunc("/abmelden", pages.Abmelden(s.publicURL))    // Authelia's logout, back to Haus (haus#61)
-	pagesMux.HandleFunc("/schrift/", pages.Font())                   // Geist, from Haus itself (haus#35)
+	pagesMux.HandleFunc(cards.NotePages, pages.Notizen(family))                   // a note's own page
+	pagesMux.HandleFunc(cards.SwitchPath, pages.Schalten(family))                 // a page's switch, the widgets' rule (haus#35)
+	pagesMux.HandleFunc("/sprechen", pages.Sprechen(family))                      // the Sprechen field to the Bote, and its reply (haus#12)
+	pagesMux.HandleFunc(pages.HoerenPath, pages.Hoeren(family))                   // the field's microphone, HA's speech-to-text (haus#63)
+	pagesMux.HandleFunc("/netzlaufwerk", pages.Netzlaufwerk(family))              // each person's network-drive password (haus#52)
+	pagesMux.HandleFunc("/willkommen", pages.Willkommen(family))                  // a new person's apps and how to set them up (haus#56)
+	pagesMux.HandleFunc("/adresse", pages.Adresse(family))                        // the household's address, admins only (laib#561)
+	pagesMux.HandleFunc("/adresse/vorschlagen", pages.AdresseVorschlagen(family)) // its form, a proposal to Laib
+	pagesMux.HandleFunc("/abmelden", pages.Abmelden(s.publicURL))                 // Authelia's logout, back to Haus (haus#61)
+	pagesMux.HandleFunc("/schrift/", pages.Font())                                // Geist, from Haus itself (haus#35)
 	boxCfg := pages.BoxConfig{Laib: s.ops, LaibURL: s.laibURL, Tickets: s.tickets, Family: family, Voice: s.voice}
 	box := pages.BoxPage(boxCfg)
 	pagesMux.HandleFunc("/box", box)

@@ -63,7 +63,7 @@ var tabs = []tab{
 }
 
 // mehr is what Mehr holds (haus#67), in this order, each only when its
-// backend is set, Box for admins; then the account with Abmelden. Notizen
+// backend is set, Box and Adresse for admins; then the account with Abmelden. Notizen
 // keeps a place of its own here until the owner decides where it goes.
 var mehr = []tab{
 	{"Energie", "/energie", `<path d="M13 3L5 13.5h6L10 21l8-10.5h-6z"/>`},
@@ -72,6 +72,7 @@ var mehr = []tab{
 	{"Dokumente", DokumentePath, `<path d="M4 7h6l2 2h8v10H4z"/><path d="M12 12v5M9.5 14.5L12 17l2.5-2.5"/>`},
 	{"Netzlaufwerk", "/netzlaufwerk", `<rect x="3" y="5" width="18" height="6" rx="1.5"/><rect x="3" y="13" width="18" height="6" rx="1.5"/><path d="M7 8h.01M7 16h.01"/>`},
 	{"Box", "/box", `<rect x="3" y="7" width="18" height="12" rx="2"/><path d="M3 11h18M8 15h2"/>`},
+	{"Adresse", adressePath, `<path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/>`},
 }
 
 // abmeldenIcon is the way out's.
@@ -98,7 +99,8 @@ func tabOf(page string) string {
 func shows(r *http.Request, cfg StartConfig) map[string]bool {
 	return map[string]bool{"Start": true, "Geräte": cfg.HA != nil, "Haushalt": cfg.Calendar != nil, "Mehr": true,
 		"Energie": cfg.HA != nil, "Medien": cfg.HA != nil, "Notizen": cfg.Notes != nil, "Dokumente": cfg.hasDocs(),
-		"Netzlaufwerk": cfg.Samba != nil && r.Header.Get("Remote-User") != "", "Box": isAdmin(r)}
+		"Netzlaufwerk": cfg.Samba != nil && r.Header.Get("Remote-User") != "", "Box": isAdmin(r),
+		"Adresse": isAdmin(r) && cfg.Laib != nil}
 }
 
 func navLink(b *strings.Builder, t tab, class string, current bool) {
