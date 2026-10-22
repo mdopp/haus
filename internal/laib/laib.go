@@ -316,3 +316,52 @@ func (c *Client) CalendarList(ctx context.Context) ([]Abo, error) {
 	out, err := c.calendar(ctx, map[string]any{"action": "list"})
 	return out.Abos, err
 }
+
+// Zuhause is box.yml's zuhause (laib#561): the household's address, all
+// of it optional; Laib never geocodes, the coordinates come from a person.
+type Zuhause struct {
+	Street    string   `json:"street,omitempty"`
+	Postcode  string   `json:"postcode,omitempty"`
+	City      string   `json:"city,omitempty"`
+	Country   string   `json:"country,omitempty"`
+	Latitude  *float64 `json:"latitude,omitempty"`
+	Longitude *float64 `json:"longitude,omitempty"`
+	Elevation *int     `json:"elevation,omitempty"`
+}
+
+// Proposed is laib_zuhause set's answer: the proposal a human approves.
+type Proposed struct {
+	Proposal int    `json:"proposal"`
+	Message  string `json:"message"`
+}
+
+// ZuhauseShow is the address as Laib has it; empty when none is set.
+func (c *Client) ZuhauseShow(ctx context.Context) (Zuhause, error) {
+	var out Zuhause
+	text, err := c.CallTyped(ctx, "zuhause", map[string]any{"action": "show"})
+	if err != nil {
+		return out, err
+	}
+	err = decodeJSON("zuhause", text, &out)
+	return out, err
+}
+
+// ZuhauseSet proposes the whole block: fields holds street, postcode,
+// city, country, latitude, longitude, elevation as strings, and one left
+// out is removed. Laib files a class-human proposal; nothing changes
+// until a human approves it on Laib's page.
+func (c *Client) ZuhauseSet(ctx context.Context, fields map[string]string) (Proposed, error) {
+	args := map[string]any{"action": "set"}
+	for k, v := range fields {
+		if v != "" {
+			args[k] = v
+		}
+	}
+	var out Proposed
+	text, err := c.CallTyped(ctx, "zuhause", args)
+	if err != nil {
+		return out, err
+	}
+	err = decodeJSON("zuhause", text, &out)
+	return out, err
+}

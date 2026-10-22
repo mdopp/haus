@@ -17,11 +17,12 @@ var mehrSays = map[string]string{
 	"Dokumente":    "Briefe und Rechnungen ablegen, per Mail oder hier",
 	"Netzlaufwerk": "Dein Passwort für das Netzlaufwerk",
 	"Box":          "Wie es der Box geht, für Admins",
+	"Adresse":      "Wo das Haus steht, für Admins",
 }
 
 // Mehr is the bar's fourth entry on the phone (haus#67): the pages that
 // have no entry of their own — Energie, Medien, Notizen, Dokumente, Netzlaufwerk, Box
-// for admins, each only when this box has it — and the account: who is
+// and Adresse for admins, each only when this box has it — and the account: who is
 // signed in, and Abmelden. On a wide window the list on the right holds
 // the same, open.
 func Mehr(cfg StartConfig) http.HandlerFunc {
