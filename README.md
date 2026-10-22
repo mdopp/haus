@@ -313,9 +313,11 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   of the last and of the same month last year, the year so far against
   last year's, and the forecast to the year's end, marked *geschätzt*:
   what came so far plus the rest as it came last year, while HA does not
-  have last year's days the daily mean so far, drawn month by month
-  (measured solid, the rest hatched, last year a stroke, `?prognose=` picks
-  the series). Each comparison is a headline number with a delta (arrow,
+  have last year's days the daily mean so far, drawn in the history's
+  own chart: in Jahr the months to come (Monat: the days) hatched in the
+  same stacked shape, a heute line, last year's months alongside; the
+  year-end figures right under the Jahr chart. The span's flow picture
+  stays "bis heute". Each comparison is a headline number with a delta (arrow,
   sign, word) coloured by what it means for the household: more Solar and
   Eigenverbrauch good, more Bezug bad, Einspeisung neutral. A comparison whose earlier
   days HA does not have says *Vergleich ab <Monat Jahr>*, never a zero;

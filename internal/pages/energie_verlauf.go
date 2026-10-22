@@ -144,6 +144,11 @@ func back(t time.Time, years, months int, end bool) time.Time {
 type bucket struct {
 	label, long string
 	v           map[string]float64
+	// est is the estimate for the rest of the bar's period (Jahr, Monat:
+	// schaetze), vorjahr last year's Eigenverbrauch + Bezug in it
+	est        map[string]float64
+	vorjahr    float64
+	hasVorjahr bool
 }
 
 // buckets are the chosen span's bars: today's 24 hours, the last seven
@@ -204,8 +209,8 @@ func buckets(view string, now time.Time, loc *time.Location, daily, hourly amoun
 
 // verlaufHTML is the history: the spans to choose, the span's totals as
 // the flow picture, its chart, the chart as a table; then the
-// comparisons and the forecast, which draws the series which names.
-func verlaufHTML(view, which string, now time.Time, loc *time.Location, daily, hourly amounts, err error) string {
+// comparisons and the year-end forecast (under the Jahr chart, else last).
+func verlaufHTML(view string, now time.Time, loc *time.Location, daily, hourly amounts, err error) string {
 	var b strings.Builder
 	b.WriteString("<h2 class=abschnitt>Verlauf</h2><nav class=zeitraum aria-label=Zeitraum>")
 	for _, v := range views {
@@ -232,16 +237,27 @@ func verlaufHTML(view, which string, now time.Time, loc *time.Location, daily, h
 	if !any {
 		b.WriteString("<p class=k>" + saysNothingInSpan + "</p>")
 	} else {
-		flowTitle := title
-		if view == "tag" {
+		// the span's own numbers are what was; the chart adds the estimate
+		flowTitle := title + " bis heute"
+		switch view {
+		case "tag":
 			flowTitle = "Heute bis jetzt" // the hours HA has summed so far
+		case "woche":
+			flowTitle = title
 		}
 		b.WriteString(flussHTML(flussSpanne(flowTitle, bs, daily, hourly)))
-		b.WriteString(energyChart(title, bs))
+		heute := schaetze(view, now, loc, daily, bs)
+		rest := map[string]string{"jahr": "der Rest des Jahres", "monat": "der Rest des Monats"}[view]
+		b.WriteString(energyChart(title, bs, heute, rest))
 	}
 	today := midnight(now, loc)
+	forecast := prognoseHTML(today, time.Date(today.Year(), time.January, 1, 0, 0, 0, 0, loc), loc, daily)
+	if view == "jahr" && any { // the Jahr chart's headline, right under it
+		b.WriteString(forecast)
+		forecast = ""
+	}
 	b.WriteString(vergleiche(now, loc, daily))
-	b.WriteString(prognoseHTML(view, which, today, time.Date(today.Year(), time.January, 1, 0, 0, 0, 0, loc), loc, daily))
+	b.WriteString(forecast)
 	return b.String()
 }
 
@@ -398,14 +414,22 @@ const (
 
 // energyChart draws the span (haus#65): one bar a period, what the house
 // used above the line — what it took from the sun (Eigenverbrauch) and
-// from the grid (Bezug) — and what went into the grid below it. Each bar
-// names its numbers on hover (a title); the legend names the colours; the
-// table under it says the same in numbers. No script, no library.
-func energyChart(title string, bs []bucket) string {
+// from the grid (Bezug) — and what went into the grid below it. A bar
+// with an estimate (Jahr, Monat: schaetze) carries it hatched on top of
+// what was, in the same series' colours, heute a dashed line at where now
+// falls (in bars; −1 none), last year a stroke. Each bar names its
+// numbers on hover (a title); the legend names the colours; the table
+// under it says the same in numbers. No script, no library.
+func energyChart(title string, bs []bucket, heute float64, rest string) string {
 	var up, down float64
+	anyEst, anyVorjahr := false, false
 	for _, b := range bs {
-		up = math.Max(up, b.v["eigen"]+b.v["bezug"])
-		down = math.Max(down, b.v["einsp"])
+		up = math.Max(up, b.v["eigen"]+b.v["bezug"]+b.est["eigen"]+b.est["bezug"])
+		down = math.Max(down, b.v["einsp"]+b.est["einsp"])
+		if b.hasVorjahr {
+			up, anyVorjahr = math.Max(up, b.vorjahr), true
+		}
+		anyEst = anyEst || len(b.est) > 0
 	}
 	if up+down == 0 {
 		up = 1
@@ -417,9 +441,20 @@ func energyChart(title string, bs []bucket) string {
 	step := plotW / float64(len(bs))
 	barW := math.Max(2, step*chartBarShare)
 	f := func(v float64) string { return strconv.FormatFloat(math.Round(v*10)/10, 'f', -1, 64) }
+	label := title + " als Balken"
+	if anyEst {
+		label += ", " + rest + " geschätzt (schraffiert)"
+	}
 	var b strings.Builder
 	b.WriteString(`<figure class=verlauf><svg viewBox="0 0 ` + strconv.Itoa(chartW) + " " + strconv.Itoa(chartH) + `" role=img aria-label="` +
-		html.EscapeString(title+" als Balken; die Zahlen stehen in der Tabelle darunter") + `">`)
+		html.EscapeString(label+"; die Zahlen stehen in der Tabelle darunter") + `">`)
+	if anyEst {
+		b.WriteString("<defs>")
+		for _, k := range []string{"eigen", "bezug", "einsp"} {
+			b.WriteString(`<pattern id=schraffur-` + k + ` width=5 height=5 patternUnits=userSpaceOnUse patternTransform="rotate(45)"><rect class=` + k + ` width=2 height=5></rect></pattern>`)
+		}
+		b.WriteString("</defs>")
+	}
 	// the scale: the top, the line, the bottom when something went out
 	grid := func(y float64, label string) {
 		b.WriteString(`<line class=gitter x1=` + strconv.Itoa(chartL) + ` x2=` + strconv.Itoa(chartW-chartR) + ` y1=` + f(y) + ` y2=` + f(y) + `></line>`)
@@ -429,25 +464,50 @@ func energyChart(title string, bs []bucket) string {
 	if down > 0 {
 		grid(float64(chartH-chartB), shortKWh(down))
 	}
+	if heute >= 0 && anyEst {
+		hx := float64(chartL) + step*heute
+		b.WriteString(`<line class=heute x1=` + f(hx) + ` x2=` + f(hx) + ` y1=` + strconv.Itoa(chartT) + ` y2=` + strconv.Itoa(chartH-chartB) + `></line>`)
+		b.WriteString(`<text class=heute-text x=` + f(math.Min(math.Max(hx, chartL+14), chartW-chartR-14)) + ` y=` + strconv.Itoa(chartT+10) + ` text-anchor=middle>heute</text>`)
+	}
+	words := func(m map[string]float64, pre string) []string {
+		var out []string
+		for _, s := range energySeries {
+			if v, ok := m[s.key]; ok {
+				out = append(out, s.name+" "+pre+roughOr(pre, v))
+			}
+		}
+		return out
+	}
 	for i, x := range bs {
 		cx := float64(chartL) + step*float64(i) + step/2
 		left := cx - barW/2
-		var tip []string
-		for _, s := range energySeries {
-			if v, ok := x.v[s.key]; ok {
-				tip = append(tip, s.name+" "+energyWords(v))
-			}
+		measured, estimated := words(x.v, ""), words(x.est, "etwa ")
+		tip := x.long
+		group := "<g>"
+		switch {
+		case len(measured) > 0 && len(estimated) > 0:
+			tip += ": " + strings.Join(measured, " · ") + "; dazu geschätzt: " + strings.Join(estimated, " · ")
+			group = "<g class=teils>"
+		case len(estimated) > 0:
+			tip += ", geschätzt: " + strings.Join(estimated, " · ")
+			group = "<g class=geschaetzt>"
+		case len(measured) > 0:
+			tip += ": " + strings.Join(measured, " · ")
 		}
-		b.WriteString("<g><title>" + html.EscapeString(x.long))
-		if len(tip) > 0 {
-			b.WriteString(": " + html.EscapeString(strings.Join(tip, " · ")))
+		if x.hasVorjahr {
+			tip += " · Vorjahr " + energyWords(x.vorjahr)
 		}
-		b.WriteString("</title>")
+		b.WriteString(group + "<title>" + html.EscapeString(tip) + "</title>")
 		// the whole column answers the finger, not only the bar
 		b.WriteString(`<rect class=treffer x=` + f(cx-step/2) + ` y=` + strconv.Itoa(chartT) + ` width=` + f(step) + ` height=` + f(plotH) + `></rect>`)
+		// above the line: what was, then the estimate on top
 		y := base
-		for _, seg := range []string{"eigen", "bezug"} {
-			h := x.v[seg] * scale
+		for _, seg := range []struct {
+			key string
+			v   float64
+			est bool
+		}{{"eigen", x.v["eigen"], false}, {"bezug", x.v["bezug"], false}, {"eigen", x.est["eigen"], true}, {"bezug", x.est["bezug"], true}} {
+			h := seg.v * scale
 			if h < chartMinVisible {
 				continue
 			}
@@ -455,11 +515,37 @@ func energyChart(title string, bs []bucket) string {
 				y -= chartGap
 				h = math.Max(0, h-chartGap)
 			}
-			b.WriteString(`<rect class=` + seg + ` x=` + f(left) + ` y=` + f(y-h) + ` width=` + f(barW) + ` height=` + f(h) + ` rx=2></rect>`)
+			class := seg.key
+			if seg.est {
+				class = `"schaetzung ` + seg.key + `"`
+			}
+			b.WriteString(`<rect class=` + class + ` x=` + f(left) + ` y=` + f(y-h) + ` width=` + f(barW) + ` height=` + f(h) + ` rx=2></rect>`)
 			y -= h
 		}
-		if h := x.v["einsp"] * scale; h >= chartMinVisible {
-			b.WriteString(`<rect class=einsp x=` + f(left) + ` y=` + f(base+chartGap/2) + ` width=` + f(barW) + ` height=` + f(math.Max(0, h-chartGap/2)) + ` rx=2></rect>`)
+		// below it: what went out, then the estimate under it
+		y = base + chartGap/2
+		for _, seg := range []struct {
+			v   float64
+			est bool
+		}{{x.v["einsp"], false}, {x.est["einsp"], true}} {
+			h := seg.v * scale
+			if h < chartMinVisible {
+				continue
+			}
+			if y > base+chartGap {
+				y += chartGap
+				h = math.Max(0, h-chartGap)
+			}
+			class := "einsp"
+			if seg.est {
+				class = `"schaetzung einsp"`
+			}
+			b.WriteString(`<rect class=` + class + ` x=` + f(left) + ` y=` + f(y) + ` width=` + f(barW) + ` height=` + f(math.Max(0, h-chartGap/2)) + ` rx=2></rect>`)
+			y += h
+		}
+		if x.hasVorjahr {
+			vy := base - x.vorjahr*scale
+			b.WriteString(`<line class=vorjahr x1=` + f(left-2) + ` x2=` + f(left+barW+2) + ` y1=` + f(vy) + ` y2=` + f(vy) + `></line>`)
 		}
 		if x.label != "" {
 			b.WriteString(`<text class=achse x=` + f(cx) + ` y=` + strconv.Itoa(chartH-6) + ` text-anchor=middle>` + html.EscapeString(x.label) + `</text>`)
@@ -473,12 +559,22 @@ func energyChart(title string, bs []bucket) string {
 		for k := range x.v {
 			has[k] = true
 		}
+		for k := range x.est {
+			has[k] = true
+		}
 	}
 	b.WriteString("</svg><figcaption><ul class=legende>")
 	for _, l := range []struct{ key, says string }{{"eigen", "Eigenverbrauch (von der Sonne)"}, {"bezug", "Bezug (aus dem Netz)"}, {"einsp", "Einspeisung (ins Netz)"}} {
 		if has[l.key] {
 			b.WriteString("<li><i class=" + l.key + "></i>" + l.says + "</li>")
 		}
+	}
+	if anyEst {
+		b.WriteString("<li><i class=schaetzung></i>geschätzt</li>")
+	}
+	if anyVorjahr {
+		y := strings.Fields(title)
+		b.WriteString("<li><i class=vorjahr></i>" + vorjahrWord(y) + "</li>")
 	}
 	b.WriteString("</ul></figcaption>")
 	// the same in numbers
@@ -488,17 +584,33 @@ func energyChart(title string, bs []bucket) string {
 			b.WriteString("<th scope=col>" + s.name + "</th>")
 		}
 	}
+	if anyVorjahr {
+		b.WriteString("<th scope=col>Vorjahr</th>")
+	}
 	b.WriteString("</tr></thead><tbody>")
 	for _, x := range bs {
-		if len(x.v) == 0 {
+		if len(x.v) == 0 && len(x.est) == 0 {
 			continue
 		}
 		b.WriteString("<tr><th scope=row>" + html.EscapeString(x.long) + "</th>")
 		for _, s := range energySeries {
-			switch v, ok := x.v[s.key]; {
+			v, ok := x.v[s.key]
+			e, okE := x.est[s.key]
+			switch {
+			case ok && okE:
+				b.WriteString("<td>" + energyWords(v) + " + etwa " + roughWords(e) + "</td>")
 			case ok:
 				b.WriteString("<td>" + energyWords(v) + "</td>")
+			case okE:
+				b.WriteString("<td>etwa " + roughWords(e) + "</td>")
 			case has[s.key]:
+				b.WriteString("<td>–</td>")
+			}
+		}
+		if anyVorjahr {
+			if x.hasVorjahr {
+				b.WriteString("<td>" + energyWords(x.vorjahr) + "</td>")
+			} else {
 				b.WriteString("<td>–</td>")
 			}
 		}
@@ -506,6 +618,25 @@ func energyChart(title string, bs []bucket) string {
 	}
 	b.WriteString("</tbody></table></details></figure>")
 	return b.String()
+}
+
+// roughOr is a measured amount as it is, an estimate rough.
+func roughOr(pre string, v float64) string {
+	if pre != "" {
+		return roughWords(v)
+	}
+	return energyWords(v)
+}
+
+// vorjahrWord names last year in the legend: the year before the one in
+// the chart's title ("Das Jahr 2026" → 2025), else "Vorjahr".
+func vorjahrWord(title []string) string {
+	if n := len(title); n > 0 {
+		if y, err := strconv.Atoi(title[n-1]); err == nil {
+			return strconv.Itoa(y - 1)
+		}
+	}
+	return "Vorjahr"
 }
 
 // shortKWh is an axis label: "12 kWh", "0,8 kWh".
@@ -531,17 +662,17 @@ const verlaufStyle = `<style>:root{--e-eigen:#c27c0e;--e-bezug:#4f8ff7;--e-einsp
 .abschnitt{font-size:1.15rem;margin:34px 0 0}.zeitraum{display:flex;gap:6px;margin:12px 0 0;flex-wrap:wrap}
 .zeitraum a{min-height:40px;display:inline-flex;align-items:center;padding:0 16px;border-radius:999px;background:var(--card);border:1px solid var(--edge);color:var(--ink);text-decoration:none;font-size:.88rem}
 .zeitraum a[aria-current]{background:var(--accent-soft);border-color:transparent;color:var(--accent);font-weight:600}
-.verlauf,.prognosebild{margin:12px 0 0;padding:12px 10px 10px;background:var(--card);border:1px solid var(--edge);border-radius:14px}
-.verlauf svg,.prognosebild svg{display:block;width:100%;height:auto}.verlauf .eigen{fill:var(--e-eigen)}.verlauf .bezug{fill:var(--e-bezug)}.verlauf .einsp{fill:var(--e-einsp)}
-.verlauf .treffer,.prognosebild .treffer{fill:transparent}.verlauf g:hover .treffer,.prognosebild g:hover .treffer{fill:var(--line)}
-.verlauf .gitter,.prognosebild .gitter{stroke:var(--line)}.verlauf .nulllinie,.prognosebild .nulllinie{stroke:var(--faint)}
-.verlauf .achse,.prognosebild .achse{fill:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
+.verlauf{margin:12px 0 0;padding:12px 10px 10px;background:var(--card);border:1px solid var(--edge);border-radius:14px}
+.verlauf svg{display:block;width:100%;height:auto}.verlauf .eigen{fill:var(--e-eigen)}.verlauf .bezug{fill:var(--e-bezug)}.verlauf .einsp{fill:var(--e-einsp)}
+.verlauf .treffer{fill:transparent}.verlauf g:hover .treffer{fill:var(--line)}
+.verlauf .gitter{stroke:var(--line)}.verlauf .nulllinie{stroke:var(--faint)}
+.verlauf .achse{fill:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
 .legende{list-style:none;margin:8px 4px 0;padding:0;display:flex;flex-wrap:wrap;gap:4px 14px;font-size:.8rem;color:var(--ink)}
 .legende i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}.legende .eigen{background:var(--e-eigen)}.legende .bezug{background:var(--e-bezug)}.legende .einsp{background:var(--e-einsp)}
-.verlauf details,.fluss details,.prognosebild details{margin:8px 4px 0;font-size:.82rem}.verlauf summary,.fluss summary,.prognosebild summary{cursor:pointer;color:var(--accent);min-height:32px;display:flex;align-items:center}
-.verlauf table,.fluss table,.prognosebild table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
-.verlauf th,.verlauf td,.fluss th,.fluss td,.prognosebild th,.prognosebild td{padding:4px 6px;border-top:1px solid var(--line);text-align:right;font-weight:400}
-.verlauf th[scope=row],.verlauf thead th:first-child,.fluss th,.prognosebild th[scope=row],.prognosebild thead th:first-child{text-align:left}.verlauf thead th,.prognosebild thead th{color:var(--muted)}
+.verlauf details,.fluss details{margin:8px 4px 0;font-size:.82rem}.verlauf summary,.fluss summary{cursor:pointer;color:var(--accent);min-height:32px;display:flex;align-items:center}
+.verlauf table,.fluss table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+.verlauf th,.verlauf td,.fluss th,.fluss td{padding:4px 6px;border-top:1px solid var(--line);text-align:right;font-weight:400}
+.verlauf th[scope=row],.verlauf thead th:first-child,.fluss th{text-align:left}.verlauf thead th{color:var(--muted)}
 .fluss-bild{background:var(--card);border:1px solid var(--edge);border-radius:14px;padding:6px 8px 12px}
 .fluss svg{display:block;width:100%;max-width:380px;height:auto;margin:0 auto}
 .fluss .spur{fill:none;stroke:var(--track);stroke-width:1.5;stroke-dasharray:2 5}
@@ -559,20 +690,18 @@ const verlaufStyle = `<style>:root{--e-eigen:#c27c0e;--e-bezug:#4f8ff7;--e-einsp
 .kennzahlen dd{margin:0}.kennzahlen .zahl{font-size:2rem;font-weight:700;line-height:1.15;font-variant-numeric:tabular-nums;color:var(--ink)}.kennzahlen .k{font-size:.8rem}
 .karte ul.zahlen{background:none;border:0;border-radius:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:8px}
 .karte .zahlen li,.karte .zahlen li:first-child{background:var(--card);border:1px solid var(--edge);border-radius:14px;padding:11px 13px 12px;display:flex;flex-direction:column;align-items:flex-start;gap:3px}
-.karte .zahlen a{display:flex;flex-direction:column;align-items:flex-start;gap:3px}.karte .wahl .zahl{font-size:1.15rem}.karte ul.legende{background:none;border:0;border-radius:0}.karte .legende li{padding:0;border:0;min-height:0}.zahlen .name{font-size:.72rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.karte ul.legende{background:none;border:0;border-radius:0}.karte .legende li{padding:0;border:0;min-height:0}.zahlen .name{font-size:.72rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 .zahlen .zahl{font-size:1.45rem;font-weight:700;line-height:1.2;font-variant-numeric:tabular-nums;color:var(--ink)}.karte .zahlen .k{font-size:.78rem;margin:0}
-.wahl li:has(a[aria-current]){border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}.wahl a[aria-current] .name{color:var(--accent)}
 .delta{display:inline-flex;align-items:center;gap:4px;padding:1px 8px;border-radius:999px;font-size:.78rem;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
 .delta.gut{color:var(--e-gut);background:var(--e-gut-soft)}.delta.schlecht{color:var(--e-schlecht);background:var(--e-schlecht-soft)}.delta.neutral,.delta.gleich{color:var(--muted);background:var(--line)}
-.prognose .prognosebild{margin-top:8px}.prognosebild.solar{--c:var(--e-solar)}.prognosebild.eigen{--c:var(--e-eigen)}.prognosebild.bezug{--c:var(--e-bezug)}.prognosebild.einsp{--c:var(--e-einsp)}
-.prognosebild .ist{fill:var(--c)}.prognosebild .strich{fill:var(--c)}.prognosebild .schaetzung{fill:url(#schraffur);stroke:var(--c);stroke-width:1.2}
-.prognosebild .vorjahr{stroke:var(--ink);stroke-width:2.5;stroke-linecap:round}.prognosebild .heute{stroke:var(--accent);stroke-width:1.2;stroke-dasharray:3 3}
-.prognosebild .heute-text{fill:var(--accent);font-size:11px;font-weight:600}
-.legende .ist{background:var(--c)}.legende .schaetzung{background:repeating-linear-gradient(45deg,var(--c) 0 2px,transparent 2px 5px);box-shadow:inset 0 0 0 1px var(--c)}
+.verlauf .schaetzung.eigen{fill:url(#schraffur-eigen);stroke:var(--e-eigen)}.verlauf .schaetzung.bezug{fill:url(#schraffur-bezug);stroke:var(--e-bezug)}.verlauf .schaetzung.einsp{fill:url(#schraffur-einsp);stroke:var(--e-einsp)}.verlauf .schaetzung{stroke-width:1}
+.verlauf .vorjahr{stroke:var(--ink);stroke-width:2;stroke-linecap:round}.verlauf .heute{stroke:var(--accent);stroke-width:1.2;stroke-dasharray:3 3}
+.verlauf .heute-text{fill:var(--accent);font-size:11px;font-weight:600}
+.legende .schaetzung{background:repeating-linear-gradient(45deg,var(--muted) 0 2px,transparent 2px 5px);box-shadow:inset 0 0 0 1px var(--muted)}
 .legende .vorjahr{height:3px;vertical-align:3px;background:var(--ink);border-radius:2px}
 @media (min-width:900px){body>.zeitraum,body>.abschnitt,body>.prognose,body>.vergleich{grid-column:1/-1}body>.verlauf{grid-column:auto;margin-top:46px;align-self:start}
 .vergleich ul.zahlen{grid-template-columns:repeat(4,minmax(0,1fr))}
-.prognose-inhalt{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:16px;align-items:start}.prognose-inhalt .zahlen{grid-template-columns:repeat(2,minmax(0,1fr))}.prognose .prognosebild{margin-top:0}}</style>`
+.prognose ul.zahlen{grid-template-columns:repeat(4,minmax(0,1fr))}}</style>`
 
 // zeitraumOf is the span the page asks for (?zeitraum=…); the day when
 // it names none it knows.

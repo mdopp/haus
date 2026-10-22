@@ -117,7 +117,7 @@ func Energie(cfg StartConfig) http.HandlerFunc {
 		}
 		if stats.Any() {
 			b.WriteString("<div id=verlauf></div>")
-			b.WriteString(verlaufHTML(view, prognoseOf(r), now, loc, daily, hourly, err))
+			b.WriteString(verlaufHTML(view, now, loc, daily, hourly, err))
 		}
 		writePage(w, http.StatusOK, b)
 	}
