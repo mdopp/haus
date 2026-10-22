@@ -26,18 +26,19 @@ func flowLegs(t *testing.T, fake *hafake.HA, pv, house, grid, battery string) {
 	}
 }
 
-// between is the part of s from start up to the first end after it.
+// between is the part of s from start up to the first end after it (end
+// looked for after start).
 func between(t *testing.T, s, start, end string) string {
 	t.Helper()
 	i := strings.Index(s, start)
 	if i < 0 {
 		t.Fatalf("no %q in:\n%s", start, s)
 	}
-	j := strings.Index(s[i:], end)
+	j := strings.Index(s[i+len(start):], end)
 	if j < 0 {
 		t.Fatalf("no %q after %q", end, start)
 	}
-	return s[i : i+j]
+	return s[i : i+len(start)+j]
 }
 
 // strokeOf is the width an edge is drawn with.

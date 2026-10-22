@@ -84,8 +84,9 @@ func prognoseReihe(today, yearStart time.Time, loc *time.Location, key, name str
 
 // schaetze puts the estimate into the Jahr and Monat chart's bars: each
 // series' rest of its period from today on, today's part already measured
-// taken off; in Jahr last year's month above the line (Eigenverbrauch and
-// Bezug) when HA has all of it. heute is where now falls, in bars from
+// taken off; and last year's same period — what the house used
+// (Eigenverbrauch + Bezug) and what went into the grid — when HA has all
+// of it. heute is where now falls, in bars from
 // the left; −1 for a span without an estimate.
 func schaetze(view string, now time.Time, loc *time.Location, daily amounts, bs []bucket) (heute float64) {
 	if view != "jahr" && view != "monat" {
@@ -126,23 +127,24 @@ func schaetze(view string, now time.Time, loc *time.Location, daily amounts, bs 
 				bs[i].est[k] = math.Max(0, v)
 			}
 		}
-		if view == "jahr" {
-			ls := from.AddDate(-1, 0, 0)
+		// last year's same period, when HA has all of it
+		ls, le := back(from, 1, 0, false), back(to, 1, 0, true)
+		lastYear := func(keys ...string) (float64, bool) {
 			all, any := true, false
 			var sum float64
-			for _, k := range []string{"eigen", "bezug"} {
+			for _, k := range keys {
 				first, ok := firstDay(daily[k], loc)
 				if !ok {
 					continue
 				}
 				any, all = true, all && !ls.Before(first)
-				v, _ := sumDays(daily[k], ls, ls.AddDate(0, 1, 0))
+				v, _ := sumDays(daily[k], ls, le)
 				sum += v
 			}
-			if any && all {
-				bs[i].vorjahr, bs[i].hasVorjahr = sum, true
-			}
+			return sum, any && all
 		}
+		bs[i].vorjahr, bs[i].hasVorjahr = lastYear("eigen", "bezug")
+		bs[i].vorjahrEinsp, bs[i].hasVorjahrEins = lastYear("einsp")
 	}
 	return heute
 }

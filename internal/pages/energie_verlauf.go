@@ -145,10 +145,11 @@ type bucket struct {
 	label, long string
 	v           map[string]float64
 	// est is the estimate for the rest of the bar's period (Jahr, Monat:
-	// schaetze), vorjahr last year's Eigenverbrauch + Bezug in it
-	est        map[string]float64
-	vorjahr    float64
-	hasVorjahr bool
+	// schaetze); vorjahr last year's use in it (Eigenverbrauch + Bezug),
+	// vorjahrEinsp what went into the grid, each when HA has all of it
+	est                        map[string]float64
+	vorjahr, vorjahrEinsp      float64
+	hasVorjahr, hasVorjahrEins bool
 }
 
 // buckets are the chosen span's bars: today's 24 hours, the last seven
@@ -403,7 +404,7 @@ func deltaChip(key string, now, then float64) string {
 // The chart's geometry, in the SVG's own units.
 const (
 	chartW, chartH = 400, 190
-	chartL, chartR = 48, 4
+	chartL, chartR = 58, 4
 	chartT, chartB = 8, 22
 	chartGap       = 1.5 // between stacked segments
 	// the units are a phone's: 400 wide is about its width, so 12 reads as
@@ -422,10 +423,13 @@ const (
 // under it says the same in numbers. No script, no library.
 func energyChart(title string, bs []bucket, heute float64, rest string) string {
 	var up, down float64
-	anyEst, anyVorjahr := false, false
+	anyEst, anyVorjahr, anyVorjahrEins := false, false, false
 	for _, b := range bs {
 		up = math.Max(up, b.v["eigen"]+b.v["bezug"]+b.est["eigen"]+b.est["bezug"])
 		down = math.Max(down, b.v["einsp"]+b.est["einsp"])
+		if b.hasVorjahrEins {
+			down, anyVorjahrEins = math.Max(down, b.vorjahrEinsp), true
+		}
 		if b.hasVorjahr {
 			up, anyVorjahr = math.Max(up, b.vorjahr), true
 		}
@@ -494,8 +498,13 @@ func energyChart(title string, bs []bucket, heute float64, rest string) string {
 		case len(measured) > 0:
 			tip += ": " + strings.Join(measured, " · ")
 		}
-		if x.hasVorjahr {
+		switch {
+		case x.hasVorjahr && x.hasVorjahrEins:
+			tip += " · Vorjahr " + energyWords(x.vorjahr) + ", eingespeist " + energyWords(x.vorjahrEinsp)
+		case x.hasVorjahr:
 			tip += " · Vorjahr " + energyWords(x.vorjahr)
+		case x.hasVorjahrEins:
+			tip += " · Vorjahr eingespeist " + energyWords(x.vorjahrEinsp)
 		}
 		b.WriteString(group + "<title>" + html.EscapeString(tip) + "</title>")
 		// the whole column answers the finger, not only the bar
@@ -543,16 +552,48 @@ func energyChart(title string, bs []bucket, heute float64, rest string) string {
 			b.WriteString(`<rect class=` + class + ` x=` + f(left) + ` y=` + f(y) + ` width=` + f(barW) + ` height=` + f(math.Max(0, h-chartGap/2)) + ` rx=2></rect>`)
 			y += h
 		}
-		if x.hasVorjahr {
-			vy := base - x.vorjahr*scale
-			b.WriteString(`<line class=vorjahr x1=` + f(left-2) + ` x2=` + f(left+barW+2) + ` y1=` + f(vy) + ` y2=` + f(vy) + `></line>`)
-		}
 		if x.label != "" {
 			b.WriteString(`<text class=achse x=` + f(cx) + ` y=` + strconv.Itoa(chartH-6) + ` text-anchor=middle>` + html.EscapeString(x.label) + `</text>`)
 		}
 		b.WriteString("</g>")
 	}
 	b.WriteString(`<line class=nulllinie x1=` + strconv.Itoa(chartL) + ` x2=` + strconv.Itoa(chartW-chartR) + ` y1=` + f(base) + ` y2=` + f(base) + `></line>`)
+	// last year as lines across the bars: the use above the line, what went
+	// into the grid below it; a gap where HA does not have the whole period
+	line := func(class string, has func(bucket) (float64, bool), sign float64) {
+		var d strings.Builder
+		for i := 0; i < len(bs); {
+			j := i
+			for j < len(bs) {
+				if _, ok := has(bs[j]); !ok {
+					break
+				}
+				j++
+			}
+			if j == i {
+				i++
+				continue
+			}
+			for k := i; k < j; k++ {
+				v, _ := has(bs[k])
+				cx, y := float64(chartL)+step*float64(k)+step/2, base-sign*v*scale
+				switch {
+				case j-i == 1: // one period alone: a short stroke
+					d.WriteString("M" + f(cx-barW/2) + " " + f(y) + "L" + f(cx+barW/2) + " " + f(y))
+				case k == i:
+					d.WriteString("M" + f(cx) + " " + f(y))
+				default:
+					d.WriteString("L" + f(cx) + " " + f(y))
+				}
+			}
+			i = j
+		}
+		if d.Len() > 0 {
+			b.WriteString(`<path class="vorjahr ` + class + `" d="` + d.String() + `"></path>`)
+		}
+	}
+	line("verbrauch", func(x bucket) (float64, bool) { return x.vorjahr, x.hasVorjahr }, 1)
+	line("einsp", func(x bucket) (float64, bool) { return x.vorjahrEinsp, x.hasVorjahrEins }, -1)
 	// the legend and the table: only the series this span has
 	has := map[string]bool{}
 	for _, x := range bs {
@@ -572,7 +613,7 @@ func energyChart(title string, bs []bucket, heute float64, rest string) string {
 	if anyEst {
 		b.WriteString("<li><i class=schaetzung></i>geschätzt</li>")
 	}
-	if anyVorjahr {
+	if anyVorjahr || anyVorjahrEins {
 		y := strings.Fields(title)
 		b.WriteString("<li><i class=vorjahr></i>" + vorjahrWord(y) + "</li>")
 	}
@@ -586,6 +627,9 @@ func energyChart(title string, bs []bucket, heute float64, rest string) string {
 	}
 	if anyVorjahr {
 		b.WriteString("<th scope=col>Vorjahr</th>")
+	}
+	if anyVorjahrEins {
+		b.WriteString("<th scope=col>Vorjahr eingespeist</th>")
 	}
 	b.WriteString("</tr></thead><tbody>")
 	for _, x := range bs {
@@ -607,10 +651,14 @@ func energyChart(title string, bs []bucket, heute float64, rest string) string {
 				b.WriteString("<td>–</td>")
 			}
 		}
-		if anyVorjahr {
-			if x.hasVorjahr {
-				b.WriteString("<td>" + energyWords(x.vorjahr) + "</td>")
-			} else {
+		for _, c := range []struct {
+			any, has bool
+			v        float64
+		}{{anyVorjahr, x.hasVorjahr, x.vorjahr}, {anyVorjahrEins, x.hasVorjahrEins, x.vorjahrEinsp}} {
+			switch {
+			case c.has:
+				b.WriteString("<td>" + energyWords(c.v) + "</td>")
+			case c.any:
 				b.WriteString("<td>–</td>")
 			}
 		}
@@ -695,10 +743,10 @@ const verlaufStyle = `<style>:root{--e-eigen:#c27c0e;--e-bezug:#4f8ff7;--e-einsp
 .delta{display:inline-flex;align-items:center;gap:4px;padding:1px 8px;border-radius:999px;font-size:.78rem;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
 .delta.gut{color:var(--e-gut);background:var(--e-gut-soft)}.delta.schlecht{color:var(--e-schlecht);background:var(--e-schlecht-soft)}.delta.neutral,.delta.gleich{color:var(--muted);background:var(--line)}
 .verlauf .schaetzung.eigen{fill:url(#schraffur-eigen);stroke:var(--e-eigen)}.verlauf .schaetzung.bezug{fill:url(#schraffur-bezug);stroke:var(--e-bezug)}.verlauf .schaetzung.einsp{fill:url(#schraffur-einsp);stroke:var(--e-einsp)}.verlauf .schaetzung{stroke-width:1}
-.verlauf .vorjahr{stroke:var(--ink);stroke-width:2;stroke-linecap:round}.verlauf .heute{stroke:var(--accent);stroke-width:1.2;stroke-dasharray:3 3}
+.verlauf .vorjahr{fill:none;stroke:var(--ink);stroke-width:1.6;stroke-dasharray:5 3;stroke-linejoin:round}.verlauf .vorjahr.einsp{stroke:var(--muted)}.verlauf .heute{stroke:var(--accent);stroke-width:1.2;stroke-dasharray:3 3}
 .verlauf .heute-text{fill:var(--accent);font-size:11px;font-weight:600}
 .legende .schaetzung{background:repeating-linear-gradient(45deg,var(--muted) 0 2px,transparent 2px 5px);box-shadow:inset 0 0 0 1px var(--muted)}
-.legende .vorjahr{height:3px;vertical-align:3px;background:var(--ink);border-radius:2px}
+.legende .vorjahr{width:16px;height:2px;vertical-align:3px;border-radius:0;background:repeating-linear-gradient(90deg,var(--ink) 0 5px,transparent 5px 8px)}
 @media (min-width:900px){body>.zeitraum,body>.abschnitt,body>.prognose,body>.vergleich{grid-column:1/-1}body>.verlauf{grid-column:auto;margin-top:46px;align-self:start}
 .vergleich ul.zahlen{grid-template-columns:repeat(4,minmax(0,1fr))}
 .prognose ul.zahlen{grid-template-columns:repeat(4,minmax(0,1fr))}}</style>`

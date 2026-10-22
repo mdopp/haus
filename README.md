@@ -315,7 +315,8 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   what came so far plus the rest as it came last year, while HA does not
   have last year's days the daily mean so far, drawn in the history's
   own chart: in Jahr the months to come (Monat: the days) hatched in the
-  same stacked shape, a heute line, last year's months alongside; the
+  same stacked shape, a heute line, last year as dashed lines (use above
+  the zero line, Einspeisung below, gaps where HA lacks the month); the
   year-end figures right under the Jahr chart. The span's flow picture
   stays "bis heute". Each comparison is a headline number with a delta (arrow,
   sign, word) coloured by what it means for the household: more Solar and
