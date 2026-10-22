@@ -276,11 +276,47 @@ func TestEnergieYearChartWithLastYear(t *testing.T) {
 	mustContain(t, fig, "<title>Januar 2026: Bezug 62 kWh · Vorjahr 31 kWh</title>",
 		"<title>Oktober 2026: Bezug 26 kWh; dazu geschätzt: Bezug etwa 18 kWh · Vorjahr 31 kWh</title>",
 		"<title>November 2026, geschätzt: Bezug etwa 30 kWh · Vorjahr 30 kWh</title>",
-		"<line class=vorjahr", "<li><i class=vorjahr></i>2025</li>", "<th scope=col>Vorjahr</th>",
+		`<path class="vorjahr verbrauch" d="M`, "<li><i class=vorjahr></i>2025</li>", "<th scope=col>Vorjahr</th>",
 		"<tr><th scope=row>November 2026</th><td>etwa 30 kWh</td><td>30 kWh</td></tr>")
-	if n := strings.Count(fig, "<line class=vorjahr"); n != 12 {
-		t.Fatalf("%d strokes for last year, want 12", n)
+	// last year is a line across the months, one stretch: all twelve there
+	line := between(t, fig, `<path class="vorjahr verbrauch" d="`, `"`)
+	if m, l := strings.Count(line, "M"), strings.Count(line, "L"); m != 1 || l != 11 {
+		t.Fatalf("last year's line %q: want one stretch through 12 months", line)
+	}
+	mustNotContain(t, fig, "<line class=vorjahr", "vorjahr einsp") // no Einspeisung here, no line for it
+	// Monat: last year's same days, the same line
+	_, body, _ = familyPage(t, Energie, cfg, "GET", "/energie?zeitraum=monat", "family")
+	fig = between(t, body, "<figure class=verlauf>", "</figure>")
+	mustContain(t, fig, "<title>15. Oktober, geschätzt: Bezug etwa 1 kWh · Vorjahr 1 kWh</title>")
+	if l := strings.Count(between(t, fig, `<path class="vorjahr verbrauch" d="`, `"`), "L"); l != 30 {
+		t.Fatalf("%d steps in October's line, want 30", l)
 	}
 	mustContain(t, section(t, body, "karte-prognose-bis-jahresende-2026-geschaetzt"),
 		`<b class=zahl>etwa 651 kWh</b> <span class="delta schlecht"><span aria-hidden=true>▲</span> +78 % · schlechter</span> <span class=k>bisher 572 kWh · 2025: 365 kWh</span>`)
+}
+
+// Last year's line has gaps where HA does not have the whole month: HA
+// from 15 March 2025 on draws it from April; Einspeisung gets a line of
+// its own below the zero line, and both are in the tooltip and the table.
+func TestEnergieLastYearLineHasGaps(t *testing.T) {
+	fake, hc := house(t)
+	loc := berlin(t)
+	from, to := time.Date(2025, 3, 15, 0, 0, 0, 0, loc), time.Date(2026, 10, 14, 0, 0, 0, 0, loc)
+	statDays(t, fake, "sensor.bezug", from, to, func(time.Time) float64 { return 2 }, nil)
+	statDays(t, fake, "sensor.einsp", from, to, func(time.Time) float64 { return 5 }, nil)
+	statDays(t, fake, "sensor.solar", from, to, func(time.Time) float64 { return 8 }, nil)
+	cfg := StartConfig{HA: hc, Energy: energie.Map{Stats: energie.Stats{Bezug: "sensor.bezug", Einspeisung: "sensor.einsp", Solar: "sensor.solar"}}}
+	_, body, _ := familyPage(t, Energie, cfg, "GET", "/energie?zeitraum=jahr", "family")
+	fig := between(t, body, "<figure class=verlauf>", "</figure>")
+	for _, c := range []string{"verbrauch", "einsp"} {
+		line := between(t, fig, `<path class="vorjahr `+c+`" d="`, `"`)
+		if m, l := strings.Count(line, "M"), strings.Count(line, "L"); m != 1 || l != 8 {
+			t.Fatalf("%s line %q: want April to December, one stretch", c, line)
+		}
+	}
+	// April 2025: use 30 × (3 + 2) = 150, fed in 30 × 5
+	mustContain(t, fig, "<title>April 2026: Solar 240 kWh · Eigenverbrauch 90 kWh · Bezug 60 kWh · Einspeisung 150 kWh · Vorjahr 150 kWh, eingespeist 150 kWh</title>",
+		"<th scope=col>Vorjahr</th><th scope=col>Vorjahr eingespeist</th>",
+		"<tr><th scope=row>März 2026</th><td>248 kWh</td><td>93 kWh</td><td>62 kWh</td><td>155 kWh</td><td>–</td><td>–</td></tr>")
+	mustContain(t, fig, "<title>März 2026: Solar 248 kWh · Eigenverbrauch 93 kWh · Bezug 62 kWh · Einspeisung 155 kWh</title>")
 }
