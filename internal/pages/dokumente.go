@@ -201,8 +201,12 @@ const dokStyle = `<style>.lead{color:var(--muted)}.weg{margin:22px 0 0;padding:1
 .gut{display:flex;gap:8px;align-items:flex-start;margin:16px 0 0;padding:12px 14px;border:1px solid var(--ok);border-radius:14px}.gut p{margin:0}</style>`
 
 func writeDokumente(w http.ResponseWriter, r *http.Request, cfg StartConfig, code int, done, see, problem string) {
+	scan := readScan(r, cfg)
 	b := familyHead(r, cfg, "Dokumente", "Dokumente")
-	b.WriteString(dokStyle)
+	if scan.moving() {
+		b.WriteString("<meta http-equiv=refresh content=5>") // the scan moves on by itself; the page follows
+	}
+	b.WriteString(dokStyle + scanStyle)
 	b.WriteString("<h1>Dokumente</h1><p class=lead>" + html.EscapeString(saysDocsLead) + "</p>")
 	if done != "" {
 		if see != "" {
@@ -212,6 +216,11 @@ func writeDokumente(w http.ResponseWriter, r *http.Request, cfg StartConfig, cod
 	}
 	if problem != "" {
 		b.WriteString("<div class=achtung role=alert><p>" + html.EscapeString(problem) + "</p></div>")
+	}
+	scanning := scanSection(r, cfg, scan)
+	if scan.active() { // a stack running or waiting comes first
+		b.WriteString(scanning)
+		scanning = ""
 	}
 	if cfg.DocumentsMail != "" {
 		addr := html.EscapeString(cfg.DocumentsMail)
@@ -229,6 +238,7 @@ func writeDokumente(w http.ResponseWriter, r *http.Request, cfg StartConfig, cod
 			`<button type=submit>Ablegen</button></form>` +
 			`<p class=k>` + html.EscapeString(saysUploadHow) + `</p></section>`)
 	}
+	b.WriteString(scanning)
 	if p := cfg.paperless(); p.Set() {
 		if !cfg.paperlessOpens(r) {
 			b.WriteString(`<p class=weiter-in><span class=k>` + html.EscapeString(saysPaperlessLAN) + `</span></p>`)

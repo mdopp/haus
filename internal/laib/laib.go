@@ -365,3 +365,120 @@ func (c *Client) ZuhauseSet(ctx context.Context, fields map[string]string) (Prop
 	err = decodeJSON("zuhause", text, &out)
 	return out, err
 }
+
+// ErrNoScan is a box without the scan service (laib#568): Laib knows the
+// verb, but nothing provides scan, or it has written no state yet.
+var ErrNoScan = errors.New("laib: no scan service")
+
+// Scan is the scan service's status file as `laib scan status` prints it
+// (laib#568): its state in a word and, for each state, what goes with it.
+type Scan struct {
+	At      string  `json:"at"`
+	Detail  string  `json:"detail"`  // the service's own sentence
+	Zustand string  `json:"zustand"` // bereit | scannt | wartet-auf-rest | trennt | legt-ab | fertig | fehler
+	Seite   int     `json:"seite"`   // scannt: the page being scanned
+	Blatt   int     `json:"blatt"`   // wartet-auf-rest: the sheet to put the rest in from
+	Scanner bool    `json:"scanner"` // a SANE scanner: „Stapel scannen“ is there
+	Eingang string  `json:"eingang"` // the inbox folder on the share, scan-eingang
+	Stapel  string  `json:"stapel"`
+	Letzte  []Stack `json:"letzte"` // the last stacks, newest first
+	// the scanner's setup (laib#571), kept until the next search or check
+	Suche    ScanSuche    `json:"suche"`
+	Pruefung ScanPruefung `json:"pruefung"`
+}
+
+// ScanSuche is the last search for scanners on the network.
+type ScanSuche struct {
+	Zustand string `json:"zustand"` // läuft | fertig | fehler; "": none yet
+	At      string `json:"at"`
+	Detail  string `json:"detail"`
+	Funde   []struct {
+		Geraet string `json:"geraet"` // the SANE device, for einrichten as it is
+		Name   string `json:"name"`
+	} `json:"funde"`
+}
+
+// ScanPruefung is the last check of the scanner: opened without paper, or
+// one probe sheet read and never filed.
+type ScanPruefung struct {
+	Geraet string `json:"geraet"`
+	OK     bool   `json:"ok"`
+	At     string `json:"at"` // "": none yet
+	Detail string `json:"detail"`
+	Probe  bool   `json:"probe"`
+}
+
+// Stack is one finished stack.
+type Stack struct {
+	Stapel    string `json:"stapel"`
+	Ende      string `json:"ende"`   // fertig | abgebrochen | fehler
+	Quelle    string `json:"quelle"` // scanner | ordner
+	Datei     string `json:"datei"`
+	At        string `json:"at"`
+	Seiten    int    `json:"seiten"`
+	Leer      int    `json:"leer"`
+	Meldung   string `json:"meldung"` // the closing message as the person got it
+	Dokumente []struct {
+		Titel string `json:"titel"`
+		Datei string `json:"datei"` // its original file name in Paperless
+	} `json:"dokumente"`
+}
+
+// ScanStatus reads what the scanner does now.
+func (c *Client) ScanStatus(ctx context.Context) (Scan, error) {
+	var out Scan
+	text, err := c.CallTyped(ctx, "scan", map[string]any{"action": "status"})
+	if err != nil {
+		return out, scanErr(err)
+	}
+	err = decodeJSON("scan", text, &out)
+	return out, err
+}
+
+// ScanOrder passes one order on (start, weiter, abschliessen, verwerfen);
+// person is whom the closing message is for, "" for the box's default.
+// Laib only writes the order; the service decides whether it fits.
+func (c *Client) ScanOrder(ctx context.Context, action, person string) (string, error) {
+	args := map[string]any{"action": action}
+	if person != "" {
+		args["person"] = person
+	}
+	text, err := c.CallTyped(ctx, "scan", args)
+	if err != nil {
+		return "", scanErr(err)
+	}
+	var out struct {
+		Message string `json:"message"`
+	}
+	if decodeJSON("scan", text, &out) == nil {
+		text = out.Message
+	}
+	return strings.TrimSpace(text), nil
+}
+
+// scanErr is Laib's refusal for a box without the service ("Der Dienst
+// scan ist nicht eingerichtet.", "… hat noch keinen Zustand geschrieben.")
+// as ErrNoScan.
+func scanErr(err error) error {
+	if msg := err.Error(); !errors.Is(err, ErrNoTool) && (strings.Contains(msg, "nicht eingerichtet") || strings.Contains(msg, "noch keinen Zustand")) {
+		return fmt.Errorf("%w: %s", ErrNoScan, msg)
+	}
+	return err
+}
+
+// ScanEinrichten proposes the scanner (laib#571): without the service, the
+// scan template with geraet (the owner approves); with it, its SCANNER.
+// geraet may be "" only without the service. Laib's dial decides.
+func (c *Client) ScanEinrichten(ctx context.Context, geraet string) (Proposed, error) {
+	args := map[string]any{"action": "einrichten"}
+	if geraet != "" {
+		args["geraet"] = geraet
+	}
+	var out Proposed
+	text, err := c.CallTyped(ctx, "scan", args)
+	if err != nil {
+		return out, err
+	}
+	err = decodeJSON("scan", text, &out)
+	return out, err
+}
