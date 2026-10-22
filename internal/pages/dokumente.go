@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/mail"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -20,8 +21,10 @@ const (
 	saysDocsLead     = "Briefe, Rechnungen, Verträge: alles, was aufgehoben werden soll, kommt in Paperless, das Archiv des Hauses."
 	saysMailHow      = "Häng das PDF oder Foto an und schick die Mail ab. Abgelegt werden die Anhänge, der Betreff wird der Titel. Paperless holt die Mails alle zehn Minuten ab."
 	saysUploadHow    = "Fotos (JPG, PNG) und PDFs, bis 25 MB. Ohne Titel bekommt das Dokument den Namen der Datei."
-	saysFiled        = "Liegt in Paperless. Die Texterkennung braucht ein paar Minuten."
-	saysFiledMany    = " Dokumente liegen in Paperless. Die Texterkennung braucht ein paar Minuten."
+	saysFiled        = "Liegt in Paperless und wird gerade gelesen (Texterkennung). Das dauert ein paar Minuten."
+	saysFiledMany    = " Dokumente liegen in Paperless und werden gerade gelesen (Texterkennung). Das dauert ein paar Minuten."
+	saysSeeFiled     = "Im Paperless ansehen"
+	saysSeeNewest    = "Die neuesten in Paperless ansehen"
 	saysPaperlessLAN = "Paperless öffnet sich nur zu Hause im WLAN. Ablegen geht hier auch von unterwegs."
 	saysOnlyAtHome   = "Nur zu Hause im WLAN."
 )
@@ -67,11 +70,15 @@ func Dokumente(cfg StartConfig) http.HandlerFunc {
 		switch r.Method {
 		case http.MethodGet, http.MethodHead:
 			q := r.URL.Query()
-			done, problem := "", ""
-			if n, err := strconv.Atoi(q.Get("abgelegt")); err == nil && n == 1 {
+			done, problem, see := "", "", ""
+			n, err := strconv.Atoi(q.Get("abgelegt"))
+			if err == nil && n == 1 {
 				done = saysFiled
 			} else if err == nil && n > 1 {
 				done = strconv.Itoa(n) + saysFiledMany
+			}
+			if done != "" {
+				see = cfg.seeFiled(r, n, q.Get("datei"))
 			}
 			if why := q.Get("fehler"); why != "" {
 				problem = uploadSays[why]
@@ -79,7 +86,7 @@ func Dokumente(cfg StartConfig) http.HandlerFunc {
 					problem = saysUploadFailed
 				}
 			}
-			writeDokumente(w, r, cfg, http.StatusOK, done, problem)
+			writeDokumente(w, r, cfg, http.StatusOK, done, see, problem)
 		case http.MethodPost:
 			if cfg.Ablage == nil {
 				http.Error(w, "Ablegen geht hier nicht.", http.StatusNotFound)
@@ -95,7 +102,11 @@ func Dokumente(cfg StartConfig) http.HandlerFunc {
 				http.Redirect(w, r, DokumentePath+"?fehler="+url.QueryEscape(why), http.StatusSeeOther)
 				return
 			}
-			http.Redirect(w, r, DokumentePath+"?abgelegt="+strconv.Itoa(len(placed)), http.StatusSeeOther)
+			to := DokumentePath + "?abgelegt=" + strconv.Itoa(len(placed))
+			if mark := fileMark(placed); mark != "" {
+				to += "&datei=" + mark // the name's random part only: the title stays out of the URL
+			}
+			http.Redirect(w, r, to, http.StatusSeeOther)
 		default:
 			w.Header().Set("Allow", "GET, HEAD, POST")
 			http.Error(w, "Nur Anzeigen und das Formular.", http.StatusMethodNotAllowed)
@@ -124,6 +135,50 @@ func MailAddress(raw string) string {
 // paperless is Paperless as Dokumente hands over to it.
 func (cfg StartConfig) paperless() App { return App{"Paperless", cfg.PaperlessPublicURL} }
 
+// newestPath is Paperless's document list, the newest added first: what
+// a family member looks for there (its list's sort and reverse
+// parameters).
+const newestPath = "/documents?sort=added&reverse=1"
+
+// FiledPages is where a filed file's link goes: /dokumente/abgelegt/<mark>
+// asks Paperless which document it became (Dokument, haus#68).
+const FiledPages = "/dokumente/abgelegt/"
+
+// markRE is the random part napi puts in a placed file's name,
+// <stem>-<mark>.<ext>.
+var markRE = regexp.MustCompile(`^[0-9a-f]{8}$`)
+var placedRE = regexp.MustCompile(`-([0-9a-f]{8})\.[a-z]+$`)
+
+// fileMark is the mark of the one file just placed; "" for several or a
+// name without one.
+func fileMark(placed []string) string {
+	if len(placed) != 1 {
+		return ""
+	}
+	if m := placedRE.FindStringSubmatch(placed[0]); m != nil {
+		return m[1]
+	}
+	return ""
+}
+
+// paperlessOpens says the person can open Paperless from where they are.
+func (cfg StartConfig) paperlessOpens(r *http.Request) bool {
+	return cfg.paperless().Set() && (!cfg.PaperlessLANOnly || atHome(r))
+}
+
+// seeFiled is the link under "Liegt in Paperless": one file with its mark,
+// Haus's /dokumente/abgelegt/<mark> (the document once Paperless has read
+// it); otherwise Paperless's newest. "" where Paperless does not open.
+func (cfg StartConfig) seeFiled(r *http.Request, n int, mark string) string {
+	if !cfg.paperlessOpens(r) {
+		return ""
+	}
+	if n == 1 && cfg.Docs != nil && markRE.MatchString(mark) {
+		return `<a href="` + FiledPages + mark + `">` + html.EscapeString(saysSeeFiled) + `</a>`
+	}
+	return `<a href="` + html.EscapeString(cfg.paperless().href(newestPath)) + `">` + html.EscapeString(saysSeeNewest) + `</a>`
+}
+
 // atHome says the request comes from the house's own network, as Caddy
 // saw it (X-Forwarded-For; only Caddy reaches the pages, the proxy secret
 // says so): a private, loopback or link-local address. No address at all
@@ -145,12 +200,15 @@ const dokStyle = `<style>.lead{color:var(--muted)}.weg{margin:22px 0 0;padding:1
 .adresse{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.9rem;color:var(--ink);overflow-wrap:anywhere}
 .gut{display:flex;gap:8px;align-items:flex-start;margin:16px 0 0;padding:12px 14px;border:1px solid var(--ok);border-radius:14px}.gut p{margin:0}</style>`
 
-func writeDokumente(w http.ResponseWriter, r *http.Request, cfg StartConfig, code int, done, problem string) {
+func writeDokumente(w http.ResponseWriter, r *http.Request, cfg StartConfig, code int, done, see, problem string) {
 	b := familyHead(r, cfg, "Dokumente", "Dokumente")
 	b.WriteString(dokStyle)
 	b.WriteString("<h1>Dokumente</h1><p class=lead>" + html.EscapeString(saysDocsLead) + "</p>")
 	if done != "" {
-		b.WriteString("<div class=gut role=status><span class=punkt></span><p>" + html.EscapeString(done) + "</p></div>")
+		if see != "" {
+			see = " " + see
+		}
+		b.WriteString("<div class=gut role=status><span class=punkt></span><p>" + html.EscapeString(done) + see + "</p></div>")
 	}
 	if problem != "" {
 		b.WriteString("<div class=achtung role=alert><p>" + html.EscapeString(problem) + "</p></div>")
@@ -172,14 +230,14 @@ func writeDokumente(w http.ResponseWriter, r *http.Request, cfg StartConfig, cod
 			`<p class=k>` + html.EscapeString(saysUploadHow) + `</p></section>`)
 	}
 	if p := cfg.paperless(); p.Set() {
-		if cfg.PaperlessLANOnly && !atHome(r) {
+		if !cfg.paperlessOpens(r) {
 			b.WriteString(`<p class=weiter-in><span class=k>` + html.EscapeString(saysPaperlessLAN) + `</span></p>`)
 		} else {
-			what := "Alle Dokumente suchen, lesen und ordnen."
+			what := "Die neuesten zuerst; alle Dokumente suchen, lesen und ordnen."
 			if cfg.PaperlessLANOnly {
 				what += " " + saysOnlyAtHome
 			}
-			b.WriteString(p.Weiter("/", what))
+			b.WriteString(p.Weiter(newestPath, what))
 		}
 	}
 	b.WriteString(`<p class=k>` + html.EscapeString(docsWhatHappens()) + `</p>`)
