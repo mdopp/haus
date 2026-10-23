@@ -67,8 +67,9 @@ func Medien(cfg StartConfig) http.HandlerFunc {
 			return
 		}
 		var on, quiet []ha.State
+		twins := twinPlayers(states, reg, true)
 		for _, s := range states {
-			if !strings.HasPrefix(s.EntityID, "media_player.") || !shown(s, reg.Hidden) {
+			if !strings.HasPrefix(s.EntityID, "media_player.") || !shown(s, reg.Hidden) || twins[s.EntityID] {
 				continue
 			}
 			if s.State == "playing" || s.State == "paused" {
@@ -113,6 +114,55 @@ func Medien(cfg StartConfig) http.HandlerFunc {
 		b.WriteString(still.HTML())
 		writePage(w, http.StatusOK, b)
 	}
+}
+
+// twinPlayers is the media players to leave out, so a thing is one tile
+// (haus#83): of twins (one Chromecast through Cast and through Music
+// Assistant, ha.Registry.Twins) all but the one to steer — the one that
+// plays, then the paused one, then the device's own integration over
+// Music Assistant's mirror, which can only steer what Music Assistant
+// plays itself. A Jellyfin session is someone's app, not a thing in the
+// house: left out, unless clients and it plays or is paused.
+func twinPlayers(states []ha.State, reg ha.Registry, clients bool) map[string]bool {
+	rank := func(s ha.State) int {
+		r := 0
+		switch s.State {
+		case "playing":
+			r = 4
+		case "paused":
+			r = 2
+		}
+		if reg.Platforms[s.EntityID] != "music_assistant" {
+			r++
+		}
+		return r
+	}
+	out := map[string]bool{}
+	best := map[string]ha.State{}
+	for _, s := range states {
+		if !strings.HasPrefix(s.EntityID, "media_player.") {
+			continue
+		}
+		if reg.Platforms[s.EntityID] == "jellyfin" && !(clients && (s.State == "playing" || s.State == "paused")) {
+			out[s.EntityID] = true
+			continue
+		}
+		k := reg.Twins[s.EntityID]
+		if k == "" {
+			continue
+		}
+		b, ok := best[k]
+		switch {
+		case !ok:
+			best[k] = s
+		case rank(s) > rank(b):
+			out[b.EntityID] = true
+			best[k] = s
+		default:
+			out[s.EntityID] = true
+		}
+	}
+	return out
 }
 
 // playingWords is what a player plays, and where: its room (unless the

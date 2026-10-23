@@ -33,6 +33,7 @@ const allLightsOff = "alle-lichter-aus"
 // What a switch that did not happen says.
 const (
 	saysSwitchFailed = "Das hat nicht geklappt: Licht und Geräte antworten gerade nicht."
+	saysPlayerNo     = "Das Gerät nimmt den Befehl gerade nicht an. Läuft dort eine App, die sich nur selbst steuern lässt? Dann am Gerät oder in der App."
 	saysNotSwitched  = "Das lässt sich hier nicht schalten."
 )
 
@@ -119,8 +120,12 @@ func Schalten(cfg StartConfig) http.HandlerFunc {
 			m.page = "Räume"
 		}
 		var no *schalter.Refusal
-		if errors.As(err, &no) {
+		var refused *ha.Error
+		switch {
+		case errors.As(err, &no):
 			m.code, m.say = no.Code, saysNotSwitched
+		case errors.As(err, &refused) && refused.Status == http.StatusInternalServerError && strings.HasPrefix(id, "media_player."):
+			m.say = saysPlayerNo // HA answered, the player did not take it (haus#83)
 		}
 		m.write(w, r, cfg)
 	}

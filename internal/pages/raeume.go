@@ -111,6 +111,7 @@ func roomCards(states []ha.State, reg ha.Registry, pinned map[string]bool) []car
 		state            ha.State
 	}
 	byRoom := map[string][]thing{}
+	twins := twinPlayers(states, reg, false) // one tile per thing (haus#83)
 	for _, s := range states {
 		domain, _, _ := strings.Cut(s.EntityID, ".")
 		kind, ok := roomKinds[domain]
@@ -120,7 +121,7 @@ func roomCards(states []ha.State, reg ha.Registry, pinned map[string]bool) []car
 		if _, group := s.Attributes["entity_id"].([]any); group {
 			continue // a group is not a thing in a room; its members are
 		}
-		if reg.Hidden[s.EntityID] {
+		if reg.Hidden[s.EntityID] || twins[s.EntityID] {
 			continue
 		}
 		room := oneLine(reg.Rooms[s.EntityID])

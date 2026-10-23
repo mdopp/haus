@@ -180,7 +180,7 @@ func Start(cfg StartConfig) http.HandlerFunc {
 			b.WriteString(sprechenField(cfg, false))
 		}
 		if cfg.HA != nil {
-			b.WriteString(imHaus(states, haErr, reg.Hidden).HTML())
+			b.WriteString(imHaus(states, haErr, reg).HTML())
 		}
 		if pins {
 			b.WriteString(meineGeraete(favs, favErr, states, haErr, reg).HTML())
@@ -197,8 +197,10 @@ func Start(cfg StartConfig) http.HandlerFunc {
 
 // imHaus answers "who is home, and what is on?": the people at home, the
 // lamps that are on with one button to turn them off, what plays with
-// Pause. What HA hides is left out; a group is not a lamp.
-func imHaus(states []ha.State, haErr error, hidden map[string]bool) cards.Card {
+// Pause, one row per thing (haus#83). What HA hides is left out; a group
+// is not a lamp.
+func imHaus(states []ha.State, haErr error, reg ha.Registry) cards.Card {
+	hidden := reg.Hidden
 	c := cards.Card{Title: "Im Haus", Look: cards.Boxes}
 	if haErr != nil {
 		c.Add(saysNoHouse+" "+saysNoSwitching, "")
@@ -211,8 +213,9 @@ func imHaus(states []ha.State, haErr error, hidden map[string]bool) cards.Card {
 		pause          bool
 	}
 	var plays []playing
+	twins := twinPlayers(states, reg, false)
 	for _, s := range states {
-		if !shown(s, hidden) {
+		if !shown(s, hidden) || twins[s.EntityID] {
 			continue
 		}
 		domain, _, _ := strings.Cut(s.EntityID, ".")
