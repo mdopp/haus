@@ -30,6 +30,9 @@ const (
 	saysBadUser       = "Der Benutzername darf nur Kleinbuchstaben, Ziffern, Punkt, Bindestrich und Unterstrich haben und muss mit einem Buchstaben anfangen."
 	saysPendingTitle  = "Eingeladen, noch kein Passwort"
 	saysPendingNone   = "Die Liste der Eingeladenen lässt sich gerade nicht lesen."
+	saysSignalHint    = "Wenn du magst: mit Ländervorwahl, etwa +49 170 1234567. Dann darf die Person dem Boten auf Signal schreiben. Die Nummer kommt als Vorschlag in Laibs Eingang und gilt, sobald er freigegeben ist."
+	saysBadSignal     = "Die Signal-Nummer bitte mit Ländervorwahl, etwa +49 170 1234567."
+	saysSignalWaits   = "Signal-Nummer eingetragen: Sie gilt, sobald der Vorschlag freigegeben ist."
 	saysWelcomeAfter  = "Nach dem ersten Anmelden zeigt Haus die Seite „Willkommen“: welche Apps es gibt und wie man sie einrichtet."
 )
 
@@ -40,11 +43,32 @@ type invitation struct {
 	first   string
 	problem string
 	form    laib.Invite
+	signal  bool   // a Signal number went with it: say it waits for the owner
+	inbox   string // Laib's page, for the way to the proposal
 }
 
 // empty is no POST's outcome: the plain Box page.
 func (inv invitation) empty() bool {
-	return inv.done == nil && inv.first == "" && inv.problem == "" && inv.form == (laib.Invite{})
+	return inv.done == nil && inv.first == "" && inv.problem == "" && inv.form == (laib.Invite{}) && !inv.signal
+}
+
+// signalRE is a Signal number as laib#596 takes it, E.164: + and 7 to 15
+// digits, the first not 0.
+var signalRE = regexp.MustCompile(`^\+[1-9][0-9]{6,14}$`)
+
+// signalNumber is what an admin typed, as E.164: spaces, dashes, dots,
+// slashes and brackets out, a leading 00 is +. "" stays "".
+func signalNumber(s string) string {
+	s = strings.Map(func(r rune) rune {
+		if strings.ContainsRune(" -./()\u00a0", r) {
+			return -1
+		}
+		return r
+	}, s)
+	if strings.HasPrefix(s, "00") {
+		s = "+" + s[2:]
+	}
+	return s
 }
 
 var userRE = regexp.MustCompile(`^[a-z][a-z0-9._-]{1,31}$`)
@@ -92,7 +116,10 @@ func Einladen(cfg BoxConfig) http.HandlerFunc {
 		f := r.PostForm
 		in := laib.Invite{User: strings.TrimSpace(f.Get("benutzer")), First: oneLine(f.Get("vorname")), Last: oneLine(f.Get("nachname")),
 			Email: strings.TrimSpace(f.Get("email")), Group: "family", Resend: f.Get("erneut") == "1"}
-		inv := invitation{form: in, first: in.First}
+		if !in.Resend {
+			in.Signal = signalNumber(f.Get("signal"))
+		}
+		inv := invitation{form: in, first: in.First, inbox: cfg.LaibURL}
 		if inv.first == "" {
 			inv.first = in.User
 		}
@@ -108,6 +135,13 @@ func Einladen(cfg BoxConfig) http.HandlerFunc {
 			in.Group = "" // the account is there; the group stays as it is
 		case !strings.Contains(in.Email, "@") || strings.HasSuffix(in.Email, "@") || strings.ContainsAny(in.Email, " \t,;<>"):
 			inv.problem = saysBadEmail
+		case in.Signal != "" && !signalRE.MatchString(in.Signal):
+			inv.problem = saysBadSignal
+		}
+		if in.Signal != "" && inv.problem == "" {
+			if takes, _ := cfg.Laib.Takes(r.Context(), "person_invite", "signal"); !takes {
+				in.Signal = "" // a Laib before laib#596: the field was not offered, nothing to pass on
+			}
 		}
 		if inv.problem != "" {
 			writeBox(w, r, cfg, http.StatusBadRequest, inv)
@@ -126,6 +160,7 @@ func Einladen(cfg BoxConfig) http.HandlerFunc {
 			return
 		}
 		inv.done = &got
+		inv.signal = in.Signal != ""
 		inv.form = laib.Invite{} // the form is empty again for the next one
 		log.Printf("haus: einladen: %s by %s: mailed %v", in.User, r.Header.Get("Remote-User"), got.Mailed)
 		writeBox(w, r, cfg, http.StatusOK, inv)
@@ -161,6 +196,17 @@ func inviteCard(ctx context.Context, c *laib.Client, inv invitation) string {
 	}
 	if inv.done != nil {
 		b.WriteString(inviteDone(*inv.done, inv.first))
+		if inv.signal { // the number waits for the owner (laib#596, laib#588)
+			b.WriteString("<p class=erfolg role=status>" + html.EscapeString(saysSignalWaits))
+			nr := ""
+			if inv.done.Proposal > 0 {
+				nr = strconv.Itoa(inv.done.Proposal)
+			}
+			if link := inboxLink(inv.inbox, nr); link != "" {
+				b.WriteString(" " + link)
+			}
+			b.WriteString("</p>")
+		}
 	}
 	if inv.problem != "" {
 		b.WriteString("<p class=problem role=alert>" + html.EscapeString(inv.problem) + "</p>")
@@ -185,6 +231,11 @@ func inviteCard(ctx context.Context, c *laib.Client, inv invitation) string {
 	field("nachname", "Nachname", "text", f.Last, " autocomplete=off", "")
 	field("benutzer", "Benutzername", "text", f.User, " autocomplete=off autocapitalize=none spellcheck=false pattern=\"[a-z][a-z0-9._\\-]{1,31}\" placeholder=\""+html.EscapeString(suggestUser(f.First))+"\"", saysUserHint)
 	field("email", "E-Mail", "email", f.Email, " required autocomplete=off", saysEmailHint)
+	if takes, err := c.Takes(ctx, "person_invite", "signal"); takes { // only once Laib takes it (laib#596)
+		field("signal", "Signal-Nummer", "tel", f.Signal, " autocomplete=off inputmode=tel placeholder=\"+49 170 1234567\"", saysSignalHint)
+	} else if err != nil {
+		log.Printf("haus: einladen: tools/list: %v", err)
+	}
 	b.WriteString("<button>Einladen</button></form><p class=k>" + html.EscapeString(saysFamilyOnly) + "</p>")
 	switch {
 	case perr != nil:
