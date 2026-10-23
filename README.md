@@ -20,6 +20,12 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   that are on with their names and one button (*Aus* for one, *Alle aus*
   for several; a group, any entity with an `entity_id` list, is not a
   lamp), what plays on a `media_player` with *Pause* when it can pause.
+  One thing is one row, on Start, Medien and Räume alike (haus#83): HA
+  devices that share an identifier (dashes and case aside: a Chromecast
+  through Cast and through Music Assistant) are twins, shown and steered
+  through the one that plays, else the paused one, else not Music
+  Assistant's mirror; a Jellyfin session is someone's app, on Medien only
+  while it plays. A player refusing a command (HA 500) is said as such.
   *Meine Geräte*: the person's own things as tiles like the phone widget
   (laib ADR 0017: favorites go to Haus): `HAUS_DATA/favoriten.json`,
   `{"<Remote-User>": ["light.buero", "cover.wohnzimmer", …]}`, read on each

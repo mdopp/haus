@@ -268,10 +268,17 @@ func (w *wsConn) result(id int, out any) error {
 
 // Registry is what Haus keeps from HA's registries and config.
 type Registry struct {
-	Rooms    map[string]string // entity → its room's name: its own area, else its device's; absent without one
-	Hidden   map[string]bool   // entities HA hides: hidden_by set, or entity_category config or diagnostic
-	Devices  map[string]string // entity → its device's id, for its page in HA (haus#64); absent without one
-	TempUnit string            // the house's temperature unit (unit_system.temperature), "" when HA did not say
+	Rooms   map[string]string // entity → its room's name: its own area, else its device's; absent without one
+	Hidden  map[string]bool   // entities HA hides: hidden_by set, or entity_category config or diagnostic
+	Devices map[string]string // entity → its device's id, for its page in HA (haus#64); absent without one
+	// Platforms is entity → its integration (cast, music_assistant, jellyfin, …).
+	Platforms map[string]string
+	// Twins is entity → a key it shares with the entities of other devices
+	// that are the same thing: devices with an identifier in common, its
+	// dashes and case aside — a Chromecast through Cast and through Music
+	// Assistant (haus#83). Absent for an entity whose device has no twin.
+	Twins    map[string]string
+	TempUnit string // the house's temperature unit (unit_system.temperature), "" when HA did not say
 }
 
 // Areas maps every entity to its room's name: the entity's own area, else
@@ -299,16 +306,14 @@ func (c *Client) registries(ctx context.Context) (Registry, error) {
 		AreaID string `json:"area_id"`
 		Name   string `json:"name"`
 	}
-	var devices []struct {
-		ID     string `json:"id"`
-		AreaID string `json:"area_id"`
-	}
+	var devices []device
 	var entities []struct {
 		EntityID       string `json:"entity_id"`
 		AreaID         string `json:"area_id"`
 		DeviceID       string `json:"device_id"`
 		HiddenBy       string `json:"hidden_by"`
 		EntityCategory string `json:"entity_category"`
+		Platform       string `json:"platform"`
 	}
 	for _, q := range []struct {
 		cmd string
@@ -335,7 +340,8 @@ func (c *Client) registries(ctx context.Context) (Registry, error) {
 	for _, d := range devices {
 		devArea[d.ID] = d.AreaID
 	}
-	reg := Registry{Rooms: map[string]string{}, Hidden: map[string]bool{}, Devices: map[string]string{}}
+	twin := twins(devices)
+	reg := Registry{Rooms: map[string]string{}, Hidden: map[string]bool{}, Devices: map[string]string{}, Platforms: map[string]string{}, Twins: map[string]string{}}
 	for _, e := range entities {
 		if e.EntityID == "" {
 			continue
@@ -350,11 +356,65 @@ func (c *Client) registries(ctx context.Context) (Registry, error) {
 		if e.DeviceID != "" {
 			reg.Devices[e.EntityID] = e.DeviceID
 		}
+		if t := twin[e.DeviceID]; t != "" {
+			reg.Twins[e.EntityID] = t
+		}
+		if e.Platform != "" {
+			reg.Platforms[e.EntityID] = e.Platform
+		}
 		if e.HiddenBy != "" || e.EntityCategory == "config" || e.EntityCategory == "diagnostic" {
 			reg.Hidden[e.EntityID] = true
 		}
 	}
 	return reg, nil
+}
+
+// device is one entry of HA's device registry, as registries reads it.
+type device struct {
+	ID          string     `json:"id"`
+	AreaID      string     `json:"area_id"`
+	Identifiers [][]string `json:"identifiers"` // [integration, its id]
+}
+
+// twins maps each device that shares an identifier with another device
+// to that identifier, folded: lower case, letters and digits only (Cast's
+// ddd3b687…, Music Assistant's ddd3b687-0701-…). Short ones ("t", a
+// Jellyfin session's name) say nothing about sameness and are skipped.
+func twins(devices []device) map[string]string {
+	fold := func(s string) string {
+		var b strings.Builder
+		for _, r := range strings.ToLower(s) {
+			if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' {
+				b.WriteRune(r)
+			}
+		}
+		return b.String()
+	}
+	byID := map[string][]string{}
+	for _, dev := range devices {
+		seen := map[string]bool{}
+		for _, ident := range dev.Identifiers {
+			if len(ident) != 2 {
+				continue
+			}
+			if k := fold(ident[1]); len(k) >= 12 && !seen[k] {
+				seen[k] = true
+				byID[k] = append(byID[k], dev.ID)
+			}
+		}
+	}
+	out := map[string]string{}
+	for k, ids := range byID {
+		if len(ids) < 2 {
+			continue
+		}
+		for _, id := range ids {
+			if cur, ok := out[id]; !ok || k < cur {
+				out[id] = k
+			}
+		}
+	}
+	return out
 }
 
 // TemperatureUnit is the house's temperature unit from GET /api/config

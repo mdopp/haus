@@ -129,9 +129,15 @@ func TestMedienSwitchesThroughSchalten(t *testing.T) {
 		t.Fatalf("HA got %v", calls(fake))
 	}
 	// HA failing a switch from Medien: the plain line, the way back to Medien
-	fake.FailCalls(500)
+	fake.FailCalls(502)
 	rec := post(t, h, "/schalten", url.Values{"geraet": {"media_player.wz"}, "tun": {"media_player.volume_up"}, "zurueck": {"/medien"}}, "anna", nil)
-	mustContain(t, rec.Body.String(), "Das hat nicht geklappt", "<p><a href=/medien>Zurück</a></p>", "href=/medien aria-current=page>")
+	mustContain(t, rec.Body.String(), saysSwitchFailed, "<p><a href=/medien>Zurück</a></p>", "href=/medien aria-current=page>")
+	mustNotLeak(t, rec.Body.String())
+	// the player refusing it (HA 500, "The command to the player failed", haus#83): said as such
+	fake.FailCalls(500)
+	rec = post(t, h, "/schalten", url.Values{"geraet": {"media_player.wz"}, "tun": {"media_player.media_pause"}, "zurueck": {"/medien"}}, "anna", nil)
+	mustContain(t, rec.Body.String(), saysPlayerNo, "<p><a href=/medien>Zurück</a></p>")
+	mustNotContain(t, rec.Body.String(), saysSwitchFailed)
 	mustNotLeak(t, rec.Body.String())
 }
 
