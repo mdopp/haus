@@ -245,6 +245,13 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     (`epson2:net:<ip>`, refused unless laib#571 would take it); and for a
     scanner that scans to a folder what goes into its own menu (the share
     `\\<HAUS_SAMBA_HOST>\data`, the folder, a Netzlaufwerk account).
+    A setup order is followed where it was pressed (haus#80): the button
+    says *Sucht …* at once, the redirect carries `?tut=<order>&seit=<unix>`,
+    and the page looks again every 2 s until the result the order writes
+    (`suche.at`, `pruefung.at`) is as new as the order — then shows it at
+    the button (nothing found: the sentence and the field by hand, focused;
+    SANE's own words folded under *Einzelheiten*) — or says that no result
+    came within 60 s (search), 30 s (check), 2 min (probe).
     Einrichten is `laib_scan einrichten [--geraet]`: one proposal, the
     service with that scanner on a box without it (*Scannen einrichten*),
     its `SCANNER` otherwise; back with a fixed sentence (no device in the

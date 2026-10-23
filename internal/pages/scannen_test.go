@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -68,10 +69,16 @@ func (f *scanLaib) client(t *testing.T) *laib.Client {
 // home (192.168.1.23) by anna in groups.
 func scanPage(t *testing.T, f *scanLaib, groups string) string {
 	t.Helper()
+	return scanPageAt(t, f, groups, "/dokumente")
+}
+
+// scanPageAt is scanPage at target, the redirect after an order.
+func scanPageAt(t *testing.T, f *scanLaib, groups, target string) string {
+	t.Helper()
 	_, cfg := dokumente(t)
 	cfg.Laib, cfg.SambaHost = f.client(t), "kraftwerk"
 	cfg.Loc, cfg.Now = berlin(t), func() time.Time { return startNow(t) }
-	rec := getDokumente(cfg, "/dokumente", map[string]string{"X-Forwarded-For": "192.168.1.23", "Remote-Groups": groups})
+	rec := getDokumente(cfg, target, map[string]string{"X-Forwarded-For": "192.168.1.23", "Remote-Groups": groups})
 	if rec.Code != 200 {
 		t.Fatalf("%d\n%s", rec.Code, rec.Body)
 	}
@@ -216,7 +223,8 @@ func TestScannerEinrichtenShowsTheSetup(t *testing.T) {
 	body := scanPage(t, f, "family,admins")
 	mustContain(t, body, `<details id=scanner class=einrichten><summary>Scanner einrichten</summary>`, // a scanner is set: closed
 		"Scanner antwortet", "epson2:net:192.168.178.87",
-		`value=pruefen><button>Erneut prüfen</button>`, `value=probe><button>Probeseite</button>`, `value=suchen><button>Scanner suchen</button>`,
+		`value=pruefen><button data-laeuft="Prüft den Scanner …">Erneut prüfen</button>`, `value=probe><button data-laeuft="Liest eine Probeseite …">Probeseite</button>`,
+		`value=suchen><button data-laeuft="Sucht im Netz nach Scannern …">Scanner suchen</button>`,
 		"Epson PID 0899 flatbed scanner", `<input type=hidden name=geraet value="epson2:net:192.168.178.87"><button aria-label="Epson PID 0899 flatbed scanner einrichten">Diesen einrichten</button>`,
 		`name=geraet value="airscan:e0:Brother MFC"`, "2 Scanner gefunden", "Adresse von Hand",
 		`\\kraftwerk\data`, "scan-eingang", "href=/netzlaufwerk>Netzlaufwerk</a>")
@@ -268,8 +276,10 @@ func TestScannerEinrichtenProposes(t *testing.T) {
 	if len(f.orders) != 1 {
 		t.Fatalf("refused posts reached Laib: %v", f.orders)
 	}
+	cfg.Now = func() time.Time { return time.Unix(1792757939, 0) }
+	h = Scannen(cfg)
 	for _, do := range []string{"suchen", "pruefen", "probe"} {
-		if rec := post(t, h, "/scannen", url.Values{"tun": {do}}, "anna", admin); rec.Header().Get("Location") != "/dokumente#scanner" {
+		if rec := post(t, h, "/scannen", url.Values{"tun": {do}}, "anna", admin); rec.Header().Get("Location") != "/dokumente?tut="+do+"&seit=1792757939#scanner" {
 			t.Errorf("admin %s → %d %q", do, rec.Code, rec.Header().Get("Location"))
 		}
 	}
@@ -292,4 +302,84 @@ func TestScannerEinrichtenProposes(t *testing.T) {
 	if _, has := f.orders[len(f.orders)-1]["geraet"]; has {
 		t.Errorf("an empty device was sent: %v", f.orders[len(f.orders)-1])
 	}
+}
+
+// haus#80: after Scanner suchen the page follows the order where it was
+// pressed — „Sucht …“ and a quick look again while the result is older
+// than the order, then what was found or, found nothing, the plain
+// sentence and the field by hand, ready; no answer in time says so. The
+// same for Prüfen and Probeseite, with SANE's own words only folded away.
+func TestScannerEinrichtenFollowsTheOrder(t *testing.T) {
+	now := startNow(t)
+	at := func(d time.Duration) string { return now.Add(d).UTC().Format(time.RFC3339) }
+	after := func(do string, ago time.Duration) string {
+		return "/dokumente?tut=" + do + "&seit=" + strconv.FormatInt(now.Add(-ago).Unix(), 10)
+	}
+	admins := "family,admins"
+	old := map[string]any{"zustand": "fertig", "at": at(-time.Hour), "funde": []any{}, "detail": "kein Scanner gefunden"}
+	f := &scanLaib{status: map[string]any{"zustand": "bereit", "scanner": false, "suche": old}}
+
+	// idle: the last search's result, no following
+	body := scanPage(t, f, admins)
+	mustContain(t, body, saysNotFound, "Scanner suchen</button>", `<script>`)
+	mustNotContain(t, body, "http-equiv=refresh", "role=alert><p>"+saysNotFound, "autofocus")
+
+	// pressed, the service has not written yet: Sucht …, no button, look again soon
+	body = scanPageAt(t, f, admins, after("suchen", 2*time.Second))
+	mustContain(t, body, `<details id=scanner class=einrichten open>`, `<p class=laeuft role=status>Sucht im Netz nach Scannern …</p>`, "<meta http-equiv=refresh content=2>")
+	mustNotContain(t, body, "Scanner suchen</button>", saysNotFound) // the old result is not this one's
+
+	// the service runs it
+	f.status["suche"] = map[string]any{"zustand": "läuft", "at": at(-time.Second), "funde": []any{}}
+	body = scanPageAt(t, f, admins, after("suchen", 3*time.Second))
+	mustContain(t, body, "Sucht im Netz nach Scannern …", "<meta http-equiv=refresh content=2>")
+	if strings.Count(body, "Sucht im Netz nach Scannern …</p>") != 1 {
+		t.Errorf("one Sucht:\n%s", body)
+	}
+
+	// done, nothing found: the sentence at the button and the field, ready
+	f.status["suche"] = map[string]any{"zustand": "fertig", "at": at(0), "funde": []any{}, "detail": "kein Scanner gefunden: das Gerät an, im selben Netz?"}
+	body = scanPageAt(t, f, admins, after("suchen", 4*time.Second))
+	mustContain(t, body, `<div class="achtung selbst" role=alert><p>`+saysNotFound, `<input id=geraet autofocus `, "Scanner suchen</button>")
+	mustNotContain(t, body, "http-equiv=refresh", "Sucht im Netz nach Scannern …</p>", "das Gerät an, im selben Netz?")
+
+	// done with finds: each to choose
+	f.status["suche"] = map[string]any{"zustand": "fertig", "at": at(0), "funde": []map[string]any{{"geraet": "epson2:net:192.168.178.87", "name": "Epson WF-3540"}}}
+	body = scanPageAt(t, f, admins, after("suchen", 4*time.Second))
+	mustContain(t, body, "Epson WF-3540", "Diesen einrichten")
+	mustNotContain(t, body, saysNotFound, "autofocus", "http-equiv=refresh")
+
+	// failed: the reason
+	f.status["suche"] = map[string]any{"zustand": "fehler", "at": at(0), "funde": []any{}, "detail": "Netzsuche abgebrochen"}
+	mustContain(t, scanPageAt(t, f, admins, after("suchen", 4*time.Second)), saysNotFound, "Netzsuche abgebrochen")
+
+	// no result in a minute: said, no endless looking
+	f.status["suche"] = old
+	body = scanPageAt(t, f, admins, after("suchen", 61*time.Second))
+	mustContain(t, body, `<div class=achtung role=alert><p>Laib hat den Auftrag angenommen, aber nach einer Minute kein Ergebnis gemeldet.`, "Scanner suchen</button>")
+	mustNotContain(t, body, "http-equiv=refresh", "Sucht im Netz nach Scannern …</p>")
+
+	// a link too old, or made up: no following
+	for _, target := range []string{after("suchen", time.Hour), "/dokumente?tut=suchen&seit=x", "/dokumente?tut=start&seit=" + strconv.FormatInt(now.Unix(), 10)} {
+		mustNotContain(t, scanPageAt(t, f, admins, target), "http-equiv=refresh", "Laib hat den Auftrag", "Sucht im Netz nach Scannern …</p>")
+	}
+
+	// Prüfen: waits for a check as new as the order, then shows it at the button
+	f.status = map[string]any{"zustand": "bereit", "scanner": true,
+		"pruefung": map[string]any{"geraet": "epson2:net:192.168.178.87", "ok": true, "at": at(-time.Hour), "detail": "Scanner antwortet"}}
+	body = scanPageAt(t, f, admins, after("pruefen", time.Second))
+	mustContain(t, body, "Prüft den Scanner …</p>", "<meta http-equiv=refresh content=2>")
+	mustNotContain(t, body, "Scanner antwortet", "Erneut prüfen</button>")
+	f.status["pruefung"] = map[string]any{"geraet": "epson2:net:192.168.178.87", "ok": false, "at": at(0),
+		"detail": "antwortet nicht: open of device epson2:net:192.168.178.87 failed: Invalid argument"}
+	body = scanPageAt(t, f, admins, after("pruefen", 3*time.Second))
+	mustContain(t, body, `<div class="achtung selbst" role=status><p>`+saysNoAnswer, "<summary>Einzelheiten</summary>", "Erneut prüfen</button>")
+	mustNotContain(t, body, "http-equiv=refresh", "Prüft den Scanner …</p>")
+	if i, j := strings.Index(body, saysNoAnswer), strings.Index(body, "Invalid argument"); i < 0 || j < i || !strings.Contains(body[i:j], "<details") {
+		t.Errorf("SANE's words not folded away:\n%s", body)
+	}
+	f.status["pruefung"].(map[string]any)["at"] = at(-time.Hour)
+	body = scanPageAt(t, f, admins, after("probe", 3*time.Minute))
+	mustContain(t, body, saysNoAnswer, "nach 2 Minuten kein Ergebnis")
+	mustNotContain(t, body, "role=status><p>"+saysNoAnswer) // not the probe's answer
 }
