@@ -141,9 +141,27 @@ func (c *Client) States(ctx context.Context) ([]State, error) {
 	return out, c.do(ctx, "GET", "/api/states", nil, nil, &out)
 }
 
-// Call runs domain.service with payload (which names the target).
-func (c *Client) Call(ctx context.Context, domain, service string, payload map[string]any) error {
-	return c.do(ctx, "POST", "/api/services/"+url.PathEscape(domain)+"/"+url.PathEscape(service), nil, payload, nil)
+// Call runs domain.service with payload (which names the target) and
+// says HA's context id for it: the context of the states it changed, ""
+// when none changed or HA did not say (haus#89). An answer it cannot read
+// is no failed call.
+func (c *Client) Call(ctx context.Context, domain, service string, payload map[string]any) (string, error) {
+	var raw json.RawMessage
+	if err := c.do(ctx, "POST", "/api/services/"+url.PathEscape(domain)+"/"+url.PathEscape(service), nil, payload, &raw); err != nil {
+		return "", err
+	}
+	var changed []struct {
+		Context struct {
+			ID string `json:"id"`
+		} `json:"context"`
+	}
+	json.Unmarshal(raw, &changed)
+	for _, s := range changed {
+		if s.Context.ID != "" {
+			return s.Context.ID, nil
+		}
+	}
+	return "", nil
 }
 
 // History is one entity's states between start and end, oldest first, in

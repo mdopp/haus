@@ -27,6 +27,7 @@ import (
 	"github.com/mdopp/haus/internal/pages"
 	"github.com/mdopp/haus/internal/persona"
 	"github.com/mdopp/haus/internal/samba"
+	"github.com/mdopp/haus/internal/schalter"
 	"github.com/mdopp/haus/internal/usage"
 	"github.com/mdopp/haus/internal/werkstatt"
 )
@@ -80,7 +81,7 @@ func routes(s site) http.Handler {
 	pagesMux := http.NewServeMux()
 	// the family's pages (haus#12): each card only from a backend that is set; a
 	// page whose backend is not set says what is missing (laib#418)
-	family := pages.StartConfig{Laib: s.ops, LaibURL: s.laibURL, HA: s.napi.HA, Energy: s.napi.Energy, Calendar: s.hh.Calendar, Contacts: s.hh.Contacts,
+	family := pages.StartConfig{Laib: s.ops, Witness: s.napi.Witness, LaibURL: s.laibURL, HA: s.napi.HA, Energy: s.napi.Energy, Calendar: s.hh.Calendar, Contacts: s.hh.Contacts,
 		Notes: s.hh.Notes, Library: s.hh.Library, Judge: s.hh.Judge, Docs: s.hh.Documents, Loc: s.hh.Loc, Favorites: s.favorites, Bote: s.bote,
 		Samba: s.samba, SambaHost: s.sambaHost, Usage: s.usage, PublicURL: s.publicURL, Welcome: s.welcome, STT: s.stt,
 		HAPublicURL: s.haPublic, Inverted: s.inverted, RadicalePublicURL: s.radicale, Views: s.views,
@@ -152,7 +153,7 @@ func main() {
 		log.Fatalf("haus: devices: %v", err)
 	}
 	pages.House = persona.Load(env("HAUS_PERSONA_DIR", "/persona"), os.Getenv("HAUS_PERSONA")) // laib ADR 0020; plain Haus without it
-	cfg := napi.Config{Laib: ops, House: pages.House}
+	cfg := napi.Config{Laib: ops, House: pages.House, Witness: &schalter.Witness{Laib: ops}}   // who switched what (haus#89)
 	cfg.Whoami = func(b string) (string, bool) {
 		d, ok := store.Lookup(b)
 		return d.UID, ok

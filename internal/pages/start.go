@@ -26,6 +26,7 @@ import (
 	"github.com/mdopp/haus/internal/paperless"
 	"github.com/mdopp/haus/internal/qmd"
 	"github.com/mdopp/haus/internal/samba"
+	"github.com/mdopp/haus/internal/schalter"
 	"github.com/mdopp/haus/internal/usage"
 )
 
@@ -34,7 +35,8 @@ import (
 // about it.
 type StartConfig struct {
 	Laib      *laib.Client
-	LaibURL   string // where Rückgängig lives (the guarantees, admins only)
+	Witness   *schalter.Witness // who switched what, into the log and Laib's journal (haus#89); nil: the log only
+	LaibURL   string            // where Rückgängig lives (the guarantees, admins only)
 	HA        *ha.Client
 	Energy    energie.Map // which sensors Energie reads (haus#12); empty: by friendly name
 	Calendar  *caldav.Client

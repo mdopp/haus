@@ -511,7 +511,12 @@ func (h *HA) serve(w http.ResponseWriter, r *http.Request) {
 		var data map[string]any
 		json.NewDecoder(r.Body).Decode(&data)
 		h.calls = append(h.calls, Call{Domain: parts[0], Service: parts[1], Data: data})
-		w.Write([]byte(`[]`))
+		// like HA: the states the call changed, each with the call's context
+		changed := []any{}
+		if id, ok := data["entity_id"].(string); ok {
+			changed = append(changed, map[string]any{"entity_id": id, "context": map[string]any{"id": fmt.Sprintf("ctx-%d", len(h.calls))}})
+		}
+		json.NewEncoder(w).Encode(changed)
 	case r.Method == "POST" && strings.HasPrefix(r.URL.Path, "/api/stt/"):
 		provider := strings.TrimPrefix(r.URL.Path, "/api/stt/")
 		words, ok := h.stt[provider]

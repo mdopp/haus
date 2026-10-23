@@ -79,9 +79,11 @@ func Schalten(cfg StartConfig) http.HandlerFunc {
 			if states, err = cfg.HA.States(r.Context()); err == nil {
 				reg, _ := cfg.HA.CachedRegistry(r.Context())
 				for _, l := range litLamps(states, reg.Hidden) {
-					if err = schalter.Do(r.Context(), cfg.HA, l.EntityID, "light.turn_off", nil, false); err != nil {
+					var said string
+					if said, err = schalter.Do(r.Context(), cfg.HA, l.EntityID, "light.turn_off", nil, false); err != nil {
 						break
 					}
+					cfg.Witness.Saw(r.Header.Get("Remote-User"), "light.turn_off", l.EntityID, said)
 				}
 			}
 		case pageDoes[do]:
@@ -103,7 +105,10 @@ func Schalten(cfg StartConfig) http.HandlerFunc {
 			case given:
 				data = map[string]any{takesWert[call]: wert}
 			}
-			err = schalter.Do(r.Context(), cfg.HA, id, call, data, false)
+			var said string
+			if said, err = schalter.Do(r.Context(), cfg.HA, id, call, data, false); err == nil {
+				cfg.Witness.Saw(r.Header.Get("Remote-User"), call, id, said) // who it was (haus#82, haus#89)
+			}
 		default:
 			err = &schalter.Refusal{Code: http.StatusBadRequest, Reason: "not a page's"}
 		}

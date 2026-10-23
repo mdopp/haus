@@ -42,7 +42,9 @@ func set(xs ...string) map[string]bool {
 // homeAPI serves the HA-backed paths.
 type homeAPI struct {
 	ha      *ha.Client
-	sources EnergyMap // which entities the energy picture reads (energy.go)
+	sources EnergyMap                          // which entities the energy picture reads (energy.go)
+	witness *schalter.Witness                  // who switched what (haus#89); nil: the log only
+	whoami  func(bearer string) (string, bool) // the person behind the device's bearer
 }
 
 func (h *homeAPI) routes(mux *http.ServeMux, auth func(http.HandlerFunc) http.HandlerFunc) {
@@ -77,10 +79,15 @@ func (h *homeAPI) call(w http.ResponseWriter, r *http.Request) {
 		refuse(w, http.StatusBadRequest, "bad_json")
 		return
 	}
-	err := schalter.Do(r.Context(), h.ha, body.EntityID, body.Service, body.Data, body.Confirmed)
+	said, err := schalter.Do(r.Context(), h.ha, body.EntityID, body.Service, body.Data, body.Confirmed)
 	var no *schalter.Refusal
 	switch {
 	case err == nil:
+		person := ""
+		if bearer, ok := bearerOf(r); ok && h.whoami != nil {
+			person, _ = h.whoami(bearer)
+		}
+		h.witness.Saw(person, body.Service, body.EntityID, said)
 		answer(w, http.StatusOK, map[string]any{"ok": true})
 	case errors.As(err, &no):
 		refuse(w, no.Code, no.Reason)

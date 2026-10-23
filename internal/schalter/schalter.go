@@ -61,34 +61,34 @@ func (r *Refusal) Error() string { return r.Reason }
 func refuse(code int, reason string) error { return &Refusal{code, reason} }
 
 // Do checks one call against the rule and, allowed, makes it: service
-// ("light.turn_off") on entityID, with data. A *Refusal when the rule
-// says no — HA hears nothing then; HA's own error when it does not
-// answer.
-func Do(ctx context.Context, c *ha.Client, entityID, service string, data map[string]any, confirmed bool) error {
+// ("light.turn_off") on entityID, with data, and says HA's context id for
+// it (haus#89; "" when HA named none). A *Refusal when the rule says no —
+// HA hears nothing then; HA's own error when it does not answer.
+func Do(ctx context.Context, c *ha.Client, entityID, service string, data map[string]any, confirmed bool) (string, error) {
 	domain, _, _ := strings.Cut(entityID, ".")
 	if !domains[domain] {
-		return refuse(http.StatusBadRequest, "unsupported_domain")
+		return "", refuse(http.StatusBadRequest, "unsupported_domain")
 	}
 	if !ha.EntityRE.MatchString(entityID) {
-		return refuse(http.StatusBadRequest, "invalid entity_id")
+		return "", refuse(http.StatusBadRequest, "invalid entity_id")
 	}
 	sdomain, action, dotted := strings.Cut(service, ".")
 	if !dotted || !nameRE.MatchString(sdomain) || !nameRE.MatchString(action) {
-		return refuse(http.StatusBadRequest, "invalid service")
+		return "", refuse(http.StatusBadRequest, "invalid service")
 	}
 	if sdomain != domain {
-		return refuse(http.StatusBadRequest, "service domain does not match entity")
+		return "", refuse(http.StatusBadRequest, "service domain does not match entity")
 	}
 	if allowed, ok := only[domain]; ok && !allowed[action] {
-		return refuse(http.StatusBadRequest, "unsupported_service")
+		return "", refuse(http.StatusBadRequest, "unsupported_service")
 	}
 	for k := range data {
 		if targetKeys[k] {
-			return refuse(http.StatusBadRequest, "data may not name a target")
+			return "", refuse(http.StatusBadRequest, "data may not name a target")
 		}
 	}
 	if !confirmed && sensitive(ctx, c, entityID, domain, action) {
-		return refuse(http.StatusForbidden, "sensitive_action")
+		return "", refuse(http.StatusForbidden, "sensitive_action")
 	}
 	payload := map[string]any{}
 	for k, v := range data {
