@@ -87,7 +87,7 @@ func TestBoxComesAtOnceAndFillsItsParts(t *testing.T) {
 	mustContain(t, got["box-inbox"], "<h2>Inbox</h2>", "leer")
 	got = parts("journal")
 	mustContain(t, got["box-bericht"], "<h2>Morgenbericht</h2>")
-	mustContain(t, got["box-journal"], "<h2>Journal · 24h</h2><table>")
+	mustContain(t, got["box-journal"], "<h2>Journal · 24h</h2><ul class=zeilen>")
 	got = parts("stand")
 	mustContain(t, got["box-stand"], "<h1>Box · <span class=gruen>bereit</span>", "Operator:")
 	mustContain(t, got["box-laeuft"], "<h2>Was läuft</h2>", "paperless")
