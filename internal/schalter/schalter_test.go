@@ -58,7 +58,7 @@ func TestOneRuleForWhatHausSwitches(t *testing.T) {
 		{"light.kueche", "light.turn_on", map[string]any{"area_id": "eg"}, false, 400, "data may not name a target"},
 	} {
 		before := len(fake.Calls())
-		err := Do(context.Background(), hc, c.entity, c.service, c.data, c.confirmed)
+		_, err := Do(context.Background(), hc, c.entity, c.service, c.data, c.confirmed)
 		var r *Refusal
 		switch {
 		case c.code == 0 && err != nil:
@@ -82,7 +82,7 @@ func TestOneRuleForWhatHausSwitches(t *testing.T) {
 func TestHATroubleIsNotARefusal(t *testing.T) {
 	fake, hc := house(t)
 	fake.FailCalls(500)
-	err := Do(context.Background(), hc, "light.kueche", "light.turn_off", nil, false)
+	_, err := Do(context.Background(), hc, "light.kueche", "light.turn_off", nil, false)
 	var r *Refusal
 	var he *ha.Error
 	if err == nil || errors.As(err, &r) || !errors.As(err, &he) {
@@ -101,7 +101,7 @@ func TestAPlayerDoesExactlyFourThings(t *testing.T) {
 		"play_media", "select_source", "select_sound_mode", "clear_playlist", "shuffle_set", "repeat_set", "join", "unjoin",
 		"browse_media", "search_media", "reload", "some_future_service"} {
 		before := len(fake.Calls())
-		err := Do(context.Background(), hc, "media_player.wohnzimmer", "media_player."+s, nil, true)
+		_, err := Do(context.Background(), hc, "media_player.wohnzimmer", "media_player."+s, nil, true)
 		var r *Refusal
 		switch {
 		case allowed[s] && (err != nil || len(fake.Calls()) != before+1):
@@ -112,7 +112,7 @@ func TestAPlayerDoesExactlyFourThings(t *testing.T) {
 	}
 	// the player's services on anything but a player are not a player's
 	for _, e := range []string{"light.kueche", "switch.kaffee", "cover.rollo"} {
-		if err := Do(context.Background(), hc, e, "media_player.volume_up", nil, true); err == nil {
+		if _, err := Do(context.Background(), hc, e, "media_player.volume_up", nil, true); err == nil {
 			t.Errorf("volume_up on %s was done", e)
 		}
 	}

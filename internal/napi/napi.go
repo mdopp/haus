@@ -20,6 +20,7 @@ import (
 	"github.com/mdopp/haus/internal/haushalt"
 	"github.com/mdopp/haus/internal/laib"
 	"github.com/mdopp/haus/internal/persona"
+	"github.com/mdopp/haus/internal/schalter"
 	"github.com/mdopp/haus/internal/usage"
 )
 
@@ -31,6 +32,7 @@ type Config struct {
 	Laib     *laib.Client // the haus hand: status, inbox, journal, restart — nothing else
 	Validate Validator
 	Whoami   func(bearer string) (string, bool) // the paired devices: uid behind a bearer
+	Witness  *schalter.Witness                  // who switched what (haus#89); nil: the log only
 	House    persona.Persona                    // the house persona the app shows (laib#129, #130)
 	HA       *ha.Client                         // Home Assistant for the house paths and the event stream (home.go, live.go); nil = 404
 	Ping     time.Duration                      // the event stream's keepalive; 0 = 90s
@@ -217,7 +219,7 @@ func Handler(c Config) http.Handler {
 		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 	})
 	if c.HA != nil { // the house paths and the event stream, from Home Assistant
-		(&homeAPI{ha: c.HA, sources: c.Energy}).routes(mux, auth)
+		(&homeAPI{ha: c.HA, sources: c.Energy, witness: c.Witness, whoami: c.Whoami}).routes(mux, auth)
 		newLive(c.HA, c.Ping, c.SensorEvery).routes(mux, auth)
 	}
 	if t := newTools(c.Haushalt); t != nil { // the tool widgets from the Haushalt source

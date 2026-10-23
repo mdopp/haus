@@ -6,12 +6,14 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/mdopp/haus/internal/ha"
 	"github.com/mdopp/haus/internal/ha/hafake"
 	"github.com/mdopp/haus/internal/laib"
+	"github.com/mdopp/haus/internal/schalter"
 )
 
 // haus#10: Haus serves the house paths itself, from Home Assistant, in the
@@ -957,5 +959,50 @@ func TestHACallPausesAPlayerAndNothingMore(t *testing.T) {
 		if code != c.want || (code == 200) != (calls == 1) || (code != 200 && !strings.Contains(body, "unsupported_service")) {
 			t.Errorf("%s → %d %s, %d calls; want %d", c.body, code, body, calls, c.want)
 		}
+	}
+}
+
+// haus#89: a switch from the app names the person its device was paired
+// by, with HA's context id, in Haus's log and Laib's journal.
+func TestHACallNotesWhoItWas(t *testing.T) {
+	var notes []map[string]any
+	var mu sync.Mutex
+	lb := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Params struct {
+				Name string         `json:"name"`
+				Args map[string]any `json:"arguments"`
+			} `json:"params"`
+		}
+		json.NewDecoder(r.Body).Decode(&req)
+		if req.Params.Name == "laib_note" {
+			mu.Lock()
+			notes = append(notes, req.Params.Args)
+			mu.Unlock()
+		}
+		json.NewEncoder(w).Encode(map[string]any{"result": map[string]any{"content": []map[string]string{{"text": "ok"}}}})
+	}))
+	t.Cleanup(lb.Close)
+	_, h := houseWith(t, func(c *Config) {
+		c.Witness = &schalter.Witness{Laib: &laib.Client{URL: lb.URL, Token: "t"}}
+		c.Whoami = func(b string) (string, bool) { return map[string]string{"dev1": "ben"}[b], b == "dev1" }
+	})
+	if code, body := raw(t, h, "POST", "/napi/ha/call", "dev1", `{"entity_id":"switch.kaffee","service":"switch.turn_off"}`); code != 200 {
+		t.Fatalf("%d %s", code, body)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		mu.Lock()
+		n := len(notes)
+		mu.Unlock()
+		if n > 0 || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(notes) != 1 || notes[0]["text"] != "ha person=ben service=switch.turn_off entity=switch.kaffee context=ctx-1" {
+		t.Fatalf("notes %v", notes)
 	}
 }

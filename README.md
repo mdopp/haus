@@ -96,7 +96,13 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   other `tun` with a `wert` is 400) and `zurueck` (Start or
   a thing's page; anything else is Start). Each call passes the widgets'
   own rule (`internal/schalter`, below); nothing else in the form rides
-  along. Only with `Remote-User` and from Haus's own page
+  along. Who switched is said (haus#82, haus#89): each switch done — here
+  and through `/napi/ha/call`, there the person who paired the device —
+  is one log line `ha person=<Remote-User> service=<d.s> entity=<id>
+  context=<HA's context id>` and the same text as a `laib_note` (kind
+  `watch`), so HA's logbook (user „Haus“) and Laib's journal together name
+  the person. The note never holds up the switch: a failed one is a
+  warning, Laib refusing `note` to the haus hand is logged once. Only with `Remote-User` and from Haus's own page
   (`Sec-Fetch-Site: same-origin`, or, from an older browser, an `Origin`
   of Haus's host; neither header is a 403 too), else 403; then 303 back. HA not answering is one plain
   line and the way back. No script: a plain form.

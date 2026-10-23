@@ -466,6 +466,14 @@ func scanErr(err error) error {
 	return err
 }
 
+// Note writes a note into Laib's journal (laib_note): kind watch,
+// incident or report, text one line. Haus notes who switched what
+// (haus#89); a Laib that does not give haus the verb answers ErrNoTool.
+func (c *Client) Note(ctx context.Context, kind, text string) error {
+	_, err := c.CallTyped(ctx, "note", map[string]any{"kind": kind, "text": text})
+	return err
+}
+
 // ScanEinrichten proposes the scanner (laib#571): without the service, the
 // scan template with geraet (the owner approves); with it, its SCANNER.
 // geraet may be "" only without the service. Laib's dial decides.
