@@ -314,7 +314,7 @@ func TestBoxCardOnlyWhenCountingAndOnlyForAdmins(t *testing.T) {
 	}
 	fake, c := metrics(t)
 	aMonth(fake)
-	req := httptest.NewRequest("GET", "/box", nil)
+	req := httptest.NewRequest("GET", "/box?ganz=1", nil)
 	req.Header.Set("Remote-User", "ben")
 	req.Header.Set("Remote-Groups", "family")
 	rec := httptest.NewRecorder()

@@ -42,6 +42,11 @@ type invitation struct {
 	form    laib.Invite
 }
 
+// empty is no POST's outcome: the plain Box page.
+func (inv invitation) empty() bool {
+	return inv.done == nil && inv.first == "" && inv.problem == "" && inv.form == (laib.Invite{})
+}
+
 var userRE = regexp.MustCompile(`^[a-z][a-z0-9._-]{1,31}$`)
 
 // suggestUser is a user name from a first name: lower case, umlauts
