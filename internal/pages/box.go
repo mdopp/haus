@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"html"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -51,9 +52,13 @@ func Icon() http.HandlerFunc {
 const adminStyle = `<style>.unter{display:flex;gap:8px;margin:18px 0 0}.unter a{display:inline-flex;align-items:center;min-height:40px;padding:0 16px;border-radius:999px;background:var(--card);border:1px solid var(--edge);color:var(--ink);text-decoration:none;font-size:.85rem}.unter a[aria-current]{color:var(--accent);border-color:var(--accent)}
 h2{font-size:.72rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:26px 2px 8px}
 table{width:100%;border-collapse:separate;border-spacing:0;background:var(--card);border:1px solid var(--edge);border-radius:14px;overflow:hidden}
-td,th{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top;overflow-wrap:anywhere}tr:last-child td{border-bottom:0}
+td,th{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top;overflow-wrap:break-word}tr:last-child td{border-bottom:0}
 .gruen{color:var(--ok)}.gelb{color:var(--warn)}.rot{color:var(--danger)}.k{font-variant-numeric:tabular-nums}
 form{display:inline}input:not([type]),input[type=text],input[type=email]{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--edge);border-radius:999px;padding:0 16px;min-height:44px;max-width:100%}
+.zeilen{list-style:none;margin:0;padding:0;background:var(--card);border:1px solid var(--edge);border-radius:14px;overflow:hidden}
+.zeilen li{display:flex;gap:10px;align-items:flex-start;padding:10px 14px;border-bottom:1px solid var(--line)}.zeilen li:last-child{border-bottom:0}
+.zeilen .was{flex:1;min-width:0;overflow-wrap:break-word}.zeilen b{font-weight:600}.zeilen .wann{display:block;font-size:.8rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.zeilen .text{display:block;font-size:.9rem;color:var(--muted)}.punkt.gelb{background:var(--warn)}.punkt.rot{background:var(--danger)}.punkt.k{background:var(--faint)}
 code{overflow-wrap:anywhere;font:.8rem ui-monospace,SFMono-Regular,Menlo,monospace}</style>`
 
 // unterNav is Box's two pages, the current one marked.
@@ -157,12 +162,21 @@ func boxPart(ctx context.Context, r *http.Request, cfg BoxConfig, part string, i
 		if ready.Lock != "" {
 			fmt.Fprintf(&b, "<p class=gelb>gesperrt: %s</p>", html.EscapeString(ready.Lock))
 		}
+		// one line per service, its state a dot (the word for a screen
+		// reader); what is not green first
 		var l strings.Builder
-		l.WriteString("<h2>Was läuft</h2><table>")
-		for _, s := range rows {
-			fmt.Fprintf(&l, "<tr><td class=%s>%s</td><td>%s</td><td class=k>%s</td></tr>", cls(s.State), html.EscapeString(s.State), html.EscapeString(s.Name), html.EscapeString(s.Detail))
+		l.WriteString("<h2>Was läuft</h2><ul class=zeilen>")
+		order := map[string]int{"rot": 0, "gelb": 1, "gruen": 2}
+		sorted := append([]laib.Service(nil), rows...)
+		sort.SliceStable(sorted, func(i, j int) bool { return order[cls(sorted[i].State)] < order[cls(sorted[j].State)] })
+		for _, s := range sorted {
+			fmt.Fprintf(&l, "<li>%s<span class=was><b>%s</b>", dot(cls(s.State), s.State), html.EscapeString(s.Name))
+			if d := oneLine(s.Detail); d != "" {
+				l.WriteString("<span class=text>" + html.EscapeString(d) + "</span>")
+			}
+			l.WriteString("</span></li>")
 		}
-		l.WriteString("</table>")
+		l.WriteString("</ul>")
 		return map[string]string{"box-stand": b.String(), "box-laeuft": l.String()}
 	case "inbox":
 		var b strings.Builder
@@ -190,7 +204,9 @@ func boxPart(ctx context.Context, r *http.Request, cfg BoxConfig, part string, i
 		// the window reaches back to yesterday's report; the journal table stays at 24h
 		es, jerr := c.Journal(ctx, "36h")
 		var b strings.Builder
-		b.WriteString("<h2>Journal · 24h</h2><table>")
+		// one entry a line: when and who small above, what and why below,
+		// the result a dot
+		b.WriteString("<h2>Journal · 24h</h2><ul class=zeilen>")
 		if jerr == nil {
 			shown := 0
 			for i := len(es) - 1; i >= 0 && shown < 25; i-- {
@@ -199,10 +215,19 @@ func boxPart(ctx context.Context, r *http.Request, cfg BoxConfig, part string, i
 					break
 				}
 				shown++
-				fmt.Fprintf(&b, "<tr><td class=k>%s</td><td>%s</td><td>%s</td><td class=%s>%s</td><td class=k>%s</td></tr>", e.T.Local().Format("02.01. 15:04"), html.EscapeString(e.Actor), html.EscapeString(e.Verb+" "+e.Service), result(e.Result), e.Result, html.EscapeString(trim(e.Reason+" "+e.Detail, 90)))
+				what := e.Verb
+				if e.Service != "" && e.Service != e.Verb {
+					what += " " + e.Service
+				}
+				fmt.Fprintf(&b, "<li>%s<span class=was><span class=wann>%s · %s</span><b>%s</b>", dot(result(e.Result), e.Result),
+					e.T.Local().Format("02.01. 15:04"), html.EscapeString(strings.TrimPrefix(e.Actor, "human:")), html.EscapeString(what))
+				if why := trim(oneLine(e.Reason+" "+e.Detail), 140); why != "" {
+					b.WriteString("<span class=text>" + html.EscapeString(why) + "</span>")
+				}
+				b.WriteString("</span></li>")
 			}
 		}
-		b.WriteString("</table>")
+		b.WriteString("</ul>")
 		return map[string]string{"box-bericht": morningReport(es, jerr), "box-journal": b.String()}
 	case "genutzt":
 		return map[string]string{"box-genutzt": usageCard(ctx, cfg.Family, cfg.Voice)}
@@ -338,6 +363,12 @@ func cls(s string) string {
 	}
 	return "gelb"
 }
+
+// dot is a state as a coloured dot, with its word for a screen reader.
+func dot(class, word string) string {
+	return `<span class="punkt ` + class + `" role=img aria-label="` + html.EscapeString(word) + `"></span>`
+}
+
 func result(s string) string {
 	switch s {
 	case "green":
