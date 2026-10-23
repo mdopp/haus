@@ -204,7 +204,7 @@ func writeDokumente(w http.ResponseWriter, r *http.Request, cfg StartConfig, cod
 	scan := readScan(r, cfg)
 	b := familyHead(r, cfg, "Dokumente", "Dokumente")
 	if scan.moving() {
-		b.WriteString("<meta http-equiv=refresh content=5>") // the scan moves on by itself; the page follows
+		b.WriteString("<meta http-equiv=refresh content=" + scan.refresh() + ">") // the scan moves on by itself; the page follows
 	}
 	b.WriteString(dokStyle + scanStyle)
 	b.WriteString("<h1>Dokumente</h1><p class=lead>" + html.EscapeString(saysDocsLead) + "</p>")

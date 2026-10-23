@@ -3,6 +3,7 @@ package pages
 import (
 	"context"
 	"errors"
+	"fmt"
 	"html"
 	"log"
 	"net/http"
@@ -30,6 +31,9 @@ const (
 	saysFolderSetup = "Ein Scanner, der in einen Netzwerkordner scannt, wird in seinem eigenen Menü eingerichtet:"
 	saysNoStacks    = "Noch kein Stapel. Was gescannt ist, steht hier mit seinen Dokumenten."
 	saysStackHow    = "Eine Datei ist ein Stapel; die Box trennt die Dokumente selbst, entfernt leere Seiten und legt alles in Paperless ab."
+	saysNoAnswer    = "Der Scanner antwortet nicht. Ist er an und im selben Netz?"
+	saysNotFound    = "Kein Scanner gefunden. Ist er an und im selben Netz? Sonst unten die Adresse von Hand eintragen, etwa epson2:net:192.168.178.87."
+	saysOrderLate   = "Laib hat den Auftrag angenommen, aber nach %s kein Ergebnis gemeldet. Noch einmal versuchen; sonst weiß laib diag mehr."
 	maxStacks       = 5
 )
 
@@ -39,6 +43,15 @@ const (
 var scanDoes = map[string]bool{"start": true, "weiter": true, "abschliessen": true, "verwerfen": true}
 var scanSetup = map[string]bool{"suchen": true, "pruefen": true, "probe": true}
 
+// scanWaits is how long the page waits for a setup order's result before
+// it says none came (haus#80): Laib only takes the order, the service
+// writes the result into its status file.
+var scanWaits = map[string]time.Duration{"suchen": time.Minute, "pruefen": 30 * time.Second, "probe": 2 * time.Minute}
+
+// scanRuns is what the page says while a setup order runs, and what its
+// button says the moment it is pressed.
+var scanRuns = map[string]string{"suchen": "Sucht im Netz nach Scannern …", "pruefen": "Prüft den Scanner …", "probe": "Liest eine Probeseite …"}
+
 // scanGeraet is a SANE device as laib#571 takes it (scanimage -L's name,
 // nothing that could break the unit's line).
 var scanGeraet = regexp.MustCompile(`^[a-z0-9_]+:[^"'\\\n\r%$]{1,120}$`)
@@ -46,7 +59,7 @@ var scanGeraet = regexp.MustCompile(`^[a-z0-9_]+:[^"'\\\n\r%$]{1,120}$`)
 // what the page says after „Einrichten“: a fixed sentence per outcome, so
 // no device lands in the URL (adresse's way)
 var scanSaid = map[string]string{
-	"vorgeschlagen":  "Vorgeschlagen. Laib richtet den Scanner ein, sobald der Vorschlag durch ist; danach prüft der Dienst ihn von selbst.",
+	"vorgeschlagen":  "Vorgeschlagen. Der Vorschlag liegt in Laibs Eingang, der Owner gibt ihn dort frei; dann richtet Laib den Scanner ein und prüft ihn von selbst.",
 	"geraet":         "Die Adresse nimmt Laib so nicht: etwa epson2:net:192.168.178.87, ohne Anführungszeichen, % und $.",
 	"nicht-moeglich": "Das ging gerade nicht. Später noch einmal versuchen; sonst weiß laib diag mehr.",
 }
@@ -106,8 +119,9 @@ func Scannen(cfg StartConfig) http.HandlerFunc {
 			return
 		}
 		to := DokumentePath
-		if scanSetup[do] {
-			to += "#scanner"
+		if scanSetup[do] { // the page waits for the result there (haus#80)
+			now, _ := cfg.clock()
+			to += "?tut=" + do + "&seit=" + strconv.FormatInt(now.Unix(), 10) + "#scanner"
 		}
 		http.Redirect(w, r, to, http.StatusSeeOther)
 	}
@@ -144,11 +158,20 @@ func scanEinrichten(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
 }
 
 // scanning is what Dokumente knows of the scan service: nothing (no
-// Laib), its state, or why not.
+// Laib), its state, or why not; and the setup order just pressed.
 type scanning struct {
-	on  bool
-	st  laib.Scan
-	err error
+	on    bool
+	st    laib.Scan
+	err   error
+	order scanOrder
+}
+
+// scanOrder is a setup order the page follows until its result is in the
+// status file or scanWaits has passed (haus#80); do is "" for none.
+type scanOrder struct {
+	do   string
+	done bool
+	late bool
 }
 
 // readScan asks Laib for the scan service's state; without a Laib, off.
@@ -158,17 +181,71 @@ func readScan(r *http.Request, cfg StartConfig) scanning {
 	}
 	s := scanning{on: true}
 	fetch(r, func(ctx context.Context) { s.st, s.err = cfg.Laib.ScanStatus(ctx) })
+	now, _ := cfg.clock()
+	s.order = followOrder(r.URL.Query(), s.st, now)
 	return s
 }
+
+// followOrder reads ?tut=…&seit=… (the redirect after a setup order): done
+// when the result the order writes is as new as the order, late when it
+// is not and scanWaits has passed. A link older than ten minutes is none.
+func followOrder(q url.Values, st laib.Scan, now time.Time) scanOrder {
+	do := q.Get("tut")
+	sec, err := strconv.ParseInt(q.Get("seit"), 10, 64)
+	if !scanSetup[do] || err != nil {
+		return scanOrder{}
+	}
+	since := time.Unix(sec, 0)
+	if age := now.Sub(since); age < -time.Minute || age > 10*time.Minute {
+		return scanOrder{}
+	}
+	newer := func(at string) bool {
+		t, err := time.Parse(time.RFC3339, at)
+		return err == nil && !t.Before(since)
+	}
+	o := scanOrder{do: do}
+	switch do {
+	case "suchen":
+		o.done = st.Suche.Zustand != "läuft" && newer(st.Suche.At)
+	default:
+		o.done = newer(st.Pruefung.At)
+	}
+	o.late = !o.done && now.Sub(since) > scanWaits[do]
+	return o
+}
+
+// waitWords is scanWaits in the page's words.
+func waitWords(d time.Duration) string {
+	switch {
+	case d == time.Minute:
+		return "einer Minute"
+	case d%time.Minute == 0:
+		return strconv.Itoa(int(d/time.Minute)) + " Minuten"
+	}
+	return strconv.Itoa(int(d/time.Second)) + " Sekunden"
+}
+
+// waiting is a setup order whose result has not come yet.
+func (o scanOrder) waiting() bool { return o.do != "" && !o.done && !o.late }
 
 // active is a stack running or waiting: the section goes to the top.
 func (s scanning) active() bool {
 	return s.on && s.err == nil && (busy(s.st.Zustand) || s.st.Zustand == "wartet-auf-rest")
 }
 
-// moving is a state that changes by itself: a stack in work, a search.
+// moving is a state that changes by itself: a stack in work, a search,
+// a setup order whose result is still to come.
 func (s scanning) moving() bool {
-	return s.on && s.err == nil && (busy(s.st.Zustand) || s.st.Suche.Zustand == "läuft")
+	return s.on && s.err == nil && (busy(s.st.Zustand) || s.st.Suche.Zustand == "läuft" || s.order.waiting())
+}
+
+// refresh is how soon the page looks again: soon while an admin waits for
+// an order's result, calmer for a stack.
+func (s scanning) refresh() string {
+	if s.order.waiting() {
+		return "2"
+	}
+	return "5"
 }
 
 // busy is a state that moves on by itself, without anyone's button.
@@ -218,7 +295,7 @@ func scanSection(r *http.Request, cfg StartConfig, s scanning) string {
 			return ""
 		}
 		return `<section class="weg scannen" id=scanner><h2>Scannen</h2>` + scanSaying(r, cfg) + `<p class=k>` + html.EscapeString(saysScanUnset) + `</p>` +
-			`<div class=knoepfe>` + scanButton("Scannen einrichten", "einrichten") + `</div>` + byHand("Mit diesem Scanner einrichten") + `</section>`
+			`<div class=knoepfe>` + scanButton("Scannen einrichten", "einrichten") + `</div>` + byHand("Mit diesem Scanner einrichten") + `</section>` + scanScript
 	}
 	if errors.Is(s.err, laib.ErrNoTool) {
 		if !isAdmin(r) {
@@ -240,9 +317,7 @@ func scanSection(r *http.Request, cfg StartConfig, s scanning) string {
 		b.WriteString(` <span class=k>` + html.EscapeString(detail) + `</span>`)
 	}
 	b.WriteString(`</p>`)
-	order := func(label, do string) string {
-		return `<form method=post action=` + ScannenPath + `><input type=hidden name=tun value=` + do + `><button>` + html.EscapeString(label) + `</button></form>`
-	}
+	order := scanButton
 	switch {
 	case st.Zustand == "wartet-auf-rest":
 		b.WriteString(`<div class=knoepfe>` + order("Weiter", "weiter") + order("Abschließen", "abschliessen") + order("Verwerfen", "verwerfen") + `</div>`)
@@ -260,16 +335,27 @@ func scanSection(r *http.Request, cfg StartConfig, s scanning) string {
 	b.WriteString(`<p class=k>Oder den Scanner in den Ordner <span class=adresse>` + html.EscapeString(where) + `</span> scannen lassen (nur zu Hause im WLAN). ` + html.EscapeString(saysStackHow) + `</p>`)
 	b.WriteString(stacks(r, cfg, st.Letzte))
 	if isAdmin(r) {
-		b.WriteString(scannerSetup(r, cfg, st))
+		b.WriteString(scannerSetup(r, cfg, st, s.order))
 	}
-	b.WriteString(`</section>`)
+	b.WriteString(`</section>` + scanScript)
 	return b.String()
 }
 
-// scanButton is one order's button, a POST to /scannen.
+// scanButton is one order's button, a POST to /scannen; scanScript turns
+// a setup order's into „Sucht …“ the moment it is pressed.
 func scanButton(label, do string) string {
-	return `<form method=post action=` + ScannenPath + `><input type=hidden name=tun value=` + do + `><button>` + html.EscapeString(label) + `</button></form>`
+	runs := ""
+	if say := scanRuns[do]; say != "" {
+		runs = ` data-laeuft="` + html.EscapeString(say) + `"`
+	}
+	return `<form method=post action=` + ScannenPath + `><input type=hidden name=tun value=` + do + `><button` + runs + `>` + html.EscapeString(label) + `</button></form>`
 }
+
+// scanScript answers a press at once (haus#79): the button says what runs
+// and takes no second press while the order goes to Laib. Without script
+// the redirect's page says the same a moment later.
+const scanScript = `<script>(function(){document.querySelectorAll('form[action="` + ScannenPath + `"]').forEach(function(f){f.addEventListener('submit',function(){` +
+	`var b=f.querySelector('button');if(!b)return;setTimeout(function(){b.disabled=true;b.textContent=b.getAttribute('data-laeuft')||'Einen Moment …'},0)})})})()</script>`
 
 // byHand is the field for a device the search does not find.
 func byHand(label string) string {
@@ -301,43 +387,81 @@ func scanSaying(r *http.Request, cfg StartConfig) string {
 // einrichten; a device by hand; and for a scanner that scans to a folder
 // what goes into its own menu. Open while no scanner is set, a search
 // runs, or just after an order.
-func scannerSetup(r *http.Request, cfg StartConfig, st laib.Scan) string {
+func scannerSetup(r *http.Request, cfg StartConfig, st laib.Scan, o scanOrder) string {
 	var b strings.Builder
 	open := ""
-	if !st.Scanner || st.Suche.Zustand == "läuft" || r.URL.Query().Get("gesagt") != "" {
+	if !st.Scanner || st.Suche.Zustand == "läuft" || r.URL.Query().Get("gesagt") != "" || o.do != "" {
 		open = " open"
 	}
 	b.WriteString(`<details id=scanner class=einrichten` + open + `><summary>Scanner einrichten</summary>`)
 	b.WriteString(scanSaying(r, cfg))
 	b.WriteString(`<p class=k>` + html.EscapeString(saysSetupHow) + `</p>`)
-	if p := st.Pruefung; p.At != "" {
-		say := oneLine(p.Detail)
+	checked := o.done && (o.do == "pruefen" || o.do == "probe")
+	if p := st.Pruefung; p.At != "" && !(o.waiting() && o.do != "suchen") {
+		say, raw := oneLine(p.Detail), ""
 		if say == "" && p.OK {
 			say = "Scanner antwortet"
 		}
-		open := `<div class=gut><span class=punkt></span><p>`
+		if !p.OK && strings.HasPrefix(say, "antwortet nicht") { // SANE's own words (laib#589)
+			say, raw = saysNoAnswer, say
+		}
+		role := ""
+		if checked { // the answer to the button just pressed
+			role = " role=status"
+		}
+		open := `<div class=gut` + role + `><span class=punkt></span><p>`
 		if !p.OK {
-			open = `<div class="achtung selbst"><p>` // its own dot, in the warning's colour
+			open = `<div class="achtung selbst"` + role + `><p>` // its own dot, in the warning's colour
 		}
 		b.WriteString(open + html.EscapeString(say))
 		if p.Geraet != "" {
 			b.WriteString(` <span class="k adresse">` + html.EscapeString(p.Geraet) + `</span>`)
 		}
-		b.WriteString(`</p></div>`)
+		b.WriteString(`</p>`)
+		if raw != "" {
+			b.WriteString(`<details class=k><summary>Einzelheiten</summary><p class=adresse>` + html.EscapeString(raw) + `</p></details>`)
+		}
+		b.WriteString(`</div>`)
+	}
+	switch {
+	case o.waiting():
+		b.WriteString(`<p class=laeuft role=status>` + html.EscapeString(scanRuns[o.do]) + `</p>`)
+	case o.late:
+		b.WriteString(`<div class=achtung role=alert><p>` + html.EscapeString(fmt.Sprintf(saysOrderLate, waitWords(scanWaits[o.do]))) + `</p></div>`)
 	}
 	free := !busy(st.Zustand) && st.Zustand != "wartet-auf-rest"
 	b.WriteString(`<div class=knoepfe>`)
-	if st.Scanner && free {
+	if st.Scanner && free && !o.waiting() {
 		b.WriteString(scanButton("Erneut prüfen", "pruefen") + scanButton("Probeseite", "probe"))
 	}
-	if st.Suche.Zustand != "läuft" {
+	if st.Suche.Zustand != "läuft" && !o.waiting() {
 		b.WriteString(scanButton("Scanner suchen", "suchen"))
 	}
 	b.WriteString(`</div>`)
+	searched := o.done && o.do == "suchen"
+	nothing := false
 	switch su := st.Suche; su.Zustand {
 	case "läuft":
-		b.WriteString(`<p>Sucht im Netz nach Scannern …</p>`)
+		if o.do != "suchen" {
+			b.WriteString(`<p class=laeuft role=status>` + html.EscapeString(scanRuns["suchen"]) + `</p>`)
+		}
 	case "fertig", "fehler":
+		if o.waiting() && o.do == "suchen" {
+			break // the last search's result is not this one's
+		}
+		if len(su.Funde) == 0 {
+			nothing = true
+			role := ""
+			if searched {
+				role = " role=alert"
+			}
+			b.WriteString(`<div class="achtung selbst"` + role + `><p>` + html.EscapeString(saysNotFound) + `</p>`)
+			if d := oneLine(su.Detail); d != "" && su.Zustand == "fehler" { // fertig's detail says what saysNotFound says
+				b.WriteString(`<p>` + html.EscapeString(d) + `</p>`)
+			}
+			b.WriteString(`</div>`)
+			break
+		}
 		if len(su.Funde) > 0 {
 			b.WriteString(`<ul class=funde>`)
 			for _, f := range su.Funde {
@@ -358,7 +482,11 @@ func scannerSetup(r *http.Request, cfg StartConfig, st laib.Scan) string {
 			b.WriteString(`<p class=k>` + html.EscapeString(d) + `</p>`)
 		}
 	}
-	b.WriteString(byHand("Einrichten"))
+	field := byHand("Einrichten")
+	if nothing && searched { // nothing found: the field is the next step
+		field = strings.Replace(field, `<input id=geraet `, `<input id=geraet autofocus `, 1)
+	}
+	b.WriteString(field)
 	host := `\<box>`
 	if cfg.SambaHost != "" {
 		host = `\` + cfg.SambaHost
@@ -468,4 +596,6 @@ const scanStyle = `<style>.scannen .zustand{margin:10px 0 0}.scannen .knoepfe{di
 .stapel ul{margin:4px 0 0;padding-left:18px}.stapel li li{font-size:.9rem;overflow-wrap:anywhere}
 .einrichten{margin:18px 0 0;padding:12px 0 0;border-top:1px solid var(--line)}.einrichten summary{cursor:pointer;font-weight:600;min-height:44px;display:flex;align-items:center}
 .funde{margin:10px 0 0;padding:0;list-style:none}.funde li{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-top:1px solid var(--line)}.funde button{margin:0;width:auto}
-.einrichten ul.k{margin:6px 0 0;padding-left:18px;font-size:.85rem}.scannen .gut,.scannen .achtung{margin:10px 0 0}</style>`
+.einrichten ul.k{margin:6px 0 0;padding-left:18px;font-size:.85rem}.scannen .gut,.scannen .achtung{margin:10px 0 0}
+.laeuft{margin:12px 0 0;font-weight:600}.laeuft::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--accent);margin-right:8px;vertical-align:1px;animation:puls 1.2s ease-in-out infinite}
+@keyframes puls{50%{opacity:.25}}@media (prefers-reduced-motion:reduce){.laeuft::before{animation:none}}.scannen button:disabled{opacity:.6}</style>`
