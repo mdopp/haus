@@ -389,10 +389,12 @@ type Scan struct {
 
 // ScanSuche is the last search for scanners on the network.
 type ScanSuche struct {
-	Zustand string `json:"zustand"` // läuft | fertig | fehler; "": none yet
-	At      string `json:"at"`
-	Detail  string `json:"detail"`
-	Funde   []struct {
+	Zustand      string `json:"zustand"` // läuft | fertig | fehler; "": none yet
+	At           string `json:"at"`
+	Detail       string `json:"detail"`       // a sentence for the family (laib#589)
+	Einzelheiten string `json:"einzelheiten"` // the raw error behind it, for an admin
+	Gefragt      int    `json:"gefragt"`      // how many neighbours on the LAN were asked directly
+	Funde        []struct {
 		Geraet string `json:"geraet"` // the SANE device, for einrichten as it is
 		Name   string `json:"name"`
 	} `json:"funde"`
@@ -401,24 +403,27 @@ type ScanSuche struct {
 // ScanPruefung is the last check of the scanner: opened without paper, or
 // one probe sheet read and never filed.
 type ScanPruefung struct {
-	Geraet string `json:"geraet"`
-	OK     bool   `json:"ok"`
-	At     string `json:"at"` // "": none yet
-	Detail string `json:"detail"`
-	Probe  bool   `json:"probe"`
+	Geraet       string `json:"geraet"`
+	OK           bool   `json:"ok"`
+	At           string `json:"at"`           // "": none yet
+	Detail       string `json:"detail"`       // a sentence for the family (laib#589)
+	Einzelheiten string `json:"einzelheiten"` // SANE's, the socket's or a tool's own words
+	Probe        bool   `json:"probe"`
 }
 
 // Stack is one finished stack.
 type Stack struct {
-	Stapel    string `json:"stapel"`
-	Ende      string `json:"ende"`   // fertig | abgebrochen | fehler
-	Quelle    string `json:"quelle"` // scanner | ordner
-	Datei     string `json:"datei"`
-	At        string `json:"at"`
-	Seiten    int    `json:"seiten"`
-	Leer      int    `json:"leer"`
-	Meldung   string `json:"meldung"` // the closing message as the person got it
-	Dokumente []struct {
+	Stapel  string `json:"stapel"`
+	Ende    string `json:"ende"`   // fertig | abgebrochen | fehler
+	Quelle  string `json:"quelle"` // scanner | ordner
+	Datei   string `json:"datei"`
+	At      string `json:"at"`
+	Seiten  int    `json:"seiten"`
+	Leer    int    `json:"leer"`
+	Meldung string `json:"meldung"` // the closing message as the person got it
+	// Einzelheiten is the raw error of a stack gone wrong (laib#589)
+	Einzelheiten string `json:"einzelheiten"`
+	Dokumente    []struct {
 		Titel string `json:"titel"`
 		Datei string `json:"datei"` // its original file name in Paperless
 	} `json:"dokumente"`

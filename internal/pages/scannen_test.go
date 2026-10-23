@@ -309,6 +309,9 @@ func TestScannerEinrichtenProposes(t *testing.T) {
 // than the order, then what was found or, found nothing, the plain
 // sentence and the field by hand, ready; no answer in time says so. The
 // same for Prüfen and Probeseite, with SANE's own words only folded away.
+// the check's sentence as laib#589 writes it
+const saysOff = "Der Scanner unter 192.168.178.87 antwortet nicht – ist er an?"
+
 func TestScannerEinrichtenFollowsTheOrder(t *testing.T) {
 	now := startNow(t)
 	at := func(d time.Duration) string { return now.Add(d).UTC().Format(time.RFC3339) }
@@ -349,9 +352,11 @@ func TestScannerEinrichtenFollowsTheOrder(t *testing.T) {
 	mustContain(t, body, "Epson WF-3540", "Diesen einrichten")
 	mustNotContain(t, body, saysNotFound, "autofocus", "http-equiv=refresh")
 
-	// failed: the reason
+	// failed: Laib's sentence why, not „nothing found“
 	f.status["suche"] = map[string]any{"zustand": "fehler", "at": at(0), "funde": []any{}, "detail": "Netzsuche abgebrochen"}
-	mustContain(t, scanPageAt(t, f, admins, after("suchen", 4*time.Second)), saysNotFound, "Netzsuche abgebrochen")
+	body = scanPageAt(t, f, admins, after("suchen", 4*time.Second))
+	mustContain(t, body, `role=alert><p>Netzsuche abgebrochen</p>`)
+	mustNotContain(t, body, saysNotFound)
 
 	// no result in a minute: said, no endless looking
 	f.status["suche"] = old
@@ -371,15 +376,35 @@ func TestScannerEinrichtenFollowsTheOrder(t *testing.T) {
 	mustContain(t, body, "Prüft den Scanner …</p>", "<meta http-equiv=refresh content=2>")
 	mustNotContain(t, body, "Scanner antwortet", "Erneut prüfen</button>")
 	f.status["pruefung"] = map[string]any{"geraet": "epson2:net:192.168.178.87", "ok": false, "at": at(0),
-		"detail": "antwortet nicht: open of device epson2:net:192.168.178.87 failed: Invalid argument"}
+		"detail": "Der Scanner unter 192.168.178.87 antwortet nicht – ist er an?", "einzelheiten": "open of device epson2:net:192.168.178.87 failed: Invalid argument"}
 	body = scanPageAt(t, f, admins, after("pruefen", 3*time.Second))
-	mustContain(t, body, `<div class="achtung selbst" role=status><p>`+saysNoAnswer, "<summary>Einzelheiten</summary>", "Erneut prüfen</button>")
+	mustContain(t, body, `<div class="achtung selbst" role=status><p>`+saysOff, "<summary>Einzelheiten</summary>", "Erneut prüfen</button>")
 	mustNotContain(t, body, "http-equiv=refresh", "Prüft den Scanner …</p>")
-	if i, j := strings.Index(body, saysNoAnswer), strings.Index(body, "Invalid argument"); i < 0 || j < i || !strings.Contains(body[i:j], "<details") {
+	if i, j := strings.Index(body, saysOff), strings.Index(body, "Invalid argument"); i < 0 || j < i || !strings.Contains(body[i:j], "<details") {
 		t.Errorf("SANE's words not folded away:\n%s", body)
 	}
 	f.status["pruefung"].(map[string]any)["at"] = at(-time.Hour)
 	body = scanPageAt(t, f, admins, after("probe", 3*time.Minute))
-	mustContain(t, body, saysNoAnswer, "nach 2 Minuten kein Ergebnis")
-	mustNotContain(t, body, "role=status><p>"+saysNoAnswer) // not the probe's answer
+	mustContain(t, body, saysOff, "nach 2 Minuten kein Ergebnis")
+	mustNotContain(t, body, "role=status><p>"+saysOff) // not the probe's answer
+}
+
+// haus#88 (laib#589): Laib's sentence stands as it is; the raw error
+// behind it — of a check, a search, a stack — is folded away under
+// „Einzelheiten“ for an admin, and the family never sees it. A search
+// says how many neighbours it asked.
+func TestScannenShowsEinzelheitenToAdmins(t *testing.T) {
+	f := &scanLaib{status: map[string]any{"zustand": "bereit", "scanner": true,
+		"pruefung": map[string]any{"geraet": "epson2:net:192.168.178.87", "ok": false, "at": "2026-10-22T20:00:00Z",
+			"detail": "Der Scanner antwortet nicht.", "einzelheiten": "TCP 192.168.178.87:1865: timed out"},
+		"suche": map[string]any{"zustand": "fehler", "at": "2026-10-22T20:00:00Z", "funde": []any{}, "gefragt": 7,
+			"detail": "Die Suche lief nicht durch – bitte noch einmal versuchen.", "einzelheiten": "scanimage: not found"},
+		"letzte": []map[string]any{{"stapel": "s1", "ende": "fehler", "quelle": "scanner", "at": "2026-10-22T19:00:00Z",
+			"meldung": "Scan fehlgeschlagen.", "einzelheiten": "sane_start: Error during device I/O"}}}}
+	body := scanPage(t, f, "family,admins")
+	mustContain(t, body, `<div class="achtung selbst"><p>Der Scanner antwortet nicht.`,
+		"<summary>Einzelheiten</summary><p class=adresse>TCP 192.168.178.87:1865: timed out</p>",
+		"Die Suche lief nicht durch – bitte noch einmal versuchen.", "Im Heimnetz wurden 7 Geräte direkt gefragt.",
+		"<p class=adresse>scanimage: not found</p>", "<p class=adresse>sane_start: Error during device I/O</p>")
+	mustNotContain(t, scanPage(t, f, "family"), "Einzelheiten", "timed out", "Error during device I/O", "scanimage")
 }
