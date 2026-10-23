@@ -31,7 +31,7 @@ const (
 	saysFolderSetup = "Ein Scanner, der in einen Netzwerkordner scannt, wird in seinem eigenen Menü eingerichtet:"
 	saysNoStacks    = "Noch kein Stapel. Was gescannt ist, steht hier mit seinen Dokumenten."
 	saysStackHow    = "Eine Datei ist ein Stapel; die Box trennt die Dokumente selbst, entfernt leere Seiten und legt alles in Paperless ab."
-	saysNoAnswer    = "Der Scanner antwortet nicht. Ist er an und im selben Netz?"
+	saysAsked       = "Im Heimnetz wurden %d Geräte direkt gefragt."
 	saysNotFound    = "Kein Scanner gefunden. Ist er an und im selben Netz? Sonst unten die Adresse von Hand eintragen, etwa epson2:net:192.168.178.87."
 	saysOrderLate   = "Laib hat den Auftrag angenommen, aber nach %s kein Ergebnis gemeldet. Noch einmal versuchen; sonst weiß laib diag mehr."
 	maxStacks       = 5
@@ -341,6 +341,15 @@ func scanSection(r *http.Request, cfg StartConfig, s scanning) string {
 	return b.String()
 }
 
+// einzelheiten is the raw error behind a sentence (laib#589), folded away
+// under „Einzelheiten“ for an admin; "" for none.
+func einzelheiten(raw string) string {
+	if raw = oneLine(raw); raw == "" {
+		return ""
+	}
+	return `<details class=k><summary>Einzelheiten</summary><p class=adresse>` + html.EscapeString(raw) + `</p></details>`
+}
+
 // scanButton is one order's button, a POST to /scannen; scanScript turns
 // a setup order's into „Sucht …“ the moment it is pressed.
 func scanButton(label, do string) string {
@@ -398,12 +407,9 @@ func scannerSetup(r *http.Request, cfg StartConfig, st laib.Scan, o scanOrder) s
 	b.WriteString(`<p class=k>` + html.EscapeString(saysSetupHow) + `</p>`)
 	checked := o.done && (o.do == "pruefen" || o.do == "probe")
 	if p := st.Pruefung; p.At != "" && !(o.waiting() && o.do != "suchen") {
-		say, raw := oneLine(p.Detail), ""
+		say, raw := oneLine(p.Detail), oneLine(p.Einzelheiten)
 		if say == "" && p.OK {
 			say = "Scanner antwortet"
-		}
-		if !p.OK && strings.HasPrefix(say, "antwortet nicht") { // SANE's own words (laib#589)
-			say, raw = saysNoAnswer, say
 		}
 		role := ""
 		if checked { // the answer to the button just pressed
@@ -418,9 +424,7 @@ func scannerSetup(r *http.Request, cfg StartConfig, st laib.Scan, o scanOrder) s
 			b.WriteString(` <span class="k adresse">` + html.EscapeString(p.Geraet) + `</span>`)
 		}
 		b.WriteString(`</p>`)
-		if raw != "" {
-			b.WriteString(`<details class=k><summary>Einzelheiten</summary><p class=adresse>` + html.EscapeString(raw) + `</p></details>`)
-		}
+		b.WriteString(einzelheiten(raw))
 		b.WriteString(`</div>`)
 	}
 	switch {
@@ -455,11 +459,15 @@ func scannerSetup(r *http.Request, cfg StartConfig, st laib.Scan, o scanOrder) s
 			if searched {
 				role = " role=alert"
 			}
-			b.WriteString(`<div class="achtung selbst"` + role + `><p>` + html.EscapeString(saysNotFound) + `</p>`)
-			if d := oneLine(su.Detail); d != "" && su.Zustand == "fehler" { // fertig's detail says what saysNotFound says
-				b.WriteString(`<p>` + html.EscapeString(d) + `</p>`)
+			say := saysNotFound
+			if su.Zustand == "fehler" && oneLine(su.Detail) != "" { // fertig's detail says what saysNotFound says
+				say = oneLine(su.Detail)
 			}
-			b.WriteString(`</div>`)
+			b.WriteString(`<div class="achtung selbst"` + role + `><p>` + html.EscapeString(say) + `</p>`)
+			if su.Gefragt > 0 {
+				b.WriteString(`<p>` + html.EscapeString(fmt.Sprintf(saysAsked, su.Gefragt)) + `</p>`)
+			}
+			b.WriteString(einzelheiten(su.Einzelheiten) + `</div>`)
 			break
 		}
 		if len(su.Funde) > 0 {
@@ -519,6 +527,9 @@ func stacks(r *http.Request, cfg StartConfig, all []laib.Stack) string {
 			break
 		}
 		b.WriteString(`<li><b>` + html.EscapeString(stackLine(s)) + `</b> <span class=k>` + html.EscapeString(stackDetail(s, now, loc)) + `</span>`)
+		if isAdmin(r) {
+			b.WriteString(einzelheiten(s.Einzelheiten))
+		}
 		if len(s.Dokumente) > 0 {
 			b.WriteString(`<ul>`)
 			for _, d := range s.Dokumente {
