@@ -299,7 +299,12 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   (`stand`, `inbox`, `einladen`, `journal`, `genutzt`, `werkstatt`: JSON,
   slot id → HTML), each within 10 s, a failed one said in its place.
   `?ganz=1`, where `<noscript>` sends, reads all parts at the same time
-  and comes whole. Every page request must
+  and comes whole. *Person einladen* (`POST /box/einladen`, haus#56) takes
+  a Signal number too (haus#87, laib#596), offered only once Laib's
+  `person_invite` lists `signal` in its `tools/list` schema (kept 5 min):
+  typed freely, sent as E.164 (`+49…`), a wrong one refused; after it,
+  that the number waits for the owner's approval, with the proposal.
+  Every page request must
   carry `X-Haus-Proxy: <HAUS_PROXY_SECRET>`, which only Caddy adds; the
   loopback port is shared with every host-network container, so without
   the secret nobody is anybody.

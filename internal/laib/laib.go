@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -21,6 +22,10 @@ type Client struct {
 	URL   string // http://host.containers.internal:5900
 	Token string
 	HTTP  *http.Client
+
+	toolsMu sync.Mutex // Takes' tools/list, kept takesFresh
+	tools   map[string]map[string]bool
+	toolsAt time.Time
 }
 
 // Readiness is `laib status --json`.ready.
@@ -224,6 +229,7 @@ type Invite struct {
 	Email  string
 	Group  string // family (Laib refuses admins from the haus hand, laib#362); empty on a resend
 	Resend bool
+	Signal string // the person's Signal number, E.164 (laib#596); "" for none
 }
 
 // Invited is what Laib did with an invitation.
@@ -233,6 +239,9 @@ type Invited struct {
 	Link    string `json:"link,omitempty"` // only without mail: the admin passes it on
 	Expires string `json:"expires"`
 	Message string `json:"message"` // one German sentence for the admin
+	// Proposal is the box.yml proposal for the Signal number (laib#596):
+	// the number is the Bote's once the owner approves it; 0 for none.
+	Proposal int `json:"proposal"`
 }
 
 // Pending is an invited person who has not set a password yet.
@@ -252,6 +261,9 @@ func (c *Client) PersonInvite(ctx context.Context, in Invite) (Invited, error) {
 	if in.Resend {
 		args["resend"] = true
 	}
+	if in.Signal != "" {
+		args["signal"] = in.Signal
+	}
 	var out Invited
 	text, err := c.CallTyped(ctx, "person_invite", args)
 	if err != nil {
@@ -259,6 +271,74 @@ func (c *Client) PersonInvite(ctx context.Context, in Invite) (Invited, error) {
 	}
 	err = decodeJSON("person_invite", text, &out)
 	return out, err
+}
+
+// Takes says whether Laib's verb takes a parameter, from its tools/list
+// (the tool's inputSchema): so a page offers a field only once Laib knows
+// it (haus#87, laib#596). Kept for takesFresh; a failed list is not kept.
+func (c *Client) Takes(ctx context.Context, verb, param string) (bool, error) {
+	c.toolsMu.Lock()
+	defer c.toolsMu.Unlock()
+	if c.tools == nil || time.Since(c.toolsAt) > takesFresh {
+		tools, err := c.listTools(ctx)
+		if err != nil {
+			return false, err
+		}
+		c.tools, c.toolsAt = tools, time.Now()
+	}
+	return c.tools["laib_"+verb][param], nil
+}
+
+// takesFresh is how long a tools/list is kept: a Laib update may add a
+// parameter, a page should see it soon.
+const takesFresh = 5 * time.Minute
+
+// listTools is tools/list: each tool's parameters.
+func (c *Client) listTools(ctx context.Context) (map[string]map[string]bool, error) {
+	if c.Token == "" {
+		return nil, errors.New("laib: no token")
+	}
+	h := c.HTTP
+	if h == nil {
+		h = &http.Client{Timeout: 30 * time.Second}
+	}
+	body, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": map[string]any{}})
+	req, err := http.NewRequestWithContext(ctx, "POST", strings.TrimRight(c.URL, "/")+"/mcp", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.Token)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := h.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("laib: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("laib: tools/list: %s", resp.Status)
+	}
+	var env struct {
+		Result struct {
+			Tools []struct {
+				Name        string `json:"name"`
+				InputSchema struct {
+					Properties map[string]json.RawMessage `json:"properties"`
+				} `json:"inputSchema"`
+			} `json:"tools"`
+		} `json:"result"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&env); err != nil {
+		return nil, fmt.Errorf("laib: tools/list: %w", err)
+	}
+	out := map[string]map[string]bool{}
+	for _, t := range env.Result.Tools {
+		ps := map[string]bool{}
+		for p := range t.InputSchema.Properties {
+			ps[p] = true
+		}
+		out[t.Name] = ps
+	}
+	return out, nil
 }
 
 // PersonPending lists who is invited and has no password yet.

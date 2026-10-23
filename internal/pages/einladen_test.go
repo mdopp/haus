@@ -25,18 +25,29 @@ type inviteLaib struct {
 	refuse  string         // person_invite's refusal, a tool error
 	pending []map[string]any
 	old     bool // no person_* tools at all
+	signal  bool // person_invite takes signal (laib#596)
 }
 
 func (f *inviteLaib) client(t *testing.T) *laib.Client {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
+			Method string `json:"method"`
 			Params struct {
 				Name string         `json:"name"`
 				Args map[string]any `json:"arguments"`
 			} `json:"params"`
 		}
 		json.NewDecoder(r.Body).Decode(&req)
+		if req.Method == "tools/list" {
+			props := map[string]any{"user": map[string]any{}, "email": map[string]any{}}
+			if f.signal {
+				props["signal"] = map[string]any{"type": "string"}
+			}
+			json.NewEncoder(w).Encode(map[string]any{"result": map[string]any{"tools": []map[string]any{
+				{"name": "laib_person_invite", "inputSchema": map[string]any{"type": "object", "properties": props}}}}})
+			return
+		}
 		text, isErr := "[]", false
 		switch req.Params.Name {
 		case "laib_status":
@@ -229,5 +240,47 @@ func TestLifetime(t *testing.T) {
 		if got := lifetime(in); got != want {
 			t.Errorf("%q → %q, want %q", in, got, want)
 		}
+	}
+}
+
+// haus#87 (laib#596): the Signal number goes with the invitation — the
+// field only once Laib's person_invite takes it; the number as E.164 from
+// what an admin types, a wrong one said; after it, that the number waits
+// for the owner's approval, with the way to the proposal.
+func TestEinladenTakesTheSignalNumber(t *testing.T) {
+	f := &inviteLaib{reply: map[string]any{"user": "carola", "mailed": true}}
+	box := get(BoxPage(BoxConfig{Laib: f.client(t), LaibURL: "https://laib.box.test"}), "admins")
+	mustNotContain(t, box, "Signal-Nummer", `name=signal`)
+	// a number typed at an older Laib is not passed on
+	invite(t, f, url.Values{"vorname": {"Carola"}, "email": {"c@example.org"}, "signal": {"+49 170 0000001"}}, "admins")
+	if _, sent := f.calls[0]["signal"]; sent {
+		t.Fatalf("signal sent to a Laib that does not take it: %v", f.calls[0])
+	}
+
+	f = &inviteLaib{signal: true, reply: map[string]any{"user": "carola", "mailed": true, "proposal": 77}}
+	box = get(BoxPage(BoxConfig{Laib: f.client(t), LaibURL: "https://laib.box.test"}), "admins")
+	mustContain(t, box, `<label for=signal>Signal-Nummer</label><input id=signal name=signal type=tel`, saysSignalHint)
+	rec := invite(t, f, url.Values{"vorname": {"Carola"}, "email": {"c@example.org"}, "signal": {"0049 (170) 000-0001"}}, "admins")
+	if rec.Code != 200 || len(f.calls) != 1 || f.calls[0]["signal"] != "+491700000001" {
+		t.Fatalf("%d %v", rec.Code, f.calls)
+	}
+	mustContain(t, rec.Body.String(), saysSignalWaits, `<a href="https://laib.box.test/inbox">Zur Inbox (Vorschlag #77)</a>`)
+
+	// none given: none sent, nothing said about it
+	rec = invite(t, f, url.Values{"vorname": {"Ben"}, "email": {"b@example.org"}}, "admins")
+	if _, sent := f.calls[1]["signal"]; sent {
+		t.Errorf("empty signal sent: %v", f.calls[1])
+	}
+	mustNotContain(t, rec.Body.String(), saysSignalWaits)
+
+	// a wrong one: said, nothing sent, the form keeps it
+	for _, bad := range []string{"0170 0000001", "+0 123", "+49abc", "+4917000000011111111"} {
+		rec = invite(t, f, url.Values{"vorname": {"Dora"}, "email": {"d@example.org"}, "signal": {bad}}, "admins")
+		if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), saysBadSignal) {
+			t.Errorf("%q → %d", bad, rec.Code)
+		}
+	}
+	if len(f.calls) != 2 {
+		t.Fatalf("a wrong number reached Laib: %v", f.calls[2:])
 	}
 }
