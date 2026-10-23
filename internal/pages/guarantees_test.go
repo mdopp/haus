@@ -33,7 +33,7 @@ func fakeLaib(t *testing.T, ready map[string]any, rows []map[string]any) *laib.C
 }
 
 func get(h http.HandlerFunc, groups string) string {
-	req := httptest.NewRequest("GET", "/box", nil)
+	req := httptest.NewRequest("GET", "/box?ganz=1", nil)
 	req.Header.Set("Remote-User", "anna")
 	if groups != "" {
 		req.Header.Set("Remote-Groups", groups)

@@ -287,7 +287,13 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   says who sees the admin page; it is not a verdict on anything, and
   `/napi` and `/pair-device` are untouched. The page: readiness, the inbox read-only
   with its reasons and a link to Laib's own inbox (the one approval
-  surface, laib ADR 0012), what runs, the journal. Every page request must
+  surface, laib ADR 0012), what runs, the journal. It comes at once
+  (haus#81): the frame and each part's place with „lädt …“; its script
+  fetches every part at the same time from `GET /box/teil?was=<part>`
+  (`stand`, `inbox`, `einladen`, `journal`, `genutzt`, `werkstatt`: JSON,
+  slot id → HTML), each within 10 s, a failed one said in its place.
+  `?ganz=1`, where `<noscript>` sends, reads all parts at the same time
+  and comes whole. Every page request must
   carry `X-Haus-Proxy: <HAUS_PROXY_SECRET>`, which only Caddy adds; the
   loopback port is shared with every host-network container, so without
   the secret nobody is anybody.
