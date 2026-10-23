@@ -206,8 +206,12 @@ func main() {
 	if counter != nil && cfg.HA != nil {
 		voice = &usage.Voice{HA: cfg.HA, Counter: counter, Since: time.Now(), Log: log.Printf}
 	}
+	// the counter stops only once the server has: a page is counted after
+	// it is answered, so the last flush waits for the requests under way (#92)
+	counting, stopCounting := context.WithCancel(context.Background())
+	defer stopCounting()
 	flushed := make(chan struct{})
-	go func() { counter.Run(ctx, 5*time.Minute); close(flushed) }()
+	go func() { counter.Run(counting, 5*time.Minute); close(flushed) }()
 	go voice.Run(ctx, time.Minute)
 	mux := routes(site{napi: cfg, hh: hh, store: store, ops: ops, proxySecret: proxySecret, laibURL: laibURL,
 		publicURL: os.Getenv("HAUS_PUBLIC_URL"), tickets: werkstatt.FromEnv(), favorites: favoriten.Open(dataDir), bote: b,
@@ -220,15 +224,19 @@ func main() {
 	addr := env("HAUS_LISTEN", "127.0.0.1:8650")
 	log.Printf("haus %s: listening on %s as %s, laib %s, home assistant %v, haushalt %d tools, memory library %v (tidy-up %v), uploads %q, the Bote %v, counting %v (voice %v), pages only behind the proxy secret", Version, addr, pages.House.Display, ops.URL, cfg.HA != nil, len(haushalt.Tools(hh)), hh.Library != nil, hh.Judge != nil, cfg.UploadDir, b != nil, counter != nil, voice != nil)
 	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
+	drained := make(chan struct{})
 	go func() {
 		<-ctx.Done()
 		shut, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		srv.Shutdown(shut)
+		srv.Shutdown(shut) // waits for the requests under way
+		close(drained)
 	}()
 	if err := srv.ListenAndServe(); err != http.ErrServerClosed {
 		log.Fatal(err)
 	}
+	<-drained
 	stop()
+	stopCounting()
 	<-flushed // the last counts go out before Haus does
 }
