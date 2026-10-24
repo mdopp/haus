@@ -34,6 +34,9 @@ type fluss struct {
 	// over a span the grid has both ways; hasBezug/hasEinsp say which the
 	// history reads
 	hasBezug, hasEinsp bool
+	// how full the battery is now, in %: shown with the Akku node
+	fuell    float64
+	hasFuell bool
 }
 
 // kanten are the ways the power took.
@@ -297,6 +300,10 @@ func flussHTML(f fluss) string {
 			said = append(said, n.name+" "+wort)
 			continue
 		}
+		if n.key == "akku" && f.hasFuell {
+			zeilen = append(zeilen, zeile{"Akku Füllstand", percent0(f.fuell)})
+			said = append(said, "Akku "+percent0(f.fuell)+" voll")
+		}
 		zeilen = append(zeilen, zeile{n.name + " " + wort, zahl})
 		said = append(said, n.name+" "+wort+" "+zahl)
 		if zz != "" {
@@ -371,7 +378,15 @@ func flussHTML(f fluss) string {
 		if kn.key == "haus" && f.da["akku"] {
 			nameY = p.y + flussR + 20
 		}
-		b.WriteString(`<text class=name x=` + n(p.x) + ` y=` + n(nameY) + ` text-anchor=middle>` + kn.name + `</text>`)
+		name := kn.name
+		if kn.key == "akku" && f.hasFuell {
+			// how full: in its name, and as a ring around it from the top, clockwise
+			name += " " + percent0(f.fuell)
+			ring := 2 * math.Pi * float64(flussR+5)
+			b.WriteString(`<circle class=fuell cx=` + n(p.x) + ` cy=` + n(p.y) + ` r=` + strconv.Itoa(flussR+5) +
+				` stroke-dasharray="` + n(ring*f.fuell/100) + ` ` + n(ring) + `" transform="rotate(-90 ` + n(p.x) + ` ` + n(p.y) + `)"></circle>`)
+		}
+		b.WriteString(`<text class=name x=` + n(p.x) + ` y=` + n(nameY) + ` text-anchor=middle>` + name + `</text>`)
 		zahlClass := "zahl"
 		switch n := len([]rune(zahl)); {
 		case !f.known[kn.key]:
@@ -415,6 +430,9 @@ func ends(a, z punkt) (punkt, punkt) {
 	off := float64(flussR) + 5
 	return punkt{a.x + dx/l*off, a.y + dy/l*off}, punkt{z.x - dx/l*off, z.y - dy/l*off}
 }
+
+// percent0 is a percent value as a whole number: "74 %".
+func percent0(v float64) string { return strconv.Itoa(int(math.Round(v))) + "\u00a0%" }
 
 // share is a share as whole percent: "63 %".
 func share(v float64) string { return strconv.Itoa(int(math.Round(v*100))) + " %" }

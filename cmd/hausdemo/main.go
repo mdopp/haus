@@ -48,6 +48,14 @@ func main() {
 	fake.Set("light.kueche", "on", map[string]any{"friendly_name": "Küchenlicht", "brightness": 153, "supported_color_modes": []string{"brightness"}, "color_mode": "brightness"})
 	fake.Set("switch.kaffee", "off", map[string]any{"friendly_name": "Kaffeemaschine"})
 	fake.Set("cover.rollo", "open", map[string]any{"friendly_name": "Rollo", "device_class": "shutter", "current_position": 60, "supported_features": 15.0})
+	power := func(name string) map[string]any {
+		return map[string]any{"friendly_name": name, "device_class": "power", "unit_of_measurement": "W"}
+	}
+	fake.Set("sensor.pv", "3200", power("Aktuell erzeugter PV-Strom"))
+	fake.Set("sensor.haus", "800", power("Aktueller Hausverbrauch"))
+	fake.Set("sensor.netz", "-1600", power("Aktuelle Netz Leistung"))
+	fake.Set("sensor.akku", "800", power("Aktuelle Akku Leistung"))
+	fake.Set("sensor.akku_soc", "74", map[string]any{"friendly_name": "Akku-Füllstand in Prozent", "device_class": "battery", "unit_of_measurement": "%"})
 	fake.Set("media_player.wz", "playing", map[string]any{"friendly_name": "Wohnzimmer", "media_title": "Abbey Road", "media_artist": "The Beatles",
 		"volume_level": 0.3, "supported_features": 1.0 + 4 + 1024 + 16384})
 
@@ -71,6 +79,7 @@ func main() {
 	mux.HandleFunc(cards.ThingPages, pages.Ding(cfg))
 	mux.HandleFunc(cards.SwitchPath, pages.Schalten(cfg))
 	mux.HandleFunc("/medien", pages.Medien(cfg))
+	mux.HandleFunc("/energie", pages.Energie(cfg))
 	mux.HandleFunc("/notizen", pages.Notizen(cfg))
 	mux.HandleFunc(cards.NotePages, pages.Notizen(cfg))
 	mux.HandleFunc("/mehr", pages.Mehr(cfg))

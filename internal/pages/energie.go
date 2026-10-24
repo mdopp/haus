@@ -104,7 +104,11 @@ func Energie(cfg StartConfig) http.HandlerFunc {
 		logErrs("energie", map[string]error{"history": histErr, "statistics": dailyE, "hourly statistics": hourlyE})
 		b.WriteString(verlaufStyle)
 		if len(legs) > 0 {
-			b.WriteString(flussHTML(flussJetzt(legs)))
+			now := flussJetzt(legs)
+			if now.da["akku"] {
+				now.fuell, _, now.hasFuell = cfg.Energy.Charge(states)
+			}
+			b.WriteString(flussHTML(now))
 		}
 		err := dailyE
 		if err == nil {

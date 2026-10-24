@@ -76,7 +76,7 @@ test('a note is written and changed', async ({ page }) => {
 
 // Pictures of the main pages as a phone shows them, for a look at the
 // run (the CI keeps them).
-for (const path of ['/start', '/raeume', '/medien', '/notizen', '/mehr']) {
+for (const path of ['/start', '/raeume', '/medien', '/energie', '/notizen', '/mehr']) {
   test(`picture of ${path}`, async ({ page }, info) => {
     await page.goto(path);
     await page.screenshot({ path: info.outputPath(path.slice(1) + '.png'), fullPage: true });
