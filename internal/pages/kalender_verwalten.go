@@ -38,6 +38,7 @@ const (
 // address never lands in a URL
 var kalenderSaid = map[string]string{
 	"verbunden":      "Verbunden. Die Termine erscheinen in den nächsten 15 Minuten.",
+	"abstand":        "Gespeichert. Der Kalender wird ab jetzt so oft abgeglichen.",
 	"getrennt":       "Getrennt. Beim nächsten Abgleich verschwindet die Kopie.",
 	"angelegt":       "Der Kalender ist angelegt.",
 	"geloescht":      "Der Kalender ist gelöscht.",
@@ -48,6 +49,60 @@ var kalenderSaid = map[string]string{
 	"gibt-es-schon":  "Einen Kalender mit diesem Namen gibt es schon.",
 	"nicht-moeglich": "Das ging gerade nicht. Später noch einmal versuchen; sonst weiß ein Admin in laib diag mehr.",
 	"kein-laib":      saysNoLaibCal,
+}
+
+// everyChoices is "Wie oft abgleichen?" (laib#619, haus#96): laib's
+// interval and the words for it; a Google calendar suggests every run,
+// a public one monthly.
+var everyChoices = []struct{ Every, Words string }{
+	{"15m", "alle 15 Minuten"}, {"1d", "täglich"}, {"7d", "wöchentlich"}, {"30d", "monatlich"},
+}
+
+// everySelect is the choice, the given one selected.
+func everySelect(selected string) string {
+	var b strings.Builder
+	b.WriteString("<select name=abstand>")
+	for _, c := range everyChoices {
+		sel := ""
+		if c.Every == selected {
+			sel = " selected"
+		}
+		b.WriteString(`<option value="` + c.Every + `"` + sel + ">" + c.Words + "</option>")
+	}
+	b.WriteString("</select>")
+	return b.String()
+}
+
+// everyOf is a subscription's interval, its kind's default when laib has
+// none (Google every run, a public calendar monthly).
+func everyOf(a laib.Abo) string {
+	if a.Every != "" {
+		return a.Every
+	}
+	if a.Kind == "google" {
+		return "15m"
+	}
+	return "30d"
+}
+
+// everyWords is an interval in the family's words.
+func everyWords(every string) string {
+	for _, c := range everyChoices {
+		if c.Every == every {
+			return c.Words
+		}
+	}
+	return "alle " + every
+}
+
+// validEvery is one of the choices.
+func validEvery(every string) bool {
+	for _, c := range everyChoices {
+		if c.Every == every {
+			return true
+		}
+	}
+	return false
 }
 
 // publicCalendars are the suggestions under "Öffentlichen Kalender
@@ -218,7 +273,7 @@ func calendarRow(cfg StartConfig, k caldav.Calendar, view ansicht.One, abo *laib
 		}
 		b.WriteString(from + ", nur lesen")
 		if abo != nil {
-			b.WriteString(" · verbunden " + sinceWords(abo.Since, now, loc))
+			b.WriteString(" · verbunden " + sinceWords(abo.Since, now, loc) + " · abgeglichen " + everyWords(everyOf(*abo)))
 		}
 		if !k.Synced.IsZero() {
 			b.WriteString(" · zuletzt abgeglichen " + agoWords(k.Synced, now))
@@ -252,6 +307,7 @@ func calendarRow(cfg StartConfig, k caldav.Calendar, view ansicht.One, abo *laib
 	}
 	switch {
 	case k.ReadOnly() && abo != nil:
+		actions.WriteString("<label>Abgleichen " + everySelect(everyOf(*abo)) + "</label><button name=tu value=abstand data-laeuft=\"Speichert …\">Abstand ändern</button>")
 		actions.WriteString("<details><summary>Trennen…</summary><button name=tu value=trennen>Ja, „" + html.EscapeString(k.Name) + "“ trennen</button></details>")
 	case k.Kind == "familie" || k.Kind == "privat":
 		actions.WriteString("<details><summary>Löschen…</summary><button name=tu value=loeschen>Ja, „" + html.EscapeString(k.Name) + "“ mit allen Terminen löschen</button></details>")
@@ -280,14 +336,15 @@ func addCard(canSubscribe bool) string {
 		b.WriteString("<details><summary>Google-Kalender verbinden</summary><form method=post action=" + kalenderAdd + " class=eingabe><input type=hidden name=weg value=google>" +
 			"<label>Name <input name=name maxlength=60 placeholder=Familie required></label>" +
 			"<label>Geheime Adresse im iCal-Format <input name=adresse type=url autocomplete=off spellcheck=false required placeholder='https://calendar.google.com/calendar/ical/…/basic.ics'></label>" +
-			"<p class=k>" + html.EscapeString(saysGoogleHow) + "</p><button>Verbinden</button></form></details>")
+			"<p class=k>" + html.EscapeString(saysGoogleHow) + "</p><label>Wie oft abgleichen? " + everySelect("15m") + "</label><button data-laeuft=\"Verbindet …\">Verbinden</button></form></details>")
 		b.WriteString("<details><summary>Öffentlichen Kalender abonnieren</summary><form method=post action=" + kalenderAdd + " class=eingabe><input type=hidden name=weg value=abo>" +
 			"<label>Welcher <select name=vorlage><option value=feiertage>Feiertage</option><option value=schulferien>Schulferien</option><option value=eigene>eigene Adresse (z. B. Müllabfuhr der Gemeinde)</option></select></label><label>Bundesland <select name=land>")
 		for _, l := range bundeslaender {
 			b.WriteString(`<option value="` + l.Code + `">` + l.Name + "</option>")
 		}
 		b.WriteString("</select></label><label>Eigene Adresse <input name=adresse type=url autocomplete=off spellcheck=false placeholder='https://… oder webcal://…'></label>" +
-			"<label>Name <input name=name maxlength=60 placeholder='leer: Feiertage bzw. Schulferien'></label>" + forWhom() + "<button>Abonnieren</button></form></details>")
+			"<label>Name <input name=name maxlength=60 placeholder='leer: Feiertage bzw. Schulferien'></label>" + forWhom() +
+			"<label>Wie oft abgleichen? " + everySelect("30d") + "</label><button data-laeuft=\"Abonniert …\">Abonnieren</button></form></details>")
 	} else {
 		b.WriteString("<p class=k>" + saysNoLaibCal + "</p>")
 	}
@@ -383,7 +440,11 @@ func KalenderHinzufuegen(cfg StartConfig) http.HandlerFunc {
 				said(w, r, "keine-adresse")
 				return
 			}
-			_, err := cfg.Laib.CalendarSubscribe(r.Context(), laib.Abo{Person: owner, Name: slug, Kind: kind, Title: title}, address)
+			every := f.Get("abstand")
+			if !validEvery(every) {
+				every = "" // laib's default for its kind
+			}
+			_, err := cfg.Laib.CalendarSubscribe(r.Context(), laib.Abo{Person: owner, Name: slug, Kind: kind, Title: title, Every: every}, address)
 			if err != nil {
 				log.Printf("haus: kalender: %s verbindet %s %s/%s: %v", me, kind, owner, slug, err) // laib's errors carry no address
 				said(w, r, laibSaid(err))
@@ -457,6 +518,19 @@ func KalenderAendern(cfg StartConfig) http.HandlerFunc {
 				return
 			}
 			said(w, r, "gespeichert")
+		case "abstand":
+			every := r.PostForm.Get("abstand")
+			if cfg.Laib == nil || !validEvery(every) || (!strings.HasPrefix(name, "google-") && !strings.HasPrefix(name, "abo-")) {
+				http.Error(w, "Das ist kein verbundener Kalender oder kein Abstand.", http.StatusBadRequest)
+				return
+			}
+			if _, err := cfg.Laib.CalendarEvery(r.Context(), owner, name[strings.Index(name, "-")+1:], every); err != nil {
+				log.Printf("haus: kalender: %s abstand %s: %v", me, path, err)
+				said(w, r, laibSaid(err))
+				return
+			}
+			log.Printf("haus: kalender: %s abstand %s %s", me, path, every)
+			said(w, r, "abstand")
 		case "trennen":
 			if cfg.Laib == nil || (!strings.HasPrefix(name, "google-") && !strings.HasPrefix(name, "abo-")) {
 				http.Error(w, "Das ist kein verbundener Kalender.", http.StatusBadRequest)

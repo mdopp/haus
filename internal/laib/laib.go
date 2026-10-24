@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -201,6 +202,23 @@ func (c *Client) Inbox(ctx context.Context) ([]Proposal, error) {
 	return out, err
 }
 
+// JournalLatest is the newest n entries, of a note kind when kind is set
+// (report is the morning report), oldest first like Journal (laib#593):
+// the Box page asks for what it shows, not 36 hours of it.
+func (c *Client) JournalLatest(ctx context.Context, n int, kind string) ([]Entry, error) {
+	args := map[string]any{"limit": strconv.Itoa(n)}
+	if kind != "" {
+		args["kind"] = kind
+	}
+	text, err := c.CallTyped(ctx, "journal", args)
+	if err != nil {
+		return nil, err
+	}
+	var out []Entry
+	err = decodeJSON("journal", text, &out)
+	return out, err
+}
+
 // Journal lists entries since a duration like "24h".
 func (c *Client) Journal(ctx context.Context, since string) ([]Entry, error) {
 	var out []Entry
@@ -361,6 +379,7 @@ type Abo struct {
 	Kind   string `json:"kind"`
 	Title  string `json:"title"`
 	Since  string `json:"since"`
+	Every  string `json:"every"` // how often laib mirrors it (laib#619): 15m, 1d, 30d; "": its kind's default
 }
 
 // Abos is laib_calendar's answer: one German sentence, and the list.
@@ -382,7 +401,17 @@ func (c *Client) calendar(ctx context.Context, args map[string]any) (Abos, error
 // CalendarSubscribe hands an address to laib, once: as the tool's stdin,
 // never as an argument, and never back (haus#66).
 func (c *Client) CalendarSubscribe(ctx context.Context, a Abo, address string) (Abos, error) {
-	return c.calendar(ctx, map[string]any{"action": "subscribe", "person": a.Person, "name": a.Name, "kind": a.Kind, "title": a.Title, "stdin": address + "\n"})
+	args := map[string]any{"action": "subscribe", "person": a.Person, "name": a.Name, "kind": a.Kind, "title": a.Title, "stdin": address + "\n"}
+	if a.Every != "" {
+		args["every"] = a.Every
+	}
+	return c.calendar(ctx, args)
+}
+
+// CalendarEvery changes how often laib mirrors a calendar (laib#619); the
+// address stays where it is.
+func (c *Client) CalendarEvery(ctx context.Context, person, name, every string) (Abos, error) {
+	return c.calendar(ctx, map[string]any{"action": "every", "person": person, "name": name, "every": every})
 }
 
 // CalendarUnsubscribe is Trennen: laib forgets the address, the next run

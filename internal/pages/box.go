@@ -201,8 +201,15 @@ func boxPart(ctx context.Context, r *http.Request, cfg BoxConfig, part string, i
 	case "einladen":
 		return map[string]string{"box-einladen": inviteCard(ctx, c, inv)}
 	case "journal":
-		// the window reaches back to yesterday's report; the journal table stays at 24h
-		es, jerr := c.Journal(ctx, "36h")
+		// what the page shows, not 36 hours of it (laib#593): the newest 25
+		// and the newest morning report, at the same time
+		var es, reports []laib.Entry
+		var jerr, rerr error
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() { defer wg.Done(); es, jerr = c.JournalLatest(ctx, 25, "") }()
+		go func() { defer wg.Done(); reports, rerr = c.JournalLatest(ctx, 1, "report") }()
+		wg.Wait()
 		var b strings.Builder
 		// one entry a line: when and who small above, what and why below,
 		// the result a dot
@@ -228,7 +235,7 @@ func boxPart(ctx context.Context, r *http.Request, cfg BoxConfig, part string, i
 			}
 		}
 		b.WriteString("</ul>")
-		return map[string]string{"box-bericht": morningReport(es, jerr), "box-journal": b.String()}
+		return map[string]string{"box-bericht": morningReport(reports, rerr), "box-journal": b.String()}
 	case "genutzt":
 		return map[string]string{"box-genutzt": usageCard(ctx, cfg.Family, cfg.Voice)}
 	case "werkstatt":

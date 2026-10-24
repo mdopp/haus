@@ -100,7 +100,7 @@ func TestDeineKalenderListsWhereEachComesFrom(t *testing.T) {
 		t.Fatalf("status %d", code)
 	}
 	mustContain(t, body, "<h1>Deine Kalender</h1>", "Haushalt", "der Haushalt, für alle",
-		"Familie", "aus Google, nur lesen · verbunden seit Mo 12.10. · zuletzt abgeglichen vor 5 min",
+		"Familie", "aus Google, nur lesen · verbunden seit Mo 12.10. · abgeglichen alle 15 Minuten · zuletzt abgeglichen vor 5 min",
 		"Müllabfuhr", "abonniert, nur lesen", "seit 3 h nicht abgeglichen",
 		`value="https://caldav.box.test/anna/google-familie/"`, "DAVx⁵", "Anmeldung wie bei Haus",
 		`href="https://caldav.box.test/.web/"`, "In Radicale öffnen", "Adressbuch fürs Telefon", `value="https://caldav.box.test/haus/haushalt-kontakte/"`,
@@ -239,5 +239,46 @@ func TestTrennenAsksLaibAndLoeschenOnlyWhatHausMade(t *testing.T) {
 	post(t, KalenderAendern(cfg), kalenderChange, url.Values{"kalender": {"/haus/familie-x/"}, "tu": {"loeschen"}}, "anna", nil)
 	if fake.DisplayName("/haus/familie-x/") != "" {
 		t.Fatal("not deleted")
+	}
+}
+
+// haus#96 (laib#619): how often each calendar is mirrored — chosen when it
+// is added (Google suggests every run, a public calendar monthly), said in
+// its row, changed there without the address; a value not offered never
+// reaches laib.
+func TestKalenderAbstandIsChosenAndChanged(t *testing.T) {
+	_, cfg, l := kalenderBox(t)
+	_, body, _ := familyPage(t, KalenderVerwalten, cfg, "GET", kalenderVerwalten, "family")
+	mustContain(t, body, `<option value="15m" selected>alle 15 Minuten</option>`, `<option value="30d" selected>monatlich</option>`,
+		"Müllabfuhr</strong> <span class=k>abonniert, nur lesen · verbunden seit", "· abgeglichen monatlich",
+		`<button name=tu value=abstand data-laeuft="Speichert …">Abstand ändern</button>`)
+
+	post(t, KalenderHinzufuegen(cfg), kalenderAdd, url.Values{"weg": {"abo"}, "vorlage": {"feiertage"}, "land": {"NI"}, "abstand": {"7d"}}, "anna", nil)
+	if c := l.calls[len(l.calls)-1]; c["every"] != "7d" {
+		t.Fatalf("subscribe %v", c)
+	}
+	post(t, KalenderHinzufuegen(cfg), kalenderAdd, url.Values{"weg": {"abo"}, "vorlage": {"schulferien"}, "land": {"NI"}, "abstand": {"5s"}}, "anna", nil)
+	if _, set := l.calls[len(l.calls)-1]["every"]; set {
+		t.Fatalf("an interval not offered went to laib: %v", l.calls[len(l.calls)-1])
+	}
+
+	rec := post(t, KalenderAendern(cfg), kalenderChange, url.Values{"kalender": {"/anna/abo-muell/"}, "tu": {"abstand"}, "abstand": {"1d"}}, "anna", nil)
+	if rec.Header().Get("Location") != kalenderVerwalten+"?gesagt=abstand" {
+		t.Fatalf("%d %v", rec.Code, rec.Header())
+	}
+	if c := l.calls[len(l.calls)-1]; c["action"] != "every" || c["person"] != "anna" || c["name"] != "muell" || c["every"] != "1d" || c["stdin"] != nil {
+		t.Fatalf("laib got %v", c)
+	}
+	n := len(l.calls)
+	for _, bad := range []url.Values{
+		{"kalender": {"/anna/abo-muell/"}, "tu": {"abstand"}, "abstand": {"1s"}},
+		{"kalender": {"/haus/haushalt/"}, "tu": {"abstand"}, "abstand": {"1d"}},
+	} {
+		if rec := post(t, KalenderAendern(cfg), kalenderChange, bad, "anna", nil); rec.Code != http.StatusBadRequest {
+			t.Errorf("%v → %d", bad, rec.Code)
+		}
+	}
+	if len(l.calls) != n {
+		t.Fatalf("refused changes reached laib: %v", l.calls[n:])
 	}
 }

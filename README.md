@@ -191,7 +191,11 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     Bundesland from openholidaysapi.org, or any ICS address), *Neuen
     Kalender anlegen* (`haus/familie-<name>` für die Familie,
     `<person>/privat-<name>` nur für mich). *In Radicale öffnen* is the
-    page's *Weiter in <App>*.
+    page's *Weiter in <App>*. How often a connected calendar is mirrored
+    (haus#96, laib#619): *Wie oft abgleichen?* when it is added (alle 15
+    Minuten · täglich · wöchentlich · monatlich; Google suggests every run,
+    a public calendar monthly), said in its row, and *Abstand ändern* there
+    (`laib_calendar every`, the address untouched).
   - *Notizen* says where notes come from (the house's „Merk dir …“, Neue
     Notiz, a file in `notes` on the share) and lets a person write them
     (owner, 2026-10-24): *Neue Notiz* (`POST /notizen`: `titel`, `text`;
