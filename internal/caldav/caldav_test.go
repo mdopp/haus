@@ -411,3 +411,29 @@ func TestTodosWithTheDoneOnes(t *testing.T) {
 		}
 	}
 }
+
+// Owner 2026-10-24: the household's calendar and address book are there
+// from the start, so a phone can take them before the first entry; asked
+// again, nothing new is made; a configured calendar is left alone.
+func TestEnsureHaushaltMakesBothOnce(t *testing.T) {
+	fake := davfake.New("haus", "pw")
+	defer fake.Close()
+	c := &Client{URL: fake.URL, User: "haus", Password: "pw"}
+	ctx := context.Background()
+	if err := c.EnsureHaushalt(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got := fake.Calendars(); len(got) != 1 || got[0] != "/haus/haushalt/" {
+		t.Fatalf("calendars %v", got)
+	}
+	if fake.DisplayName("/haus/haushalt-kontakte/") == "" {
+		t.Fatal("no address book")
+	}
+	before := count(fake.Methods, "MKCALENDAR") + count(fake.Methods, "MKCOL")
+	if err := (&Client{URL: fake.URL, User: "haus", Password: "pw"}).EnsureHaushalt(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if n := count(fake.Methods, "MKCALENDAR") + count(fake.Methods, "MKCOL"); n != before {
+		t.Fatalf("made again: %d → %d", before, n)
+	}
+}

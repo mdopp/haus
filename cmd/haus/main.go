@@ -17,6 +17,7 @@ import (
 
 	"github.com/mdopp/haus/internal/ansicht"
 	"github.com/mdopp/haus/internal/bote"
+	"github.com/mdopp/haus/internal/caldav"
 	"github.com/mdopp/haus/internal/cards"
 	"github.com/mdopp/haus/internal/devices"
 	"github.com/mdopp/haus/internal/favoriten"
@@ -153,6 +154,29 @@ func routes(s site) http.Handler {
 // (laib#639); Haus takes it when HAUS_MUSIC_INBOX names none.
 const musicInboxMount = "/musik-eingang"
 
+// ensureHaushalt makes the household's calendar and address book in
+// Radicale, trying again with a growing pause while Radicale does not
+// answer; done once they are there.
+func ensureHaushalt(ctx context.Context, c *caldav.Client) {
+	wait := 10 * time.Second
+	for {
+		tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		err := c.EnsureHaushalt(tctx)
+		cancel()
+		if err == nil {
+			log.Printf("haus: Haushalt: calendar and address book are there")
+			return
+		}
+		log.Printf("haus: Haushalt: making the calendar and address book: %v (again in %v)", err, wait)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(wait):
+		}
+		wait = min(wait*2, 10*time.Minute)
+	}
+}
+
 func main() {
 	if len(os.Args) > 1 { // a one-shot command, not the server
 		os.Exit(command(context.Background(), os.Args[1:], os.Getenv, os.Stdout, os.Stderr))
@@ -219,6 +243,9 @@ func main() {
 	// from HA's Assist runs every minute, as HA keeps only the last ten
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, os.Interrupt)
 	defer stop()
+	if hh.Calendar != nil { // the household's calendar and address book there from the start (owner 2026-10-24)
+		go ensureHaushalt(ctx, hh.Calendar)
+	}
 	counter := usage.FromEnv(os.Getenv)
 	var voice *usage.Voice
 	if counter != nil && cfg.HA != nil {

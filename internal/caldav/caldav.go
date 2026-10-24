@@ -398,6 +398,16 @@ func (c *Client) target(ctx context.Context, k kind, comp string) (Collection, e
 	return col, nil
 }
 
+// EnsureHaushalt makes the household's calendar and address book when
+// they are not there yet (owner 2026-10-24: there at once, so a phone can
+// take them before the first entry), as the first write would: the
+// configured ones are left as they are.
+func (c *Client) EnsureHaushalt(ctx context.Context) error {
+	_, cerr := c.target(ctx, c.calendars(), "VEVENT")
+	_, berr := c.target(ctx, c.books(), "")
+	return errors.Join(cerr, berr)
+}
+
 const mkcalendarBody = `<?xml version="1.0" encoding="utf-8"?>
 <C:mkcalendar xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
   <D:set><D:prop>
