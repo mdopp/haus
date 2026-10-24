@@ -49,6 +49,7 @@ var q=f.getAttribute('data-frage');if(q&&!confirm(q)){e.preventDefault();return}
 e.preventDefault();var b=or(e.submitter,f.querySelector('button')),was=null,sw=b&&b.getAttribute('role')==='switch';last=Date.now();busy++;
 if(b){if(sw)flip(b);if(b.hasAttribute('data-laeuft')){was=b.textContent;b.textContent=b.getAttribute('data-laeuft')}b.disabled=true;b.setAttribute('aria-busy','true')}
 var body=new FormData(f);if(e.submitter&&e.submitter.name)body.append(e.submitter.name,e.submitter.value);
+if(f.enctype!=='multipart/form-data')body=new URLSearchParams(body);
 function back(){if(!b)return;b.disabled=false;b.removeAttribute('aria-busy');if(was!==null)b.textContent=was;if(sw)flip(b)}
 fetch(f.getAttribute('action'),{method:'POST',body:body,credentials:'same-origin',headers:{'X-Haus-Skript':'1'}}).then(function(r){var ct=or(r.headers.get('Content-Type'),'');
 return r.text().then(function(t){busy--;if(ct.indexOf('text/html')===0){swap(t,r.url);return}back();say(or(t.trim(),'Das hat nicht geklappt.'))})})

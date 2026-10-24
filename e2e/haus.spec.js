@@ -55,8 +55,8 @@ test('a player pauses in place', async ({ page }) => {
 
 test('a note is written and changed', async ({ page }) => {
   await page.goto('/notizen');
-  await expect(page.getByText('Merk dir')).toBeVisible();
-  await page.getByText('Neue Notiz').click();
+  await expect(page.getByText('Merk dir').first()).toBeVisible();
+  await page.locator('summary', { hasText: 'Neue Notiz' }).click();
   await page.getByLabel('Titel').fill('Wasserzähler');
   await page.getByLabel('Text', { exact: true }).fill('Nummer 1234');
   await mark(page);
