@@ -3,6 +3,7 @@ package pages
 import (
 	"context"
 	"errors"
+	"fmt"
 	"html"
 	"log"
 	"net/http"
@@ -33,23 +34,27 @@ const (
 	saysSignalHint    = "Wenn du magst: mit Ländervorwahl, etwa +49 170 1234567. Dann darf die Person dem Boten auf Signal schreiben. Die Nummer kommt als Vorschlag in Laibs Eingang und gilt, sobald er freigegeben ist."
 	saysBadSignal     = "Die Signal-Nummer bitte mit Ländervorwahl, etwa +49 170 1234567."
 	saysSignalWaits   = "Signal-Nummer eingetragen: Sie gilt, sobald der Vorschlag freigegeben ist."
+	saysSignalLater   = "Signal-Nummer für jemanden, der schon ein Konto hat: Benutzername und Nummer. Die Nummer kommt als Vorschlag in Laibs Eingang."
+	saysSignalSet     = "Signal-Nummer für %s eingetragen: Sie gilt, sobald der Vorschlag freigegeben ist."
 	saysWelcomeAfter  = "Nach dem ersten Anmelden zeigt Haus die Seite „Willkommen“: welche Apps es gibt und wie man sie einrichtet."
 )
 
 // invitation is what the card says after a POST: the result, or what
 // went wrong, and the form's values to keep.
 type invitation struct {
-	done    *laib.Invited
-	first   string
-	problem string
-	form    laib.Invite
-	signal  bool   // a Signal number went with it: say it waits for the owner
-	inbox   string // Laib's page, for the way to the proposal
+	done     *laib.Invited
+	first    string
+	problem  string
+	form     laib.Invite
+	signal   bool           // a Signal number went with it: say it waits for the owner
+	numbered *laib.Proposed // a Signal number set for someone already there (laib#596)
+	numFor   string         // whose
+	inbox    string         // Laib's page, for the way to the proposal
 }
 
 // empty is no POST's outcome: the plain Box page.
 func (inv invitation) empty() bool {
-	return inv.done == nil && inv.first == "" && inv.problem == "" && inv.form == (laib.Invite{}) && !inv.signal
+	return inv.done == nil && inv.first == "" && inv.problem == "" && inv.form == (laib.Invite{}) && !inv.signal && inv.numbered == nil
 }
 
 // signalRE is a Signal number as laib#596 takes it, E.164: + and 7 to 15
@@ -114,6 +119,10 @@ func Einladen(cfg BoxConfig) http.HandlerFunc {
 			return
 		}
 		f := r.PostForm
+		if f.Get("tun") == "signal" {
+			signalLater(w, r, cfg)
+			return
+		}
 		in := laib.Invite{User: strings.TrimSpace(f.Get("benutzer")), First: oneLine(f.Get("vorname")), Last: oneLine(f.Get("nachname")),
 			Email: strings.TrimSpace(f.Get("email")), Group: "family", Resend: f.Get("erneut") == "1"}
 		if !in.Resend {
@@ -165,6 +174,34 @@ func Einladen(cfg BoxConfig) http.HandlerFunc {
 		log.Printf("haus: einladen: %s by %s: mailed %v", in.User, r.Header.Get("Remote-User"), got.Mailed)
 		writeBox(w, r, cfg, http.StatusOK, inv)
 	}
+}
+
+// signalLater sets the Signal number of someone who already has an
+// account (haus#87, laib#596): Benutzername and Nummer, one proposal; the
+// card says it waits for the owner, with the way to it.
+func signalLater(w http.ResponseWriter, r *http.Request, cfg BoxConfig) {
+	user, number := strings.TrimSpace(r.PostForm.Get("benutzer")), signalNumber(r.PostForm.Get("signal"))
+	inv := invitation{inbox: cfg.LaibURL, numFor: user}
+	switch {
+	case !userRE.MatchString(user):
+		inv.problem = saysBadUser
+	case !signalRE.MatchString(number):
+		inv.problem = saysBadSignal
+	}
+	if inv.problem != "" {
+		writeBox(w, r, cfg, http.StatusBadRequest, inv)
+		return
+	}
+	p, err := cfg.Laib.PersonSignal(r.Context(), user, number)
+	if err != nil {
+		log.Printf("haus: einladen: signal for %s by %s: %v", user, r.Header.Get("Remote-User"), err)
+		inv.problem = inviteProblem(err)
+		writeBox(w, r, cfg, http.StatusBadGateway, inv)
+		return
+	}
+	log.Printf("haus: einladen: signal for %s by %s: Vorschlag #%d", user, r.Header.Get("Remote-User"), p.Proposal)
+	inv.numbered = &p
+	writeBox(w, r, cfg, http.StatusOK, inv)
 }
 
 // inviteProblem is Laib's refusal as the admin reads it: its own sentence
@@ -237,6 +274,24 @@ func inviteCard(ctx context.Context, c *laib.Client, inv invitation) string {
 		log.Printf("haus: einladen: tools/list: %v", err)
 	}
 	b.WriteString("<button>Einladen</button></form><p class=k>" + html.EscapeString(saysFamilyOnly) + "</p>")
+	if takes, _ := c.Takes(ctx, "person_signal", "number"); takes { // laib#596
+		if p := inv.numbered; p != nil {
+			b.WriteString("<p class=erfolg role=status>" + html.EscapeString(fmt.Sprintf(saysSignalSet, inv.numFor)))
+			nr := ""
+			if p.Proposal > 0 {
+				nr = strconv.Itoa(p.Proposal)
+			}
+			if link := inboxLink(inv.inbox, nr); link != "" {
+				b.WriteString(" " + link)
+			}
+			b.WriteString("</p>")
+		}
+		b.WriteString("<h3 id=signal-nachtragen>Signal-Nummer nachtragen</h3><p class=k>" + html.EscapeString(saysSignalLater) + "</p>" +
+			"<form class=einladen method=post action=" + invitePath + "><input type=hidden name=tun value=signal>" +
+			"<label for=signal-benutzer>Benutzername</label><input id=signal-benutzer name=benutzer type=text required autocomplete=off autocapitalize=none spellcheck=false pattern=\"[a-z][a-z0-9._\\-]{1,31}\">" +
+			"<label for=signal-nummer>Signal-Nummer</label><input id=signal-nummer name=signal type=tel required autocomplete=off inputmode=tel placeholder=\"+49 170 1234567\">" +
+			"<button>Nummer eintragen</button></form>")
+	}
 	switch {
 	case perr != nil:
 		log.Printf("haus: einladen: pending: %v", perr)
