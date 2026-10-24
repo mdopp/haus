@@ -86,6 +86,13 @@ func routes(s site) http.Handler {
 		Samba: s.samba, SambaHost: s.sambaHost, Usage: s.usage, PublicURL: s.publicURL, Welcome: s.welcome, STT: s.stt,
 		HAPublicURL: s.haPublic, Inverted: s.inverted, RadicalePublicURL: s.radicale, Views: s.views,
 		DocumentsMail: s.docsMail, PaperlessPublicURL: s.paperlessPublic, PaperlessLANOnly: s.paperlessLAN}
+	if family.MusicInbox = os.Getenv("HAUS_MUSIC_INBOX"); family.MusicInbox != "" { // haus#107: the music inbox beets sorts in
+		if fi, err := os.Stat(family.MusicInbox); err != nil || !fi.IsDir() {
+			log.Printf("haus: HAUS_MUSIC_INBOX %s is not a folder (yet): uploads answer 503 until it is", family.MusicInbox)
+		}
+		pagesMux.HandleFunc(pages.MusikPath, pages.Musik(family))
+		pagesMux.HandleFunc(pages.MusikTeilPath, pages.Musik(family))
+	}
 	if s.napi.UploadDir != "" { // haus#68: the page's way into Paperless's inbox, the app's folder
 		family.Ablage = napi.NewUploads(s.napi.UploadDir)
 	}

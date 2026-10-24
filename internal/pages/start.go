@@ -73,6 +73,7 @@ type StartConfig struct {
 	// whether it opens only at home (HAUS_PAPERLESS_LAN_ONLY)
 	DocumentsMail      string
 	Ablage             *napi.Uploads
+	MusicInbox         string // laib's music inbox, which beets sorts in (haus#107); "": no Musik hinzufügen
 	PaperlessPublicURL string
 	PaperlessLANOnly   bool
 }

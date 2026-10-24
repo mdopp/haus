@@ -74,9 +74,23 @@ test('a note is written and changed', async ({ page }) => {
   await expect(page.getByText('im Keller links')).toBeVisible();
 });
 
+test('music goes up in pieces and arrives whole', async ({ page, request }) => {
+  await page.goto('/musik');
+  const big = Buffer.alloc(9 * 1024 * 1024, 7); // two pieces
+  await page.setInputFiles('#musik-dateien', [
+    { name: 'lied.mp3', mimeType: 'audio/mpeg', buffer: big },
+    { name: 'notiz.txt', mimeType: 'text/plain', buffer: Buffer.from('nein') },
+  ]);
+  await expect(page.locator('#musik-stand')).toContainText('1 von 2 Dateien hochgeladen', { timeout: 20_000 });
+  await expect(page.locator('#musik-liste')).toContainText('keine Musikdatei');
+  const got = await (await request.get('/demo/musik')).json();
+  expect(got['lied.mp3']).toBe(big.length);
+  expect(Object.keys(got).filter((k) => k.includes('.part'))).toEqual([]);
+});
+
 // Pictures of the main pages as a phone shows them, for a look at the
 // run (the CI keeps them).
-for (const path of ['/start', '/raeume', '/medien', '/energie', '/notizen', '/mehr']) {
+for (const path of ['/start', '/raeume', '/medien', '/energie', '/notizen', '/mehr', '/musik']) {
   test(`picture of ${path}`, async ({ page }, info) => {
     await page.goto(path);
     await page.screenshot({ path: info.outputPath(path.slice(1) + '.png'), fullPage: true });

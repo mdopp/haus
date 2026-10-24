@@ -888,6 +888,22 @@ of the main pages are kept with each run. Locally: `cd e2e && npm ci &&
 npx playwright install chromium && npx playwright test`; `go run
 ./cmd/hausdemo` alone to look at the pages.
 
+## Musik hinzufügen (haus#107)
+
+`GET /musik`, under Mehr, only when `HAUS_MUSIC_INBOX` names laib's
+music inbox (the haus template mounts it at `/musik-eingang`; beets
+sorts it into the music and Jellyfin). Anyone in the family: files
+(MP3, FLAC, M4A, OGG, Opus, WAV), a whole folder (`webkitdirectory`, on
+a computer) or ZIPs. The page's script sends each file in 8 MB pieces to
+`POST /musik/teil?pfad=<place>&ab=<offset>&gesamt=<size>`: appended to
+`._<name>.part` beside where it goes (a piece at another offset answers
+409 with the size there, so the page goes on from it), renamed to its
+name after the last byte — never over another file (`name (2).mp3`) —
+the folders kept, nothing hidden, absolute or outside the inbox, up to
+4 GB a file. Each file's progress, then how many arrived and that the
+box sorts them in. What beets made of them (laib's status) follows when
+laib reports it.
+
 ## The Haus script
 
 Every family page carries one inline script in its head (`hausScript`,
