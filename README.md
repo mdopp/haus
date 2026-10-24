@@ -304,6 +304,9 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   `person_invite` lists `signal` in its `tools/list` schema (kept 5 min):
   typed freely, sent as E.164 (`+49…`), a wrong one refused; after it,
   that the number waits for the owner's approval, with the proposal.
+  *Signal-Nummer nachtragen* on the same card (`tun=signal`: `benutzer`,
+  `signal`), once Laib has `person_signal`: one proposal for someone who
+  already has an account, said the same way.
   Every page request must
   carry `X-Haus-Proxy: <HAUS_PROXY_SECRET>`, which only Caddy adds; the
   loopback port is shared with every host-network container, so without

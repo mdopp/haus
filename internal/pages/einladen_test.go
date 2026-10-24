@@ -25,7 +25,7 @@ type inviteLaib struct {
 	refuse  string         // person_invite's refusal, a tool error
 	pending []map[string]any
 	old     bool // no person_* tools at all
-	signal  bool // person_invite takes signal (laib#596)
+	signal  bool // person_invite takes signal, person_signal is there (laib#596)
 }
 
 func (f *inviteLaib) client(t *testing.T) *laib.Client {
@@ -41,11 +41,14 @@ func (f *inviteLaib) client(t *testing.T) *laib.Client {
 		json.NewDecoder(r.Body).Decode(&req)
 		if req.Method == "tools/list" {
 			props := map[string]any{"user": map[string]any{}, "email": map[string]any{}}
+			tools := []map[string]any{}
 			if f.signal {
 				props["signal"] = map[string]any{"type": "string"}
+				tools = append(tools, map[string]any{"name": "laib_person_signal", "inputSchema": map[string]any{"type": "object",
+					"properties": map[string]any{"user": map[string]any{}, "number": map[string]any{}}}})
 			}
-			json.NewEncoder(w).Encode(map[string]any{"result": map[string]any{"tools": []map[string]any{
-				{"name": "laib_person_invite", "inputSchema": map[string]any{"type": "object", "properties": props}}}}})
+			tools = append(tools, map[string]any{"name": "laib_person_invite", "inputSchema": map[string]any{"type": "object", "properties": props}})
+			json.NewEncoder(w).Encode(map[string]any{"result": map[string]any{"tools": tools}})
 			return
 		}
 		text, isErr := "[]", false
@@ -53,6 +56,11 @@ func (f *inviteLaib) client(t *testing.T) *laib.Client {
 		case "laib_status":
 			b, _ := json.Marshal(map[string]any{"ready": map[string]any{"state": "bereit", "operator": "läuft"}, "services": []map[string]any{{"name": "immich", "state": "grün"}}})
 			text = string(b)
+		case "laib_person_signal":
+			f.mu.Lock()
+			f.calls = append(f.calls, req.Params.Args)
+			f.mu.Unlock()
+			text = `{"proposal":81,"message":"Vorschlag #81: Signal-Nummer für anna."}`
 		case "laib_person_invite", "laib_person_pending":
 			if f.old {
 				text, isErr = "unknown tool "+req.Params.Name, true
@@ -282,5 +290,35 @@ func TestEinladenTakesTheSignalNumber(t *testing.T) {
 	}
 	if len(f.calls) != 2 {
 		t.Fatalf("a wrong number reached Laib: %v", f.calls[2:])
+	}
+}
+
+// haus#87 (laib#596): someone who already has an account gets the number
+// later, on the same card: Benutzername and Nummer, one person_signal
+// proposal, said as waiting for the owner with the way to it; only once
+// Laib has the verb; a wrong name or number reaches nothing.
+func TestEinladenSetsTheSignalNumberLater(t *testing.T) {
+	old := &inviteLaib{}
+	mustNotContain(t, get(BoxPage(BoxConfig{Laib: old.client(t), LaibURL: "https://laib.box.test"}), "admins"), "Signal-Nummer nachtragen")
+
+	f := &inviteLaib{signal: true}
+	mustContain(t, get(BoxPage(BoxConfig{Laib: f.client(t), LaibURL: "https://laib.box.test"}), "admins"),
+		"<h3 id=signal-nachtragen>Signal-Nummer nachtragen</h3>", `<input type=hidden name=tun value=signal>`, `name=signal type=tel required`)
+	rec := invite(t, f, url.Values{"tun": {"signal"}, "benutzer": {"anna"}, "signal": {"0170 0000001"}}, "admins")
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), saysBadSignal) {
+		t.Fatalf("no country code → %d", rec.Code)
+	}
+	rec = invite(t, f, url.Values{"tun": {"signal"}, "benutzer": {"Anna M"}, "signal": {"+491700000001"}}, "admins")
+	if rec.Code != http.StatusBadRequest || len(f.calls) != 0 {
+		t.Fatalf("bad user → %d %v", rec.Code, f.calls)
+	}
+	rec = invite(t, f, url.Values{"tun": {"signal"}, "benutzer": {"anna"}, "signal": {"+49 170 0000001"}}, "admins")
+	if rec.Code != 200 || len(f.calls) != 1 || f.calls[0]["user"] != "anna" || f.calls[0]["number"] != "+491700000001" {
+		t.Fatalf("%d %v", rec.Code, f.calls)
+	}
+	mustContain(t, rec.Body.String(), "Signal-Nummer für anna eingetragen: Sie gilt, sobald der Vorschlag freigegeben ist.",
+		`<a href="https://laib.box.test/inbox">Zur Inbox (Vorschlag #81)</a>`)
+	if rec := invite(t, f, url.Values{"tun": {"signal"}, "benutzer": {"anna"}, "signal": {"+491700000001"}}, "family"); rec.Code != http.StatusForbidden {
+		t.Errorf("family → %d", rec.Code)
 	}
 }

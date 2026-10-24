@@ -559,6 +559,18 @@ func (c *Client) Note(ctx context.Context, kind, text string) error {
 	return err
 }
 
+// PersonSignal sets or changes a person's Signal number (laib#596): a
+// box.yml proposal the owner approves; number as E.164.
+func (c *Client) PersonSignal(ctx context.Context, user, number string) (Proposed, error) {
+	var out Proposed
+	text, err := c.CallTyped(ctx, "person_signal", map[string]any{"user": user, "number": number})
+	if err != nil {
+		return out, err
+	}
+	err = decodeJSON("person_signal", text, &out)
+	return out, err
+}
+
 // ScanEinrichten proposes the scanner (laib#571): without the service, the
 // scan template with geraet (the owner approves); with it, its SCANNER.
 // geraet may be "" only without the service. Laib's dial decides.
