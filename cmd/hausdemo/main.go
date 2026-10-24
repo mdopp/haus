@@ -11,6 +11,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"log"
 	"net/http"
@@ -72,7 +73,9 @@ func main() {
 		log.Fatal(err)
 	}
 
-	cfg := pages.StartConfig{HA: &ha.Client{URL: fake.URL, Token: "demo"}, Notes: nd, Favorites: favoriten.Open(dir)}
+	inbox := filepath.Join(dir, "musik-eingang")
+	os.MkdirAll(inbox, 0o755)
+	cfg := pages.StartConfig{HA: &ha.Client{URL: fake.URL, Token: "demo"}, Notes: nd, Favorites: favoriten.Open(dir), MusicInbox: inbox}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/start", pages.Start(cfg))
 	mux.HandleFunc("/raeume", pages.Raeume(cfg))
@@ -80,6 +83,21 @@ func main() {
 	mux.HandleFunc(cards.SwitchPath, pages.Schalten(cfg))
 	mux.HandleFunc("/medien", pages.Medien(cfg))
 	mux.HandleFunc("/energie", pages.Energie(cfg))
+	mux.HandleFunc(pages.MusikPath, pages.Musik(cfg))
+	mux.HandleFunc(pages.MusikTeilPath, pages.Musik(cfg))
+	mux.HandleFunc("/demo/musik", func(w http.ResponseWriter, r *http.Request) { // what arrived in the inbox, name → size
+		got := map[string]int64{}
+		filepath.WalkDir(inbox, func(p string, d os.DirEntry, err error) error {
+			if err == nil && !d.IsDir() {
+				if fi, err := d.Info(); err == nil {
+					rel, _ := filepath.Rel(inbox, p)
+					got[rel] = fi.Size()
+				}
+			}
+			return nil
+		})
+		json.NewEncoder(w).Encode(got)
+	})
 	mux.HandleFunc("/notizen", pages.Notizen(cfg))
 	mux.HandleFunc(cards.NotePages, pages.Notizen(cfg))
 	mux.HandleFunc("/mehr", pages.Mehr(cfg))
