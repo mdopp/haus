@@ -11,6 +11,7 @@ package energie
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/mdopp/haus/internal/ha"
@@ -94,6 +95,7 @@ func FromEnv() (Map, error) {
 	for _, f := range Legs {
 		legs[f.Key] = true
 	}
+	legs[ChargeKey] = true // the battery's charge, in % (not a leg)
 	for _, item := range strings.Split(os.Getenv("HAUS_ENERGY_FLOW"), ",") {
 		if item = strings.TrimSpace(item); item == "" {
 			continue
@@ -101,7 +103,7 @@ func FromEnv() (Map, error) {
 		k, e, ok := strings.Cut(item, "=")
 		k, e = strings.TrimSpace(k), strings.TrimSpace(e)
 		if !ok || !legs[k] || !ha.EntityRE.MatchString(e) {
-			return Map{}, fmt.Errorf("HAUS_ENERGY_FLOW %q: want pv|house|grid|battery=<entity_id>", item)
+			return Map{}, fmt.Errorf("HAUS_ENERGY_FLOW %q: want pv|house|grid|battery|soc=<entity_id>", item)
 		}
 		m.Flow[k] = e
 	}
@@ -210,6 +212,41 @@ func (m Map) Pick(states []ha.State) (flow []Leg, totals []Counter, used map[str
 		}
 	}
 	return flow, totals, used
+}
+
+// ChargeKey names the battery's charge in HAUS_ENERGY_FLOW
+// (soc=sensor.…): how full it is, in %.
+const ChargeKey = "soc"
+
+// fallbackCharge are the friendly names a battery's charge goes by when
+// the template names none (SENEC's first).
+var fallbackCharge = []string{"Akku-Füllstand in Prozent", "Akku Füllstand", "Batterie Ladezustand", "Battery State of Charge"}
+
+// Charge is how full the house's battery is, in percent: the template's
+// soc entity when it named one, else a battery sensor in % by one of the
+// fallback's friendly names. ok is false without one, or when it does not
+// say a number from 0 to 100 (unavailable, unknown).
+func (m Map) Charge(states []ha.State) (pct float64, s ha.State, ok bool) {
+	want := m.Flow[ChargeKey]
+	for _, st := range states {
+		name, _ := st.Attributes["friendly_name"].(string)
+		unit, _ := st.Attributes["unit_of_measurement"].(string)
+		match := st.EntityID == want
+		if want == "" && strings.HasPrefix(st.EntityID, "sensor.") && unit == "%" {
+			for _, n := range fallbackCharge {
+				match = match || strings.EqualFold(name, n)
+			}
+		}
+		if !match {
+			continue
+		}
+		v, err := strconv.ParseFloat(st.State, 64)
+		if err != nil || v < 0 || v > 100 {
+			return 0, st, false
+		}
+		return v, st, true
+	}
+	return 0, ha.State{}, false
 }
 
 // DeviceClass is a sensor's device_class, lower case.

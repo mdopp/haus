@@ -729,7 +729,7 @@ const verlaufStyle = `<style>:root{--e-eigen:#c27c0e;--e-bezug:#4f8ff7;--e-einsp
 .fluss .lauf{fill:none;stroke:var(--c);stroke-linecap:round;stroke-dasharray:1 11;animation:fliesst 1.6s linear infinite}
 @keyframes fliesst{to{stroke-dashoffset:-12}}@media (prefers-reduced-motion:reduce){.fluss .lauf{animation:none}}
 .knoten.solar{--c:var(--e-solar)}.knoten.netz{--c:var(--e-bezug)}.knoten.akku{--c:var(--e-akku)}.knoten.haus{--c:var(--accent)}
-.knoten circle{fill:var(--card);stroke:var(--c);stroke-width:3}.knoten.aus circle{stroke:var(--faint);stroke-dasharray:4 4;stroke-width:2}
+.knoten circle{fill:var(--card);stroke:var(--c);stroke-width:3}.knoten circle.fuell{fill:none;stroke:var(--c);stroke-width:5;stroke-linecap:round;opacity:.55}.knoten.aus circle{stroke:var(--faint);stroke-dasharray:4 4;stroke-width:2}
 .knoten .name{fill:var(--muted);font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase}
 .knoten .zahl{fill:var(--ink);font-size:17px;font-weight:700;font-variant-numeric:tabular-nums}.knoten .zahl.leer{fill:var(--faint)}.knoten .zahl.lang{font-size:13.5px}
 .knoten .wort{fill:var(--muted);font-size:11.5px}.knoten .zweit{fill:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
