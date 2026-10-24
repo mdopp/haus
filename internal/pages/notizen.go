@@ -66,7 +66,7 @@ func Notizen(cfg StartConfig) http.HandlerFunc {
 			b.WriteString(newNoteForm("", "", r.URL.Query().Get("neu") == "1"))
 		}
 		b.WriteString(`<form method=get action=/notizen role=search>` +
-			`<input type=search name=q value="` + html.EscapeString(q) + `" placeholder="` + field + `" aria-label="` + field + `"> <button>Suchen</button></form>`)
+			`<input type=search name=q value="` + html.EscapeString(q) + `" placeholder="` + field + `" aria-label="` + field + `"> <button data-laeuft="Sucht …">Suchen</button></form>`)
 
 		if q != "" {
 			var res library.Found
@@ -297,7 +297,7 @@ func newNoteForm(title, text string, open bool) string {
 	return `<details class=neu` + o + `><summary>Neue Notiz</summary><form class=notizform method=post action=/notizen>` +
 		`<label for=titel>Titel</label><input id=titel type=text name=titel required maxlength=200 value="` + html.EscapeString(title) + `">` +
 		`<label for=text>Text</label><textarea id=text name=text>` + html.EscapeString(text) + `</textarea>` +
-		`<button data-laeuft="Legt an …">Anlegen</button></form></details>` + pressScript
+		`<button data-laeuft="Legt an …">Anlegen</button></form></details>`
 }
 
 // noteWrite takes a POST: to /notizen a new note (titel, text), to
@@ -401,7 +401,7 @@ func noteEdit(w http.ResponseWriter, r *http.Request, cfg StartConfig, ref strin
 	b.WriteString(`<form class=notizform method=post action="` + html.EscapeString(cards.NotePage(n.Name)) + `">` +
 		`<input type=hidden name=stand value=` + strconv.FormatInt(n.Changed.UnixNano(), 10) + `>` +
 		`<label for=text>Text (die erste Zeile „# …“ ist der Titel)</label><textarea id=text name=text>` + html.EscapeString(text) + `</textarea>` +
-		`<button data-laeuft="Speichert …">Speichern</button></form>` + pressScript +
+		`<button data-laeuft="Speichert …">Speichern</button></form>` +
 		`<p><a href="` + html.EscapeString(cards.NotePage(n.Name)) + `">Abbrechen</a></p>`)
 	writePage(w, code, b)
 }

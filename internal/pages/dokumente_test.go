@@ -192,7 +192,7 @@ func TestDokumenteFiledLinksToWhatWasFiled(t *testing.T) {
 	// a mark that is none: no Haus link with it, the newest instead
 	for _, bad := range []string{"..%2F..%2Fx", "0A1B2C3D", "0a1b2c3d0", "%22%3E%3Cscript%3E"} {
 		page := getDokumente(cfg, "/dokumente?abgelegt=1&datei="+bad, home).Body.String()
-		if strings.Contains(page, "/dokumente/abgelegt/") || strings.Contains(page, "<script>") || strings.Count(page, newest) != 2 {
+		if strings.Contains(page, "/dokumente/abgelegt/") || strings.Contains(page, "\"><script>") || strings.Count(page, newest) != 2 {
 			t.Errorf("mark %q:\n%s", bad, page)
 		}
 	}

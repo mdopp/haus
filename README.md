@@ -865,3 +865,30 @@ parsers in mdopp/haus-android. `HAUS_QMD_REAL=<a running qmd>
 HAUS_QMD_REAL_NOTES=<its notes folder> go test ./internal/library -run Real`
 checks against a real qmd by hand; CI never does.
 No Go file names the old app or its names (`internal/app/names_test.go`).
+
+**In a browser** (`e2e/`, CI job `e2e`): `cmd/hausdemo` serves the family
+pages against the fakes (lamps, a cover, a player that change when
+switched, a notes folder; everyone is anna, `/demo/fehler?status=503`
+makes switching fail, `/demo/setze?id=…&state=…` changes a state from
+elsewhere). Playwright drives it on a phone-sized viewport: a switch flips
+at once and the page stays (no reload), a refusal is said on the page,
+the page follows a change made elsewhere, a player pauses in place, a
+note is written and changed, and no page throws a script error. Pictures
+of the main pages are kept with each run. Locally: `cd e2e && npm ci &&
+npx playwright install chromium && npx playwright test`; `go run
+./cmd/hausdemo` alone to look at the pages.
+
+## The Haus script
+
+Every family page carries one inline script in its head (`hausScript`,
+`internal/pages/skript.go`; owner 2026-10-24: scripts are welcome). A POST
+form goes in the background: the pressed switch flips at once, a button
+with `data-laeuft` says what runs, the answer replaces the page in place
+(scroll, focus and open folds kept, the address follows a redirect). A
+refusal the server says as `text/plain` (`/schalten` does when asked with
+`X-Haus-Skript`) is shown at the bottom and the page stays. `data-frage`
+asks before a removal, `data-kopieren` copies the field before it, a
+`<div hidden data-auffrischen=N>` refreshes the page in place every N
+seconds while it is seen and nobody types (Start, Räume, a thing 15,
+Medien 10, Energie 60, Dokumente 2–5 while a scan moves). `data-ganz`
+leaves a form to the browser.

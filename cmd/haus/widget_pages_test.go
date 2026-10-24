@@ -273,7 +273,7 @@ func TestItemPagesEscapeWhatTheyShow(t *testing.T) {
 	for _, p := range []string{"/raeume/sensor.boese", "/kalender/erinnerung/boese", "/kontakte/boese"} {
 		rec := page(h, p)
 		body := rec.Body.String()
-		if rec.Code != 200 || strings.Contains(body, "<script>") ||
+		if rec.Code != 200 || strings.Contains(body, "<script>alert") ||
 			!strings.Contains(body, "<h1>&lt;script&gt;alert(1)&lt;/script&gt;</h1>") ||
 			!strings.Contains(body, "<title>&lt;script&gt;alert(1)&lt;/script&gt; · ") {
 			t.Errorf("%s → %d, not escaped:\n%s", p, rec.Code, body)

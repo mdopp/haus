@@ -241,11 +241,11 @@ func (s scanning) moving() bool {
 
 // refresh is how soon the page looks again: soon while an admin waits for
 // an order's result, calmer for a stack.
-func (s scanning) refresh() string {
+func (s scanning) refresh() int {
 	if s.order.waiting() {
-		return "2"
+		return 2
 	}
-	return "5"
+	return 5
 }
 
 // busy is a state that moves on by itself, without anyone's button.
@@ -295,7 +295,7 @@ func scanSection(r *http.Request, cfg StartConfig, s scanning) string {
 			return ""
 		}
 		return `<section class="weg scannen" id=scanner><h2>Scannen</h2>` + scanSaying(r, cfg) + `<p class=k>` + html.EscapeString(saysScanUnset) + `</p>` +
-			`<div class=knoepfe>` + scanButton("Scannen einrichten", "einrichten") + `</div>` + byHand("Mit diesem Scanner einrichten") + `</section>` + scanScript
+			`<div class=knoepfe>` + scanButton("Scannen einrichten", "einrichten") + `</div>` + byHand("Mit diesem Scanner einrichten") + `</section>`
 	}
 	if errors.Is(s.err, laib.ErrNoTool) {
 		if !isAdmin(r) {
@@ -337,7 +337,7 @@ func scanSection(r *http.Request, cfg StartConfig, s scanning) string {
 	if isAdmin(r) {
 		b.WriteString(scannerSetup(r, cfg, st, s.order))
 	}
-	b.WriteString(`</section>` + scanScript)
+	b.WriteString(`</section>`)
 	return b.String()
 }
 
@@ -350,7 +350,7 @@ func einzelheiten(raw string) string {
 	return `<details class=k><summary>Einzelheiten</summary><p class=adresse>` + html.EscapeString(raw) + `</p></details>`
 }
 
-// scanButton is one order's button, a POST to /scannen; scanScript turns
+// scanButton is one order's button, a POST to /scannen; hausScript turns
 // a setup order's into „Sucht …“ the moment it is pressed.
 func scanButton(label, do string) string {
 	runs := ""
@@ -359,12 +359,6 @@ func scanButton(label, do string) string {
 	}
 	return `<form method=post action=` + ScannenPath + `><input type=hidden name=tun value=` + do + `><button` + runs + `>` + html.EscapeString(label) + `</button></form>`
 }
-
-// scanScript answers a press at once (haus#79): the button says what runs
-// and takes no second press while the order goes to Laib. Without script
-// the redirect's page says the same a moment later.
-const scanScript = `<script>(function(){document.querySelectorAll('form[action="` + ScannenPath + `"]').forEach(function(f){f.addEventListener('submit',function(){` +
-	`var b=f.querySelector('button');if(!b)return;setTimeout(function(){b.disabled=true;b.textContent=b.getAttribute('data-laeuft')||'Einen Moment …'},0)})})})()</script>`
 
 // byHand is the field for a device the search does not find.
 func byHand(label string) string {

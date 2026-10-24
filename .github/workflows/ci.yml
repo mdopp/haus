@@ -16,8 +16,37 @@ jobs:
           go-version-file: go.mod
       - run: go vet ./... && go test ./...
       - run: CGO_ENABLED=0 go build -o /dev/null ./cmd/haus
+  e2e:
+    # the family pages in a real browser against cmd/hausdemo's fakes
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: e2e
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test
+        env:
+          CI: "1"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e
+          path: |
+            e2e/test-results
+            e2e/playwright-report
+          retention-days: 14
   image:
-    needs: test
+    needs: [test, e2e]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:

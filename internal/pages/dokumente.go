@@ -204,7 +204,7 @@ func writeDokumente(w http.ResponseWriter, r *http.Request, cfg StartConfig, cod
 	scan := readScan(r, cfg)
 	b := familyHead(r, cfg, "Dokumente", "Dokumente")
 	if scan.moving() {
-		b.WriteString("<meta http-equiv=refresh content=" + scan.refresh() + ">") // the scan moves on by itself; the page follows
+		b.WriteString(refreshEvery(scan.refresh())) // the scan moves on by itself; the page follows in place
 	}
 	b.WriteString(dokStyle + scanStyle)
 	b.WriteString("<h1>Dokumente</h1><p class=lead>" + html.EscapeString(saysDocsLead) + "</p>")
@@ -235,7 +235,7 @@ func writeDokumente(w http.ResponseWriter, r *http.Request, cfg StartConfig, cod
 			`<input id=datei type=file name=file accept="image/jpeg,image/png,image/gif,image/webp,application/pdf" multiple required>` +
 			`<label for=titel>Titel (wenn du magst)</label>` +
 			`<input id=titel type=text name=filename maxlength=80 autocomplete=off placeholder="z. B. Stromrechnung Oktober">` +
-			`<button type=submit>Ablegen</button></form>` +
+			`<button type=submit data-laeuft="Lädt hoch …">Ablegen</button></form>` +
 			`<p class=k>` + html.EscapeString(saysUploadHow) + `</p></section>`)
 	}
 	b.WriteString(scanning)

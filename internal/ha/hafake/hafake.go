@@ -58,6 +58,7 @@ type HA struct {
 	stt      map[string]string // provider → the words it hears
 	heard    []Speech
 	stats    map[string][]Stat // statistic id → what it added, per hour (or coarser)
+	apply    bool              // a call turns a light or switch on or off, like HA (the demo)
 	statDown bool
 	statAsks []map[string]any
 }
@@ -423,6 +424,15 @@ func (h *HA) RegistriesDown(down bool) {
 	h.regsDown = down
 }
 
+// ApplyCalls makes a service call change the state it names, as HA does:
+// on, off, toggle, play, pause. For the demo (cmd/hausdemo); the tests
+// keep the states as they set them.
+func (h *HA) ApplyCalls(on bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.apply = on
+}
+
 // FailCalls makes service calls answer status (0: succeed again).
 func (h *HA) FailCalls(status int) {
 	h.mu.Lock()
@@ -511,6 +521,21 @@ func (h *HA) serve(w http.ResponseWriter, r *http.Request) {
 		var data map[string]any
 		json.NewDecoder(r.Body).Decode(&data)
 		h.calls = append(h.calls, Call{Domain: parts[0], Service: parts[1], Data: data})
+		if id, ok := data["entity_id"].(string); ok && h.apply {
+			if s, ok := h.states[id]; ok {
+				attrs, _ := s["attributes"].(map[string]any)
+				switch parts[1] {
+				case "turn_on", "media_play":
+					h.set(id, map[bool]string{true: "playing", false: "on"}[parts[1] == "media_play"], attrs)
+				case "turn_off":
+					h.set(id, "off", attrs)
+				case "media_pause":
+					h.set(id, "paused", attrs)
+				case "toggle":
+					h.set(id, map[bool]string{true: "off", false: "on"}[s["state"] == "on"], attrs)
+				}
+			}
+		}
 		// like HA: the states the call changed, each with the call's context
 		changed := []any{}
 		if id, ok := data["entity_id"].(string); ok {

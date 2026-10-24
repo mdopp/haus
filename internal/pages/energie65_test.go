@@ -76,7 +76,7 @@ func TestEnergieHistoryByDayWeekMonthYear(t *testing.T) {
 		"<rect class=eigen", "<rect class=bezug", "<rect class=einsp",
 		"<li><i class=eigen></i>Eigenverbrauch (von der Sonne)</li>", "<summary>Als Tabelle</summary>", "<th scope=row>09 Uhr</th>",
 		"--e-eigen:#c27c0e", "prefers-color-scheme:light")
-	mustNotContain(t, body, "<script", "sensor.senec", "Home Assistant")
+	mustNotContain(t, body, "<script>alert", "sensor.senec", "Home Assistant")
 	asked := fake.StatisticsAsked()
 	periods := map[string]bool{}
 	for _, a := range asked {

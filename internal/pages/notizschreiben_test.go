@@ -32,7 +32,7 @@ func TestNotizenWrite(t *testing.T) {
 	_, body, _ := familyPage(t, Notizen, cfg, "GET", "/notizen", "family")
 	mustContain(t, body, "Notizen entstehen, wenn du Haus sagst „Merk dir …“", "Netzlaufwerk",
 		`<details class=neu><summary>Neue Notiz</summary><form class=notizform method=post action=/notizen>`, `name=titel required`, `<textarea id=text name=text>`)
-	mustContain(t, body, `<button data-laeuft="Legt an …">Anlegen</button>`, pressScript)
+	mustContain(t, body, `<button data-laeuft="Legt an …">Anlegen</button>`, hausScript)
 	// the persona by its name where the page says how to address it
 	House.Display = "Joshua"
 	_, body, _ = familyPage(t, Notizen, cfg, "GET", "/notizen", "family")

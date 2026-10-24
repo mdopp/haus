@@ -269,7 +269,7 @@ func TestDingPinsAndUnpins(t *testing.T) {
 	mustContain(t, body, `<form method=post action="/raeume/light.buero">`, `name=stern value=an`, "☆ Auf Start zeigen",
 		"Dann steht es auf Start unter „Meine Geräte“.",
 		`<form method=post action=/schalten>`, `name=tun value="light.turn_off"`, `name=zurueck value="/raeume/light.buero"`, ">Ausschalten</button>")
-	mustNotContain(t, body, "<script", "★")
+	mustNotContain(t, body, "<script>alert", "★")
 
 	rec := post(t, Ding(cfg), "/raeume/light.buero", url.Values{"stern": {"an"}}, "anna", nil)
 	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/raeume/light.buero" {
