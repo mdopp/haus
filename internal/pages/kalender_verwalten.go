@@ -558,7 +558,7 @@ func KalenderAendern(cfg StartConfig) http.HandlerFunc {
 	}
 }
 
-const kalenderStyle = `<style>.karte form.eingabe{display:block}.eingabe label{max-width:30rem}.eingabe p.k{max-width:36rem}.kalender{list-style:none;padding:0;margin:0}.kalender li{padding:12px 0;border-bottom:1px solid var(--line)}.kalender .knoepfe{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px}
+const kalenderStyle = `<style>.karte form.eingabe{display:block}.kalender select{min-width:9rem;min-height:44px;font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--edge);border-radius:10px;padding:0 10px}.eingabe label{max-width:30rem}.eingabe p.k{max-width:36rem}.kalender{list-style:none;padding:0;margin:0}.kalender li{padding:12px 0;border-bottom:1px solid var(--line)}.kalender .knoepfe{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px}
 .kalender details{display:inline-block}.adresse{margin:6px 0}.kopieren{width:100%;max-width:36rem;font:13px ui-monospace,Menlo,Consolas,monospace;padding:.35rem .5rem;border:1px solid var(--line);border-radius:.4rem;background:transparent;color:inherit;box-sizing:border-box}
 .eingabe label{display:block;margin:.6rem 0 .15rem}.eingabe input:not([type=radio]),.eingabe select{font:inherit;width:100%;max-width:30rem;padding:.35rem .5rem;border:1px solid var(--line);border-radius:.4rem;background:transparent;color:inherit;box-sizing:border-box}
 .eingabe .wahl{display:inline-block;margin-right:1rem}.eingabe fieldset{border:0;padding:0;margin:.6rem 0}.eingabe button{margin-top:.8rem}.problem{border-left:3px solid #b3261e;padding:.1rem .6rem;margin:.4rem 0}.gesagt{border-left:3px solid #2b7a3d;padding:.2rem .7rem}
