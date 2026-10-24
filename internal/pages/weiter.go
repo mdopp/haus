@@ -24,6 +24,27 @@ func AppURL(raw string) string {
 	return raw
 }
 
+// OnDomain completes an address whose host ends in a dot ("https://caldav."
+// from a template value "https://caldav.${DOMAIN}" that reached Haus with
+// ${DOMAIN} empty) with the box's domain, taken from Haus's own public
+// address (haus.<domain>); else the address as it is.
+func OnDomain(raw, haus string) string {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || !strings.HasSuffix(u.Host, ".") {
+		return raw
+	}
+	h, err := url.Parse(strings.TrimSpace(haus))
+	if err != nil || h.Host == "" {
+		return raw
+	}
+	_, domain, ok := strings.Cut(h.Hostname(), ".")
+	if !ok || domain == "" {
+		return raw
+	}
+	u.Host += domain
+	return u.String()
+}
+
 // Set says the app has an address.
 func (a App) Set() bool { return a.URL != "" }
 

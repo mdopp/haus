@@ -199,11 +199,11 @@ func main() {
 			log.Printf("haus: HAUS_UPLOAD_DIR: sweeping staged parts: %v", err)
 		}
 	}
-	haPublic := pages.AppURL(os.Getenv("HAUS_HA_PUBLIC_URL")) // haus#64
+	haPublic := pages.AppURL(pages.OnDomain(os.Getenv("HAUS_HA_PUBLIC_URL"), os.Getenv("HAUS_PUBLIC_URL"))) // haus#64
 	if haPublic == "" && os.Getenv("HAUS_HA_PUBLIC_URL") != "" {
 		log.Printf("haus: HAUS_HA_PUBLIC_URL %q is not an http(s) address: no link to Home Assistant", os.Getenv("HAUS_HA_PUBLIC_URL"))
 	}
-	radicalePublic := pages.AppURL(os.Getenv("HAUS_RADICALE_PUBLIC_URL")) // haus#66
+	radicalePublic := pages.AppURL(pages.OnDomain(os.Getenv("HAUS_RADICALE_PUBLIC_URL"), os.Getenv("HAUS_PUBLIC_URL"))) // haus#66
 	if radicalePublic == "" && os.Getenv("HAUS_RADICALE_PUBLIC_URL") != "" {
 		log.Printf("haus: HAUS_RADICALE_PUBLIC_URL %q is not an http(s) address: no link to Radicale, no addresses for the phone", os.Getenv("HAUS_RADICALE_PUBLIC_URL"))
 	}
@@ -212,7 +212,7 @@ func main() {
 	if docsMail == "" && os.Getenv("HAUS_DOCUMENTS_MAIL") != "" {
 		log.Printf("haus: HAUS_DOCUMENTS_MAIL %q is not one plain address: no mail button", os.Getenv("HAUS_DOCUMENTS_MAIL"))
 	}
-	paperlessPublic := pages.AppURL(os.Getenv("HAUS_PAPERLESS_PUBLIC_URL"))
+	paperlessPublic := pages.AppURL(pages.OnDomain(os.Getenv("HAUS_PAPERLESS_PUBLIC_URL"), os.Getenv("HAUS_PUBLIC_URL")))
 	paperlessLAN, _ := strconv.ParseBool(os.Getenv("HAUS_PAPERLESS_LAN_ONLY"))
 	b := bote.FromEnv() // the Sprechen field (haus#12): with the Bote's key only (laib#215)
 	// haus#50: counted for usage-metrics, flushed every five minutes; the voice

@@ -20,6 +20,9 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/mdopp/haus/internal/ansicht"
+	"github.com/mdopp/haus/internal/caldav"
+	"github.com/mdopp/haus/internal/caldav/davfake"
 	"github.com/mdopp/haus/internal/cards"
 	"github.com/mdopp/haus/internal/favoriten"
 	"github.com/mdopp/haus/internal/ha"
@@ -75,7 +78,13 @@ func main() {
 
 	inbox := filepath.Join(dir, "musik-eingang")
 	os.MkdirAll(inbox, 0o755)
-	cfg := pages.StartConfig{HA: &ha.Client{URL: fake.URL, Token: "demo"}, Notes: nd, Favorites: favoriten.Open(dir), MusicInbox: inbox}
+	dav := davfake.New("haus", "demo")
+	defer dav.Close()
+	dav.AddCalendar("/haus/haushalt/", "Haushalt")
+	dav.AddPrincipal("anna")
+	cfg := pages.StartConfig{HA: &ha.Client{URL: fake.URL, Token: "demo"}, Notes: nd, Favorites: favoriten.Open(dir), MusicInbox: inbox,
+		Calendar: &caldav.Client{URL: dav.URL, User: "haus", Password: "demo", Loc: time.Local}, Views: ansicht.Open(dir),
+		RadicalePublicURL: "https://caldav.example"}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/start", pages.Start(cfg))
 	mux.HandleFunc("/raeume", pages.Raeume(cfg))
@@ -83,6 +92,8 @@ func main() {
 	mux.HandleFunc(cards.SwitchPath, pages.Schalten(cfg))
 	mux.HandleFunc("/medien", pages.Medien(cfg))
 	mux.HandleFunc("/energie", pages.Energie(cfg))
+	mux.HandleFunc("/kalender", pages.Kalender(cfg))
+	mux.HandleFunc("/kalender/verwalten", pages.KalenderVerwalten(cfg))
 	mux.HandleFunc(pages.MusikPath, pages.Musik(cfg))
 	mux.HandleFunc(pages.MusikTeilPath, pages.Musik(cfg))
 	mux.HandleFunc("/demo/musik", func(w http.ResponseWriter, r *http.Request) { // what arrived in the inbox, name → size
