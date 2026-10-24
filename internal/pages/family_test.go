@@ -205,7 +205,7 @@ func TestFamilyPagesWearTheHousePaletteNotThePersona(t *testing.T) {
 			"#070709", "#14141a", "#f97316", "#ffc107", "prefers-color-scheme:light", "color-scheme",
 			"@font-face", FontPath, "system-ui")
 		mustNotContain(t, body, "Joshua", "Wollen wir", "#3ddc84", "#0c120e", "/persona/icon.svg", "<header>", "class=sr>",
-			"<script", "googleapis", "gstatic", "#faf9f6")
+			"<script src", "googleapis", "gstatic", "#faf9f6") // Haus's own small scripts only, never one from elsewhere
 		if h.Get("Content-Type") != "text/html; charset=utf-8" {
 			t.Fatalf("%s: %q", p.path, h.Get("Content-Type"))
 		}

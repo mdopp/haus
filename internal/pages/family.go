@@ -230,6 +230,12 @@ func fromHaus(r *http.Request) bool {
 	return false
 }
 
+// pressScript answers a press at once (haus#79): a form's button with
+// data-laeuft says it („Speichert …“) and takes no second press while the
+// form goes. Without script the page after the form says the same.
+const pressScript = `<script>(function(){document.querySelectorAll('form button[data-laeuft]').forEach(function(b){` +
+	`b.form.addEventListener('submit',function(){setTimeout(function(){b.disabled=true;b.textContent=b.getAttribute('data-laeuft')},0)})})})()</script>`
+
 // showOnly answers anything but GET and HEAD with 405: a page shows; what
 // changes something has its own form and path (/schalten, a thing's ☆).
 func showOnly(w http.ResponseWriter, r *http.Request, what string) bool {

@@ -75,7 +75,7 @@ func TestNotizenListsTheNewest(t *testing.T) {
 		`<a href="/notizen/rezepte/apfelkuchen.md">Apfelkuchen</a>`,
 		`<a href="/notizen/WLAN%20f%C3%BCr%20G%C3%A4ste.md">WLAN für Gäste</a>`,
 		"heute")
-	mustNotContain(t, body, "Geheim", "Versteckt", "Draußen", "<i>", "<script")
+	mustNotContain(t, body, "Geheim", "Versteckt", "Draußen", "<i>", "<script>alert")
 	before(t, body, "Einkaufsliste", "Packliste")
 }
 
@@ -94,7 +94,7 @@ func TestNotizenSearch(t *testing.T) {
 	// holds a <script> line, which stays text
 	_, body, _ = familyPage(t, Notizen, StartConfig{Notes: nd}, "GET", "/notizen?q="+url.QueryEscape(`"><script>alert(1)</script>`), "")
 	mustContain(t, body, `value="&#34;&gt;&lt;script&gt;alert(1)&lt;/script&gt;"`, `<a href="/notizen/einkaufsliste.md">Einkaufsliste</a>`)
-	mustNotContain(t, body, "<script")
+	mustNotContain(t, body, "<script>alert")
 
 	// a blank query is no search
 	_, body, _ = familyPage(t, Notizen, StartConfig{Notes: nd}, "GET", "/notizen?q=++", "")
@@ -128,7 +128,7 @@ func TestNotizShowsItsTextEscaped(t *testing.T) {
 		mustContain(t, body, "<title>Einkaufsliste · Zuhause</title>", ">Einkaufsliste</h1>",
 			"Milch\nBrot", "Käse &lt;b&gt;fett&lt;/b&gt;", "&lt;script&gt;alert(1)&lt;/script&gt;",
 			`href=/notizen`, "href=/notizen aria-current=page>")
-		mustNotContain(t, body, "<b>fett", "<script", "# Einkaufsliste")
+		mustNotContain(t, body, "<b>fett", "<script>alert", "# Einkaufsliste")
 		// two paragraphs, the line break inside the first kept
 		if strings.Count(body, "<p class=notiz>") != 2 {
 			t.Fatalf("%s: want two paragraphs:\n%s", path, body)
@@ -219,7 +219,7 @@ func TestNotizenSearchByMeaning(t *testing.T) {
 	}
 	mustContain(t, body, "Treffer für „Lebensmittel“", `<a href="/notizen/einkaufsliste.md">Einkaufsliste</a>`, "Milch",
 		`<a href="/notizen/rezepte/apfelkuchen.md">Apfelkuchen</a>`, "&lt;i&gt;Schräger Titel&lt;/i&gt;")
-	mustNotContain(t, body, "Geheim", "Draußen", "draußen", "<i>", "<script", saysWordsOnly, "Nichts gefunden")
+	mustNotContain(t, body, "Geheim", "Draußen", "draußen", "<i>", "<script>alert", saysWordsOnly, "Nichts gefunden")
 	before(t, body, "Einkaufsliste", "Apfelkuchen")
 	mustNotLeak(t, body, f.URL, "qmd")
 }

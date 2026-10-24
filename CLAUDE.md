@@ -25,3 +25,10 @@ it. No silent buttons, no endless spinners (a timeout becomes an honest
 message), no raw errors, phone layout first. Tests cover the states: idle,
 running, done, failed, timed out. A page or button without them is not
 finished.
+
+**Scripts make the touch answer; the page works without them (owner,
+2026-10-24).** Every page and form works with script off: a form posts,
+the page after it says what happened. Small inline scripts of Haus's own
+are welcome wherever they make using it better — the pressed button's
+"Speichert …" (`pressScript`), a part fetched after the page, a live
+state. Never a script from elsewhere, no framework, no build step.
