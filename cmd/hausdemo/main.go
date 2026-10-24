@@ -74,13 +74,14 @@ func main() {
 	mux.HandleFunc("/notizen", pages.Notizen(cfg))
 	mux.HandleFunc(cards.NotePages, pages.Notizen(cfg))
 	mux.HandleFunc("/mehr", pages.Mehr(cfg))
+	mux.Handle(pages.LivePath, &pages.Live{HA: cfg.HA})
 	mux.HandleFunc("/demo/fehler", func(w http.ResponseWriter, r *http.Request) {
 		n, _ := strconv.Atoi(r.URL.Query().Get("status"))
 		fake.FailCalls(n)
 	})
 	mux.HandleFunc("/demo/setze", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
-		fake.Set(q.Get("id"), q.Get("state"), map[string]any{"friendly_name": q.Get("name")})
+		fake.Change(q.Get("id"), q.Get("state"), map[string]any{"friendly_name": q.Get("name")})
 	})
 	anna := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		r.Header.Set("Remote-User", "anna")

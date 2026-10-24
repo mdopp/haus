@@ -1,7 +1,10 @@
 package pages
 
 import (
+	"bufio"
+	"context"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
@@ -20,8 +23,8 @@ func TestFamilyPagesCarryTheHausScript(t *testing.T) {
 	for _, p := range []struct {
 		page  func(StartConfig) http.HandlerFunc
 		path  string
-		every string // "": none
-	}{{Start, "/start", "15"}, {Raeume, "/raeume", "15"}, {Medien, "/medien", "10"}, {Energie, "/energie", "60"},
+		every string // the marker after data-auffrischen=; "": none
+	}{{Start, "/start", "120 data-live=alle"}, {Raeume, "/raeume", "120 data-live=seite"}, {Medien, "/medien", "120 data-live=seite"}, {Energie, "/energie", "60"},
 		{Kalender, "/kalender", ""}, {Notizen, "/notizen", ""}, {Mehr, "/mehr", ""}} {
 		_, body, _ := familyPage(t, p.page, all, "GET", p.path, "family")
 		mustContain(t, body, hausScript, hausStyle)
@@ -73,4 +76,53 @@ func TestButtonsSayWhatRuns(t *testing.T) {
 	_, body, _ := familyPage(t, Notizen, StartConfig{Notes: nd}, "GET", "/notizen", "family")
 	mustContain(t, body, `<button data-laeuft="Sucht …">Suchen</button>`, `<button data-laeuft="Legt an …">Anlegen</button>`)
 	mustContain(t, copyField("https://caldav.box.test/anna/privat/"), `<button type=button data-kopieren>Kopieren</button>`)
+}
+
+// The pages' push (owner, 2026-10-24): /live streams each change of a
+// thing Home Assistant reports, its entity id, while someone listens;
+// sensors stay out; nobody signed in gets nothing; the last one gone ends
+// the subscription.
+func TestLiveStreamsWhatChanged(t *testing.T) {
+	fake, hc := house(t)
+	fake.Set("light.flur", "off", nil)
+	l := &Live{HA: hc}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.Header.Set("Remote-User", r.URL.Query().Get("wer"))
+		l.ServeHTTP(w, r)
+	}))
+	defer srv.Close()
+	if res, err := http.Get(srv.URL + "/live"); err != nil || res.StatusCode != http.StatusForbidden {
+		t.Fatalf("nobody: %v %v", res, err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	req, _ := http.NewRequestWithContext(ctx, "GET", srv.URL+"/live?wer=anna", nil)
+	res, err := http.DefaultClient.Do(req)
+	if err != nil || res.StatusCode != 200 || res.Header.Get("Content-Type") != "text/event-stream" {
+		t.Fatalf("%v %v", res, err)
+	}
+	if !fake.WaitSubscribed(1) {
+		t.Fatal("no subscription to HA")
+	}
+	fake.Change("sensor.temp", "21.5", nil)
+	fake.Change("light.flur", "on", nil)
+	rd := bufio.NewReader(res.Body)
+	var got []string
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) && len(got) < 2 {
+		line, err := rd.ReadString('\n')
+		if err != nil {
+			break
+		}
+		if strings.HasPrefix(line, "event: ") || strings.HasPrefix(line, "data: ") {
+			got = append(got, strings.TrimSpace(line))
+		}
+	}
+	if strings.Join(got, "|") != "event: geaendert|data: light.flur" {
+		t.Fatalf("stream %q", got)
+	}
+	cancel()
+	res.Body.Close()
+	if !fake.WaitSubscribedExactly(0) {
+		t.Error("the subscription outlived its last listener")
+	}
 }

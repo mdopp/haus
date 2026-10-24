@@ -167,7 +167,7 @@ func Start(cfg StartConfig) http.HandlerFunc {
 		logErrs("start", map[string]error{"laib": laibErr, "home assistant": haErr, "calendar": evErr, "reminders": todoErr, "favorites": favErr})
 
 		b := familyHead(r, cfg, "Zuhause", "Start")
-		b.WriteString(refreshEvery(15)) // lamps, players, the day: in place while it is seen
+		b.WriteString(liveRefresh("alle", 120)) // lamps and players by push; the day and the box line every two minutes
 		b.WriteString("<h1>Zuhause</h1><p class=datum>" + dateWords(now, loc) + "</p>")
 		var top, bottom string
 		if cfg.Laib != nil {

@@ -12,14 +12,16 @@ import "strconv"
 //
 // A page that changes by itself carries <div hidden data-auffrischen=N>:
 // it is fetched again every N seconds, in place, while the page is seen
-// and nobody is typing or pressing.
+// and nobody is typing or pressing. With data-live it also listens on
+// LivePath and is fetched again as soon as a thing on it changes (Home
+// Assistant pushes it), so N is only the fallback.
 //
 // A form with data-ganz, or one whose answer is not a page (an app link),
 // goes the browser's own way. The script sits in the head and listens on
 // the document, so a page swapped in needs nothing bound again; the
 // page's own inline scripts run again after a swap.
 const hausScript = `<script>(function(){if(window.hausSkript)return;window.hausSkript=1;
-var busy=0,last=0,timer=null,sec=1e3;
+var busy=0,last=0,timer=null,sec=1e3,es=null;
 function or(a,b){return a?a:b}
 function act(e){return e.form?e.form.getAttribute('action'):''}
 function say(t){var h=document.getElementById('haus-hinweis');if(!h){h=document.createElement('div');h.id='haus-hinweis';h.setAttribute('role','alert');document.body.appendChild(h)}
@@ -34,7 +36,10 @@ function swap(text,url){var d=new DOMParser().parseFromString(text,'text/html');
 document.title=d.title;document.body.innerHTML=d.body.innerHTML;if(url!==location.href)history.replaceState(null,'',url);
 document.body.querySelectorAll('script').forEach(function(o){var s=document.createElement('script');s.textContent=o.textContent;o.parentNode.replaceChild(s,o)});
 restore(k,same);plan()}
-function plan(){clearTimeout(timer);var m=document.querySelector('[data-auffrischen]');if(!m)return;timer=setTimeout(fresh,or(+m.getAttribute('data-auffrischen'),15)*sec)}
+function heard(e){var m=document.querySelector('[data-live]');if(!m)return;
+if(m.getAttribute('data-live')!=='alle'&&document.body.innerHTML.indexOf(e.data)<0)return;clearTimeout(timer);timer=setTimeout(fresh,400)}
+function plan(){clearTimeout(timer);var m=document.querySelector('[data-auffrischen]');if(!m)return;
+if(m.hasAttribute('data-live')&&!es&&window.EventSource){es=new EventSource('/live');es.addEventListener('geaendert',heard)}timer=setTimeout(fresh,or(+m.getAttribute('data-auffrischen'),15)*sec)}
 function typing(){var a=document.activeElement;return a&&['INPUT','TEXTAREA','SELECT'].indexOf(a.tagName)>=0&&a.type!=='hidden'&&a.type!=='submit'}
 function fresh(){if(document.hidden){timer=setTimeout(fresh,3*sec);return}if(busy){timer=setTimeout(fresh,3*sec);return}
 if(typing()){timer=setTimeout(fresh,3*sec);return}if(Date.now()-last<4*sec){timer=setTimeout(fresh,3*sec);return}
