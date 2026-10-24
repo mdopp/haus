@@ -86,7 +86,11 @@ func routes(s site) http.Handler {
 		Samba: s.samba, SambaHost: s.sambaHost, Usage: s.usage, PublicURL: s.publicURL, Welcome: s.welcome, STT: s.stt,
 		HAPublicURL: s.haPublic, Inverted: s.inverted, RadicalePublicURL: s.radicale, Views: s.views,
 		DocumentsMail: s.docsMail, PaperlessPublicURL: s.paperlessPublic, PaperlessLANOnly: s.paperlessLAN}
-	if family.MusicInbox = os.Getenv("HAUS_MUSIC_INBOX"); family.MusicInbox != "" { // haus#107: the music inbox beets sorts in
+	family.MusicInbox = os.Getenv("HAUS_MUSIC_INBOX")
+	if fi, err := os.Stat(musicInboxMount); family.MusicInbox == "" && err == nil && fi.IsDir() {
+		family.MusicInbox = musicInboxMount // where laib's haus template mounts it (laib#639)
+	}
+	if family.MusicInbox != "" { // haus#107: the music inbox beets sorts in
 		if fi, err := os.Stat(family.MusicInbox); err != nil || !fi.IsDir() {
 			log.Printf("haus: HAUS_MUSIC_INBOX %s is not a folder (yet): uploads answer 503 until it is", family.MusicInbox)
 		}
@@ -144,6 +148,10 @@ func routes(s site) http.Handler {
 	mux.Handle("/", pages.RequireProxy(s.proxySecret, pages.Counted(s.usage, pagesMux)))
 	return mux
 }
+
+// musicInboxMount is where laib's haus template mounts the music inbox
+// (laib#639); Haus takes it when HAUS_MUSIC_INBOX names none.
+const musicInboxMount = "/musik-eingang"
 
 func main() {
 	if len(os.Args) > 1 { // a one-shot command, not the server

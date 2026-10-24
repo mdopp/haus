@@ -890,9 +890,9 @@ npx playwright install chromium && npx playwright test`; `go run
 
 ## Musik hinzufügen (haus#107)
 
-`GET /musik`, under Mehr, only when `HAUS_MUSIC_INBOX` names laib's
-music inbox (the haus template mounts it at `/musik-eingang`; beets
-sorts it into the music and Jellyfin). Anyone in the family: files
+`GET /musik`, under Mehr, only with laib's music inbox: `HAUS_MUSIC_INBOX`,
+else `/musik-eingang` when it is mounted (laib#639's haus template mounts
+it there; beets sorts it into the music and Jellyfin). Anyone in the family: files
 (MP3, FLAC, M4A, OGG, Opus, WAV), a whole folder (`webkitdirectory`, on
 a computer) or ZIPs. The page's script sends each file in 8 MB pieces to
 `POST /musik/teil?pfad=<place>&ab=<offset>&gesamt=<size>`: appended to
