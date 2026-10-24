@@ -63,10 +63,10 @@ func Raeume(cfg StartConfig) http.HandlerFunc {
 		if haErr == nil && !roomsOK {
 			log.Printf("haus: räume page: home assistant's rooms are not known yet; the cards are left out")
 		}
-		b := familyHead(r, cfg, "Räume", "Räume")
+		b := familyHead(r, cfg, "Geräte", "Räume")
 		b.WriteString(liveRefresh("seite", 120))
-		b.WriteString("<h1>Räume</h1>")
-		if haErr == nil { // the way on only while HA answers: a line about it never names it (laib ADR 0021)
+		b.WriteString("<h1>Geräte</h1>") // the tab's name (owner 2026-10-24)
+		if haErr == nil {                // the way on only while HA answers: a line about it never names it (laib ADR 0021)
 			b.WriteString(cfg.homeAssistant().Weiter("/", saysInHA))
 		}
 		switch {
@@ -86,7 +86,11 @@ func Raeume(cfg StartConfig) http.HandlerFunc {
 					pinned[id] = true
 				}
 			}
-			for _, c := range roomCards(states, reg, pinned) {
+			playing := laeuftGerade(states, reg, "/raeume", pinned)
+			if len(playing.Rows) > 0 {
+				b.WriteString(playing.HTML()) // what plays first, with its buttons: Medien's card (owner 2026-10-24)
+			}
+			for _, c := range roomCards(states, reg, pinned, playingIDs(playing)) {
 				b.WriteString(c.HTML())
 			}
 		}
@@ -105,7 +109,7 @@ const saysInHA = "Für alles, was Haus nicht kann: Automationen, Einstellungen, 
 // its own page; a lamp HA reaches with its switch. pinned is the person's
 // Start (nil: no ☆). What HA hides (hidden, config, diagnostic) is left
 // out.
-func roomCards(states []ha.State, reg ha.Registry, pinned map[string]bool) []cards.Card {
+func roomCards(states []ha.State, reg ha.Registry, pinned, playing map[string]bool) []cards.Card {
 	type thing struct {
 		kind             int
 		id, name, detail string
@@ -122,7 +126,7 @@ func roomCards(states []ha.State, reg ha.Registry, pinned map[string]bool) []car
 		if _, group := s.Attributes["entity_id"].([]any); group {
 			continue // a group is not a thing in a room; its members are
 		}
-		if reg.Hidden[s.EntityID] || twins[s.EntityID] {
+		if reg.Hidden[s.EntityID] || twins[s.EntityID] || playing[s.EntityID] { // what plays is on top, once
 			continue
 		}
 		room := oneLine(reg.Rooms[s.EntityID])

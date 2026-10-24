@@ -52,24 +52,31 @@ const (
 // icon (24×24, stroked).
 type tab struct{ name, href, icon string }
 
-// tabs are the bar (haus#67): at most four — Start, Geräte, Haushalt (the
-// calendar with its reminders), Mehr — each only when its backend is set;
-// Mehr always, it holds the account.
+// tabs are the bar (haus#67; owner 2026-10-24): Start, Geräte (the rooms,
+// what plays on top), Haushalt (Kalender, Notizen, Dokumente), Energie,
+// Mehr (the account and the settings) — each only when its backend is set;
+// Mehr always, it holds the account. Every page is in exactly one.
 var tabs = []tab{
 	{"Start", "/start", `<path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z"/>`},
 	{"Geräte", "/raeume", `<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>`},
 	{"Haushalt", "/kalender", `<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>`},
+	{"Energie", "/energie", `<path d="M13 3L5 13.5h6L10 21l8-10.5h-6z"/>`},
 	{"Mehr", mehrPath, `<circle cx="5.5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="18.5" cy="12" r="1.3"/>`},
 }
 
-// mehr is what Mehr holds (haus#67), in this order, each only when its
-// backend is set, Box and Adresse for admins; then the account with Abmelden. Notizen
-// keeps a place of its own here until the owner decides where it goes.
+// haushaltPages is what the Haushalt tab holds, as pills on top of each of its
+// pages (owner 2026-10-24): the household's days, memory and papers.
+var haushaltPages = []tab{
+	{"Kalender", "/kalender", ""},
+	{"Notizen", "/notizen", ""},
+	{"Dokumente", DokumentePath, ""},
+}
+
+// mehr is what Mehr holds (haus#67; owner 2026-10-24): the settings and,
+// for admins, the box — each only when this box has it; then the account
+// with Abmelden. What the family uses day to day has a tab of its own.
 var mehr = []tab{
-	{"Energie", "/energie", `<path d="M13 3L5 13.5h6L10 21l8-10.5h-6z"/>`},
-	{"Medien", "/medien", `<circle cx="12" cy="12" r="9"/><path d="M10 8.5v7l6-3.5z"/>`},
-	{"Notizen", "/notizen", `<path d="M6 4h9l3 3v13H6z"/><path d="M9 11h6M9 15h6"/>`},
-	{"Dokumente", DokumentePath, `<path d="M4 7h6l2 2h8v10H4z"/><path d="M12 12v5M9.5 14.5L12 17l2.5-2.5"/>`},
+	{"Apps einrichten", willkommenPath, `<rect x="6" y="3" width="12" height="18" rx="2"/><path d="M11 18h2"/>`},
 	{"Netzlaufwerk", "/netzlaufwerk", `<rect x="3" y="5" width="18" height="6" rx="1.5"/><rect x="3" y="13" width="18" height="6" rx="1.5"/><path d="M7 8h.01M7 16h.01"/>`},
 	{"Box", "/box", `<rect x="3" y="7" width="18" height="12" rx="2"/><path d="M3 11h18M8 15h2"/>`},
 	{"Adresse", adressePath, `<path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/>`},
@@ -78,13 +85,13 @@ var mehr = []tab{
 // abmeldenIcon is the way out's.
 const abmeldenIcon = `<path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4M10 16l-4-4 4-4M6 12h10"/>`
 
-// tabOf is the bar entry a page belongs to: Räume is Geräte, Kalender is
-// Haushalt, what Mehr holds is Mehr.
+// tabOf is the bar entry a page belongs to: Räume and Medien are Geräte,
+// Kalender, Notizen and Dokumente Haushalt, what Mehr holds is Mehr.
 func tabOf(page string) string {
 	switch page {
-	case "Räume":
+	case "Räume", "Medien":
 		return "Geräte"
-	case "Kalender":
+	case "Kalender", "Notizen", "Dokumente":
 		return "Haushalt"
 	}
 	for _, m := range mehr {
@@ -97,9 +104,10 @@ func tabOf(page string) string {
 
 // shows says which entries this box and this person have.
 func shows(r *http.Request, cfg StartConfig) map[string]bool {
-	return map[string]bool{"Start": true, "Geräte": cfg.HA != nil, "Haushalt": cfg.Calendar != nil, "Mehr": true,
-		"Energie": cfg.HA != nil, "Medien": cfg.HA != nil, "Notizen": cfg.Notes != nil, "Dokumente": cfg.hasDocs(),
-		"Netzlaufwerk": cfg.Samba != nil && r.Header.Get("Remote-User") != "", "Box": isAdmin(r),
+	return map[string]bool{"Start": true, "Geräte": cfg.HA != nil, "Haushalt": cfg.Calendar != nil || cfg.Notes != nil || cfg.hasDocs(), "Mehr": true,
+		"Energie": cfg.HA != nil, "Kalender": cfg.Calendar != nil, "Notizen": cfg.Notes != nil, "Dokumente": cfg.hasDocs(),
+		"Apps einrichten": cfg.Laib != nil || cfg.Samba != nil,
+		"Netzlaufwerk":    cfg.Samba != nil && r.Header.Get("Remote-User") != "", "Box": isAdmin(r),
 		"Adresse": isAdmin(r) && cfg.Laib != nil}
 }
 
@@ -131,6 +139,14 @@ func familyNav(r *http.Request, cfg StartConfig, current string) string {
 		class := ""
 		if t.name == "Mehr" {
 			class = "zu-mehr"
+		}
+		if t.name == "Haushalt" {
+			for _, h := range haushaltPages {
+				if show[h.name] {
+					t.href = h.href
+					break
+				}
+			}
 		}
 		navLink(&b, t, class, t.name == in)
 	}
@@ -177,6 +193,7 @@ form[role=search]{display:flex;gap:8px;margin:16px 0 0}
 .ruhig{display:flex;gap:8px;align-items:flex-start;margin:26px 2px 0;color:var(--muted);font-size:.8rem}.punkt{width:8px;height:8px;margin-top:.45em;border-radius:50%;background:var(--ok);flex:none}.punkt.grau{background:var(--faint)}
 .weiter-in{margin:18px 2px 0;font-size:.9rem}.weiter-in a{font-weight:600;text-decoration:none}.weiter-in a::after{content:" ↗"}.weiter-in .k{display:block;font-size:.8rem;margin-top:2px}
 .stern{margin:20px 0 0}.stern p{margin:6px 2px 0;font-size:.85rem}
+.unterseiten{display:flex;gap:8px;margin:22px 0 -8px;overflow-x:auto}.unterseiten a{display:inline-flex;align-items:center;min-height:44px;padding:0 18px;border-radius:999px;background:var(--card);border:1px solid var(--edge);color:var(--ink);text-decoration:none;font-size:.9rem;white-space:nowrap}.unterseiten a[aria-current]{color:var(--accent);border-color:var(--accent);font-weight:600}
 .tabs{position:fixed;left:0;right:0;bottom:0;z-index:2;display:flex;justify-content:center;background:var(--panel);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
 .tabs a{flex:1;max-width:7.5rem;min-height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--muted);text-decoration:none;font-size:.72rem}
 .tabs a[aria-current]{color:var(--accent)}.tabs svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.tabs .mehr{display:none}
@@ -208,7 +225,33 @@ func familyHead(r *http.Request, cfg StartConfig, title, current string) *string
 	b.WriteString(cards.Style + hausStyle + hausScript) // in the head: a page swapped in keeps it
 	b.WriteString(familyNav(r, cfg, current))
 	b.WriteString(konto(r))
+	if tabOf(current) == "Haushalt" {
+		b.WriteString(haushaltNav(r, cfg, current))
+	}
 	return b
+}
+
+// haushaltNav is the Haushalt tab's pages as pills, the current marked;
+// none for a box with only one of them.
+func haushaltNav(r *http.Request, cfg StartConfig, current string) string {
+	show := shows(r, cfg)
+	var b strings.Builder
+	n := 0
+	for _, t := range haushaltPages {
+		if !show[t.name] {
+			continue
+		}
+		n++
+		mark := ""
+		if t.name == current {
+			mark = " aria-current=page"
+		}
+		b.WriteString("<a href=" + t.href + mark + ">" + t.name + "</a>")
+	}
+	if n < 2 {
+		return ""
+	}
+	return `<nav class=unterseiten aria-label=Haushalt>` + b.String() + `</nav>`
 }
 
 // fromHaus is a POST the person sent from Haus's own page (haus#35): the

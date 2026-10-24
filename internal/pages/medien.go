@@ -4,6 +4,7 @@ import (
 	"context"
 	"math"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -94,12 +95,7 @@ func Medien(cfg StartConfig) http.HandlerFunc {
 		}
 		byName(on)
 		byName(quiet)
-		laeuft := cards.Card{Title: "Läuft gerade", Look: cards.Boxes}
-		for _, s := range on {
-			row := cards.Row{Text: friendly(s), Detail: playingWords(s, reg.Rooms[s.EntityID]), Href: cards.ThingPage(s.EntityID)}
-			row.Action, row.Also = playerButtons(s, medienPath)
-			laeuft.Rows = append(laeuft.Rows, row)
-		}
+		laeuft := playingCard(on, reg, medienPath)
 		if len(on) == 0 {
 			laeuft.Add(saysNothingPlays, "")
 		}
@@ -220,4 +216,54 @@ func playerButtons(s ha.State, back string) (*cards.Action, []*cards.Action) {
 		return nil, nil
 	}
 	return all[0], append([]*cards.Action{}, all[1:]...)
+}
+
+// playingCard is Läuft gerade: each playing or paused player with its
+// room and what it plays, and its buttons landing on back.
+func playingCard(on []ha.State, reg ha.Registry, back string) cards.Card {
+	c := cards.Card{Title: "Läuft gerade", Look: cards.Boxes}
+	for _, s := range on {
+		row := cards.Row{Text: friendly(s), Detail: playingWords(s, reg.Rooms[s.EntityID]), Href: cards.ThingPage(s.EntityID)}
+		row.Action, row.Also = playerButtons(s, back)
+		c.Rows = append(c.Rows, row)
+	}
+	return c
+}
+
+// laeuftGerade is Läuft gerade for Geräte: the players that play or are
+// paused, one per thing, playing first; no rows when none does.
+func laeuftGerade(states []ha.State, reg ha.Registry, back string, pinned map[string]bool) cards.Card {
+	twins := twinPlayers(states, reg, false) // a Jellyfin session is someone's app, not a thing in the house
+	var on []ha.State
+	for _, s := range states {
+		if strings.HasPrefix(s.EntityID, "media_player.") && shown(s, reg.Hidden) && !twins[s.EntityID] && (s.State == "playing" || s.State == "paused") {
+			on = append(on, s)
+		}
+	}
+	sort.SliceStable(on, func(i, j int) bool {
+		if (on[i].State == "playing") != (on[j].State == "playing") {
+			return on[i].State == "playing"
+		}
+		return strings.ToLower(friendly(on[i])) < strings.ToLower(friendly(on[j]))
+	})
+	c := playingCard(on, reg, back)
+	if pinned != nil { // its ☆ goes with it, as in its room
+		for i, s := range on {
+			c.Rows[i].Pin = &cards.Pin{Entity: s.EntityID, Name: friendly(s), On: pinned[s.EntityID], Back: back}
+		}
+	}
+	return c
+}
+
+// playingIDs are the players a Läuft gerade card shows.
+func playingIDs(c cards.Card) map[string]bool {
+	ids := map[string]bool{}
+	for _, r := range c.Rows {
+		if id, ok := strings.CutPrefix(r.Href, cards.ThingPages); ok {
+			if u, err := url.PathUnescape(id); err == nil {
+				ids[u] = true
+			}
+		}
+	}
+	return ids
 }

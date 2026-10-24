@@ -75,18 +75,24 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   is, Geist served by Haus itself at `/schrift/…woff2` (OFL, vendored in
   `internal/pages/schrift`; no request to Google, the phone's own font
   when it does not load), and one selection on every family page
-  (haus#67): on the phone a bar at the bottom with at most four entries,
-  icon and name — Start · Geräte (`/raeume`) · Haushalt (`/kalender`, the
-  appointments and reminders) · Mehr — Geräte and Haushalt only when their
-  backend is set. `GET /mehr` holds the rest: Energie, Medien, Notizen
-  (its place until the owner decides where notes go), Netzlaufwerk, Box
-  for admins, each only when this box has it, and *Konto* with who is
-  signed in and *Abmelden*. From 900 px wide the bar is a list on the
+  (haus#67; owner 2026-10-24: every page in exactly one tab, the page named
+  like its tab): on the phone a bar at the bottom, icon and name — Start ·
+  Geräte (`/raeume`: what plays on top as *Läuft gerade* with its buttons
+  and ☆, once; then the rooms; `/medien` stays reachable and counts as
+  Geräte) · Haushalt (Kalender, Notizen, Dokumente as pills on top of each;
+  the tab leads to the first this box has) · Energie · Mehr — each only
+  when its backend is set. `GET /mehr` holds the settings only: Apps
+  einrichten, the Netzlaufwerk password, Box and Adresse for admins, each
+  only when this box has it, and *Konto* with who is signed in and
+  *Abmelden*. Start: the day (*Heute und demnächst*) first, then *Meine
+  Geräte*, *Im Haus*, and Energie in one line (the roof, the house, the
+  battery's charge, the grid) leading to Energie. From 900 px wide the bar is a list on the
   right, Mehr open in it (its entries, who is signed in, Abmelden; Mehr's
   own entry is the phone's), the page and its entry marked, and the cards
   in two columns beside it. At the top of a page only the login, small
-  (haus#61's Abmelden moved under Mehr). No
-  persona on the family's pages: it speaks where you talk to it.
+  (haus#61's Abmelden moved under Mehr). The persona's greeting, colours
+  and icon stay off the family's pages; its name appears where a sentence
+  says how to address it.
 - `POST /schalten` — a family page's button (haus#35): `geraet`, `tun`
   (`light|switch.turn_on|turn_off`, `media_player.media_pause`, Geräte's
   `cover.open_cover|stop_cover|close_cover|set_cover_position` (haus#64), or

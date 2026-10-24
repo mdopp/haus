@@ -60,12 +60,13 @@ func mehrOf(t *testing.T, body string) string {
 	return body[i : i+j]
 }
 
-// haus#12, haus#35, haus#67: one selection on every family page, the item
-// pages too. The bar has at most four entries — Start · Geräte · Haushalt
-// · Mehr, each with its icon and only when its backend is set — and Mehr
-// holds Energie, Medien, Notizen and, for admins, Box, then who is signed
-// in and Abmelden. The page itself is marked, and its bar entry: Räume is
-// Geräte, Kalender is Haushalt, Energie is Mehr.
+// haus#12, haus#35, haus#67, owner 2026-10-24: one selection on every
+// family page, the item pages too. The bar is Start · Geräte · Haushalt ·
+// Energie · Mehr, each with its icon and only when its backend is set;
+// every page is in exactly one: Räume, things and Medien are Geräte;
+// Kalender, Notizen and Dokumente Haushalt, with their pills on top; Mehr
+// holds the settings and, for admins, Box, then who is signed in and
+// Abmelden — no page the family uses day to day.
 func TestFamilyTabBar(t *testing.T) {
 	fake, hc := house(t)
 	fake.Set("light.flur", "on", map[string]any{"friendly_name": "Flurlicht"})
@@ -73,42 +74,42 @@ func TestFamilyTabBar(t *testing.T) {
 	nd := notesDir(t, map[string]time.Duration{"Einkaufsliste": time.Hour})
 	all := StartConfig{HA: hc, Calendar: cal, Notes: nd}
 	for _, p := range []struct {
-		page      func(StartConfig) http.HandlerFunc
-		path      string
-		bar, self string
-	}{{Start, "/start", "/start", ""}, {Raeume, "/raeume", "/raeume", ""}, {Kalender, "/kalender", "/kalender", ""},
-		{Energie, "/energie", "/mehr", "/energie"}, {Medien, "/medien", "/mehr", "/medien"}, {Notizen, "/notizen", "/mehr", "/notizen"},
+		page func(StartConfig) http.HandlerFunc
+		path string
+		bar  string
+		pill string // the Haushalt pill marked; "": no pills
+	}{{Start, "/start", "/start", ""}, {Raeume, "/raeume", "/raeume", ""}, {Kalender, "/kalender", "/kalender", "/kalender"},
+		{Energie, "/energie", "/energie", ""}, {Medien, "/medien", "/raeume", ""}, {Notizen, "/notizen", "/kalender", "/notizen"},
 		{Mehr, "/mehr", "/mehr", ""}, {Ding, "/raeume/light.flur", "/raeume", ""}, {Ding, "/raeume/light.gibtsnicht", "/raeume", ""},
-		{Notizen, "/notizen/einkaufsliste.md", "/mehr", "/notizen"}} {
+		{Notizen, "/notizen/einkaufsliste.md", "/kalender", "/notizen"}} {
 		code, body, _ := familyPage(t, p.page, all, "GET", p.path, "family")
 		if code != 200 && code != 404 {
 			t.Fatalf("%s → %d", p.path, code)
 		}
 		bar, more := barOf(t, body), mehrOf(t, body)
-		if n := strings.Count(bar, "<a "); n != 4 {
-			t.Errorf("%s: %d entries in the bar, want 4", p.path, n)
+		if n := strings.Count(bar, "<a "); n != 5 {
+			t.Errorf("%s: %d entries in the bar, want 5", p.path, n)
 		}
-		mustContain(t, bar, ">Start</a>", ">Geräte</a>", ">Haushalt</a>", ">Mehr</a>", "<svg")
+		mustContain(t, bar, ">Start</a>", ">Geräte</a>", ">Haushalt</a>", ">Energie</a>", ">Mehr</a>", "<svg")
 		before(t, bar, "href=/start", "href=/raeume")
 		before(t, bar, "href=/raeume", "href=/kalender")
-		before(t, bar, "href=/kalender", "href=/mehr")
-		mustNotContain(t, bar, "href=/energie", "href=/medien", "href=/notizen", "href=/box", "Abmelden")
+		before(t, bar, "href=/kalender", "href=/energie")
+		before(t, bar, "href=/energie", "href=/mehr")
+		mustNotContain(t, bar, "href=/medien", "href=/notizen", "href=/box", "Abmelden")
 		if !strings.Contains(bar, "href="+p.bar+" aria-current=page>") || strings.Count(bar, "aria-current=page") != 1 {
 			t.Errorf("%s: the bar marks not just %s:\n%s", p.path, p.bar, bar)
 		}
-		mustContain(t, more, ">Mehr</p>", ">Energie</a>", ">Medien</a>", ">Notizen</a>", "Angemeldet als <span class=wer>anna</span>", "href=/abmelden>")
-		before(t, more, "href=/energie", "href=/medien")
-		before(t, more, "href=/medien", "href=/notizen")
-		before(t, more, "href=/notizen", "href=/abmelden")
-		mustNotContain(t, more, "href=/box")
-		switch n := strings.Count(more, "aria-current=page"); {
-		case p.self == "" && n != 0, p.self != "" && (n != 1 || !strings.Contains(more, "href="+p.self+" aria-current=page>")):
-			t.Errorf("%s: Mehr marks %d, want %q", p.path, n, p.self)
+		mustContain(t, more, ">Mehr</p>", "Angemeldet als <span class=wer>anna</span>", "href=/abmelden>")
+		mustNotContain(t, more, "href=/box", "href=/energie", "href=/medien", "href=/notizen", "href=/dokumente")
+		if p.pill != "" {
+			pills := between(t, body, "<nav class=unterseiten aria-label=Haushalt>", "</nav>")
+			mustContain(t, pills, "<a href=/kalender", ">Kalender</a>", "<a href=/notizen", ">Notizen</a>", "href="+p.pill+" aria-current=page>")
+			before(t, pills, "Kalender", "Notizen")
+		} else {
+			mustNotContain(t, body, "class=unterseiten")
 		}
 		_, body, _ = familyPage(t, p.page, all, "GET", p.path, "family,admins")
-		more = mehrOf(t, body)
-		mustContain(t, more, "href=/box")
-		before(t, more, "href=/notizen", "href=/box")
+		mustContain(t, mehrOf(t, body), "href=/box")
 		mustNotContain(t, barOf(t, body), "href=/box")
 	}
 	// Box is under Mehr, for admins
@@ -117,6 +118,10 @@ func TestFamilyTabBar(t *testing.T) {
 	}, all, "GET", "/box", "admins")
 	mustContain(t, barOf(t, body), "href=/mehr aria-current=page>")
 	mustContain(t, mehrOf(t, body), "href=/box aria-current=page>")
+	// Haushalt with notes only: the tab leads there, no pills for one page
+	_, body, _ = familyPage(t, Notizen, StartConfig{Notes: nd}, "GET", "/notizen", "family")
+	mustContain(t, barOf(t, body), "href=/notizen aria-current=page>", "</svg>Haushalt</a>")
+	mustNotContain(t, body, "class=unterseiten")
 	// nothing set: Start and Mehr, and no word about the rest
 	_, body, _ = familyPage(t, Start, StartConfig{}, "GET", "/start", "family")
 	mustContain(t, body, "href=/start aria-current=page>", "href=/mehr>")
@@ -198,7 +203,7 @@ func TestFamilyPagesWearTheHousePaletteNotThePersona(t *testing.T) {
 		page  func(StartConfig) http.HandlerFunc
 		path  string
 		title string
-	}{{Start, "/start", "Zuhause"}, {Raeume, "/raeume", "Räume · Zuhause"}, {Kalender, "/kalender", "Kalender · Zuhause"},
+	}{{Start, "/start", "Zuhause"}, {Raeume, "/raeume", "Geräte · Zuhause"}, {Kalender, "/kalender", "Kalender · Zuhause"},
 		{Notizen, "/notizen", "Notizen · Zuhause"}, {Ding, "/raeume/light.flur", "Flurlicht · Zuhause"}} {
 		_, body, h := familyPage(t, p.page, all, "GET", p.path, "")
 		mustContain(t, body, "<title>"+p.title+"</title>", "lang=de", "<h1>",

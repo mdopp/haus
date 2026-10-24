@@ -69,12 +69,15 @@ func TestRaeumeOneCardPerRoom(t *testing.T) {
 	before(t, body, "karte-kueche", "Deckenlampe")
 	before(t, body, "Rollo Küche", "karte-wohnzimmer")
 	before(t, body, "karte-wohnzimmer", "Stehlampe")
-	before(t, body, "Sonos", "karte-ohne-raum")
+	before(t, body, "karte-laeuft-gerade", "karte-kueche") // what plays is on top, once (owner 2026-10-24)
+	before(t, body, "Sonos", "karte-kueche")
 	before(t, body, "karte-ohne-raum", "Kellerlicht")
 	// within a room: lights, heating, covers, media
 	before(t, body, "Deckenlampe", "Rollo Küche")
 	before(t, body, "Stehlampe", "Heizung Wohnzimmer")
-	before(t, body, "Heizung Wohnzimmer", "Sonos")
+	if strings.Count(body, ">Sonos</a>") != 1 {
+		t.Error("the playing Sonos twice")
+	}
 }
 
 // The states every kind says, the family's words: a cover closed, a
@@ -238,7 +241,8 @@ func TestRaeumePinsFromTheList(t *testing.T) {
 		`name=zurueck value="/raeume#karte-kueche"`, `aria-label="Deckenlampe auf Start zeigen">☆</button>`,
 		`<form method=post action="/raeume/cover.rollo_kueche">`)
 	mustContain(t, wz, `<form method=post action="/raeume/climate.wohnzimmer">`, `name=stern value=aus`,
-		`aria-label="Heizung Wohnzimmer von Start nehmen">★</button>`, `<form method=post action="/raeume/media_player.wz">`)
+		`aria-label="Heizung Wohnzimmer von Start nehmen">★</button>`)
+	mustContain(t, section(t, body, "karte-laeuft-gerade"), `<form method=post action="/raeume/media_player.wz">`) // playing: on top, with its ☆
 	// one ☆ a thing: Deckenlampe, Rollo, Stehlampe, Heizung, Sonos, Kellerlicht
 	if n := strings.Count(body, "name=stern"); n != 6 {
 		t.Fatalf("%d stars, want 6:\n%s", n, body)

@@ -131,7 +131,7 @@ func TestMedienSwitchesThroughSchalten(t *testing.T) {
 	// HA failing a switch from Medien: the plain line, the way back to Medien
 	fake.FailCalls(502)
 	rec := post(t, h, "/schalten", url.Values{"geraet": {"media_player.wz"}, "tun": {"media_player.volume_up"}, "zurueck": {"/medien"}}, "anna", nil)
-	mustContain(t, rec.Body.String(), saysSwitchFailed, "<p><a href=/medien>Zurück</a></p>", "href=/medien aria-current=page>")
+	mustContain(t, rec.Body.String(), saysSwitchFailed, "<p><a href=/medien>Zurück</a></p>", "href=/raeume aria-current=page>")
 	mustNotLeak(t, rec.Body.String())
 	// the player refusing it (HA 500, "The command to the player failed", haus#83): said as such
 	fake.FailCalls(500)
@@ -203,7 +203,7 @@ func TestMedienUnknownPathIsA404(t *testing.T) {
 		if code != 404 {
 			t.Fatalf("%s → %d, want 404", p, code)
 		}
-		mustContain(t, body, "<p>Diese Seite gibt es nicht.</p>", "<p><a href=/medien>Medien</a></p>", "href=/medien aria-current=page>")
+		mustContain(t, body, "<p>Diese Seite gibt es nicht.</p>", "<p><a href=/medien>Medien</a></p>", "href=/raeume aria-current=page>")
 		mustNotContain(t, body, "karte-", "<form")
 	}
 }

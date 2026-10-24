@@ -293,3 +293,47 @@ func energyWords(kwh float64) string {
 	}
 	return s + " kWh"
 }
+
+// energieZeile is Energie on Start in one line (owner 2026-10-24): what
+// the roof makes and the house uses now, the battery's charge and the
+// grid, leading to Energie. Nothing without flow legs.
+func energieZeile(cfg StartConfig, states []ha.State) string {
+	legs, _, _ := cfg.Energy.Pick(states)
+	if len(legs) == 0 {
+		return ""
+	}
+	f := flussJetzt(legs)
+	var top, more []string
+	if f.known["solar"] {
+		top = append(top, "Dach "+powerWords(f.solar))
+	}
+	if f.known["haus"] {
+		top = append(top, "Haus "+powerWords(f.haus))
+	}
+	if f.da["akku"] {
+		if pct, _, ok := cfg.Energy.Charge(states); ok {
+			a := "Akku " + percent0(pct)
+			switch {
+			case f.known["akku"] && f.laden > 0:
+				a += " lädt"
+			case f.known["akku"] && f.entladen > 0:
+				a += " entlädt"
+			}
+			more = append(more, a)
+		}
+	}
+	if f.known["netz"] {
+		switch {
+		case f.einsp > 0:
+			more = append(more, powerWords(f.einsp)+" ins Netz")
+		case f.bezug > 0:
+			more = append(more, powerWords(f.bezug)+" aus dem Netz")
+		}
+	}
+	if len(top) == 0 {
+		return ""
+	}
+	c := cards.Card{Title: "Energie"}
+	c.AddLink(strings.Join(top, " · "), strings.Join(more, " · "), "/energie")
+	return c.HTML()
+}

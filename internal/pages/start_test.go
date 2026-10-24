@@ -203,10 +203,11 @@ func TestStartIsZuhause(t *testing.T) {
 	mustNotContain(t, body, "Joshua", "Wollen wir", "#3ddc84", "#0c120e", "/persona/icon.svg",
 		"Alles läuft", "Letzte Sicherung", "Orten", "Letzte Änderung", "Paperless wird installiert", "Operator", "Laib",
 		"Haushalt</h2>", "Jetzt</h2>", "Favoriten</h2>", "Einkaufsliste", "<script>alert", "fonts.googleapis", "fonts.gstatic")
-	before(t, body, "<h1>Zuhause</h1>", "karte-im-haus")
-	before(t, body, "karte-im-haus", "karte-meine-geraete")
-	before(t, body, "karte-meine-geraete", "karte-heute-und-demnaechst")
-	before(t, body, "karte-heute-und-demnaechst", "Alles in Ordnung")
+	// the day first, then what you switch, then the house (owner 2026-10-24)
+	before(t, body, "<h1>Zuhause</h1>", "karte-heute-und-demnaechst")
+	before(t, body, "karte-heute-und-demnaechst", "karte-meine-geraete")
+	before(t, body, "karte-meine-geraete", "karte-im-haus")
+	before(t, body, "karte-im-haus", "Alles in Ordnung")
 }
 
 // haus#35: Im Haus says who is home, what is on — each with its one
