@@ -88,9 +88,17 @@ test('music goes up in pieces and arrives whole', async ({ page, request }) => {
   expect(Object.keys(got).filter((k) => k.includes('.part'))).toEqual([]);
 });
 
+test('a form in a card stacks its fields on a phone', async ({ page }) => {
+  await page.goto('/kalender/verwalten');
+  await page.locator('summary', { hasText: 'Neuen Kalender anlegen' }).click();
+  const name = page.locator('form.eingabe input[name=name]').last();
+  const box = await name.boundingBox();
+  expect(box.width, 'the name field has room').toBeGreaterThan(250);
+});
+
 // Pictures of the main pages as a phone shows them, for a look at the
 // run (the CI keeps them).
-for (const path of ['/start', '/raeume', '/medien', '/energie', '/notizen', '/mehr', '/musik']) {
+for (const path of ['/start', '/raeume', '/medien', '/energie', '/notizen', '/mehr', '/musik', '/kalender/verwalten']) {
   test(`picture of ${path}`, async ({ page }, info) => {
     await page.goto(path);
     await page.screenshot({ path: info.outputPath(path.slice(1) + '.png'), fullPage: true });
