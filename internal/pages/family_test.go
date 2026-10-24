@@ -77,9 +77,9 @@ func TestFamilyTabBar(t *testing.T) {
 		path      string
 		bar, self string
 	}{{Start, "/start", "/start", ""}, {Raeume, "/raeume", "/raeume", ""}, {Kalender, "/kalender", "/kalender", ""},
-		{Energie, "/energie", "/mehr", "/energie"}, {Medien, "/medien", "/mehr", "/medien"}, {Notizen, "/notizen", "/mehr", "/notizen"},
+		{Energie, "/energie", "/mehr", "/energie"}, {Medien, "/medien", "/mehr", "/medien"}, {Notizen, "/notizen", "/mehr", ""},
 		{Mehr, "/mehr", "/mehr", ""}, {Ding, "/raeume/light.flur", "/raeume", ""}, {Ding, "/raeume/light.gibtsnicht", "/raeume", ""},
-		{Notizen, "/notizen/einkaufsliste.md", "/mehr", "/notizen"}} {
+		{Notizen, "/notizen/einkaufsliste.md", "/mehr", ""}} {
 		code, body, _ := familyPage(t, p.page, all, "GET", p.path, "family")
 		if code != 200 && code != 404 {
 			t.Fatalf("%s → %d", p.path, code)
@@ -96,11 +96,10 @@ func TestFamilyTabBar(t *testing.T) {
 		if !strings.Contains(bar, "href="+p.bar+" aria-current=page>") || strings.Count(bar, "aria-current=page") != 1 {
 			t.Errorf("%s: the bar marks not just %s:\n%s", p.path, p.bar, bar)
 		}
-		mustContain(t, more, ">Mehr</p>", ">Energie</a>", ">Medien</a>", ">Notizen</a>", "Angemeldet als <span class=wer>anna</span>", "href=/abmelden>")
+		mustContain(t, more, ">Mehr</p>", ">Energie</a>", ">Medien</a>", "Angemeldet als <span class=wer>anna</span>", "href=/abmelden>")
 		before(t, more, "href=/energie", "href=/medien")
-		before(t, more, "href=/medien", "href=/notizen")
-		before(t, more, "href=/notizen", "href=/abmelden")
-		mustNotContain(t, more, "href=/box")
+		before(t, more, "href=/medien", "href=/abmelden")
+		mustNotContain(t, more, "href=/box", "href=/notizen") // Notizen has no entry (haus#67, owner 2026-10-24)
 		switch n := strings.Count(more, "aria-current=page"); {
 		case p.self == "" && n != 0, p.self != "" && (n != 1 || !strings.Contains(more, "href="+p.self+" aria-current=page>")):
 			t.Errorf("%s: Mehr marks %d, want %q", p.path, n, p.self)
@@ -108,7 +107,7 @@ func TestFamilyTabBar(t *testing.T) {
 		_, body, _ = familyPage(t, p.page, all, "GET", p.path, "family,admins")
 		more = mehrOf(t, body)
 		mustContain(t, more, "href=/box")
-		before(t, more, "href=/notizen", "href=/box")
+		before(t, more, "href=/medien", "href=/box")
 		mustNotContain(t, barOf(t, body), "href=/box")
 	}
 	// Box is under Mehr, for admins

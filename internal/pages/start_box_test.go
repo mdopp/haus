@@ -133,11 +133,11 @@ func TestMehrListsWhatItHolds(t *testing.T) {
 	nd := notesDir(t, map[string]time.Duration{"Einkaufsliste": time.Hour})
 	_, body, _ := familyPage(t, Mehr, StartConfig{HA: hc, Notes: nd}, "GET", "/mehr", "family")
 	page := body[strings.Index(body, "<h1>Mehr</h1>"):]
-	mustContain(t, page, `<a href="/energie">Energie</a>`, `<a href="/medien">Medien</a>`, `<a href="/notizen">Notizen</a>`, mehrSays["Energie"],
+	mustContain(t, page, `<a href="/energie">Energie</a>`, `<a href="/medien">Medien</a>`, mehrSays["Energie"],
 		"<h2 id=karte-konto>Konto</h2>", "Angemeldet als anna", `<a href="/abmelden">Abmelden</a>`)
-	mustNotContain(t, page, "/box", "/netzlaufwerk")
+	mustNotContain(t, page, "/box", "/netzlaufwerk", "/notizen")
 	before(t, page, "/energie", "/medien")
-	before(t, page, "/notizen", "karte-konto")
+	before(t, page, "/medien", "karte-konto")
 	_, body, _ = familyPage(t, Mehr, StartConfig{}, "GET", "/mehr", "family,admins")
 	page = body[strings.Index(body, "<h1>Mehr</h1>"):]
 	mustContain(t, page, `<a href="/box">Box</a>`, "/abmelden")

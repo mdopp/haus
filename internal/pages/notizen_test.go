@@ -127,7 +127,7 @@ func TestNotizShowsItsTextEscaped(t *testing.T) {
 		}
 		mustContain(t, body, "<title>Einkaufsliste · Zuhause</title>", ">Einkaufsliste</h1>",
 			"Milch\nBrot", "Käse &lt;b&gt;fett&lt;/b&gt;", "&lt;script&gt;alert(1)&lt;/script&gt;",
-			`href=/notizen`, "href=/notizen aria-current=page>")
+			`href=/notizen`, "href=/mehr aria-current=page>") // no entry of its own, under Mehr (haus#67)
 		mustNotContain(t, body, "<b>fett", "<script", "# Einkaufsliste")
 		// two paragraphs, the line break inside the first kept
 		if strings.Count(body, "<p class=notiz>") != 2 {

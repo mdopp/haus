@@ -78,8 +78,8 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   (haus#67): on the phone a bar at the bottom with at most four entries,
   icon and name — Start · Geräte (`/raeume`) · Haushalt (`/kalender`, the
   appointments and reminders) · Mehr — Geräte and Haushalt only when their
-  backend is set. `GET /mehr` holds the rest: Energie, Medien, Notizen
-  (its place until the owner decides where notes go), Netzlaufwerk, Box
+  backend is set. `GET /mehr` holds the rest: Energie, Medien, Dokumente,
+  Netzlaufwerk, Adresse and Box
   for admins, each only when this box has it, and *Konto* with who is
   signed in and *Abmelden*. From 900 px wide the bar is a list on the
   right, Mehr open in it (its entries, who is signed in, Abmelden; Mehr's
@@ -186,7 +186,9 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     Kalender anlegen* (`haus/familie-<name>` für die Familie,
     `<person>/privat-<name>` nur für mich). *In Radicale öffnen* is the
     page's *Weiter in <App>*.
-  - *Notizen*: a search field (`GET /notizen?q=…`, the memory library
+  - *Notizen* (no entry of its own since 2026-10-24, haus#67: the notes
+    folder was cleaned up to a household note and a list; Joshua finds
+    them, his links lead here, under Mehr): a search field (`GET /notizen?q=…`, the memory library
     below: 20 hits, by meaning) and the ten newest notes. When the library
     answers but no note is close to the question, the page says *Keine
     Notiz passt wirklich zu deiner Frage.* and shows what the words find
