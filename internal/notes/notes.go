@@ -209,6 +209,70 @@ func (d *Dir) PutNew(name string, content []byte) (bool, error) {
 	return true, nil
 }
 
+// ErrChanged is a note changed by someone else since it was read.
+var ErrChanged = errors.New("Notizen: die Notiz hat sich inzwischen geändert")
+
+// MaxText is how long a note may be, for a page's field.
+const MaxText = maxText
+
+// Update writes text as the note name, a file that is there, when it is
+// still as it was read (was, its Changed): else ErrChanged, and nothing is
+// written — one person's edit never overwrites another's. The new text
+// appears whole, through a temp file renamed over the old one.
+func (d *Dir) Update(name, text string, was time.Time) error {
+	clean, err := checkName(name)
+	if err != nil {
+		return err
+	}
+	if !isNote(clean) {
+		return ErrNotFound
+	}
+	if len(text) > maxText {
+		return fmt.Errorf("Notizen: der Text ist zu lang (höchstens %d KB)", maxText>>10)
+	}
+	root, err := os.OpenRoot(d.path)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	st, err := root.Lstat(clean)
+	if errors.Is(err, fs.ErrNotExist) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if !st.Mode().IsRegular() {
+		return ErrNotFound // a symlink or a folder is not edited through
+	}
+	if !st.ModTime().Equal(was) {
+		return ErrChanged
+	}
+	content := strings.ReplaceAll(text, "\r\n", "\n")
+	if !strings.HasSuffix(content, "\n") {
+		content += "\n"
+	}
+	rnd := make([]byte, 8)
+	rand.Read(rnd)
+	tmp := path.Join(path.Dir(clean), ".haus-"+hex.EncodeToString(rnd)+".tmp")
+	f, err := root.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, st.Mode().Perm())
+	if err != nil {
+		return err
+	}
+	defer root.Remove(tmp)
+	_, werr := f.WriteString(content)
+	if serr := f.Sync(); werr == nil {
+		werr = serr
+	}
+	if cerr := f.Close(); werr == nil {
+		werr = cerr
+	}
+	if werr != nil {
+		return werr
+	}
+	return root.Rename(tmp, clean)
+}
+
 // Hit is one search result.
 type Hit struct {
 	Name  string   // the file, relative to the directory
@@ -661,7 +725,7 @@ func (d *Dir) Read(ctx context.Context, ref string) (Note, error) {
 			return Note{}, false, nil
 		}
 		buf, _ := io.ReadAll(io.LimitReader(f, maxRead+1))
-		n := Note{Name: name, Text: string(buf[:min(len(buf), maxRead)]), Truncated: len(buf) > maxRead, Title: title(name, buf)}
+		n := Note{Name: name, Text: string(buf[:min(len(buf), maxRead)]), Truncated: len(buf) > maxRead, Title: title(name, buf), Changed: st.ModTime()}
 		return n, true, nil
 	}
 	for _, name := range []string{ref, Slug(ref) + ".md"} {
