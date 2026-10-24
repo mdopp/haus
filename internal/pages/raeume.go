@@ -64,7 +64,7 @@ func Raeume(cfg StartConfig) http.HandlerFunc {
 			log.Printf("haus: räume page: home assistant's rooms are not known yet; the cards are left out")
 		}
 		b := familyHead(r, cfg, "Räume", "Räume")
-		b.WriteString(refreshEvery(15))
+		b.WriteString(liveRefresh("seite", 120))
 		b.WriteString("<h1>Räume</h1>")
 		if haErr == nil { // the way on only while HA answers: a line about it never names it (laib ADR 0021)
 			b.WriteString(cfg.homeAssistant().Weiter("/", saysInHA))

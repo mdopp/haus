@@ -91,6 +91,9 @@ func routes(s site) http.Handler {
 	}
 	start := pages.Start(family) // one: the page and its box line share laib's status (haus#67)
 	pagesMux.HandleFunc("/start", start)
+	if family.HA != nil {
+		pagesMux.Handle(pages.LivePath, &pages.Live{HA: family.HA}) // the pages' push from Home Assistant
+	}
 	pagesMux.HandleFunc(pages.StartBoxPath, start)
 	pagesMux.HandleFunc("/mehr", pages.Mehr(family)) // the bar's fourth entry, with Abmelden (haus#67)
 	pagesMux.HandleFunc("/raeume", pages.Raeume(family))

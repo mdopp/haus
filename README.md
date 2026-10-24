@@ -872,7 +872,7 @@ switched, a notes folder; everyone is anna, `/demo/fehler?status=503`
 makes switching fail, `/demo/setze?id=…&state=…` changes a state from
 elsewhere). Playwright drives it on a phone-sized viewport: a switch flips
 at once and the page stays (no reload), a refusal is said on the page,
-the page follows a change made elsewhere, a player pauses in place, a
+the page follows a change made elsewhere within seconds (push), a player pauses in place, a
 note is written and changed, and no page throws a script error. Pictures
 of the main pages are kept with each run. Locally: `cd e2e && npm ci &&
 npx playwright install chromium && npx playwright test`; `go run
@@ -889,6 +889,12 @@ refusal the server says as `text/plain` (`/schalten` does when asked with
 `X-Haus-Skript`) is shown at the bottom and the page stays. `data-frage`
 asks before a removal, `data-kopieren` copies the field before it, a
 `<div hidden data-auffrischen=N>` refreshes the page in place every N
-seconds while it is seen and nobody types (Start, Räume, a thing 15,
-Medien 10, Energie 60, Dokumente 2–5 while a scan moves). `data-ganz`
+seconds while it is seen and nobody types (Energie 60, Dokumente 2–5
+while a scan moves). Pages that show Home Assistant's things are pushed
+instead (owner 2026-10-24): with `data-live` the script listens on
+`GET /live` (server-sent events, behind Authelia like every page; one
+`state_changed` subscription to HA while anyone listens, sensors left
+out) and fetches the page in place as soon as a thing on it changes —
+Räume, a thing, Medien (`seite`), Start any thing (`alle`); their N=120
+is only the fallback and for the day's calendar and the box line. `data-ganz`
 leaves a form to the browser.

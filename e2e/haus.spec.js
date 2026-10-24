@@ -37,11 +37,12 @@ test('a refusal is said on the page and the switch goes back', async ({ page, re
   expect(await stays(page)).toBe(true);
 });
 
-test('the page follows a change made elsewhere', async ({ page, request }) => {
+test('the page follows a change made elsewhere at once (push)', async ({ page, request }) => {
   await page.goto('/raeume');
   await mark(page);
+  await page.waitForTimeout(500); // the stream is open
   await request.get('/demo/setze?id=light.flur&state=on&name=Flurlicht');
-  await expect(page.getByRole('switch', { name: 'Flurlicht' })).toHaveAttribute('aria-checked', 'true', { timeout: 25_000 });
+  await expect(page.getByRole('switch', { name: 'Flurlicht' })).toHaveAttribute('aria-checked', 'true', { timeout: 5_000 });
   expect(await stays(page), 'refreshed in place').toBe(true);
 });
 

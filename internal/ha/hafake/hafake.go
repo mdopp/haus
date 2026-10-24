@@ -534,6 +534,13 @@ func (h *HA) serve(w http.ResponseWriter, r *http.Request) {
 				case "toggle":
 					h.set(id, map[bool]string{true: "off", false: "on"}[s["state"] == "on"], attrs)
 				}
+				ns, subs := h.states[id], append([]*conn(nil), h.subs...)
+				go func() { // like HA: the change goes to every subscriber
+					for _, c := range subs {
+						c.send(map[string]any{"id": c.subID, "type": "event", "event": map[string]any{
+							"event_type": "state_changed", "data": map[string]any{"entity_id": id, "new_state": ns}}})
+					}
+				}()
 			}
 		}
 		// like HA: the states the call changed, each with the call's context
