@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -115,4 +116,44 @@ func TestBoxWholeReadsThePartsTogether(t *testing.T) {
 	body := rec.Body.String()
 	mustContain(t, body, "<div id=box-stand data-teil=stand aria-busy=false>", "Operator:", "<h2>Inbox</h2><p class=k>leer</p>", "<h2>Was läuft</h2>", "paperless")
 	mustNotContain(t, body, "fetch('/box/teil", saysPartLoading)
+}
+
+// haus#96 (laib#593): the journal part asks for what it shows — the newest
+// 25, and the newest morning report — never 36 hours.
+func TestBoxJournalAsksForWhatItShows(t *testing.T) {
+	var mu sync.Mutex
+	var asked []map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Params struct {
+				Name string         `json:"name"`
+				Args map[string]any `json:"arguments"`
+			} `json:"params"`
+		}
+		json.NewDecoder(r.Body).Decode(&req)
+		text := "[]"
+		if req.Params.Name == "laib_journal" {
+			mu.Lock()
+			asked = append(asked, req.Params.Args)
+			mu.Unlock()
+			if req.Params.Args["kind"] == "report" {
+				text = `[{"t":"` + time.Now().UTC().Format(time.RFC3339) + `","actor":"ops","verb":"note","reason":"report","result":"info","detail":"Nachts alles ruhig."}]`
+			}
+		}
+		json.NewEncoder(w).Encode(map[string]any{"result": map[string]any{"content": []map[string]string{{"text": text}}}})
+	}))
+	t.Cleanup(srv.Close)
+	h := BoxPage(BoxConfig{Laib: &laib.Client{URL: srv.URL, Token: "t"}, LaibURL: "https://laib.box.test"})
+	rec := boxAt(h, "/box/teil?was=journal", "admins")
+	mustContain(t, rec.Body.String(), "Nachts alles ruhig.")
+	if len(asked) != 2 {
+		t.Fatalf("asked %v", asked)
+	}
+	want := map[string]bool{`{"limit":"25"}`: true, `{"kind":"report","limit":"1"}`: true}
+	for _, a := range asked {
+		b, _ := json.Marshal(a)
+		if !want[string(b)] {
+			t.Errorf("asked %s", b)
+		}
+	}
 }
