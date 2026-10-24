@@ -1,0 +1,11 @@
+{
+  "name": "haus-e2e",
+  "private": true,
+  "description": "Haus's family pages in a real browser, against cmd/hausdemo's fakes",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
+  }
+}

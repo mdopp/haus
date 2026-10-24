@@ -61,7 +61,7 @@ func TestRaeumeOneCardPerRoom(t *testing.T) {
 		"Kellerlicht")
 	// each thing leads to its own page (haus#28)
 	mustContain(t, body, `<a href="/raeume/light.kueche_decke">Deckenlampe</a>`, `<a href="/raeume/media_player.wz">Sonos</a>`)
-	mustNotContain(t, body, "Bad</h2>", "Kaffeemaschine", "Küchentemperatur", "Feuchte", "Erdgeschoss", "<script")
+	mustNotContain(t, body, "Bad</h2>", "Kaffeemaschine", "Küchentemperatur", "Feuchte", "Erdgeschoss", "<script>alert")
 	// rooms by name, Ohne Raum last
 	before(t, body, "karte-kueche", "karte-wohnzimmer")
 	before(t, body, "karte-wohnzimmer", "karte-ohne-raum")
@@ -216,7 +216,7 @@ func TestRaeumeSwitchesLampsInPlace(t *testing.T) {
 		t.Fatalf("%d forms, want 4 (three switches, Deckenlampe's slider):\n%s", n, body)
 	}
 	mustNotContain(t, body, `value="cover.`, `value="climate.`, `value="media_player.`, `value="light.eg"`, `value="light.garten"`,
-		"<script")
+		"<script>alert")
 	// HA not answering: no switch at all
 	fake.Down(true)
 	_, body, _ = familyPage(t, Raeume, StartConfig{HA: hc}, "GET", "/raeume", "family")

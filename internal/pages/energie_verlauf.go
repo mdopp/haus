@@ -708,7 +708,7 @@ const verlaufStyle = `<style>:root{--e-eigen:#c27c0e;--e-bezug:#4f8ff7;--e-einsp
 @media (prefers-color-scheme:light){:root{--e-eigen:#c27c0e;--e-bezug:#2f6fd6;--e-einsp:#0f8a78;--e-solar:#b07d00;--e-akku:#7c4ddb;
 --e-gut:#00788a;--e-schlecht:#c4352b;--e-gut-soft:rgba(0,120,138,.08);--e-schlecht-soft:rgba(196,53,43,.08)}}
 .abschnitt{font-size:1.15rem;margin:34px 0 0}.zeitraum{display:flex;gap:6px;margin:12px 0 0;flex-wrap:wrap}
-.zeitraum a{min-height:40px;display:inline-flex;align-items:center;padding:0 16px;border-radius:999px;background:var(--card);border:1px solid var(--edge);color:var(--ink);text-decoration:none;font-size:.88rem}
+.zeitraum a{min-height:44px;display:inline-flex;align-items:center;padding:0 16px;border-radius:999px;background:var(--card);border:1px solid var(--edge);color:var(--ink);text-decoration:none;font-size:.88rem}
 .zeitraum a[aria-current]{background:var(--accent-soft);border-color:transparent;color:var(--accent);font-weight:600}
 .verlauf{margin:12px 0 0;padding:12px 10px 10px;background:var(--card);border:1px solid var(--edge);border-radius:14px}
 .verlauf svg{display:block;width:100%;height:auto}.verlauf .eigen{fill:var(--e-eigen)}.verlauf .bezug{fill:var(--e-bezug)}.verlauf .einsp{fill:var(--e-einsp)}
@@ -717,7 +717,7 @@ const verlaufStyle = `<style>:root{--e-eigen:#c27c0e;--e-bezug:#4f8ff7;--e-einsp
 .verlauf .achse{fill:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
 .legende{list-style:none;margin:8px 4px 0;padding:0;display:flex;flex-wrap:wrap;gap:4px 14px;font-size:.8rem;color:var(--ink)}
 .legende i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}.legende .eigen{background:var(--e-eigen)}.legende .bezug{background:var(--e-bezug)}.legende .einsp{background:var(--e-einsp)}
-.verlauf details,.fluss details{margin:8px 4px 0;font-size:.82rem}.verlauf summary,.fluss summary{cursor:pointer;color:var(--accent);min-height:32px;display:flex;align-items:center}
+.verlauf details,.fluss details{margin:8px 4px 0;font-size:.82rem}.verlauf summary,.fluss summary{cursor:pointer;color:var(--accent);min-height:44px;display:flex;align-items:center}
 .verlauf table,.fluss table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
 .verlauf th,.verlauf td,.fluss th,.fluss td{padding:4px 6px;border-top:1px solid var(--line);text-align:right;font-weight:400}
 .verlauf th[scope=row],.verlauf thead th:first-child,.fluss th{text-align:left}.verlauf thead th{color:var(--muted)}

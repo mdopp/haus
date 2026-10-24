@@ -114,5 +114,5 @@ func TestBoxWholeReadsThePartsTogether(t *testing.T) {
 	rec := boxAt(h, "/box?ganz=1", "admins")
 	body := rec.Body.String()
 	mustContain(t, body, "<div id=box-stand data-teil=stand aria-busy=false>", "Operator:", "<h2>Inbox</h2><p class=k>leer</p>", "<h2>Was läuft</h2>", "paperless")
-	mustNotContain(t, body, "<script", saysPartLoading)
+	mustNotContain(t, body, "fetch('/box/teil", saysPartLoading)
 }

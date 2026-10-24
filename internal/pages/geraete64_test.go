@@ -58,7 +58,7 @@ func TestRaeumeDimsAndMovesCovers(t *testing.T) {
 		`name=geraet value="cover.rollo"><input type=hidden name=tun value="cover.close_cover">`, "<button>Runter</button>",
 		"<noscript><button>Setzen</button></noscript>", `onchange="this.form.requestSubmit`)
 	mustNotContain(t, ess, `value="light.schalter"><input type=hidden name=tun value="light.turn_on"><input type=hidden name=zurueck value="/raeume#karte-esszimmer"><span`,
-		`value="cover.ohne"`, `value="cover.garage"`, "<script")
+		`value="cover.ohne"`, `value="cover.garage"`, "<script>alert")
 	if n := strings.Count(ess, "class=regler"); n != 4 { // Bambi, Dimmer, Rollo, Esszimmerjalousie
 		t.Fatalf("%d sliders, want 4:\n%s", n, ess)
 	}

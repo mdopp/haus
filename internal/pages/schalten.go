@@ -132,6 +132,14 @@ func Schalten(cfg StartConfig) http.HandlerFunc {
 		case errors.As(err, &refused) && refused.Status == http.StatusInternalServerError && strings.HasPrefix(id, "media_player."):
 			m.say = saysPlayerNo // HA answered, the player did not take it (haus#83)
 		}
+		if r.Header.Get("X-Haus-Skript") != "" { // the page stays; the sentence is shown on it
+			code := m.code
+			if code == http.StatusOK {
+				code = http.StatusBadGateway
+			}
+			http.Error(w, m.say, code)
+			return
+		}
 		m.write(w, r, cfg)
 	}
 }

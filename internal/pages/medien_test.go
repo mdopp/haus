@@ -98,7 +98,7 @@ func TestMedienWhatPlaysWhere(t *testing.T) {
 	before(t, still, "Badradio", "Garagenlautsprecher")
 	before(t, still, "Garagenlautsprecher", "Kinderzimmer")
 	before(t, body, "karte-laeuft-gerade", "karte-gerade-still")
-	mustNotContain(t, body, "Altes Radio", "Versteckt", "Überall", "Flurlicht", "media_player.alt", "media_player.alle", "<script", "0.35")
+	mustNotContain(t, body, "Altes Radio", "Versteckt", "Überall", "Flurlicht", "media_player.alt", "media_player.alle", "<script>alert", "0.35")
 }
 
 // The buttons switch through the one path: Medien's are in what a page

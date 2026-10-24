@@ -54,7 +54,7 @@ func TestKalenderShowsTodayTheNextTwoWeeksAndReminders(t *testing.T) {
 		"Müll rausbringen", "morgen 07:00",
 		"Rechnung bezahlen", "überfällig seit Mo 12.10. 09:00",
 		"Irgendwann Keller")
-	mustNotContain(t, body, "Gestern vorbei", "Zu weit weg", "Schon erledigt", "<form", "<button", "<script")
+	mustNotContain(t, body, "Gestern vorbei", "Zu weit weg", "Schon erledigt", "<form", "<button", "<script>alert")
 	// order: the cards, and within each, soonest first; undated reminders last
 	before(t, body, "karte-heute", "karte-naechste-14-tage")
 	before(t, body, "karte-naechste-14-tage", "karte-erinnerungen")
@@ -90,7 +90,7 @@ func TestKalenderEscapes(t *testing.T) {
 	dav.Put("/haus/familie/1.ics", eventAt("1", "20261014T110000Z", "20261014T120000Z", "<script>alert(1)</script>", "<b>Ort</b>"))
 	_, body, _ := familyPage(t, Kalender, StartConfig{Calendar: cal}, "GET", "/kalender", "")
 	mustContain(t, body, "&lt;script&gt;alert(1)&lt;/script&gt;", "&lt;b&gt;Ort&lt;/b&gt;")
-	mustNotContain(t, body, "<script", "<b>Ort")
+	mustNotContain(t, body, "<script>alert", "<b>Ort")
 }
 
 // A long list is cut, the count is not.

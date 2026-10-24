@@ -60,6 +60,7 @@ func Medien(cfg StartConfig) http.HandlerFunc {
 			func(ctx context.Context) { reg, _ = cfg.HA.CachedRegistry(ctx) })
 		logErrs("medien", map[string]error{"home assistant": haErr})
 		b := familyHead(r, cfg, "Medien", "Medien")
+		b.WriteString(refreshEvery(10)) // what plays changes by itself
 		b.WriteString("<h1>Medien</h1>")
 		if haErr != nil {
 			b.WriteString("<p class=k>" + saysNoPlayers + "</p>")

@@ -197,7 +197,7 @@ func writeNetzlaufwerk(w http.ResponseWriter, r *http.Request, cfg StartConfig, 
 			}
 			row := "<div>" + html.EscapeString(n) + "<span class=k>" + html.EscapeString(state) + "</span></div>"
 			if !acc[n].IsZero() {
-				row += "<form method=post action=" + netzlaufwerkPath + "><input type=hidden name=tun value=entfernen><input type=hidden name=wer value=\"" + html.EscapeString(n) + "\">" +
+				row += "<form method=post action=" + netzlaufwerkPath + " data-frage=\"Das Netzlaufwerk-Passwort von " + html.EscapeString(n) + " entfernen? Die Person kommt dann nicht mehr auf das Netzlaufwerk.\"><input type=hidden name=tun value=entfernen><input type=hidden name=wer value=\"" + html.EscapeString(n) + "\">" +
 					"<button aria-label=\"Passwort von " + html.EscapeString(n) + " entfernen\">Entfernen</button></form>"
 			}
 			fam.items = append(fam.items, "<li class=tu>"+row+"</li>")
@@ -226,7 +226,7 @@ func passwordForm(title, who string, names []string, hint string) string {
 	}
 	b.WriteString("<div class=feld><label for=" + id + "-pw>Neues Passwort für das Netzlaufwerk</label><input id=" + id + "-pw name=passwort type=password autocomplete=new-password minlength=" + strconv.Itoa(samba.MinLen) + " maxlength=" + strconv.Itoa(samba.MaxLen) + " required></div>")
 	b.WriteString("<div class=feld><label for=" + id + "-nochmal>Noch einmal</label><input id=" + id + "-nochmal name=nochmal type=password autocomplete=new-password minlength=" + strconv.Itoa(samba.MinLen) + " maxlength=" + strconv.Itoa(samba.MaxLen) + " required></div>")
-	b.WriteString("<p class=k>" + html.EscapeString(hint) + "</p><button>Passwort speichern</button></form>")
+	b.WriteString("<p class=k>" + html.EscapeString(hint) + "</p><button data-laeuft=\"Speichert …\">Passwort speichern</button></form>")
 	return b.String()
 }
 

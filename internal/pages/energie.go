@@ -60,6 +60,7 @@ func Energie(cfg StartConfig) http.HandlerFunc {
 		fetch(r, func(ctx context.Context) { states, haErr = cfg.HA.States(ctx) })
 		logErrs("energie", map[string]error{"home assistant": haErr})
 		b := familyHead(r, cfg, "Energie", "Energie")
+		b.WriteString(refreshEvery(60)) // Jetzt follows the sun; the history is HA's statistics, not every second
 		b.WriteString("<h1>Energie</h1>")
 		if haErr != nil {
 			b.WriteString("<p class=k>" + saysNoEnergy + "</p>")

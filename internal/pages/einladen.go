@@ -273,7 +273,7 @@ func inviteCard(ctx context.Context, c *laib.Client, inv invitation) string {
 	} else if err != nil {
 		log.Printf("haus: einladen: tools/list: %v", err)
 	}
-	b.WriteString("<button>Einladen</button></form><p class=k>" + html.EscapeString(saysFamilyOnly) + "</p>")
+	b.WriteString("<button data-laeuft=\"Lädt ein …\">Einladen</button></form><p class=k>" + html.EscapeString(saysFamilyOnly) + "</p>")
 	if takes, _ := c.Takes(ctx, "person_signal", "number"); takes { // laib#596
 		if p := inv.numbered; p != nil {
 			b.WriteString("<p class=erfolg role=status>" + html.EscapeString(fmt.Sprintf(saysSignalSet, inv.numFor)))
@@ -290,7 +290,7 @@ func inviteCard(ctx context.Context, c *laib.Client, inv invitation) string {
 			"<form class=einladen method=post action=" + invitePath + "><input type=hidden name=tun value=signal>" +
 			"<label for=signal-benutzer>Benutzername</label><input id=signal-benutzer name=benutzer type=text required autocomplete=off autocapitalize=none spellcheck=false pattern=\"[a-z][a-z0-9._\\-]{1,31}\">" +
 			"<label for=signal-nummer>Signal-Nummer</label><input id=signal-nummer name=signal type=tel required autocomplete=off inputmode=tel placeholder=\"+49 170 1234567\">" +
-			"<button>Nummer eintragen</button></form>")
+			"<button data-laeuft=\"Trägt ein …\">Nummer eintragen</button></form>")
 	}
 	switch {
 	case perr != nil:
@@ -312,7 +312,7 @@ func inviteCard(ctx context.Context, c *laib.Client, inv invitation) string {
 				"<form method=post action=" + invitePath + "><input type=hidden name=erneut value=1>" +
 				"<input type=hidden name=benutzer value=\"" + html.EscapeString(p.User) + "\"><input type=hidden name=email value=\"" + html.EscapeString(p.Email) + "\">" +
 				"<input type=hidden name=vorname value=\"" + html.EscapeString(first) + "\"><input type=hidden name=nachname value=\"" + html.EscapeString(last) + "\">" +
-				"<button aria-label=\"Link an " + html.EscapeString(name) + " erneut senden\">Erneut senden</button></form></td></tr>")
+				"<button aria-label=\"Link an " + html.EscapeString(name) + " erneut senden\" data-laeuft=\"Sendet …\">Erneut senden</button></form></td></tr>")
 		}
 		b.WriteString("</table>")
 	}

@@ -107,7 +107,7 @@ func TestDeineKalenderListsWhereEachComesFrom(t *testing.T) {
 		"Google-Kalender verbinden", "Geheime Adresse im iCal-Format", "Kalender integrieren",
 		"Öffentlichen Kalender abonnieren", "Feiertage", "Schulferien", "Niedersachsen", "Neuen Kalender anlegen", "nur für mich",
 		"Trennen…")
-	mustNotContain(t, body, "private-", "<script")
+	mustNotContain(t, body, "private-", "<script>alert")
 	// the Haushalt is not Haus's to delete, a mirror not to delete but to Trennen
 	before(t, body, "Haushalt", "Familie")
 	if strings.Count(body, "Löschen…") != 0 {

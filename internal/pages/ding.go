@@ -83,6 +83,7 @@ func Ding(cfg StartConfig) http.HandlerFunc {
 		now, loc := cfg.clock()
 		name := friendly(s)
 		b := familyHead(r, cfg, name, "Räume")
+		b.WriteString(refreshEvery(15))
 		b.WriteString("<h1>" + html.EscapeString(name) + "</h1>")
 		c := cards.Card{Title: "Jetzt"}
 		row := cards.Row{Text: roomDetail(domain, s, reg.TempUnit), Detail: changedWords(s, now, loc)}

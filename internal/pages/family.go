@@ -162,7 +162,7 @@ const frame = `<style>@font-face{font-family:Geist;src:url(` + FontPath + `) for
 body{margin:0 auto;max-width:40rem;padding:0 16px calc(88px + env(safe-area-inset-bottom));background:var(--bg);color:var(--ink);font:16px/1.5 Geist,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-text-size-adjust:100%}
 h1{font-size:1.6rem;font-weight:700;letter-spacing:-.01em;line-height:1.2;margin:22px 0 2px;overflow-wrap:anywhere}.datum{margin:0;color:var(--muted);font-size:.9rem}
 p{margin:12px 0}a{color:var(--accent)}.k{color:var(--muted)}
-button{font:inherit;font-size:.85rem;font-weight:600;color:var(--accent);background:var(--accent-soft);border:0;border-radius:999px;padding:0 16px;min-height:40px;cursor:pointer;white-space:nowrap}
+button{font:inherit;font-size:.85rem;font-weight:600;color:var(--accent);background:var(--accent-soft);border:0;border-radius:999px;padding:0 16px;min-height:44px;cursor:pointer;white-space:nowrap}
 input[type=search]{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--edge);border-radius:999px;padding:0 16px;min-height:44px;width:min(24rem,62vw)}
 form[role=search]{display:flex;gap:8px;margin:16px 0 0}
 .sprechen{margin:20px 0 0}.sprechen label{display:block;font-size:.72rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:0 0 8px}
@@ -205,7 +205,7 @@ func familyHead(r *http.Request, cfg StartConfig, title, current string) *string
 	b.WriteString("<!doctype html><html lang=de><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1,viewport-fit=cover'>" +
 		"<meta name=color-scheme content='dark light'><meta name=theme-color content='#0c0c0e'><title>" + html.EscapeString(title) + "</title>")
 	b.WriteString(frame)
-	b.WriteString(cards.Style)
+	b.WriteString(cards.Style + hausStyle + hausScript) // in the head: a page swapped in keeps it
 	b.WriteString(familyNav(r, cfg, current))
 	b.WriteString(konto(r))
 	return b
@@ -229,12 +229,6 @@ func fromHaus(r *http.Request) bool {
 	}
 	return false
 }
-
-// pressScript answers a press at once (haus#79): a form's button with
-// data-laeuft says it („Speichert …“) and takes no second press while the
-// form goes. Without script the page after the form says the same.
-const pressScript = `<script>(function(){document.querySelectorAll('form button[data-laeuft]').forEach(function(b){` +
-	`b.form.addEventListener('submit',function(){setTimeout(function(){b.disabled=true;b.textContent=b.getAttribute('data-laeuft')},0)})})})()</script>`
 
 // showOnly answers anything but GET and HEAD with 405: a page shows; what
 // changes something has its own form and path (/schalten, a thing's ☆).

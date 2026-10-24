@@ -94,7 +94,7 @@ func TestScannenAfterAJamSaysWhereToGoOn(t *testing.T) {
 	mustContain(t, body, "Nach Blatt 6 abgebrochen", "Den Rest ab Blatt 6 einlegen",
 		`<form method=post action=/scannen><input type=hidden name=tun value=weiter><button>Weiter</button></form>`,
 		`value=abschliessen><button>Abschließen</button>`, `value=verwerfen><button>Verwerfen</button>`)
-	mustNotContain(t, body, "Stapel scannen", "sane_start", "device I/O", "http-equiv=refresh")
+	mustNotContain(t, body, "Stapel scannen", "sane_start", "device I/O", "<div hidden data-auffrischen")
 	before(t, body, "<h2>Scannen</h2>", "Per E-Mail ablegen")
 }
 
@@ -111,7 +111,7 @@ func TestScannenOffersAStackOnlyWithAScanner(t *testing.T) {
 		mustContain(t, body, `\\kraftwerk\data\scan-eingang`, "nur zu Hause im WLAN")
 	}
 	body := scanPage(t, &scanLaib{status: map[string]any{"zustand": "scannt", "seite": 12, "scanner": true}}, "family")
-	mustContain(t, body, "<b>Scannt</b>", "Seite 12", "<meta http-equiv=refresh content=5>")
+	mustContain(t, body, "<b>Scannt</b>", "Seite 12", "data-auffrischen=5>")
 	mustNotContain(t, body, "Stapel scannen", "action=/scannen")
 }
 
@@ -228,7 +228,7 @@ func TestScannerEinrichtenShowsTheSetup(t *testing.T) {
 		"Epson PID 0899 flatbed scanner", `<input type=hidden name=geraet value="epson2:net:192.168.178.87"><button aria-label="Epson PID 0899 flatbed scanner einrichten">Diesen einrichten</button>`,
 		`name=geraet value="airscan:e0:Brother MFC"`, "2 Scanner gefunden", "Adresse von Hand",
 		`\\kraftwerk\data`, "scan-eingang", "href=/netzlaufwerk>Netzlaufwerk</a>")
-	mustNotContain(t, body, "http-equiv=refresh")
+	mustNotContain(t, body, "<div hidden data-auffrischen")
 	mustNotContain(t, scanPage(t, f, "family"), "Scanner einrichten", "Scanner suchen", "Probeseite", "pruefen")
 
 	// no scanner yet, a search running, a check that failed: open, the page follows, no probe without a device
@@ -236,7 +236,7 @@ func TestScannerEinrichtenShowsTheSetup(t *testing.T) {
 		"pruefung": map[string]any{"geraet": "", "ok": false, "at": "2026-10-22T20:00:00Z", "detail": "kein Scanner eingerichtet (SCANNER ist leer)"},
 		"suche":    map[string]any{"zustand": "läuft", "at": "2026-10-22T20:01:00Z", "funde": []any{}}}
 	body = scanPage(t, f, "family,admins")
-	mustContain(t, body, `<details id=scanner class=einrichten open>`, "Sucht im Netz nach Scannern", "<meta http-equiv=refresh content=5>",
+	mustContain(t, body, `<details id=scanner class=einrichten open>`, "Sucht im Netz nach Scannern", "data-auffrischen=5>",
 		`<div class="achtung selbst"><p>kein Scanner eingerichtet`)
 	mustNotContain(t, body, "Scanner suchen</button>", "Probeseite", "Erneut prüfen")
 }
@@ -325,17 +325,17 @@ func TestScannerEinrichtenFollowsTheOrder(t *testing.T) {
 	// idle: the last search's result, no following
 	body := scanPage(t, f, admins)
 	mustContain(t, body, saysNotFound, "Scanner suchen</button>", `<script>`)
-	mustNotContain(t, body, "http-equiv=refresh", "role=alert><p>"+saysNotFound, "autofocus")
+	mustNotContain(t, body, "<div hidden data-auffrischen", "role=alert><p>"+saysNotFound, "autofocus")
 
 	// pressed, the service has not written yet: Sucht …, no button, look again soon
 	body = scanPageAt(t, f, admins, after("suchen", 2*time.Second))
-	mustContain(t, body, `<details id=scanner class=einrichten open>`, `<p class=laeuft role=status>Sucht im Netz nach Scannern …</p>`, "<meta http-equiv=refresh content=2>")
+	mustContain(t, body, `<details id=scanner class=einrichten open>`, `<p class=laeuft role=status>Sucht im Netz nach Scannern …</p>`, "data-auffrischen=2>")
 	mustNotContain(t, body, "Scanner suchen</button>", saysNotFound) // the old result is not this one's
 
 	// the service runs it
 	f.status["suche"] = map[string]any{"zustand": "läuft", "at": at(-time.Second), "funde": []any{}}
 	body = scanPageAt(t, f, admins, after("suchen", 3*time.Second))
-	mustContain(t, body, "Sucht im Netz nach Scannern …", "<meta http-equiv=refresh content=2>")
+	mustContain(t, body, "Sucht im Netz nach Scannern …", "data-auffrischen=2>")
 	if strings.Count(body, "Sucht im Netz nach Scannern …</p>") != 1 {
 		t.Errorf("one Sucht:\n%s", body)
 	}
@@ -344,13 +344,13 @@ func TestScannerEinrichtenFollowsTheOrder(t *testing.T) {
 	f.status["suche"] = map[string]any{"zustand": "fertig", "at": at(0), "funde": []any{}, "detail": "kein Scanner gefunden: das Gerät an, im selben Netz?"}
 	body = scanPageAt(t, f, admins, after("suchen", 4*time.Second))
 	mustContain(t, body, `<div class="achtung selbst" role=alert><p>`+saysNotFound, `<input id=geraet autofocus `, "Scanner suchen</button>")
-	mustNotContain(t, body, "http-equiv=refresh", "Sucht im Netz nach Scannern …</p>", "das Gerät an, im selben Netz?")
+	mustNotContain(t, body, "<div hidden data-auffrischen", "Sucht im Netz nach Scannern …</p>", "das Gerät an, im selben Netz?")
 
 	// done with finds: each to choose
 	f.status["suche"] = map[string]any{"zustand": "fertig", "at": at(0), "funde": []map[string]any{{"geraet": "epson2:net:192.168.178.87", "name": "Epson WF-3540"}}}
 	body = scanPageAt(t, f, admins, after("suchen", 4*time.Second))
 	mustContain(t, body, "Epson WF-3540", "Diesen einrichten")
-	mustNotContain(t, body, saysNotFound, "autofocus", "http-equiv=refresh")
+	mustNotContain(t, body, saysNotFound, "autofocus", "<div hidden data-auffrischen")
 
 	// failed: Laib's sentence why, not „nothing found“
 	f.status["suche"] = map[string]any{"zustand": "fehler", "at": at(0), "funde": []any{}, "detail": "Netzsuche abgebrochen"}
@@ -362,24 +362,24 @@ func TestScannerEinrichtenFollowsTheOrder(t *testing.T) {
 	f.status["suche"] = old
 	body = scanPageAt(t, f, admins, after("suchen", 61*time.Second))
 	mustContain(t, body, `<div class=achtung role=alert><p>Laib hat den Auftrag angenommen, aber nach einer Minute kein Ergebnis gemeldet.`, "Scanner suchen</button>")
-	mustNotContain(t, body, "http-equiv=refresh", "Sucht im Netz nach Scannern …</p>")
+	mustNotContain(t, body, "<div hidden data-auffrischen", "Sucht im Netz nach Scannern …</p>")
 
 	// a link too old, or made up: no following
 	for _, target := range []string{after("suchen", time.Hour), "/dokumente?tut=suchen&seit=x", "/dokumente?tut=start&seit=" + strconv.FormatInt(now.Unix(), 10)} {
-		mustNotContain(t, scanPageAt(t, f, admins, target), "http-equiv=refresh", "Laib hat den Auftrag", "Sucht im Netz nach Scannern …</p>")
+		mustNotContain(t, scanPageAt(t, f, admins, target), "<div hidden data-auffrischen", "Laib hat den Auftrag", "Sucht im Netz nach Scannern …</p>")
 	}
 
 	// Prüfen: waits for a check as new as the order, then shows it at the button
 	f.status = map[string]any{"zustand": "bereit", "scanner": true,
 		"pruefung": map[string]any{"geraet": "epson2:net:192.168.178.87", "ok": true, "at": at(-time.Hour), "detail": "Scanner antwortet"}}
 	body = scanPageAt(t, f, admins, after("pruefen", time.Second))
-	mustContain(t, body, "Prüft den Scanner …</p>", "<meta http-equiv=refresh content=2>")
+	mustContain(t, body, "Prüft den Scanner …</p>", "data-auffrischen=2>")
 	mustNotContain(t, body, "Scanner antwortet", "Erneut prüfen</button>")
 	f.status["pruefung"] = map[string]any{"geraet": "epson2:net:192.168.178.87", "ok": false, "at": at(0),
 		"detail": "Der Scanner unter 192.168.178.87 antwortet nicht – ist er an?", "einzelheiten": "open of device epson2:net:192.168.178.87 failed: Invalid argument"}
 	body = scanPageAt(t, f, admins, after("pruefen", 3*time.Second))
 	mustContain(t, body, `<div class="achtung selbst" role=status><p>`+saysOff, "<summary>Einzelheiten</summary>", "Erneut prüfen</button>")
-	mustNotContain(t, body, "http-equiv=refresh", "Prüft den Scanner …</p>")
+	mustNotContain(t, body, "<div hidden data-auffrischen", "Prüft den Scanner …</p>")
 	if i, j := strings.Index(body, saysOff), strings.Index(body, "Invalid argument"); i < 0 || j < i || !strings.Contains(body[i:j], "<details") {
 		t.Errorf("SANE's words not folded away:\n%s", body)
 	}

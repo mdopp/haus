@@ -269,7 +269,7 @@ func changeForm(path, name, inner string) string {
 }
 
 func copyField(addr string) string {
-	return `<input class=kopieren readonly value="` + html.EscapeString(addr) + `" aria-label="Adresse zum Kopieren">`
+	return `<input class=kopieren readonly value="` + html.EscapeString(addr) + `" aria-label="Adresse zum Kopieren"><button type=button data-kopieren>Kopieren</button>`
 }
 
 // addCard is "Kalender hinzufügen", three ways; without laib's tool only the new calendar.

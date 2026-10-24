@@ -202,7 +202,7 @@ func TestStartIsZuhause(t *testing.T) {
 		"Alles in Ordnung · eure Daten sind von gestern Abend gesichert")
 	mustNotContain(t, body, "Joshua", "Wollen wir", "#3ddc84", "#0c120e", "/persona/icon.svg",
 		"Alles läuft", "Letzte Sicherung", "Orten", "Letzte Änderung", "Paperless wird installiert", "Operator", "Laib",
-		"Haushalt</h2>", "Jetzt</h2>", "Favoriten</h2>", "Einkaufsliste", "<script", "fonts.googleapis", "fonts.gstatic")
+		"Haushalt</h2>", "Jetzt</h2>", "Favoriten</h2>", "Einkaufsliste", "<script>alert", "fonts.googleapis", "fonts.gstatic")
 	before(t, body, "<h1>Zuhause</h1>", "karte-im-haus")
 	before(t, body, "karte-im-haus", "karte-meine-geraete")
 	before(t, body, "karte-meine-geraete", "karte-heute-und-demnaechst")
@@ -735,7 +735,7 @@ func TestStartFitsAPhone(t *testing.T) {
 	fake.Set("light.lang", "on", map[string]any{"friendly_name": strings.Repeat("Wohnzimmerdeckenfluter", 3)})
 	_, body := startPage(t, StartConfig{HA: hc}, "")
 	mustContain(t, body, "width=device-width", cards.Style, "min-height:40px")
-	mustNotContain(t, body, "<script", "<table")
+	mustNotContain(t, body, "<script>alert", "<table")
 }
 
 func must[T any](v T, err error) T {
