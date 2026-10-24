@@ -264,9 +264,7 @@ func paragraphs(text string) []string {
 }
 
 // What writing a note says (owner, 2026-10-24): where notes come from, and
-// each outcome in a sentence. No persona name and no script on a family
-// page (haus#35); a note is written in milliseconds, the page after it
-// says so.
+// each outcome in a sentence. No persona name on a family page (haus#35).
 func saysNotesHow() string {
 	return "Notizen entstehen, wenn du dem Haus sagst „Merk dir …“ (unter Sprechen oder per Signal), hier mit „Neue Notiz“ oder als Datei im Ordner notes auf dem Netzlaufwerk. " +
 		"Das Haus findet sie wieder, wenn du es fragst."
@@ -285,7 +283,7 @@ var noteSaid = map[string]string{"angelegt": "Notiz angelegt.", "gespeichert": "
 // noteStyle is the note forms' look: a roomy field, phone first.
 const noteStyle = `<style>.notizform label{display:block;font-size:.85rem;color:var(--muted);margin:12px 0 6px}
 .notizform input[type=text],.notizform textarea{width:100%;font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--edge);border-radius:12px;padding:10px 14px}
-.notizform input[type=text]{min-height:44px}.notizform textarea{min-height:12rem;resize:vertical;line-height:1.45}.notizform button{margin:12px 0 0;min-height:44px}
+.notizform input[type=text]{min-height:44px}.notizform button:disabled{opacity:.6}.notizform textarea{min-height:12rem;resize:vertical;line-height:1.45}.notizform button{margin:12px 0 0;min-height:44px}
 details.neu{margin:16px 0}details.neu summary{cursor:pointer;font-weight:600;min-height:44px;display:flex;align-items:center;color:var(--accent)}
 .wege{display:flex;gap:16px;align-items:center;flex-wrap:wrap}.wege .knopf{display:inline-flex;align-items:center;min-height:44px;padding:0 18px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-weight:600;text-decoration:none}
 .vorher{white-space:pre-wrap;border:1px solid var(--edge);border-radius:12px;padding:10px 14px;background:var(--card);font-size:.9rem;max-height:20rem;overflow:auto}</style>`
@@ -299,7 +297,7 @@ func newNoteForm(title, text string, open bool) string {
 	return `<details class=neu` + o + `><summary>Neue Notiz</summary><form class=notizform method=post action=/notizen>` +
 		`<label for=titel>Titel</label><input id=titel type=text name=titel required maxlength=200 value="` + html.EscapeString(title) + `">` +
 		`<label for=text>Text</label><textarea id=text name=text>` + html.EscapeString(text) + `</textarea>` +
-		`<button>Anlegen</button></form></details>`
+		`<button data-laeuft="Legt an …">Anlegen</button></form></details>` + pressScript
 }
 
 // noteWrite takes a POST: to /notizen a new note (titel, text), to
@@ -403,7 +401,7 @@ func noteEdit(w http.ResponseWriter, r *http.Request, cfg StartConfig, ref strin
 	b.WriteString(`<form class=notizform method=post action="` + html.EscapeString(cards.NotePage(n.Name)) + `">` +
 		`<input type=hidden name=stand value=` + strconv.FormatInt(n.Changed.UnixNano(), 10) + `>` +
 		`<label for=text>Text (die erste Zeile „# …“ ist der Titel)</label><textarea id=text name=text>` + html.EscapeString(text) + `</textarea>` +
-		`<button>Speichern</button></form>` +
+		`<button data-laeuft="Speichert …">Speichern</button></form>` + pressScript +
 		`<p><a href="` + html.EscapeString(cards.NotePage(n.Name)) + `">Abbrechen</a></p>`)
 	writePage(w, code, b)
 }

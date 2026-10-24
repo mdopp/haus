@@ -31,7 +31,7 @@ func TestNotizenWrite(t *testing.T) {
 	_, body, _ := familyPage(t, Notizen, cfg, "GET", "/notizen", "family")
 	mustContain(t, body, "Notizen entstehen, wenn du dem Haus sagst „Merk dir …“", "Netzlaufwerk",
 		`<details class=neu><summary>Neue Notiz</summary><form class=notizform method=post action=/notizen>`, `name=titel required`, `<textarea id=text name=text>`)
-	mustNotContain(t, body, "<script")
+	mustContain(t, body, `<button data-laeuft="Legt an …">Anlegen</button>`, pressScript)
 
 	// a new note
 	rec := post(t, h, "/notizen", url.Values{"titel": {"Wasserzähler"}, "text": {"Nummer 1234\nim Keller"}}, "anna", nil)
