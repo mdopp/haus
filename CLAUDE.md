@@ -26,6 +26,11 @@ message), no raw errors, phone layout first. Tests cover the states: idle,
 running, done, failed, timed out. A page or button without them is not
 finished.
 
+**The persona (laib ADR 0020) speaks where you talk to it.** Family pages
+wear the house's palette, not its greeting, colours or icon; its name
+appears where a sentence says how to address it ("Sag Joshua: Merk dir …",
+owner 2026-10-24).
+
 **Scripts are welcome (owner, 2026-10-24).** Use them wherever they make
 Haus better to use — the pressed button's "Speichert …" (`pressScript`),
 a part fetched after the page, a live state, recording. A page need not

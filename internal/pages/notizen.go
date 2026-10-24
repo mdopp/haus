@@ -264,10 +264,10 @@ func paragraphs(text string) []string {
 }
 
 // What writing a note says (owner, 2026-10-24): where notes come from, and
-// each outcome in a sentence. No persona name on a family page (haus#35).
+// each outcome in a sentence. The persona by name, as the one to tell it.
 func saysNotesHow() string {
-	return "Notizen entstehen, wenn du dem Haus sagst „Merk dir …“ (unter Sprechen oder per Signal), hier mit „Neue Notiz“ oder als Datei im Ordner notes auf dem Netzlaufwerk. " +
-		"Das Haus findet sie wieder, wenn du es fragst."
+	return "Notizen entstehen, wenn du " + House.Display + " sagst „Merk dir …“ (unter Sprechen oder per Signal), hier mit „Neue Notiz“ oder als Datei im Ordner notes auf dem Netzlaufwerk. " +
+		House.Display + " findet sie wieder, wenn du fragst."
 }
 
 const (

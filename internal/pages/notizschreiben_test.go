@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/mdopp/haus/internal/notes"
+	"github.com/mdopp/haus/internal/persona"
 )
 
 // Notizen says where notes come from, and a person writes them here
@@ -29,9 +30,14 @@ func TestNotizenWrite(t *testing.T) {
 	h := Notizen(cfg)
 
 	_, body, _ := familyPage(t, Notizen, cfg, "GET", "/notizen", "family")
-	mustContain(t, body, "Notizen entstehen, wenn du dem Haus sagst „Merk dir …“", "Netzlaufwerk",
+	mustContain(t, body, "Notizen entstehen, wenn du Haus sagst „Merk dir …“", "Netzlaufwerk",
 		`<details class=neu><summary>Neue Notiz</summary><form class=notizform method=post action=/notizen>`, `name=titel required`, `<textarea id=text name=text>`)
 	mustContain(t, body, `<button data-laeuft="Legt an …">Anlegen</button>`, pressScript)
+	// the persona by its name where the page says how to address it
+	House.Display = "Joshua"
+	_, body, _ = familyPage(t, Notizen, cfg, "GET", "/notizen", "family")
+	House = persona.Default()
+	mustContain(t, body, "wenn du Joshua sagst „Merk dir …“", "Joshua findet sie wieder")
 
 	// a new note
 	rec := post(t, h, "/notizen", url.Values{"titel": {"Wasserzähler"}, "text": {"Nummer 1234\nim Keller"}}, "anna", nil)
