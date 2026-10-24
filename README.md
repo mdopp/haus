@@ -186,7 +186,16 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     Kalender anlegen* (`haus/familie-<name>` für die Familie,
     `<person>/privat-<name>` nur für mich). *In Radicale öffnen* is the
     page's *Weiter in <App>*.
-  - *Notizen*: a search field (`GET /notizen?q=…`, the memory library
+  - *Notizen* says where notes come from (the house's „Merk dir …“, Neue
+    Notiz, a file in `notes` on the share) and lets a person write them
+    (owner, 2026-10-24): *Neue Notiz* (`POST /notizen`: `titel`, `text`;
+    `notes.Dir.Create`, never overwriting) and, on a note's page,
+    *Bearbeiten* (`?bearbeiten=1`: the whole file in a field;
+    `POST /notizen/<name>`: `text`, `stand` = the file's time as read).
+    A note changed since is not overwritten (409): what is saved now and
+    the person's own text are both on the page. Only from Haus's own page,
+    who wrote what in the log; a note longer than a page shows is read-only
+    here. Then a search field (`GET /notizen?q=…`, the memory library
     below: 20 hits, by meaning) and the ten newest notes. When the library
     answers but no note is close to the question, the page says *Keine
     Notiz passt wirklich zu deiner Frage.* and shows what the words find

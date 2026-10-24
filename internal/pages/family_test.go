@@ -170,6 +170,9 @@ func TestFamilyPagesDecideNothing(t *testing.T) {
 		path string
 	}{{Raeume, "/raeume"}, {Energie, "/energie"}, {Medien, "/medien"}, {Kalender, "/kalender"}, {Notizen, "/notizen"}, {Notizen, "/notizen/einkaufsliste.md"}} {
 		for _, m := range []string{"POST", "PUT", "DELETE"} {
+			if m == "POST" && strings.HasPrefix(p.path, "/notizen") {
+				continue // a note is written, not a verdict (owner, 2026-10-24): TestNotizenWrite
+			}
 			if code, _, _ := familyPage(t, p.page, all, m, p.path, "admins"); code != http.StatusMethodNotAllowed {
 				t.Fatalf("%s %s → %d, want 405", m, p.path, code)
 			}
