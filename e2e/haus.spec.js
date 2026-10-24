@@ -96,6 +96,45 @@ test('a form in a card stacks its fields on a phone', async ({ page }) => {
   expect(box.width, 'the name field has room').toBeGreaterThan(250);
 });
 
+// Every page, every field, on a phone (owner 2026-10-24: "werden alle
+// Felder geprüft?"): with every fold open, the page is no wider than the
+// screen, a field to type in has room, a button is big enough for a
+// finger, and no text runs out of its box.
+const PAGES = ['/start', '/raeume', '/raeume/light.kueche', '/medien', '/energie', '/kalender', '/kalender/verwalten',
+  '/notizen', '/notizen/einkaufsliste.md', '/notizen/einkaufsliste.md?bearbeiten=1', '/mehr', '/musik'];
+for (const path of PAGES) {
+  test(`layout of ${path}`, async ({ page }) => {
+    await page.goto(path);
+    await page.evaluate(() => document.querySelectorAll('details').forEach((d) => { d.open = true; }));
+    const problems = await page.evaluate(() => {
+      const out = [];
+      const vw = document.documentElement.clientWidth;
+      if (document.documentElement.scrollWidth > vw + 1) out.push(`page ${document.documentElement.scrollWidth}px wide on a ${vw}px screen`);
+      const seen = (el) => { const r = el.getBoundingClientRect(); const cs = getComputedStyle(el);
+        return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none'; };
+      const what = (el) => (el.getAttribute('aria-label') || el.name || el.textContent || el.tagName).trim().slice(0, 40);
+      for (const el of document.querySelectorAll('input, select, textarea')) {
+        if (!seen(el) || ['hidden', 'checkbox', 'radio', 'range', 'file', 'submit'].includes(el.type)) continue;
+        const r = el.getBoundingClientRect();
+        if (r.width < 120) out.push(`field "${what(el)}" only ${Math.round(r.width)}px wide`);
+        if (r.right > vw + 1) out.push(`field "${what(el)}" runs off the screen`);
+      }
+      for (const el of document.querySelectorAll('button, .knopf, nav a, summary')) {
+        if (!seen(el)) continue;
+        const r = el.getBoundingClientRect();
+        if (r.height < 40) out.push(`"${what(el)}" only ${Math.round(r.height)}px high`);
+        if (r.right > vw + 1) out.push(`"${what(el)}" runs off the screen`);
+      }
+      for (const el of document.querySelectorAll('p, li, h1, h2, label, td, th, .k')) {
+        if (!seen(el)) continue;
+        if (el.scrollWidth > el.clientWidth + 2 && getComputedStyle(el).overflowX === 'visible') out.push(`text overflows: "${what(el)}"`);
+      }
+      return out;
+    });
+    expect(problems, `${path} on a phone`).toEqual([]);
+  });
+}
+
 // Pictures of the main pages as a phone shows them, for a look at the
 // run (the CI keeps them).
 for (const path of ['/start', '/raeume', '/medien', '/energie', '/notizen', '/mehr', '/musik', '/kalender/verwalten']) {
