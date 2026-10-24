@@ -182,14 +182,18 @@ func Start(cfg StartConfig) http.HandlerFunc {
 		if cfg.Bote != nil {
 			b.WriteString(sprechenField(cfg, false))
 		}
-		if cfg.HA != nil {
-			b.WriteString(imHaus(states, haErr, reg).HTML())
+		// the day first, then what you switch, then the house (owner 2026-10-24)
+		if cfg.Calendar != nil {
+			b.WriteString(agenda(events, evErr, todos, todoErr, now, loc).HTML())
 		}
 		if pins {
 			b.WriteString(meineGeraete(favs, favErr, states, haErr, reg).HTML())
 		}
-		if cfg.Calendar != nil {
-			b.WriteString(agenda(events, evErr, todos, todoErr, now, loc).HTML())
+		if cfg.HA != nil {
+			b.WriteString(imHaus(states, haErr, reg).HTML())
+			if haErr == nil {
+				b.WriteString(energieZeile(cfg, states))
+			}
 		}
 		b.WriteString(bottom)
 		b.WriteString(toNetzlaufwerk(cfg.Samba, person))
