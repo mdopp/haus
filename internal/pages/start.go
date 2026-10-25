@@ -16,6 +16,7 @@ import (
 	"github.com/mdopp/haus/internal/bote"
 	"github.com/mdopp/haus/internal/caldav"
 	"github.com/mdopp/haus/internal/cards"
+	"github.com/mdopp/haus/internal/discogs"
 	"github.com/mdopp/haus/internal/einkauf"
 	"github.com/mdopp/haus/internal/energie"
 	"github.com/mdopp/haus/internal/favoriten"
@@ -43,6 +44,7 @@ type StartConfig struct {
 	Podcasts  *podcasts.Service // the family's podcasts in Audiobookshelf (haus#123); nil: no page
 	Einkauf   *einkauf.Liste    // the household's shopping list in Radicale (haus#118); nil: no page
 	Wuensche  *einkauf.Wuensche // the music wish list (owner 2026-10-25); nil: a song link is a note
+	Regal     *discogs.Regal    // the household's records on Discogs (laib#696); nil: no Platte erfassen
 	LaibURL   string            // where Rückgängig lives (the guarantees, admins only)
 	HA        *ha.Client
 	Energy    energie.Map // which sensors Energie reads (haus#12); empty: by friendly name

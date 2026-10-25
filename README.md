@@ -965,6 +965,23 @@ Each wish moves through stages kept in `musikwuensche.json` in HAUS_DATA:
 *Datei da* (the record on its way; set by hand, or by Jellyfin when the
 download is sorted in) → ticked off when all of it is there.
 
+## Discogs: the shelf, the wantlist, Platte erfassen (owner 2026-10-25)
+
+With the household's Discogs account (`HAUS_DISCOGS_TOKEN`, its personal
+access token, laib#696) Haus looks into the collection — a wish already on
+the shelf is "Hast du schon auf Vinyl", a wish whose album arrives there
+is ticked off (and taken off the wantlist) — and a wish's album goes on
+the wantlist with one button, so Discogs reports offers. *Platte erfassen*
+(`/platte`, under Mehr and on the list *Musik*): 1–4 photos of a record.
+The phone makes them small and reads a barcode with the browser's
+`BarcodeDetector`; without a barcode the box's model reads catalogue
+number, label, artist and title (`HAUS_LLM_VISION_MODEL`, else the house
+model; only while it has the card, else who has it). Discogs is searched
+by barcode (its check digit checked), then catalogue number and label,
+then artist and title on vinyl; the best five show with their cover
+(through Haus, `/platte/bild`) and why they match, and only *Das ist sie*
+adds one to the collection.
+
 ## Podcasts (haus#123)
 
 `GET /podcasts`, under Mehr, with Audiobookshelf (`HAUS_ABS_URL`,

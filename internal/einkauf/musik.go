@@ -8,11 +8,13 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/mdopp/haus/internal/caldav"
+	"github.com/mdopp/haus/internal/discogs"
 	"github.com/mdopp/haus/internal/jellyfin"
 	"github.com/mdopp/haus/internal/merken"
 	"github.com/mdopp/haus/internal/musicbrainz"
@@ -44,7 +46,8 @@ type Wuensche struct {
 	Listen *Liste
 	Bib    Bibliothek
 	MB     Suche
-	Dir    string // HAUS_DATA: musikwuensche.json, each wish's stage and where it is
+	Regal  *discogs.Regal // the household's records on Discogs; nil: none
+	Dir    string         // HAUS_DATA: musikwuensche.json, each wish's stage and where it is
 	Now    func() time.Time
 
 	mu        sync.Mutex
@@ -80,6 +83,15 @@ func (w *Wuensche) Wuenschen(ctx context.Context, lied merken.Lied, person strin
 				where = "auf dem Album „" + t.Album + "“"
 			}
 			return Gewuenscht{Schon: true, Satz: "Hast du schon: „" + lied.Name() + "“ " + where + "."}, nil
+		}
+	}
+	if w.Regal != nil {
+		if p, ok, err := w.Regal.Hat(ctx, lied.Kuenstler, lied.Titel); err == nil && ok {
+			year := ""
+			if p.Jahr > 0 {
+				year = " (" + strconv.Itoa(p.Jahr) + ")"
+			}
+			return Gewuenscht{Schon: true, Satz: "Hast du schon auf Vinyl: „" + p.Titel + "“" + year + "."}, nil
 		}
 	}
 	if err := w.Ensure(ctx); err != nil {
@@ -129,7 +141,7 @@ type Erfuellt struct {
 // Pruefen ticks off the open wishes the music has now, and says whom to
 // tell.
 func (w *Wuensche) Pruefen(ctx context.Context) ([]Erfuellt, error) {
-	if w.Bib == nil {
+	if w.Bib == nil && w.Regal == nil {
 		return nil, nil
 	}
 	l := w.liste()
@@ -141,6 +153,25 @@ func (w *Wuensche) Pruefen(ctx context.Context) ([]Erfuellt, error) {
 				continue
 			}
 			artist, title := Teile(it.Summary)
+			st := w.Stand(it.UID)
+			if album := st.AlbumName(title); w.Regal != nil && album != "" { // the record on the shelf: all there
+				if p, ok, err := w.Regal.Hat(ctx, artist, album); err == nil && ok {
+					it.Done = true
+					if err := l.DAV.UpdateItem(ctx, it); err != nil {
+						return err
+					}
+					if st.Wantlist != 0 {
+						if err := w.Regal.C.Entwuenschen(ctx, st.Wantlist); err != nil {
+							log.Printf("haus: musikwunsch: wantlist: %v", err)
+						}
+					}
+					out = append(out, Erfuellt{Person: Wer(it.Herkunft), Satz: "Die Platte „" + p.Titel + "“ ist in deiner Sammlung; ich habe „" + it.Summary + "“ auf der Wunschliste abgehakt."})
+					continue
+				}
+			}
+			if w.Bib == nil {
+				continue
+			}
 			t, ok, err := w.Bib.Find(ctx, artist, title)
 			if err != nil {
 				return err
@@ -148,7 +179,6 @@ func (w *Wuensche) Pruefen(ctx context.Context) ([]Erfuellt, error) {
 			if !ok {
 				continue
 			}
-			st := w.Stand(it.UID)
 			if st.Stufe == StufeDatei {
 				continue // the file came already; the record is ticked off by hand
 			}
@@ -244,7 +274,8 @@ type Stand struct {
 	Bestellt time.Time         `json:"bestellt,omitzero"`
 	DateiAm  time.Time         `json:"datei_am,omitzero"`
 	Fund     *musicbrainz.Fund `json:"fund,omitempty"`
-	Versucht time.Time         `json:"versucht,omitzero"` // the last search, found or not
+	Wantlist int               `json:"wantlist,omitempty"` // the release on the Discogs wantlist
+	Versucht time.Time         `json:"versucht,omitzero"`  // the last search, found or not
 	Sucht    bool              `json:"-"`
 }
 
@@ -423,4 +454,54 @@ func (w *Wuensche) Stufe(ctx context.Context, uid, step string) (string, error) 
 		return ErrNoLine
 	})
 	return said, err
+}
+
+// AlbumName is the record a wish is: the album MusicBrainz found it on,
+// or the wish itself when it is an album; "" before either is known.
+func (st Stand) AlbumName(title string) string {
+	switch {
+	case st.Album:
+		return title
+	case st.Fund != nil && st.Fund.Gefunden:
+		return st.Fund.Album
+	}
+	return ""
+}
+
+// AufWantlist puts the wish's record on the Discogs wantlist: its album's
+// main release on vinyl.
+func (w *Wuensche) AufWantlist(ctx context.Context, uid string) (string, error) {
+	if w.Regal == nil {
+		return "", errors.New("Discogs ist nicht verbunden.")
+	}
+	items, err := w.liste().Lesen(ctx)
+	if err != nil {
+		return "", err
+	}
+	for _, it := range items {
+		if it.UID != uid {
+			continue
+		}
+		artist, title := Teile(it.Summary)
+		album := w.Stand(uid).AlbumName(title)
+		if album == "" {
+			return "", errors.New("Auf welchem Album das ist, weiß Haus noch nicht; erst wenn es gefunden ist, geht es auf die Wantlist.")
+		}
+		t, ok, err := w.Regal.C.Album(ctx, artist, album)
+		if err != nil {
+			return "", err
+		}
+		if !ok {
+			return "", errors.New("Discogs kennt „" + album + "“ von " + artist + " nicht als Platte.")
+		}
+		if err := w.Regal.C.Wuenschen(ctx, t.ID); err != nil {
+			return "", err
+		}
+		w.setzen(uid, func(st *Stand) { st.Wantlist = t.ID })
+		if w.Listen.Changed != nil {
+			w.Listen.Changed(MusikListe)
+		}
+		return "„" + album + "“ steht auf deiner Discogs-Wantlist; Discogs meldet sich, wenn jemand sie anbietet.", nil
+	}
+	return "", ErrNoLine
 }

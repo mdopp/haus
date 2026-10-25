@@ -99,14 +99,19 @@ func (c *Client) do(ctx context.Context, method, u, key string, body []byte) ([]
 
 // loaded reads the lease (GET, no key: it is public): the house model is
 // the one answering, ready in a window or the default with none held.
-func (c *Client) loaded(ctx context.Context) error {
+func (c *Client) loaded(ctx context.Context) error { return c.loadedAs(ctx, c.Model) }
+
+// loadedAs is loaded for the model alias: only while it is the one in place.
+func (c *Client) loadedAs(ctx context.Context, alias string) error {
 	raw, err := c.do(ctx, http.MethodGet, strings.TrimSuffix(c.URL, "/v1")+"/api/model-lease", "", nil)
 	if err != nil {
 		return err
 	}
 	var l struct {
-		State string `json:"state"`
-		Alias string `json:"alias"`
+		State  string `json:"state"`
+		Alias  string `json:"alias"`
+		Holder string `json:"holder"`
+		Until  string `json:"until"`
 	}
 	if err := json.Unmarshal(raw, &l); err != nil {
 		return fmt.Errorf("judge: the lease: %w", err)
@@ -114,8 +119,8 @@ func (c *Client) loaded(ctx context.Context) error {
 	// ready with the house model; or no window held and the house model the
 	// default: nobody holds the card, so asking takes it from no one, and a
 	// model not loaded yet only runs out the caller's budget
-	if (l.State != "ready" && l.State != "none") || l.Alias != c.Model {
-		return fmt.Errorf("%w (lease %q, %q)", ErrNotLoaded, l.State, l.Alias)
+	if (l.State != "ready" && l.State != "none") || l.Alias != alias {
+		return &NotLoaded{State: l.State, Alias: l.Alias, Holder: l.Holder, Until: l.Until}
 	}
 	return nil
 }
@@ -258,4 +263,28 @@ func (c *Client) Summarize(ctx context.Context, title, text string) (Gist, error
 		return Gist{}, fmt.Errorf("judge: the answer is no gist: %q", cut(ans.Choices[0].Message.Content))
 	}
 	return g, nil
+}
+
+// NotLoaded is the lease saying another model, or another holder, has the
+// card: who and until when, as the lease says it. It is ErrNotLoaded.
+type NotLoaded struct {
+	State, Alias, Holder, Until string
+}
+
+func (e *NotLoaded) Error() string {
+	return fmt.Sprintf("%v (lease %q, %q, holder %q until %q)", ErrNotLoaded, e.State, e.Alias, e.Holder, e.Until)
+}
+
+func (e *NotLoaded) Is(target error) bool { return target == ErrNotLoaded }
+
+// Satz is the card's state for the family: who has it and until when.
+func (e *NotLoaded) Satz() string {
+	s := "Das Bildmodell der Box ist gerade nicht bereit"
+	if e.Holder != "" {
+		s += ": Die Grafikkarte nutzt gerade " + e.Holder
+		if e.Until != "" {
+			s += " bis " + e.Until
+		}
+	}
+	return s + "."
 }
