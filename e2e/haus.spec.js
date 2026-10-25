@@ -145,11 +145,35 @@ test('a recipe goes on the list for more portions, without what one has', async 
   await page.getByRole('button', { name: 'Zutaten zeigen' }).click();
   await expect(page.getByText('1 kg Hackfleisch')).toBeVisible();
   await page.getByLabel('2 Dosen Tomaten').uncheck();
-  await page.getByRole('button', { name: 'Auf die Einkaufsliste' }).click();
+  await page.getByRole('button', { name: 'Auf die Liste' }).click();
   await expect(page).toHaveURL(/\/einkauf$/);
   await expect(page.getByRole('status')).toContainText('auf der Liste');
   await expect(page.getByRole('switch', { name: '500 g Lasagneplatten' })).toBeVisible();
   await expect(page.getByRole('switch', { name: 'Dosen Tomaten' })).toHaveCount(0);
+});
+
+test("a list of one's own is made, switched to, and deleted", async ({ page }) => {
+  await page.goto('/einkauf');
+  await page.locator('summary', { hasText: 'Listen verwalten' }).click();
+  const name = 'Nur ich ' + Date.now();
+  await page.getByLabel('Neue Liste').fill(name);
+  await page.getByLabel('Nur für mich').check();
+  await page.getByRole('button', { name: 'Anlegen' }).click();
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(name);
+  await expect(page.getByRole('status')).toContainText('angelegt');
+  await expect(page.getByRole('navigation', { name: 'Listen' }).getByRole('link', { name: name })).toHaveAttribute('aria-current', 'page');
+  await page.getByLabel('Was fehlt?').fill('Geheimnis');
+  await page.getByRole('button', { name: 'Dazu' }).click();
+  await expect(page.getByRole('switch', { name: 'Geheimnis' })).toBeVisible();
+  await page.getByRole('navigation', { name: 'Listen' }).getByRole('link', { name: 'Einkauf' }).click();
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Einkauf');
+  await expect(page.getByRole('switch', { name: 'Geheimnis' })).toHaveCount(0);
+  await page.getByRole('navigation', { name: 'Listen' }).getByRole('link', { name: name }).click();
+  await page.locator('summary', { hasText: 'Listen verwalten' }).click();
+  page.once('dialog', (d) => d.accept());
+  await page.getByRole('button', { name: 'Diese Liste löschen' }).click();
+  await expect(page.getByRole('status')).toContainText('gelöscht');
+  await expect(page.getByRole('link', { name: name })).toHaveCount(0);
 });
 
 test('music goes up in pieces and arrives whole', async ({ page, request }) => {
@@ -180,7 +204,7 @@ test('a form in a card stacks its fields on a phone', async ({ page }) => {
 // finger, and no text runs out of its box.
 const PAGES = ['/start', '/raeume', '/raeume/light.kueche', '/medien', '/energie', '/kalender', '/kalender/verwalten',
   '/notizen', '/notizen?tag=kochen', '/notizen/einkaufsliste.md', '/notizen/einkaufsliste.md?bearbeiten=1', '/mehr', '/musik', '/podcasts',
-  '/einkauf', '/einkauf/rezepte', '/einkauf/rezepte?n=rezepte%2Flasagne.md', '/notizen/rezepte/lasagne.md'];
+  '/einkauf', '/einkauf?liste=liste-baumarkt', '/einkauf/rezepte', '/einkauf/rezepte?n=rezepte%2Flasagne.md', '/notizen/rezepte/lasagne.md'];
 for (const path of PAGES) {
   test(`layout of ${path}`, async ({ page }) => {
     await page.goto(path);

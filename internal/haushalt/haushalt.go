@@ -341,19 +341,26 @@ func Tools(cfg Config) []mcpserver.Tool {
 		out = append(out,
 			mcpserver.Tool{
 				Name: "einkaufsliste_dazu",
-				Description: "Schreibt auf die gemeinsame Einkaufsliste des Haushalts: einzelne Dinge („Milch, 500 g Mehl“) und/oder die Zutaten " +
+				Description: "Schreibt auf eine Liste, ohne Angabe die gemeinsame Einkaufsliste des Haushalts: einzelne Dinge („Milch, 500 g Mehl“) und/oder die Zutaten " +
 					"gemerkter Rezepte, auf eine Zahl Portionen umgerechnet („Lasagne und Curry für 4“: rezepte „Lasagne, Curry“, portionen „4“). " +
-					"Gleiches wird zusammengezählt. Sag danach kurz, was jetzt auf der Liste steht.",
+					"„Auf meine Liste“: liste „meine“; eine benannte Liste („Baumarkt“) mit ihrem Namen. Gleiches wird zusammengezählt. Sag danach kurz, was jetzt auf der Liste steht.",
 				Schema: obj(map[string]any{"dinge": str("Was auf die Liste soll, durch Komma getrennt, mit Menge wenn gesagt; leer, wenn nur Rezepte"),
 					"rezepte":   str("Namen gemerkter Rezepte, durch Komma getrennt; leer, wenn keine"),
-					"portionen": str("Für wie viele Portionen die Rezepte gerechnet werden, als Zahl; leer: wie im Rezept")}),
+					"portionen": str("Für wie viele Portionen die Rezepte gerechnet werden, als Zahl; leer: wie im Rezept"),
+					"liste":     str("Welche Liste: leer für die Einkaufsliste des Haushalts, „meine“ für die eigene der Person, sonst der Name der Liste"),
+					"person":    str("Wer schreibt: der Benutzername der Person; nötig für „meine“")}),
 				Call: func(ctx context.Context, a map[string]any) (string, error) { return einkaufDazu(ctx, l, cfg.Notes, a) },
 			},
 			mcpserver.Tool{
 				Name:        "einkaufsliste",
-				Description: "Liest die gemeinsame Einkaufsliste des Haushalts: was noch fehlt, und wofür (welches Rezept).",
-				Schema:      obj(map[string]any{}),
+				Description: "Liest eine Liste, ohne Angabe die gemeinsame Einkaufsliste des Haushalts: was noch fehlt, und wofür (welches Rezept).",
+				Schema: obj(map[string]any{"liste": str("Welche Liste: leer für die Einkaufsliste, „meine“ für die eigene der Person, sonst ihr Name"),
+					"person": str("Wer fragt: der Benutzername der Person; nötig für „meine“")}),
 				Call: func(ctx context.Context, a map[string]any) (string, error) {
+					l, _, err := l.Waehle(ctx, mcpserver.Str(a, "person"), mcpserver.Str(a, "liste"))
+					if err != nil {
+						return "", err
+					}
 					items, err := l.Lesen(ctx)
 					if err != nil {
 						return "", err
@@ -370,9 +377,9 @@ func Tools(cfg Config) []mcpserver.Tool {
 						b.WriteString("\n")
 					}
 					if b.Len() == 0 {
-						return "Die Einkaufsliste ist leer.", nil
+						return "Die Liste ist leer.", nil
 					}
-					return "Auf der Einkaufsliste:\n" + b.String(), nil
+					return "Auf der Liste:\n" + b.String(), nil
 				},
 			})
 	}
@@ -1246,12 +1253,19 @@ func einkaufDazu(ctx context.Context, l *einkauf.Liste, d *notes.Dir, a map[stri
 		}
 		return "", errors.New("Nichts gesagt, was auf die Liste soll.")
 	}
+	l, made, err := l.Waehle(ctx, mcpserver.Str(a, "person"), mcpserver.Str(a, "liste"))
+	if err != nil {
+		return "", err
+	}
 	res, err := l.Dazu(ctx, zs)
 	if err != nil {
 		return "", err
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "Auf der Einkaufsliste: %d neu, %d dazugezählt.", res.Neu, res.Addiert)
+	if made {
+		b.WriteString("Neue eigene Liste „" + einkauf.MeineName + "“ angelegt. ")
+	}
+	fmt.Fprintf(&b, "Auf der Liste: %d neu, %d dazugezählt.", res.Neu, res.Addiert)
 	if len(found) > 0 {
 		b.WriteString(" Aus den Rezepten: " + strings.Join(found, ", ") + ".")
 	}

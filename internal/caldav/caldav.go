@@ -218,6 +218,11 @@ func (c *Client) list(ctx context.Context, books bool) ([]Collection, error) {
 
 // listAt is the calendars, or the address books, in the home at home.
 func (c *Client) listAt(ctx context.Context, home string, books bool) ([]Collection, error) {
+	return c.collectionsAt(ctx, home, books, false)
+}
+
+// collectionsAt is listAt, or with lists the lists only (haus#119).
+func (c *Client) collectionsAt(ctx context.Context, home string, books, lists bool) ([]Collection, error) {
 	code, raw, err := c.do(ctx, "PROPFIND", home, "1", propfindBody, nil)
 	if err != nil {
 		return nil, err
@@ -251,7 +256,7 @@ func (c *Client) listAt(ctx context.Context, home string, books bool) ([]Collect
 				cs = append(cs, strings.ToUpper(cp.Name))
 			}
 		}
-		if (books && !isBook) || (!books && !isCal) || (isCal && isList(r.Href)) { // a list is no calendar (haus#118)
+		if (books && !isBook) || (!books && !isCal) || (isCal && isList(r.Href) != lists) { // a list is no calendar (haus#118)
 			continue
 		}
 		u, err := c.resolve(r.Href)

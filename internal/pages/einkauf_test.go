@@ -26,7 +26,7 @@ func shoppingList(t *testing.T) (*einkauf.Liste, *int) {
 		t.Fatal(err)
 	}
 	told := 0
-	l.Changed = func() { told++ }
+	l.Changed = func(caldav.ListRef) { told++ }
 	return l, &told
 }
 
@@ -55,7 +55,7 @@ func TestEinkaufPage(t *testing.T) {
 	h := Einkauf(cfg)
 
 	_, body, _ := familyPage(t, Einkauf, cfg, "GET", EinkaufPath, "family")
-	mustContain(t, body, "<h1>Einkauf</h1>", saysEinkaufEmpty, `data-live=seite`, `<span hidden>`+EinkaufLive+`</span>`,
+	mustContain(t, body, "<h1>Einkauf</h1>", saysEinkaufEmpty, `data-live=seite`, `<span hidden>`+ListeLive(caldav.Einkauf)+`</span>`,
 		`<input type=hidden name=tun value=dazu>`, `href=/einkauf aria-current=page`)
 	mustNotContain(t, body, "Abgehakte entfernen", "Zutaten aus Rezepten") // no notes: no recipes
 
@@ -151,14 +151,14 @@ func TestEinkaufFromRecipes(t *testing.T) {
 	cfg := StartConfig{Einkauf: l, Notes: nd}
 
 	_, body, _ := familyPage(t, Einkauf, cfg, "GET", EinkaufPath, "family")
-	mustContain(t, body, `<a class=knopf href=/einkauf/rezepte>Zutaten aus Rezepten</a>`)
+	mustContain(t, body, `<a class=knopf href="/einkauf/rezepte">Zutaten aus Rezepten</a>`)
 	_, body, _ = familyPage(t, Einkauf, cfg, "GET", EinkaufRezeptePath, "family")
 	mustContain(t, body, `value="rezepte/lasagne.md"><span>Lasagne</span>`, `value="rezepte/curry.md"><span>Curry</span>`)
 	mustNotContain(t, body, "Alt", "Auf die Einkaufsliste")
 
 	_, body, _ = familyPage(t, Einkauf, cfg, "GET", EinkaufRezeptePath+"?n=rezepte/lasagne.md&n=rezepte/curry.md&portionen=4", "family")
 	mustContain(t, body, `value="4"`, "<h2 id=k-zutaten>Zutaten</h2>", "Nimm weg, was du schon hast.",
-		`value="4 Zwiebeln`+"\t"+`Lasagne, Curry"><span>4 Zwiebeln <small>Lasagne, Curry</small>`, `value="800 ml Kokosmilch`, "Auf die Einkaufsliste")
+		`value="4 Zwiebeln`+"\t"+`Lasagne, Curry"><span>4 Zwiebeln <small>Lasagne, Curry</small>`, `value="800 ml Kokosmilch`, "Auf die Liste</button>")
 
 	rec := post(t, Einkauf(cfg), EinkaufPath, url.Values{"tun": {"rezepte"}, "z": {"500 g Hackfleisch\tLasagne", "4 Zwiebeln\tLasagne, Curry"}}, "anna", nil)
 	mustContain(t, rec.Body.String(), "2 Zeilen neu auf der Liste.", "<span class=was>4 Zwiebeln<small>Lasagne, Curry</small>")
@@ -173,4 +173,102 @@ func TestEinkaufFromRecipes(t *testing.T) {
 	mustContain(t, body, `<a class=knopf href="/einkauf/rezepte?n=rezepte%2Flasagne.md">Auf die Einkaufsliste</a>`)
 	_, body, _ = familyPage(t, Notizen, cfg, "GET", "/notizen/einkaufsliste.md", "family")
 	mustNotContain(t, body, "Auf die Einkaufsliste")
+}
+
+// haus#119: lists besides the household's — named ones for everyone, a
+// person's own for them alone: made and deleted on the page, switched
+// between, a recipe put on the one chosen; another person's own list is
+// no list for anyone else, not even by its address.
+func TestListen(t *testing.T) {
+	dav := davfake.New("haus", "pw")
+	t.Cleanup(dav.Close)
+	dav.AddPrincipal("anna")
+	dav.AddPrincipal("ben")
+	l := einkauf.Open(&caldav.Client{URL: dav.URL, User: "haus", Password: "pw"})
+	l.Ensure(context.Background())
+	var told []caldav.ListRef
+	l.Changed = func(r caldav.ListRef) { told = append(told, r) }
+	cfg := StartConfig{Einkauf: l}
+	h := Einkauf(cfg)
+
+	_, body, _ := familyPage(t, Einkauf, cfg, "GET", EinkaufPath, "family")
+	mustContain(t, body, "<summary>Listen verwalten</summary>", `<input type=radio name=fuer value=mich>`)
+	mustNotContain(t, body, "<nav class=listen", "Diese Liste löschen") // one list: no switch; the household's stays
+
+	rec := post(t, h, EinkaufPath, url.Values{"tun": {"neu"}, "name": {"Baumarkt"}, "fuer": {"haushalt"}}, "anna", nil)
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/einkauf?liste=liste-baumarkt&neu=1" {
+		t.Fatalf("neu → %d %q", rec.Code, rec.Header().Get("Location"))
+	}
+	rec = post(t, h, EinkaufPath, url.Values{"tun": {"neu"}, "name": {"Geschenke für Ben"}, "fuer": {"mich"}}, "anna", nil)
+	if loc := rec.Header().Get("Location"); loc != "/einkauf?liste=anna%2Fliste-geschenke-fuer-ben&neu=1" {
+		t.Fatalf("mine → %q", loc)
+	}
+	if got := dav.Calendars(); strings.Join(got, " ") != "/anna/liste-geschenke-fuer-ben/ /haus/einkauf/ /haus/liste-baumarkt/" {
+		t.Errorf("in Radicale: %v", got)
+	}
+	if rec := post(t, h, EinkaufPath, url.Values{"tun": {"neu"}, "name": {"Baumarkt"}}, "anna", nil); rec.Code != http.StatusConflict {
+		t.Errorf("twice → %d", rec.Code)
+	}
+	if rec := post(t, h, EinkaufPath, url.Values{"tun": {"neu"}, "name": {"  "}}, "anna", nil); rec.Code != http.StatusBadRequest {
+		t.Errorf("no name → %d", rec.Code)
+	}
+
+	mine := "/einkauf?liste=" + url.QueryEscape("anna/liste-geschenke-fuer-ben")
+	_, body, _ = familyPageAs(t, Einkauf, cfg, "GET", mine+"&neu=1", "anna", "family")
+	mustContain(t, body, "<h1>Geschenke für Ben</h1>", saysListeMine, saysListMade, `<nav class=listen aria-label=Listen><a href="/einkauf">Einkauf</a>`,
+		`<a href="/einkauf?liste=liste-baumarkt">Baumarkt</a>`, `aria-current=page>Geschenke für Ben <span class=meine>nur für dich</span></a>`,
+		`<span hidden>`+ListeLive(caldav.ListRef{Person: "anna", Slug: "liste-geschenke-fuer-ben"})+`</span>`, `data-frage="Liste „Geschenke für Ben“ mit allen Zeilen löschen?"`)
+	mustNotContain(t, body, "anna/liste", "geschenke-fuer-ben</span>") // the live token is not the list's name
+
+	// Ben sees the household's lists, not Anna's own, not even by address
+	_, body, _ = familyPageAs(t, Einkauf, cfg, "GET", EinkaufPath, "ben", "family")
+	mustContain(t, body, ">Baumarkt</a>")
+	mustNotContain(t, body, "Geschenke")
+	if code, _, _ := familyPageAs(t, Einkauf, cfg, "GET", mine, "ben", "family"); code != http.StatusNotFound {
+		t.Errorf("Ben on Anna's list → %d", code)
+	}
+	if rec := post(t, h, mine, url.Values{"tun": {"dazu"}, "was": {"Socken"}}, "ben", nil); rec.Code != http.StatusNotFound {
+		t.Errorf("Ben writes on Anna's list → %d", rec.Code)
+	}
+	if code, _, _ := familyPageAs(t, Einkauf, cfg, "GET", "/einkauf?liste=liste-gibtsnicht", "anna", "family"); code != http.StatusNotFound {
+		t.Errorf("no such list → %d", code)
+	}
+
+	rec = post(t, h, mine, url.Values{"tun": {"dazu"}, "was": {"Buch"}}, "anna", nil)
+	mustContain(t, rec.Body.String(), "<h1>Geschenke für Ben</h1>", "<span class=was>Buch</span>")
+	if len(told) == 0 || told[len(told)-1] != (caldav.ListRef{Person: "anna", Slug: "liste-geschenke-fuer-ben"}) {
+		t.Errorf("told %v", told)
+	}
+	_, body, _ = familyPage(t, Einkauf, cfg, "GET", EinkaufPath, "family")
+	mustNotContain(t, body, "Buch")
+
+	rec = post(t, h, "/einkauf?liste=liste-baumarkt", url.Values{"tun": {"loeschen"}}, "anna", nil)
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/einkauf?geloescht=1" {
+		t.Fatalf("loeschen → %d %q", rec.Code, rec.Header().Get("Location"))
+	}
+	if rec := post(t, h, EinkaufPath, url.Values{"tun": {"loeschen"}}, "anna", nil); rec.Code != http.StatusBadRequest {
+		t.Errorf("the household's list deleted → %d", rec.Code)
+	}
+	_, body, _ = familyPage(t, Einkauf, cfg, "GET", "/einkauf?geloescht=1", "family")
+	mustContain(t, body, saysListGone)
+	mustNotContain(t, body, ">Baumarkt</a>")
+}
+
+// a recipe goes on the list chosen
+func TestRezepteOnAChosenList(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "curry.md"), []byte("---\nart: rezept\n---\n# Curry\n\n## Zutaten\n\n- 1 Zwiebel\n"), 0o644)
+	nd, _ := notes.Open(dir)
+	dav := davfake.New("haus", "pw")
+	t.Cleanup(dav.Close)
+	dav.AddPrincipal("anna")
+	l := einkauf.Open(&caldav.Client{URL: dav.URL, User: "haus", Password: "pw"})
+	l.Ensure(context.Background())
+	l.DAV.MakeList(context.Background(), "", "urlaub", "Urlaub")
+	cfg := StartConfig{Einkauf: l, Notes: nd}
+	_, body, _ := familyPage(t, Einkauf, cfg, "GET", EinkaufRezeptePath+"?n=curry.md&liste=liste-urlaub", "family")
+	mustContain(t, body, `<select id=ziel name=liste><option value="einkauf">Einkauf</option><option value="liste-urlaub" selected>Urlaub</option></select>`,
+		`<input type=hidden name=liste value="liste-urlaub">`)
+	rec := post(t, Einkauf(cfg), EinkaufPath, url.Values{"tun": {"rezepte"}, "liste": {"liste-urlaub"}, "z": {"1 Zwiebel\tCurry"}}, "anna", nil)
+	mustContain(t, rec.Body.String(), "<h1>Urlaub</h1>", "<span class=was>1 Zwiebel<small>Curry</small>")
 }
