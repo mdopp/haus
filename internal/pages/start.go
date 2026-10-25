@@ -21,6 +21,7 @@ import (
 	"github.com/mdopp/haus/internal/ha"
 	"github.com/mdopp/haus/internal/judge"
 	"github.com/mdopp/haus/internal/laib"
+	"github.com/mdopp/haus/internal/merken"
 	"github.com/mdopp/haus/internal/napi"
 	"github.com/mdopp/haus/internal/notes"
 	"github.com/mdopp/haus/internal/paperless"
@@ -36,6 +37,7 @@ import (
 type StartConfig struct {
 	Laib      *laib.Client
 	Witness   *schalter.Witness // who switched what, into the log and Laib's journal (haus#89); nil: the log only
+	Fetcher   merken.Fetcher    // how Notizen fetches a page to keep (haus#117); the tests' allows their 127.0.0.1
 	LaibURL   string            // where Rückgängig lives (the guarantees, admins only)
 	HA        *ha.Client
 	Energy    energie.Map // which sensors Energie reads (haus#12); empty: by friendly name

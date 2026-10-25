@@ -200,3 +200,62 @@ func cut(s string) string {
 	}
 	return s
 }
+
+// Gist is what the house model says of a page someone wants to keep
+// (haus#117): what kind it is, its core in a few sentences, and tags.
+type Gist struct {
+	Art  string   `json:"art"`  // notiz, rezept, album, reise
+	Kern string   `json:"kern"` // three or four German sentences
+	Tags []string `json:"tags"` // up to four
+}
+
+const gistSystem = "Du fasst eine Webseite für die Notizen eines Haushalts zusammen. Antworte nur mit JSON. " +
+	"art: rezept (ein Kochrezept), album (eine Rezension oder Vorstellung eines Musikalbums), reise (ein Reiseziel, eine Unterkunft, ein Reiseangebot) oder notiz (alles andere). " +
+	"kern: der Kern der Seite in drei bis vier deutschen Sätzen, sachlich, ohne Werbung; bei einer Rezension das Urteil und warum. " +
+	"tags: höchstens vier kurze deutsche Stichwörter in Kleinbuchstaben."
+
+// Summarize asks the house model for a page's gist: its title and text,
+// cut to what the model takes. Only while the house model is the one in
+// place (ErrNotLoaded otherwise); an answer that is not the schema's is
+// an error and the caller keeps the page's own words.
+func (c *Client) Summarize(ctx context.Context, title, text string) (Gist, error) {
+	if err := c.loaded(ctx); err != nil {
+		return Gist{}, err
+	}
+	if r := []rune(text); len(r) > 6000 {
+		text = string(r[:6000])
+	}
+	schema := map[string]any{"type": "object", "additionalProperties": false, "required": []string{"art", "kern", "tags"},
+		"properties": map[string]any{
+			"art":  map[string]any{"type": "string", "enum": []string{"notiz", "rezept", "album", "reise"}},
+			"kern": map[string]any{"type": "string", "maxLength": 900},
+			"tags": map[string]any{"type": "array", "maxItems": 4, "items": map[string]any{"type": "string", "maxLength": 30}}}}
+	body, err := json.Marshal(map[string]any{
+		"model": c.Model, "temperature": 0, "max_tokens": 400,
+		"messages":             []map[string]string{{"role": "system", "content": gistSystem}, {"role": "user", "content": "Titel: " + title + "\n\n" + text}},
+		"response_format":      map[string]any{"type": "json_schema", "json_schema": map[string]any{"name": "zusammenfassung", "schema": schema}},
+		"chat_template_kwargs": map[string]any{"enable_thinking": false},
+	})
+	if err != nil {
+		return Gist{}, err
+	}
+	raw, err := c.do(ctx, http.MethodPost, c.URL+"/chat/completions", c.Key, body)
+	if err != nil {
+		return Gist{}, err
+	}
+	var ans struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+	if err := json.Unmarshal(raw, &ans); err != nil || len(ans.Choices) == 0 {
+		return Gist{}, fmt.Errorf("judge: not a chat completion: %v", err)
+	}
+	var g Gist
+	if err := json.Unmarshal([]byte(ans.Choices[0].Message.Content), &g); err != nil || strings.TrimSpace(g.Kern) == "" {
+		return Gist{}, fmt.Errorf("judge: the answer is no gist: %q", cut(ans.Choices[0].Message.Content))
+	}
+	return g, nil
+}
