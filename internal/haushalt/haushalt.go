@@ -269,10 +269,18 @@ func Tools(cfg Config) []mcpserver.Tool {
 				Call:        func(ctx context.Context, a map[string]any) (string, error) { return notizLesen(ctx, n, a) },
 			},
 			mcpserver.Tool{
+				Name:        "notizen_mit_tag",
+				Description: "Listet die Notizen, die alle genannten Tags tragen (z. B. kochen oder reisen, sommer-2027), die neuesten zuerst, mit Art und Tags; ohne Tag die vorhandenen Tags mit ihrer Anzahl.",
+				Schema:      obj(map[string]any{"tags": str("Tags, mit Komma getrennt; leer: welche Tags es gibt")}),
+				Call:        func(ctx context.Context, a map[string]any) (string, error) { return notizenMitTag(ctx, n, a) },
+			},
+			mcpserver.Tool{
 				Name:        "notiz_anlegen",
-				Description: "Legt eine neue Notiz als Markdown-Datei im Notizen-Ordner der Familie an; überschreibt nie eine bestehende.",
-				Schema:      obj(map[string]any{"titel": str("Titel der Notiz"), "text": str("Inhalt, Markdown erlaubt")}, "titel", "text"),
-				Call:        func(ctx context.Context, a map[string]any) (string, error) { return notizAnlegen(n, a) },
+				Description: "Legt eine neue Notiz als Markdown-Datei im Notizen-Ordner der Familie an; überschreibt nie eine bestehende. Art und Tags machen sie wiederfindbar (haus#116).",
+				Schema: obj(map[string]any{"titel": str("Titel der Notiz"), "text": str("Inhalt, Markdown erlaubt"),
+					"art":  map[string]any{"type": "string", "enum": artKeys(), "description": "Was für eine Notiz: rezept, album, reise, liste; sonst notiz"},
+					"tags": str("Tags, mit Komma getrennt, z. B. kochen, vegetarisch")}, "titel", "text"),
+				Call: func(ctx context.Context, a map[string]any) (string, error) { return notizAnlegen(n, a) },
 			},
 		)
 		if lib := cfg.Library; lib != nil {
@@ -563,7 +571,7 @@ func notizenSuchen(ctx context.Context, n *notes.Dir, a map[string]any) (string,
 	}
 	var b strings.Builder
 	for _, h := range res.Hits {
-		b.WriteString("## " + h.Title + " (" + h.Name + ")\n")
+		b.WriteString("## " + h.Title + " (" + h.Name + ")" + kopfWords(h.Kopf) + "\n")
 		for _, l := range h.Lines {
 			b.WriteString(l + "\n")
 		}
@@ -676,7 +684,8 @@ func notizLesen(ctx context.Context, n *notes.Dir, a map[string]any) (string, er
 }
 
 func notizAnlegen(n *notes.Dir, a map[string]any) (string, error) {
-	name, err := n.Create(mcpserver.Str(a, "titel"), mcpserver.Str(a, "text"))
+	k := notes.Kopf{}.Set(mcpserver.Str(a, "art"), strings.Split(mcpserver.Str(a, "tags"), ","))
+	name, err := n.CreateWith(mcpserver.Str(a, "titel"), mcpserver.Str(a, "text"), k)
 	if err != nil {
 		return "", err
 	}
@@ -1058,3 +1067,55 @@ func DayTime(t time.Time) string { return dayTime(t) }
 
 // BirthdayText shows JJJJ-MM-TT as TT.MM.JJJJ and --MM-TT as TT.MM.
 func BirthdayText(b string) string { return birthdayDay(b) }
+
+// artKeys are the kinds a note can be, for the tool's schema.
+func artKeys() []string {
+	var out []string
+	for _, a := range notes.Arten {
+		out = append(out, a.Key)
+	}
+	return out
+}
+
+// kopfWords is a note's kind and tags after its title: " · Rezept #kochen".
+func kopfWords(k notes.Kopf) string {
+	var parts []string
+	if k.Art != "" {
+		parts = append(parts, notes.ArtName(k.Art))
+	}
+	if len(k.Tags) > 0 {
+		parts = append(parts, "#"+strings.Join(k.Tags, " #"))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return " · " + strings.Join(parts, " ")
+}
+
+// notizenMitTag lists the notes with every tag asked for; without one, the
+// tags there are (haus#116).
+func notizenMitTag(ctx context.Context, n *notes.Dir, a map[string]any) (string, error) {
+	want := notes.Tags(strings.Split(mcpserver.Str(a, "tags"), ","))
+	got, counts, err := n.ByTags(ctx, want, maxHits)
+	if err != nil {
+		return "", err
+	}
+	if len(want) == 0 {
+		if len(counts) == 0 {
+			return "Noch trägt keine Notiz einen Tag.", nil
+		}
+		var parts []string
+		for _, c := range counts {
+			parts = append(parts, fmt.Sprintf("#%s (%d)", c.Tag, c.N))
+		}
+		return "Tags: " + strings.Join(parts, ", "), nil
+	}
+	if len(got) == 0 {
+		return "Keine Notiz trägt #" + strings.Join(want, " und #") + ".", nil
+	}
+	var b strings.Builder
+	for _, e := range got {
+		b.WriteString("- " + e.Title + " (" + e.Name + ")" + kopfWords(e.Kopf) + "\n")
+	}
+	return strings.TrimRight(b.String(), "\n"), nil
+}

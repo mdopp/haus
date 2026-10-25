@@ -247,7 +247,7 @@ func TestProtocolShape(t *testing.T) {
 // not there (the Bote's tool budget, laib#54).
 func TestToolsOnlyWhatWorks(t *testing.T) {
 	cal := []string{"erinnerung_anlegen", "erinnerungen", "termin_anlegen", "termine"}
-	not := []string{"notiz_anlegen", "notiz_lesen", "notizen_suchen"}
+	not := []string{"notiz_anlegen", "notiz_lesen", "notizen_mit_tag", "notizen_suchen"}
 	con := []string{"kontakt_anlegen", "kontakt_lesen", "kontakte_suchen"}
 	doc := []string{"dokumente_suchen"}
 	join := func(ls ...[]string) []string {
@@ -1271,5 +1271,32 @@ func TestFromEnvDocumentsCollection(t *testing.T) {
 	t.Setenv("HAUS_QMD_DOCUMENTS", "notizen")
 	if _, err := FromEnv(); err == nil {
 		t.Fatal("the notes' collection taken for the documents'")
+	}
+}
+
+// haus#116: Joshua files a note with its kind and tags, finds the notes
+// by tag, and is told which tags there are; a search hit says its kind
+// and tags.
+func TestNoteToolsWithTags(t *testing.T) {
+	s := newSetup(t, want{notes: true})
+	text, isErr := call(t, s.h, "notiz_anlegen", map[string]any{"titel": "Lasagne", "text": "Nudeln, Tomaten", "art": "rezept", "tags": "Kochen, italienisch"})
+	if isErr || !strings.Contains(text, "lasagne.md") {
+		t.Fatalf("%q", text)
+	}
+	if b, _ := os.ReadFile(filepath.Join(s.notes, "lasagne.md")); !strings.HasPrefix(string(b), "---\nart: rezept\ntags: [kochen, italienisch]\n---\n") {
+		t.Fatalf("file %q", b)
+	}
+	call(t, s.h, "notiz_anlegen", map[string]any{"titel": "Rom", "text": "Kolosseum", "art": "reise", "tags": "reisen, italienisch"})
+	if text, _ := call(t, s.h, "notizen_mit_tag", map[string]any{"tags": "kochen"}); !strings.Contains(text, "- Lasagne (lasagne.md) · Rezept #kochen #italienisch") || strings.Contains(text, "Rom") {
+		t.Fatalf("by tag: %q", text)
+	}
+	if text, _ := call(t, s.h, "notizen_mit_tag", map[string]any{}); !strings.Contains(text, "#italienisch (2)") {
+		t.Fatalf("tags: %q", text)
+	}
+	if text, _ := call(t, s.h, "notizen_mit_tag", map[string]any{"tags": "garten"}); !strings.Contains(text, "Keine Notiz trägt #garten") {
+		t.Fatalf("none: %q", text)
+	}
+	if text, _ := call(t, s.h, "notizen_suchen", map[string]any{"text": "Kolosseum"}); !strings.Contains(text, "## Rom (rom.md) · Reise #reisen #italienisch") {
+		t.Fatalf("search: %q", text)
 	}
 }

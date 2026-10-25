@@ -196,6 +196,14 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     Minuten · täglich · wöchentlich · monatlich; Google suggests every run,
     a public calendar monthly), said in its row, and *Abstand ändern* there
     (`laib_calendar every`, the address untouched).
+  - A note's head (haus#116): front matter `art` (notiz, rezept, album,
+    reise, liste), `tags` (lower case, words joined by `-`) and `quelle`;
+    every other line of an older head is kept. *Notizen* filters by tag
+    (`?tag=…`, several combine, each a pill with its count), lists kind
+    and tags at each note; *Neue Notiz* and *Bearbeiten* set them in fields
+    (offered tags to tick, others typed), the note's page shows them with
+    links. Joshua: `notiz_anlegen` takes `art` and `tags`, `notizen_mit_tag`
+    lists by tag or says which tags there are, `notizen_suchen` names them.
   - *Notizen* says where notes come from (the house's „Merk dir …“, Neue
     Notiz, a file in `notes` on the share) and lets a person write them
     (owner, 2026-10-24): *Neue Notiz* (`POST /notizen`: `titel`, `text`;

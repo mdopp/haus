@@ -109,6 +109,11 @@ func oneLine(s string) string {
 // appears complete or not at all: written aside, then hard-linked into
 // place. A share without hard links gets an error, not a weaker write.
 func (d *Dir) Create(title, text string) (string, error) {
+	return d.CreateWith(title, text, Kopf{})
+}
+
+// CreateWith is Create with a head (haus#116): kind, tags, source.
+func (d *Dir) CreateWith(title, text string, k Kopf) (string, error) {
 	title = oneLine(title)
 	if title == "" {
 		return "", errors.New("Notizen: titel fehlt")
@@ -124,7 +129,11 @@ func (d *Dir) Create(title, text string) (string, error) {
 		return "", err
 	}
 	defer root.Close()
-	content := []byte("# " + title + "\n\n" + strings.TrimSpace(strings.ReplaceAll(text, "\r\n", "\n")) + "\n")
+	k.Tags = Tags(k.Tags)
+	if !validArt(k.Art) || k.Art == "notiz" {
+		k.Art = ""
+	}
+	content := []byte(k.With("# " + title + "\n\n" + strings.TrimSpace(strings.ReplaceAll(text, "\r\n", "\n")) + "\n"))
 	rnd := make([]byte, 8)
 	rand.Read(rnd)
 	tmp := ".haus-" + hex.EncodeToString(rnd) + ".tmp"
@@ -278,6 +287,7 @@ type Hit struct {
 	Name  string   // the file, relative to the directory
 	Title string   // the first "# " heading, else the file name
 	Lines []string // the first lines of the body
+	Kopf  Kopf     // its head (haus#116)
 }
 
 // Result is a search's answer.
@@ -300,7 +310,8 @@ func cut(s string, n int) string {
 }
 
 func title(name string, body []byte) string {
-	sc := bufio.NewScanner(strings.NewReader(string(body)))
+	k, rest := SplitKopf(string(body))
+	sc := bufio.NewScanner(strings.NewReader(rest))
 	for sc.Scan() {
 		l := strings.TrimSpace(sc.Text())
 		if l == "" {
@@ -310,6 +321,9 @@ func title(name string, body []byte) string {
 			return cut(strings.TrimSpace(l[2:]), MaxTitle)
 		}
 		break
+	}
+	if k.Titel != "" {
+		return cut(k.Titel, MaxTitle)
 	}
 	return cut(strings.TrimSuffix(path.Base(name), path.Ext(name)), MaxTitle)
 }
@@ -618,7 +632,8 @@ func (d *Dir) Search(ctx context.Context, q string, max int) (Result, error) {
 			}
 		}
 		if m.words > 0 {
-			m.hit = Hit{Name: name, Title: t, Lines: Passage(nil, string(body), 3)}
+			k, rest := SplitKopf(string(body))
+			m.hit = Hit{Name: name, Title: t, Lines: Passage(nil, rest, 3), Kopf: k}
 			found = append(found, m)
 		}
 	})
@@ -650,6 +665,7 @@ type Note struct {
 	Text      string
 	Truncated bool
 	Changed   time.Time
+	Kopf      Kopf // its head (haus#116): kind, tags, source
 }
 
 // viaSymlink says whether a part of name is a symlink: a name os.Root
@@ -726,6 +742,7 @@ func (d *Dir) Read(ctx context.Context, ref string) (Note, error) {
 		}
 		buf, _ := io.ReadAll(io.LimitReader(f, maxRead+1))
 		n := Note{Name: name, Text: string(buf[:min(len(buf), maxRead)]), Truncated: len(buf) > maxRead, Title: title(name, buf), Changed: st.ModTime()}
+		n.Kopf, _ = SplitKopf(n.Text)
 		return n, true, nil
 	}
 	for _, name := range []string{ref, Slug(ref) + ".md"} {
@@ -755,6 +772,7 @@ type Entry struct {
 	Name    string
 	Title   string
 	Changed time.Time
+	Kopf    Kopf // its head (haus#116)
 }
 
 // Recent lists the n most recently changed notes, newest first. It looks at
@@ -816,6 +834,7 @@ func (d *Dir) Recent(ctx context.Context, n int) ([]Entry, error) {
 		head, _ := io.ReadAll(io.LimitReader(f, 4<<10))
 		f.Close()
 		e.Title = title(e.Name, head)
+		e.Kopf, _ = SplitKopf(string(head))
 		out = append(out, e)
 	}
 	return out, nil
@@ -864,5 +883,7 @@ func (d *Dir) Lookup(ctx context.Context, name string) (Note, error) {
 		return Note{}, ErrNotFound
 	}
 	buf, _ := io.ReadAll(io.LimitReader(f, maxRead+1))
-	return Note{Name: clean, Title: title(clean, buf), Text: string(buf[:min(len(buf), maxRead)]), Truncated: len(buf) > maxRead, Changed: st.ModTime()}, nil
+	n := Note{Name: clean, Title: title(clean, buf), Text: string(buf[:min(len(buf), maxRead)]), Truncated: len(buf) > maxRead, Changed: st.ModTime()}
+	n.Kopf, _ = SplitKopf(n.Text)
+	return n, nil
 }
