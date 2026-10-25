@@ -907,6 +907,27 @@ of the main pages are kept with each run. Locally: `cd e2e && npm ci &&
 npx playwright install chromium && npx playwright test`; `go run
 ./cmd/hausdemo` alone to look at the pages.
 
+## Einkauf (haus#118)
+
+`GET /einkauf`, a pill under Haushalt, with Radicale. The household's one
+shopping list is a task-only collection in Haus's account, `haus/einkauf`
+("Einkauf"), made at start with the Haushalt calendar, so the phones show
+it as a task list too (DAVx⁵ with a task app); it is no calendar and its
+tasks are no reminders. A line's text is all there is (a phone's edit is
+read the same way): Haus reads amounts the German way — g/kg, ml/l, EL, TL,
+Prise, Dose, Packung …, fractions, ranges — adds up the same thing in the
+same kind of unit (200 g + 0,5 kg Mehl = 700 g; anything else stands side
+by side) and keeps the recipes it came from in DESCRIPTION. A tap ticks a
+line off (If-Match: a phone's edit in between is read again, never
+overwritten); the ticked ones go below, *Abgehakte entfernen* deletes them.
+*Zutaten aus Rezepten* (`/einkauf/rezepte?n=…&portionen=…`): recipe notes
+(`art: rezept`, a `## Zutaten` list, "Für N Portionen"), added up and
+scaled as one buys (grams to 5, whole tins up), each to leave out before
+it goes on the list; a recipe note links there. Every change is pushed
+over `/live` (`haus.einkauf`) to the other open pages; a phone app's change
+shows within a minute. Joshua: `einkaufsliste_dazu(dinge, rezepte,
+portionen)` and `einkaufsliste`.
+
 ## Podcasts (haus#123)
 
 `GET /podcasts`, under Mehr, with Audiobookshelf (`HAUS_ABS_URL`,
