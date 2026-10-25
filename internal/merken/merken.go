@@ -16,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"mime"
 	"net"
 	"net/http"
@@ -75,12 +76,20 @@ func (f Fetcher) client() *http.Client {
 			if err != nil {
 				return nil, err
 			}
+			// every allowed address in turn: the first may be one this
+			// network cannot reach (an IPv6 one without a route)
+			var last error = ErrPrivate
 			for _, ip := range ips {
-				if f.AllowPrivate || public(ip) {
-					return d.DialContext(ctx, network, net.JoinHostPort(ip.String(), port))
+				if !f.AllowPrivate && !public(ip) {
+					continue
 				}
+				c, err := d.DialContext(ctx, network, net.JoinHostPort(ip.String(), port))
+				if err == nil {
+					return c, nil
+				}
+				last = err
 			}
-			return nil, ErrPrivate
+			return nil, last
 		},
 		TLSHandshakeTimeout:   10 * time.Second,
 		ResponseHeaderTimeout: 15 * time.Second,
@@ -165,6 +174,7 @@ func (f Fetcher) Get(ctx context.Context, u *url.URL) (string, string, []byte, s
 		if errors.As(err, &ue) && errors.Is(ue.Err, ErrNoAddress) {
 			return "", "", nil, "", ErrNoAddress
 		}
+		log.Printf("haus: merken: %s: %v", u.Host, err) // why it did not answer: the name, the way, the time
 		return "", "", nil, "", ErrNoAnswer
 	}
 	defer res.Body.Close()
@@ -174,6 +184,7 @@ func (f Fetcher) Get(ctx context.Context, u *url.URL) (string, string, []byte, s
 	ct, params, _ := mime.ParseMediaType(res.Header.Get("Content-Type"))
 	raw, err := io.ReadAll(io.LimitReader(res.Body, maxPage))
 	if err != nil {
+		log.Printf("haus: merken: %s: reading: %v", u.Host, err)
 		return "", "", nil, "", ErrNoAnswer
 	}
 	return res.Request.URL.String(), ct, raw, params["charset"], nil
