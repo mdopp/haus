@@ -27,6 +27,7 @@ import (
 	"github.com/mdopp/haus/internal/favoriten"
 	"github.com/mdopp/haus/internal/ha"
 	"github.com/mdopp/haus/internal/ha/hafake"
+	"github.com/mdopp/haus/internal/merken"
 	"github.com/mdopp/haus/internal/notes"
 	"github.com/mdopp/haus/internal/pages"
 )
@@ -84,7 +85,7 @@ func main() {
 	dav.AddPrincipal("anna")
 	cfg := pages.StartConfig{HA: &ha.Client{URL: fake.URL, Token: "demo"}, Notes: nd, Favorites: favoriten.Open(dir), MusicInbox: inbox,
 		Calendar: &caldav.Client{URL: dav.URL, User: "haus", Password: "demo", Loc: time.Local}, Views: ansicht.Open(dir),
-		RadicalePublicURL: "https://caldav.example"}
+		RadicalePublicURL: "https://caldav.example", Fetcher: merken.Fetcher{AllowPrivate: true}}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/start", pages.Start(cfg))
 	mux.HandleFunc("/raeume", pages.Raeume(cfg))
@@ -112,6 +113,12 @@ func main() {
 	mux.HandleFunc("/notizen", pages.Notizen(cfg))
 	mux.HandleFunc(cards.NotePages, pages.Notizen(cfg))
 	mux.HandleFunc("/mehr", pages.Mehr(cfg))
+	mux.HandleFunc("/demo/rezept", func(w http.ResponseWriter, r *http.Request) { // a recipe page to keep, as Chefkoch marks one up
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write([]byte(`<html><head><title>Kürbissuppe</title><script type="application/ld+json">{"@type":"Recipe","name":"Kürbissuppe",` +
+			`"recipeYield":"4","totalTime":"PT40M","recipeIngredient":["1 Hokkaido","1 l Gemüsebrühe","200 ml Kokosmilch"],` +
+			`"recipeInstructions":[{"@type":"HowToStep","text":"Kürbis würfeln."},{"@type":"HowToStep","text":"In Brühe kochen und pürieren."}]}</script></head><body></body></html>`))
+	})
 	mux.Handle(pages.LivePath, &pages.Live{HA: cfg.HA})
 	mux.HandleFunc("/demo/fehler", func(w http.ResponseWriter, r *http.Request) {
 		n, _ := strconv.Atoi(r.URL.Query().Get("status"))

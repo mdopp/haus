@@ -310,3 +310,51 @@ func (k Kopf) Set(art string, tags []string) Kopf {
 	k.Art, k.Tags = art, Tags(tags)
 	return k
 }
+
+// ByQuelle is the note made from this address, if there is one: a link
+// kept once is not kept twice (haus#117).
+func (d *Dir) ByQuelle(ctx context.Context, quelle string) (Entry, bool, error) {
+	root, err := os.OpenRoot(d.path)
+	if err != nil {
+		return Entry{}, false, err
+	}
+	defer root.Close()
+	fsys := root.FS()
+	var found Entry
+	ok := false
+	files := 0
+	err = fs.WalkDir(fsys, ".", func(name string, e fs.DirEntry, err error) error {
+		if cerr := ctx.Err(); cerr != nil {
+			return cerr
+		}
+		if err != nil || ok {
+			return nil
+		}
+		if e.IsDir() {
+			if name != "." && strings.HasPrefix(e.Name(), ".") {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if !e.Type().IsRegular() || strings.HasPrefix(e.Name(), ".") || !isNote(name) {
+			return nil
+		}
+		if files++; files > maxFiles {
+			return errStop
+		}
+		f, err := fsys.Open(name)
+		if err != nil {
+			return nil
+		}
+		head, _ := io.ReadAll(io.LimitReader(f, 4<<10))
+		f.Close()
+		if k, _ := SplitKopf(string(head)); k.Quelle != "" && k.Quelle == quelle {
+			found, ok = Entry{Name: name, Title: title(name, head), Kopf: k}, true
+		}
+		return nil
+	})
+	if err != nil && !errors.Is(err, errStop) {
+		return Entry{}, false, err
+	}
+	return found, ok, nil
+}

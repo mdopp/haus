@@ -17,6 +17,7 @@ import (
 	"github.com/mdopp/haus/internal/judge"
 	"github.com/mdopp/haus/internal/judge/proxyfake"
 	"github.com/mdopp/haus/internal/library"
+	"github.com/mdopp/haus/internal/merken"
 	"github.com/mdopp/haus/internal/notes"
 	"github.com/mdopp/haus/internal/paperless"
 	"github.com/mdopp/haus/internal/paperless/paperlessfake"
@@ -62,7 +63,7 @@ const plToken = "pl-geheim-123"
 func newSetup(t *testing.T, w want) setup {
 	t.Helper()
 	s := setup{}
-	cfg := Config{Token: tok, Loc: berlin(t), Version: "test", PhoneCountry: w.country, PublicURL: hausPublic}
+	cfg := Config{Token: tok, Loc: berlin(t), Version: "test", PhoneCountry: w.country, PublicURL: hausPublic, Fetcher: merken.Fetcher{AllowPrivate: true}}
 	if w.noPublic {
 		cfg.PublicURL = ""
 	}
@@ -247,7 +248,7 @@ func TestProtocolShape(t *testing.T) {
 // not there (the Bote's tool budget, laib#54).
 func TestToolsOnlyWhatWorks(t *testing.T) {
 	cal := []string{"erinnerung_anlegen", "erinnerungen", "termin_anlegen", "termine"}
-	not := []string{"notiz_anlegen", "notiz_lesen", "notizen_mit_tag", "notizen_suchen"}
+	not := []string{"notiz_anlegen", "notiz_aus_link", "notiz_lesen", "notizen_mit_tag", "notizen_suchen"}
 	con := []string{"kontakt_anlegen", "kontakt_lesen", "kontakte_suchen"}
 	doc := []string{"dokumente_suchen"}
 	join := func(ls ...[]string) []string {
@@ -1298,5 +1299,23 @@ func TestNoteToolsWithTags(t *testing.T) {
 	}
 	if text, _ := call(t, s.h, "notizen_suchen", map[string]any{"text": "Kolosseum"}); !strings.Contains(text, "## Rom (rom.md) · Reise #reisen #italienisch") {
 		t.Fatalf("search: %q", text)
+	}
+}
+
+// haus#117: a link sent to the Bote becomes a note: what was kept in a
+// line, and the note's page in Haus; the same link again is said so.
+func TestNotizAusLink(t *testing.T) {
+	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(`<html><head><script type="application/ld+json">{"@type":"Recipe","name":"Apfelkuchen","recipeIngredient":["4 Äpfel"],"recipeInstructions":["Backen."]}</script></head></html>`))
+	}))
+	defer site.Close()
+	s := newSetup(t, want{notes: true})
+	text, isErr := call(t, s.h, "notiz_aus_link", map[string]any{"link": site.URL + "/kuchen", "hinweis": "#sonntag"})
+	if isErr || !strings.Contains(text, "Rezept gemerkt: Apfelkuchen, 1 Zutat, 1 Schritt.") || !strings.Contains(text, "In Haus: "+hausPublic+"/notizen/apfelkuchen.md") {
+		t.Fatalf("%q", text)
+	}
+	if text, _ := call(t, s.h, "notiz_aus_link", map[string]any{"link": site.URL + "/kuchen"}); !strings.Contains(text, "schon gemerkt") {
+		t.Fatalf("twice: %q", text)
 	}
 }

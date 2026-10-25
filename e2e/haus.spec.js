@@ -91,6 +91,18 @@ test('a note gets a kind and tags and is found by its tag', async ({ page }) => 
   await expect(page.getByRole('link', { name: 'Einkaufsliste' })).toHaveCount(0);
 });
 
+test('a recipe link becomes a recipe note', async ({ page, baseURL }) => {
+  await page.goto('/notizen');
+  await page.getByLabel('Link zu einem Rezept, einer Rezension, einer Reise …').fill(baseURL + '/demo/rezept');
+  await page.getByLabel('Dazu, wenn du magst').fill('#herbst');
+  await page.getByRole('button', { name: 'Merken' }).click();
+  await expect(page.getByRole('status')).toContainText('Gemerkt.');
+  await expect(page).toHaveURL(/kuerbissuppe\.md/);
+  await expect(page.locator('.kopf')).toContainText('Rezept');
+  await expect(page.getByText('1 l Gemüsebrühe')).toBeVisible();
+  await expect(page.locator('.kopf a', { hasText: '#herbst' })).toBeVisible();
+});
+
 test('music goes up in pieces and arrives whole', async ({ page, request }) => {
   await page.goto('/musik');
   const big = Buffer.alloc(9 * 1024 * 1024, 7); // two pieces

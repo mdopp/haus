@@ -28,6 +28,7 @@ import (
 	"github.com/mdopp/haus/internal/judge"
 	"github.com/mdopp/haus/internal/library"
 	"github.com/mdopp/haus/internal/mcpserver"
+	"github.com/mdopp/haus/internal/merken"
 	"github.com/mdopp/haus/internal/notes"
 	"github.com/mdopp/haus/internal/paperless"
 	"github.com/mdopp/haus/internal/qmd"
@@ -37,6 +38,7 @@ import (
 type Config struct {
 	Token     string            // HAUS_HAUSHALT_TOKEN, the Bote's bearer
 	Calendar  *caldav.Client    // nil: no calendar or reminder tools
+	Fetcher   merken.Fetcher    // how notiz_aus_link fetches a page (haus#117); the tests' allows 127.0.0.1
 	Contacts  *caldav.Client    // nil: no contact tools (the same Radicale account)
 	Notes     *notes.Dir        // nil: no note tools
 	Library   *qmd.Client       // the memory library's search (haus#13); nil, or no Notes: no notizen_finden
@@ -267,6 +269,17 @@ func Tools(cfg Config) []mcpserver.Tool {
 				Description: "Liest eine Notiz ganz, nach Titel oder Dateiname (wie notizen_suchen ihn zeigt).",
 				Schema:      obj(map[string]any{"titel": str("Titel oder Dateiname der Notiz")}, "titel"),
 				Call:        func(ctx context.Context, a map[string]any) (string, error) { return notizLesen(ctx, n, a) },
+			},
+			mcpserver.Tool{
+				Name: "notiz_aus_link",
+				Description: "Merkt sich eine Webseite als Notiz, wenn jemand einen Link schickt: ein Rezept mit Portionen, Zutaten und Zubereitung, " +
+					"eine Album-Rezension mit Band, Wertung und Kern, eine Reise mit Ort, Anbieter und Preis, sonst den Kern der Seite; der Link bleibt dabei, " +
+					"Art und Tags werden gesetzt. Einen Link merkt es sich nur einmal. Sag danach kurz, was gemerkt wurde.",
+				Schema: obj(map[string]any{"link": str("Die Adresse der Seite, https://…"),
+					"hinweis": str("Was die Person dazu schrieb; #wörter darin werden Tags")}, "link"),
+				Call: func(ctx context.Context, a map[string]any) (string, error) {
+					return notizAusLink(ctx, cfg, n, a)
+				},
 			},
 			mcpserver.Tool{
 				Name:        "notizen_mit_tag",
@@ -1118,4 +1131,18 @@ func notizenMitTag(ctx context.Context, n *notes.Dir, a map[string]any) (string,
 		b.WriteString("- " + e.Title + " (" + e.Name + ")" + kopfWords(e.Kopf) + "\n")
 	}
 	return strings.TrimRight(b.String(), "\n"), nil
+}
+
+// notizAusLink keeps a page someone sent as a note (haus#117) and says
+// what was kept, with the note's page in Haus.
+func notizAusLink(ctx context.Context, cfg Config, n *notes.Dir, a map[string]any) (string, error) {
+	got, err := merken.Merken(ctx, cfg.Fetcher, cfg.Judge, n, mcpserver.Str(a, "link"), mcpserver.Str(a, "hinweis"))
+	if err != nil {
+		return "", err
+	}
+	out := got.Kurz
+	if pub := strings.TrimRight(cfg.PublicURL, "/"); pub != "" {
+		out += "\nIn Haus: " + pub + "/notizen/" + url.PathEscape(got.Name)
+	}
+	return out, nil
 }

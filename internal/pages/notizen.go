@@ -14,6 +14,7 @@ import (
 
 	"github.com/mdopp/haus/internal/cards"
 	"github.com/mdopp/haus/internal/library"
+	"github.com/mdopp/haus/internal/merken"
 	"github.com/mdopp/haus/internal/notes"
 )
 
@@ -64,6 +65,7 @@ func Notizen(cfg StartConfig) http.HandlerFunc {
 		b := familyHead(r, cfg, "Notizen", "Notizen")
 		b.WriteString(noteStyle + "<h1>Notizen</h1><p class=k>" + html.EscapeString(saysNotesHow()) + "</p>")
 		if q == "" {
+			b.WriteString(merkenForm("", "", ""))
 			b.WriteString(newNoteForm("", "", "", notes.Tags(r.URL.Query()["tag"]), r.URL.Query().Get("neu") == "1")) // a filter's tags ticked
 		}
 		b.WriteString(`<form method=get action=/notizen role=search>` +
@@ -297,7 +299,10 @@ const (
 )
 
 // noteSaid is the sentence after a write, by ?gesagt=.
-var noteSaid = map[string]string{"angelegt": "Notiz angelegt.", "gespeichert": "Gespeichert."}
+var noteSaid = map[string]string{"angelegt": "Notiz angelegt.", "gespeichert": "Gespeichert.",
+	"gemerkt":   "Gemerkt. Oben das Wichtigste, unten der Link und was auf der Seite stand.",
+	"schon":     "Diesen Link hattest du schon gemerkt; hier ist die Notiz.",
+	"teilweise": "Gemerkt sind nur Link und Titel: Die Seite ließ sich nicht lesen. Den Text kannst du unter „Bearbeiten“ ergänzen."}
 
 // noteStyle is the note forms' look: a roomy field, phone first.
 const noteStyle = `<style>.notizform label{display:block;font-size:.85rem;color:var(--muted);margin:12px 0 6px}
@@ -341,6 +346,10 @@ func noteWrite(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
 	text := r.PostForm.Get("text")
 	art, tags := kopfFrom(r.PostForm)
 	ref := strings.TrimLeft(strings.TrimPrefix(r.URL.Path, "/notizen"), "/")
+	if ref == merkenRef {
+		merkenPost(w, r, cfg)
+		return
+	}
 	if ref == "" {
 		title := oneLine(r.PostForm.Get("titel"))
 		problem := ""
@@ -560,4 +569,62 @@ func kopfLine(k notes.Kopf) string {
 	}
 	b.WriteString(`</p>`)
 	return b.String()
+}
+
+// merkenRef is where „Aus Link merken“ posts: /notizen/merken, never a
+// note's name (a note ends in .md).
+const merkenRef = "merken"
+
+// merkenWait is how long keeping a link may take: the page, then the
+// house model's summary.
+var merkenWait = 90 * time.Second
+
+// merkenForm is „Aus Link merken“ (haus#117): the link, and what to say
+// with it; after a problem the sentence and what was typed.
+func merkenForm(link, hint, problem string) string {
+	var b strings.Builder
+	b.WriteString(`<section class=karte aria-labelledby=k-merken><h2 id=k-merken>Aus Link merken</h2>`)
+	if problem != "" {
+		b.WriteString(`<div class=achtung role=alert><p>` + html.EscapeString(problem) + `</p></div>`)
+	}
+	b.WriteString(`<form class=notizform method=post action=/notizen/merken>` +
+		`<label for=link>Link zu einem Rezept, einer Rezension, einer Reise …</label><input id=link type=url name=link required inputmode=url autocomplete=off placeholder="https://…" value="` + html.EscapeString(link) + `">` +
+		`<label for=hinweis>Dazu, wenn du magst</label><input id=hinweis type=text name=hinweis maxlength=200 autocomplete=off placeholder="z. B. #weihnachten für die Feiertage" value="` + html.EscapeString(hint) + `">` +
+		`<button data-laeuft="Liest die Seite …">Merken</button></form>` +
+		`<p class=k>` + html.EscapeString(saysMerkenHow()) + `</p></section>`)
+	return b.String()
+}
+
+// saysMerkenHow is the other way in: the persona on Signal.
+func saysMerkenHow() string {
+	return "Oder den Link einfach " + House.Display + " auf Signal schicken. Rezepte kommen mit Zutaten und Zubereitung, Rezensionen mit ihrem Kern, Reisen mit Ort und Preis; der Link bleibt immer dabei."
+}
+
+// merkenPost keeps a link as a note and opens it, or says why not with
+// what was typed still there.
+func merkenPost(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
+	link, hint := strings.TrimSpace(r.PostForm.Get("link")), oneLine(r.PostForm.Get("hinweis"))
+	ctx, cancel := context.WithTimeout(r.Context(), merkenWait)
+	defer cancel()
+	got, err := merken.Merken(ctx, cfg.Fetcher, cfg.Judge, cfg.Notes, link, hint)
+	if err != nil {
+		say := err.Error()
+		if !errors.Is(err, merken.ErrNoAddress) && !errors.Is(err, merken.ErrPrivate) && !errors.Is(err, merken.ErrNoAnswer) {
+			log.Printf("haus: merken by %s: %v", r.Header.Get("Remote-User"), err)
+			say = saysNoteNotSaved
+		}
+		b := familyHead(r, cfg, "Notizen", "Notizen")
+		b.WriteString(noteStyle + "<h1>Notizen</h1>" + merkenForm(link, hint, say))
+		writePage(w, http.StatusBadRequest, b)
+		return
+	}
+	said := "gemerkt"
+	switch {
+	case got.Schon:
+		said = "schon"
+	case got.Teilweise:
+		said = "teilweise"
+	}
+	log.Printf("haus: merken: %s by %s (%s)", got.Name, r.Header.Get("Remote-User"), said)
+	http.Redirect(w, r, cards.NotePage(got.Name)+"?gesagt="+said, http.StatusSeeOther)
 }

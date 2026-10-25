@@ -204,6 +204,17 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     (offered tags to tick, others typed), the note's page shows them with
     links. Joshua: `notiz_anlegen` takes `art` and `tags`, `notizen_mit_tag`
     lists by tag or says which tags there are, `notizen_suchen` names them.
+  - *Aus Link merken* (haus#117, `internal/merken`): a link — on Notizen
+    (`POST /notizen/merken`: `link`, `hinweis`) or sent to Joshua
+    (`notiz_aus_link`) — becomes a note. Haus fetches the page itself, only
+    public addresses (no home network by address or name, every redirect
+    checked), 3 MB, 20 s. The page's JSON-LD makes a recipe (portions,
+    time, ingredients, steps), an album (band, album, year, rating, the
+    review), a trip (place, provider, price); else the house model's core
+    and tags (`judge.Summarize`), else the page's description. Kind, tags
+    (the hint's #words too) and `quelle` in the head; the link and the
+    page's text at the end. A link kept once opens its note again; a page
+    that answers but cannot be read keeps link and title, said so.
   - *Notizen* says where notes come from (the house's „Merk dir …“, Neue
     Notiz, a file in `notes` on the share) and lets a person write them
     (owner, 2026-10-24): *Neue Notiz* (`POST /notizen`: `titel`, `text`;
