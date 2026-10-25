@@ -145,7 +145,7 @@ test('a recipe goes on the list for more portions, without what one has', async 
   await page.getByRole('button', { name: 'Zutaten zeigen' }).click();
   await expect(page.getByText('1 kg Hackfleisch')).toBeVisible();
   await page.getByLabel('2 Dosen Tomaten').uncheck();
-  await page.getByRole('button', { name: 'Auf die Einkaufsliste' }).click();
+  await page.getByRole('button', { name: 'Auf die Liste' }).click();
   await expect(page).toHaveURL(/\/einkauf$/);
   await expect(page.getByRole('status')).toContainText('auf der Liste');
   await expect(page.getByRole('switch', { name: '500 g Lasagneplatten' })).toBeVisible();
