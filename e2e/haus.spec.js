@@ -152,7 +152,7 @@ test('a recipe goes on the list for more portions, without what one has', async 
   await expect(page.getByRole('switch', { name: 'Dosen Tomaten' })).toHaveCount(0);
 });
 
-test('a list of one's own is made, switched to, and deleted', async ({ page }) => {
+test("a list of one's own is made, switched to, and deleted", async ({ page }) => {
   await page.goto('/einkauf');
   await page.locator('summary', { hasText: 'Listen verwalten' }).click();
   const name = 'Nur ich ' + Date.now();
