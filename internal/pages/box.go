@@ -130,7 +130,7 @@ type boxSlot struct{ id, title, part string }
 // boxSlots are the Box page's places, in the page's order; a part may
 // fill several (laib's status: the top and Was läuft).
 func boxSlots(cfg BoxConfig) []boxSlot {
-	slots := []boxSlot{{"box-stand", "", "stand"}, {"box-inbox", "Inbox", "inbox"}, {"box-einladen", "Person einladen", "einladen"},
+	slots := []boxSlot{{"box-stand", "", "stand"}, {"box-inbox", "Inbox", "inbox"}, {"box-aufgaben", "Box-Aufgaben", "aufgaben"}, {"box-einladen", "Person einladen", "einladen"},
 		{"box-bericht", "Morgenbericht", "journal"}}
 	if cfg.Family.Usage != nil {
 		slots = append(slots, boxSlot{"box-genutzt", "Was wird genutzt", "genutzt"})
@@ -159,6 +159,13 @@ func boxPart(ctx context.Context, r *http.Request, cfg BoxConfig, part string, i
 		fmt.Fprintf(&b, "<h1>Box · <span class=%s>%s</span> <span class=k>· %d Dienste · %d grün · %d gelb · %d rot · Drift %d</span></h1>",
 			readyClass(ready), html.EscapeString(ready.State), ready.Services, ready.Green, ready.Yellow, ready.Red, ready.Drift)
 		fmt.Fprintf(&b, "<p>Operator: <span class=%s>%s</span></p>", operatorClass(ready.Operator), html.EscapeString(ready.Operator))
+		if ready.Aufgaben > 0 { // the Box-Aufgaben's badge (haus#115)
+			due := ""
+			if ready.AufgabenFaellig > 0 {
+				due = fmt.Sprintf(", <span class=gelb>%d fällig</span>", ready.AufgabenFaellig)
+			}
+			fmt.Fprintf(&b, "<p><a href=#box-aufgaben>%d Box-Aufgaben offen</a>%s</p>", ready.Aufgaben, due)
+		}
 		if ready.Lock != "" {
 			fmt.Fprintf(&b, "<p class=gelb>gesperrt: %s</p>", html.EscapeString(ready.Lock))
 		}
@@ -172,7 +179,7 @@ func boxPart(ctx context.Context, r *http.Request, cfg BoxConfig, part string, i
 		for _, s := range sorted {
 			fmt.Fprintf(&l, "<li>%s<span class=was><b>%s</b>", dot(cls(s.State), s.State), html.EscapeString(s.Name))
 			if d := oneLine(s.Detail); d != "" {
-				l.WriteString("<span class=text>" + html.EscapeString(d) + "</span>")
+				l.WriteString("<span class=text>" + linkAufgaben(html.EscapeString(d)) + "</span>")
 			}
 			l.WriteString("</span></li>")
 		}
@@ -200,6 +207,8 @@ func boxPart(ctx context.Context, r *http.Request, cfg BoxConfig, part string, i
 		return map[string]string{"box-inbox": b.String()}
 	case "einladen":
 		return map[string]string{"box-einladen": inviteCard(ctx, c, inv)}
+	case "aufgaben":
+		return map[string]string{"box-aufgaben": aufgabenCard(ctx, c, time.Now(), "", "")}
 	case "journal":
 		// what the page shows, not 36 hours of it (laib#593): the newest 25
 		// and the newest morning report, at the same time
@@ -271,8 +280,17 @@ func boxPartAnswer(w http.ResponseWriter, r *http.Request, cfg BoxConfig) {
 // time and the page comes whole. inv is what the invite card says after a
 // POST to /box/einladen (haus#56): that card is then on the page at once.
 func writeBox(w http.ResponseWriter, r *http.Request, cfg BoxConfig, code int, inv invitation) {
+	writeBoxWith(w, r, cfg, code, inv, nil)
+}
+
+// writeBoxWith is writeBox with places filled already (a POST's outcome in
+// its card, haus#115).
+func writeBoxWith(w http.ResponseWriter, r *http.Request, cfg BoxConfig, code int, inv invitation, pre map[string]string) {
 	slots := boxSlots(cfg)
 	filled := map[string]string{}
+	for id, h := range pre {
+		filled[id] = h
+	}
 	whole := r.URL.Query().Get("ganz") == "1"
 	if whole || !inv.empty() {
 		var mu sync.Mutex

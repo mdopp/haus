@@ -152,7 +152,8 @@ func routes(s site) http.Handler {
 	boxCfg := pages.BoxConfig{Laib: s.ops, LaibURL: s.laibURL, Tickets: s.tickets, Family: family, Voice: s.voice}
 	box := pages.BoxPage(boxCfg)
 	pagesMux.HandleFunc("/box", box)
-	pagesMux.HandleFunc("/box/einladen", pages.Einladen(boxCfg)) // the card "Person einladen", admins only (haus#56)
+	pagesMux.HandleFunc("/box/einladen", pages.Einladen(boxCfg))    // the card "Person einladen", admins only (haus#56)
+	pagesMux.HandleFunc(pages.AufgabenPath, pages.Aufgaben(boxCfg)) // the Box-Aufgaben: Erledigt, Später (haus#115)
 	pagesMux.HandleFunc("/box/geraete", pages.Geraete(s.store, s.publicURL, family))
 	pagesMux.HandleFunc("/pair-device", pages.PairDevice(s.store, family)) // the app's own pairing path (haus#6)
 	pagesMux.HandleFunc("/box/", box)

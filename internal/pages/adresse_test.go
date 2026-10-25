@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"reflect"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -123,8 +124,9 @@ func TestAdresseVorschlagenSendsExactlyTheFields(t *testing.T) {
 	if loc != adressePath+"?gesagt=vorgeschlagen&vorschlag=7" {
 		t.Fatalf("redirect %q", loc)
 	}
-	for _, v := range []string{"Muster", "12345", "52", "8.0456"} {
-		if strings.Contains(strings.TrimPrefix(loc, adressePath+"?gesagt=vorgeschlagen&vorschlag=7"), v) || strings.Contains(logs.String(), v) {
+	logged := regexp.MustCompile(`(?m)^\d{4}/\d\d/\d\d \d\d:\d\d:\d\d `).ReplaceAllString(logs.String(), "") // the log's own time may hold a "52"
+	for _, v := range []string{"Muster", "12345", "52.12", "8.0456"} {
+		if strings.Contains(strings.TrimPrefix(loc, adressePath+"?gesagt=vorgeschlagen&vorschlag=7"), v) || strings.Contains(logged, v) {
 			t.Fatalf("%q in the redirect %q or the log %q", v, loc, logs.String())
 		}
 	}
