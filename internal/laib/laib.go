@@ -40,6 +40,9 @@ type Readiness struct {
 	Lock      string `json:"lock,omitempty"`
 	Drift     int    `json:"drift"`
 	Operator  string `json:"operator"` // aus | startet | läuft | stumm | antwortet nicht | fehlt
+	// the Box-Aufgaben open, and those whose reminder day has come (laib#667)
+	Aufgaben        int `json:"aufgaben"`
+	AufgabenFaellig int `json:"aufgabenFaellig"`
 	// the three guarantees (haus#2)
 	LastBackup struct {
 		At    string `json:"at"`
@@ -644,4 +647,63 @@ func (c *Client) ScanEinrichten(ctx context.Context, geraet string) (Proposed, e
 	}
 	err = decodeJSON("scan", text, &out)
 	return out, err
+}
+
+// Aufgabe is one of the box's own to-dos (laib#667): owner actions that are
+// box topics, not code. Dates are JJJJ-MM-TT.
+type Aufgabe struct {
+	ID       int    `json:"id"`
+	Titel    string `json:"titel"`
+	Warum    string `json:"warum,omitempty"`
+	Seit     string `json:"seit"`
+	Von      string `json:"von"`
+	Erinnern string `json:"erinnern,omitempty"`
+	Befund   string `json:"befund,omitempty"` // "<probe> [<topic>]": Laib closes it itself when the finding is gone
+	Erledigt *struct {
+		Am  string `json:"am"`
+		Von string `json:"von"`
+		Wie string `json:"wie,omitempty"`
+	} `json:"erledigt,omitempty"`
+}
+
+// Aufgaben is the box's to-do list: how many are open, how many due.
+type Aufgaben struct {
+	Offen    int       `json:"offen"`
+	Faellig  int       `json:"faellig"`
+	Aufgaben []Aufgabe `json:"aufgaben"`
+}
+
+// BoxAufgaben lists the Box-Aufgaben, the done ones too (haus#115).
+func (c *Client) BoxAufgaben(ctx context.Context) (Aufgaben, error) {
+	var out Aufgaben
+	text, err := c.CallTyped(ctx, "aufgabe", map[string]any{"action": "list", "alle": true})
+	if err != nil {
+		return out, err
+	}
+	return out, decodeJSON("aufgabe", text, &out)
+}
+
+// AufgabeErledigt ticks one off for von (laib records haus:<von>); it
+// answers laib's sentence.
+func (c *Client) AufgabeErledigt(ctx context.Context, id int, von string) (string, error) {
+	return c.aufgabe(ctx, map[string]any{"action": "erledigt", "id": strconv.Itoa(id), "von": von})
+}
+
+// AufgabeSpaeter moves one's reminder to erinnern (JJJJ-MM-TT).
+func (c *Client) AufgabeSpaeter(ctx context.Context, id int, erinnern, von string) (string, error) {
+	return c.aufgabe(ctx, map[string]any{"action": "zurueckstellen", "id": strconv.Itoa(id), "erinnern": erinnern, "von": von})
+}
+
+func (c *Client) aufgabe(ctx context.Context, args map[string]any) (string, error) {
+	text, err := c.CallTyped(ctx, "aufgabe", args)
+	if err != nil {
+		return "", err
+	}
+	var out struct {
+		Message string `json:"message"`
+	}
+	if decodeJSON("aufgabe", text, &out) != nil || out.Message == "" {
+		return strings.TrimSpace(text), nil
+	}
+	return out.Message, nil
 }
