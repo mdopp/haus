@@ -486,6 +486,15 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   `bad_params`; Radicale in trouble 502. It is not destructive (the
   phone unticks it), so it asks no `confirmed`; Haus adds, files or
   changes nothing else from a row.
+- Share → Haus (haus#120): `POST /napi/merken` with JSON `{"text"}`,
+  what the phone shared (a browser's link, often with the page's title
+  around it). The first http(s) address is the link, the words around it
+  the hint (`#tags` become tags); Haus keeps the page as a note the way
+  *Aus Link merken* does. Answer `{"titel", "art", "kurz", "schon",
+  "teilweise", "notiz"}` (`notiz`: the note's page on Haus, or "" without
+  `HAUS_PUBLIC_URL`); a text without a link or an address at home 400, a
+  page that does not answer 502, no notes 404 — each `{"error": "<a
+  German sentence>"}`. Up to 75 s (a page, then the house model).
 - The camera capture: `POST /napi/upload` (multipart, `file` parts, an
   optional `filename`) stores into `HAUS_UPLOAD_DIR`, the share's folder
   Paperless consumes; unset, 404. JPEG and PDF as the contract
