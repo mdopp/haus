@@ -6,6 +6,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net/http"
 	"os"
@@ -21,6 +22,7 @@ import (
 	"github.com/mdopp/haus/internal/caldav"
 	"github.com/mdopp/haus/internal/cards"
 	"github.com/mdopp/haus/internal/devices"
+	"github.com/mdopp/haus/internal/einkauf"
 	"github.com/mdopp/haus/internal/favoriten"
 	"github.com/mdopp/haus/internal/ha"
 	"github.com/mdopp/haus/internal/haushalt"
@@ -109,8 +111,13 @@ func routes(s site) http.Handler {
 	if s.podcasts != nil {
 		pagesMux.HandleFunc(pages.PodcastsPath, pages.Podcasts(family)) // haus#123
 	}
-	if family.HA != nil {
-		pagesMux.Handle(pages.LivePath, &pages.Live{HA: family.HA}) // the pages' push from Home Assistant
+	live := &pages.Live{HA: family.HA} // the pages' push: Home Assistant's changes and Haus's own
+	pagesMux.Handle(pages.LivePath, live)
+	if s.hh.Einkauf != nil { // haus#118: the list, ticked on one phone, fetched again on the others
+		s.hh.Einkauf.Changed = func() { live.Tell(pages.EinkaufLive) }
+		family.Einkauf = s.hh.Einkauf
+		pagesMux.HandleFunc(pages.EinkaufPath, pages.Einkauf(family))
+		pagesMux.HandleFunc(pages.EinkaufRezeptePath, pages.Einkauf(family))
 	}
 	pagesMux.HandleFunc(pages.StartBoxPath, start)
 	pagesMux.HandleFunc("/mehr", pages.Mehr(family)) // the bar's fourth entry, with Abmelden (haus#67)
@@ -193,17 +200,17 @@ func tellNewEpisodes(ctx context.Context, pods *podcasts.Service, l *laib.Client
 	}
 }
 
-// ensureHaushalt makes the household's calendar and address book in
+// ensureHaushalt makes the household's calendar, address book and shopping list in
 // Radicale, trying again with a growing pause while Radicale does not
 // answer; done once they are there.
 func ensureHaushalt(ctx context.Context, c *caldav.Client) {
 	wait := 10 * time.Second
 	for {
 		tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		err := c.EnsureHaushalt(tctx)
+		err := errors.Join(c.EnsureHaushalt(tctx), c.EnsureList(tctx, caldav.ShoppingList, einkauf.Name)) // and the shopping list (haus#118)
 		cancel()
 		if err == nil {
-			log.Printf("haus: Haushalt: calendar and address book are there")
+			log.Printf("haus: Haushalt: calendar, address book and shopping list are there")
 			return
 		}
 		log.Printf("haus: Haushalt: making the calendar and address book: %v (again in %v)", err, wait)
@@ -257,6 +264,9 @@ func main() {
 	if c := abs.FromEnv(); c != nil { // haus#123: HAUS_ABS_URL and HAUS_ABS_TOKEN from laib (laib#676)
 		pods = podcasts.Open(c, dataDir)
 		hh.Podcasts = pods
+	}
+	if hh.Calendar != nil {
+		hh.Einkauf = einkauf.Open(hh.Calendar) // haus#118: the household's shopping list, haus/einkauf
 	}
 	cfg.Haushalt = hh // haus#10: the tool widgets from the same backends; none set, 404
 	// haus#10: the camera capture into the share's Paperless consume folder; unset, 404

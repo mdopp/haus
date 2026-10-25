@@ -114,6 +114,44 @@ test('a podcast is subscribed by its link and can be ended', async ({ page, base
   await expect(page.getByRole('status')).toContainText('Abo beendet');
 });
 
+test('a line ticked on one phone is ticked on the other at once', async ({ page }) => {
+  const other = await page.context().newPage();
+  other.on('pageerror', (e) => errors.push(String(e)));
+  await page.goto('/einkauf');
+  await other.goto('/einkauf');
+  await mark(other);
+  const item = 'Hafermilch ' + Date.now();
+  await page.getByLabel('Was fehlt?').fill(item);
+  await page.getByRole('button', { name: 'Dazu' }).click();
+  await expect(page.getByRole('status')).toContainText('1 Zeile neu auf der Liste');
+  await expect(other.getByRole('switch', { name: item }), 'pushed to the other phone').toBeVisible({ timeout: 5_000 });
+  const mine = page.getByRole('switch', { name: item });
+  await mine.click();
+  await expect(page.getByRole('switch', { name: item })).toHaveAttribute('aria-checked', 'true');
+  await expect(other.getByRole('switch', { name: item })).toHaveAttribute('aria-checked', 'true', { timeout: 5_000 });
+  expect(await stays(other), 'the other page swapped in place').toBe(true);
+  page.once('dialog', (d) => d.accept());
+  await page.getByRole('button', { name: 'Abgehakte entfernen' }).click();
+  await expect(page.getByRole('status')).toContainText('entfernt');
+  await expect(other.getByRole('switch', { name: item })).toHaveCount(0, { timeout: 5_000 });
+  await other.close();
+});
+
+test('a recipe goes on the list for more portions, without what one has', async ({ page }) => {
+  await page.goto('/notizen/rezepte/lasagne.md');
+  await page.getByRole('link', { name: 'Auf die Einkaufsliste' }).click();
+  await expect(page.getByLabel('Für')).toHaveValue('4');
+  await page.getByLabel('Für').fill('8');
+  await page.getByRole('button', { name: 'Zutaten zeigen' }).click();
+  await expect(page.getByText('1 kg Hackfleisch')).toBeVisible();
+  await page.getByLabel('2 Dosen Tomaten').uncheck();
+  await page.getByRole('button', { name: 'Auf die Einkaufsliste' }).click();
+  await expect(page).toHaveURL(/\/einkauf$/);
+  await expect(page.getByRole('status')).toContainText('auf der Liste');
+  await expect(page.getByRole('switch', { name: '500 g Lasagneplatten' })).toBeVisible();
+  await expect(page.getByRole('switch', { name: 'Dosen Tomaten' })).toHaveCount(0);
+});
+
 test('music goes up in pieces and arrives whole', async ({ page, request }) => {
   await page.goto('/musik');
   const big = Buffer.alloc(9 * 1024 * 1024, 7); // two pieces
@@ -141,7 +179,8 @@ test('a form in a card stacks its fields on a phone', async ({ page }) => {
 // screen, a field to type in has room, a button is big enough for a
 // finger, and no text runs out of its box.
 const PAGES = ['/start', '/raeume', '/raeume/light.kueche', '/medien', '/energie', '/kalender', '/kalender/verwalten',
-  '/notizen', '/notizen?tag=kochen', '/notizen/einkaufsliste.md', '/notizen/einkaufsliste.md?bearbeiten=1', '/mehr', '/musik', '/podcasts'];
+  '/notizen', '/notizen?tag=kochen', '/notizen/einkaufsliste.md', '/notizen/einkaufsliste.md?bearbeiten=1', '/mehr', '/musik', '/podcasts',
+  '/einkauf', '/einkauf/rezepte', '/einkauf/rezepte?n=rezepte%2Flasagne.md', '/notizen/rezepte/lasagne.md'];
 for (const path of PAGES) {
   test(`layout of ${path}`, async ({ page }) => {
     await page.goto(path);

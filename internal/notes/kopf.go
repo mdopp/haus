@@ -227,13 +227,25 @@ type TagCount struct {
 // filter's choices. It reads each note's head only (4 KB), at most
 // maxFiles files, the hidden ones left out.
 func (d *Dir) ByTags(ctx context.Context, want []string, n int) ([]Entry, []TagCount, error) {
+	want = Tags(want)
+	return d.byHead(ctx, func(k Kopf) bool { return len(want) > 0 && k.Has(want) }, n)
+}
+
+// ByArt lists the notes of kind art (haus#118: the recipes), newest
+// first, at most n, read as ByTags reads.
+func (d *Dir) ByArt(ctx context.Context, art string, n int) ([]Entry, error) {
+	all, _, err := d.byHead(ctx, func(k Kopf) bool { return k.Art == art }, n)
+	return all, err
+}
+
+// byHead lists the notes whose head keep takes, and counts every note's tags.
+func (d *Dir) byHead(ctx context.Context, keep func(Kopf) bool, n int) ([]Entry, []TagCount, error) {
 	root, err := os.OpenRoot(d.path)
 	if err != nil {
 		return nil, nil, err
 	}
 	defer root.Close()
 	fsys := root.FS()
-	want = Tags(want)
 	var all []Entry
 	counts := map[string]int{}
 	files := 0
@@ -271,7 +283,7 @@ func (d *Dir) ByTags(ctx context.Context, want []string, n int) ([]Entry, []TagC
 		for _, t := range k.Tags {
 			counts[t]++
 		}
-		if len(want) > 0 && k.Has(want) {
+		if keep(k) {
 			all = append(all, Entry{Name: name, Title: title(name, head), Changed: info.ModTime(), Kopf: k})
 		}
 		return nil

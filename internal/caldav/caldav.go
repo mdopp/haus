@@ -251,7 +251,7 @@ func (c *Client) listAt(ctx context.Context, home string, books bool) ([]Collect
 				cs = append(cs, strings.ToUpper(cp.Name))
 			}
 		}
-		if (books && !isBook) || (!books && !isCal) {
+		if (books && !isBook) || (!books && !isCal) || (isCal && isList(r.Href)) { // a list is no calendar (haus#118)
 			continue
 		}
 		u, err := c.resolve(r.Href)
@@ -679,6 +679,13 @@ var completion = map[string]bool{"STATUS": true, "COMPLETED": true, "PERCENT-COM
 // completed is the object's text with the VTODO uid ticked off at now:
 // every other line as it was, the new properties before its first alarm.
 func completed(data, uid string, now time.Time) string {
+	return patchTodo(data, uid, []string{"STATUS:COMPLETED", "COMPLETED:" + utc(now), "PERCENT-COMPLETE:100", "DTSTAMP:" + utc(now), "LAST-MODIFIED:" + utc(now)}, completion)
+}
+
+// patchTodo is the object's text with the VTODO uid's own properties named
+// in replace dropped and set written in their place, before its first
+// alarm; every other line as it was.
+func patchTodo(data, uid string, set []string, replace map[string]bool) string {
 	lines := unfold(data)
 	var b strings.Builder
 	for i := 0; i < len(lines); i++ {
@@ -701,7 +708,7 @@ func completed(data, uid string, now time.Time) string {
 		added, depth := false, 0
 		add := func() {
 			if !added {
-				for _, l := range []string{"STATUS:COMPLETED", "COMPLETED:" + utc(now), "PERCENT-COMPLETE:100", "DTSTAMP:" + utc(now), "LAST-MODIFIED:" + utc(now)} {
+				for _, l := range set {
 					fold(&b, l)
 				}
 				added = true
@@ -720,7 +727,7 @@ func completed(data, uid string, now time.Time) string {
 				depth++
 			case ok && p.Name == "END":
 				depth--
-			case ok && depth == 0 && completion[p.Name]:
+			case ok && depth == 0 && replace[p.Name]:
 				continue
 			}
 			fold(&b, l)

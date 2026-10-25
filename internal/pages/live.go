@@ -23,7 +23,8 @@ const LivePath = "/live"
 var livePing = 30 * time.Second
 
 // Live is the pages' stream: one state_changed subscription to Home
-// Assistant while anyone listens, each change to every listener. What
+// Assistant while anyone listens (when there is one), each change to every
+// listener, and Haus's own changes (Tell). What
 // pages show only: actuators, people; sensors change every few seconds
 // and Energie asks on its own.
 type Live struct {
@@ -46,7 +47,7 @@ func (l *Live) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Nur zum Zuhören.", http.StatusMethodNotAllowed)
 		return
 	}
-	if r.Header.Get("Remote-User") == "" || l.HA == nil {
+	if r.Header.Get("Remote-User") == "" {
 		http.Error(w, "Kein Strom ohne Anmeldung.", http.StatusForbidden)
 		return
 	}
@@ -87,7 +88,7 @@ func (l *Live) join() chan string {
 		l.subs = map[chan string]bool{}
 	}
 	l.subs[ch] = true
-	if l.stop == nil {
+	if l.stop == nil && l.HA != nil {
 		ctx, cancel := context.WithCancel(context.Background())
 		l.stop = cancel
 		go l.run(ctx)
@@ -103,6 +104,19 @@ func (l *Live) leave(ch chan string) {
 	if len(l.subs) == 0 && l.stop != nil {
 		l.stop()
 		l.stop = nil
+	}
+}
+
+// Tell is a change of Haus's own, its id as data (haus#118: "haus.einkauf"
+// when the shopping list changed), to every listener.
+func (l *Live) Tell(id string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for ch := range l.subs {
+		select {
+		case ch <- id:
+		default:
+		}
 	}
 }
 

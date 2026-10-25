@@ -1,7 +1,7 @@
 // Package davfake is a fake Radicale for tests: Basic auth, PROPFIND on the
 // account's home (and, with AddPrincipal, on the root and other homes), REPORT calendar-query on a calendar and addressbook-query
 // on an address book (each object with its ETag), PUT with If-None-Match
-// or If-Match, MKCALENDAR, and MKCOL
+// or If-Match, MKCALENDAR, MKCOL, and DELETE of a collection or an object (with If-Match)
 // extended for an address book. It filters a calendar REPORT by component
 // only and an address book REPORT not at all; the client filters itself,
 // and tests read the query it sent.
@@ -388,6 +388,15 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		s.cols[r.URL.Path] = col{name: mk.Name, book: true}
 		w.WriteHeader(http.StatusCreated)
 	case http.MethodDelete:
+		if _, ok := s.objs[r.URL.Path]; ok {
+			if m := r.Header.Get("If-Match"); m != "" && m != s.etag(r.URL.Path) {
+				w.WriteHeader(http.StatusPreconditionFailed)
+				return
+			}
+			delete(s.objs, r.URL.Path)
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
 		if _, ok := s.cols[r.URL.Path]; !ok {
 			w.WriteHeader(http.StatusNotFound)
 			return
