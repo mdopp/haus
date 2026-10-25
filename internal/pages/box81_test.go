@@ -62,7 +62,7 @@ func TestBoxComesAtOnceAndFillsItsParts(t *testing.T) {
 	body := rec.Body.String()
 	mustContain(t, body, `<div id=box-stand data-teil=stand aria-busy=true><h1>Box</h1><p class=k>lädt …</p></div>`,
 		`<div id=box-inbox data-teil=inbox aria-busy=true><h2>Inbox</h2>`, `<div id=box-journal data-teil=journal aria-busy=true><h2>Journal · 24h</h2>`,
-		`["stand","inbox","einladen","journal"].forEach`, "fetch('/box/teil?was='+was", `<noscript><meta http-equiv=refresh content="0;url=/box?ganz=1"></noscript>`, saysPartFailed)
+		`["stand","inbox","aufgaben","einladen","journal"].forEach`, "fetch('/box/teil?was='+was", `<noscript><meta http-equiv=refresh content="0;url=/box?ganz=1"></noscript>`, saysPartFailed)
 	mustNotContain(t, body, "Was wird genutzt", "Werkstatt", "Operator:")
 	before(t, body, "box-stand", "box-inbox")
 	before(t, body, "box-bericht", "box-laeuft")
