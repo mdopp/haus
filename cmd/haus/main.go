@@ -102,6 +102,7 @@ func routes(s site) http.Handler {
 		}
 		pagesMux.HandleFunc(pages.MusikPath, pages.Musik(family))
 		pagesMux.HandleFunc(pages.MusikTeilPath, pages.Musik(family))
+		pagesMux.HandleFunc(pages.MusikStandPath, pages.Musik(family)) // haus#113: the import's line
 	}
 	if s.napi.UploadDir != "" { // haus#68: the page's way into Paperless's inbox, the app's folder
 		family.Ablage = napi.NewUploads(s.napi.UploadDir)
