@@ -15,6 +15,7 @@ import (
 	"github.com/mdopp/haus/internal/caldav/davfake"
 	"github.com/mdopp/haus/internal/einkauf"
 	"github.com/mdopp/haus/internal/merken"
+	"github.com/mdopp/haus/internal/musicbrainz"
 	"github.com/mdopp/haus/internal/notes"
 )
 
@@ -274,15 +275,45 @@ func TestRezepteOnAChosenList(t *testing.T) {
 	mustContain(t, rec.Body.String(), "<h1>Urlaub</h1>", "<span class=was>1 Zwiebel<small>Curry</small>")
 }
 
-// the music wish list: who wished it, where to buy it as a file, the link
-// it came from; a song link on Notizen goes there, not into a note
+type fundFake struct{ f musicbrainz.Fund }
+
+func (f fundFake) Suchen(context.Context, string, string, bool, time.Time) (musicbrainz.Fund, error) {
+	return f.f, nil
+}
+
+// the music wish list: who wished it, where it is to be had (album, date,
+// label, the shops MusicBrainz names), the searches, the link it came
+// from, and the stages; a song link on Notizen goes there
 func TestMusikWunschliste(t *testing.T) {
 	l, _ := shoppingList(t)
-	w := &einkauf.Wuensche{Listen: l}
+	l.Changed = nil
+	fund := musicbrainz.Fund{Gefunden: true, Album: "Was mich umbringt", Datum: "2099-04-09", Kommt: true, Label: "Problembär",
+		Links: []musicbrainz.Link{{Wo: "Bandcamp (Label Problembär)", Was: "Platte und Download, meist sofort", URL: "https://problembaer.bandcamp.com/"}}}
+	w := &einkauf.Wuensche{Listen: l, MB: fundFake{fund}, Dir: t.TempDir()}
 	w.Wuenschen(context.Background(), merken.Lied{Kuenstler: "Wanda", Titel: "Salbei", Link: "https://youtube.com/watch?v=x"}, "anna")
+	items, _ := l.Andere(einkauf.MusikListe).Lesen(context.Background())
+	uid := items[0].UID
+	for i := 0; i < 400 && (w.Stand(uid).Fund == nil || w.Stand(uid).Sucht); i++ {
+		time.Sleep(5 * time.Millisecond)
+	}
 	cfg := StartConfig{Einkauf: l, Wuensche: w}
 	_, body, _ := familyPage(t, Einkauf, cfg, "GET", "/einkauf?liste=liste-musik", "family")
 	mustContain(t, body, "<h1>Musik</h1>", "<span class=was>Wanda – Salbei<small>gewünscht von anna</small>",
-		`<p class=kaufen>Kaufen: <a href="https://bandcamp.com/search?q=Wanda+Salbei" rel="noopener noreferrer" target=_blank>Bandcamp</a>`,
-		`<a href="https://youtube.com/watch?v=x" rel="noopener noreferrer" target=_blank>Anhören</a>`)
+		"<p class=fund>Erscheint am 09.04.2099 auf „Was mich umbringt“: vorbestellen · Label Problembär</p>",
+		`<a href="https://problembaer.bandcamp.com/" rel="noopener noreferrer" target=_blank>Bandcamp (Label Problembär)</a> <small>Platte und Download, meist sofort</small>`,
+		`<p class=kaufen>Suchen: <a href="https://bandcamp.com/search?q=Wanda+Salbei" rel="noopener noreferrer" target=_blank>Bandcamp</a>`,
+		`<a href="https://youtube.com/watch?v=x" rel="noopener noreferrer" target=_blank>Anhören</a>`,
+		`<input type=hidden name=schritt value=bestellt-lp><button data-laeuft="Merkt sich …">Bestellt: Platte + Download</button>`, "Neu suchen")
+
+	rec := post(t, Einkauf(cfg), "/einkauf?liste=liste-musik", url.Values{"tun": {"stufe"}, "uid": {uid}, "schritt": {"bestellt-lp"}}, "anna", nil)
+	body = rec.Body.String()
+	mustContain(t, body, "ist bestellt, als Platte mit Download", "<span class=chip>Bestellt</span>", "Platte mit Download", ">Datei ist da</button>", ">Platte ist da</button>")
+	mustNotContain(t, body, ">Bestellt: nur Datei</button>")
+	rec = post(t, Einkauf(cfg), "/einkauf?liste=liste-musik", url.Values{"tun": {"stufe"}, "uid": {uid}, "schritt": {"datei"}}, "anna", nil)
+	mustContain(t, rec.Body.String(), "<span class=chip>Datei da</span> Platte unterwegs seit")
+	rec = post(t, Einkauf(cfg), "/einkauf?liste=liste-musik", url.Values{"tun": {"stufe"}, "uid": {uid}, "schritt": {"platte"}}, "anna", nil)
+	mustContain(t, rec.Body.String(), "Die Platte von „Wanda – Salbei“ ist da; abgehakt.", "aria-checked=true><span class=haken></span><span class=was>Wanda – Salbei")
+	if rec := post(t, Einkauf(cfg), "/einkauf", url.Values{"tun": {"stufe"}, "uid": {uid}, "schritt": {"platte"}}, "anna", nil); rec.Code != http.StatusBadRequest {
+		t.Errorf("a stage on the shopping list → %d", rec.Code)
+	}
 }

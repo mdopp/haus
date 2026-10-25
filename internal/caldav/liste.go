@@ -260,11 +260,11 @@ func (c *Client) ListItems(ctx context.Context, r ListRef) ([]Item, error) {
 	return out, nil
 }
 
-// AddItem writes a new open line to the list.
-func (c *Client) AddItem(ctx context.Context, r ListRef, summary, herkunft string) error {
+// AddItem writes a new open line to the list and answers its UID.
+func (c *Client) AddItem(ctx context.Context, r ListRef, summary, herkunft string) (string, error) {
 	u, err := c.listURL(r)
 	if err != nil {
-		return err
+		return "", err
 	}
 	now := c.now()
 	// lines of one second (a recipe's) keep their order by their UID
@@ -281,12 +281,12 @@ func (c *Client) AddItem(ctx context.Context, r ListRef, summary, herkunft strin
 	code, _, err := c.do(ctx, http.MethodPut, u+uid+".ics", "", b.String(),
 		map[string]string{"Content-Type": "text/calendar; charset=utf-8", "If-None-Match": "*"})
 	if err != nil {
-		return err
+		return "", err
 	}
 	if code != http.StatusCreated && code != http.StatusNoContent && code != http.StatusOK {
-		return &ErrStatus{"PUT", code}
+		return "", &ErrStatus{"PUT", code}
 	}
-	return nil
+	return uid, nil
 }
 
 // what an edit of a line replaces

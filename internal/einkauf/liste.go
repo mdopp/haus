@@ -103,7 +103,7 @@ func (l *Liste) Dazu(ctx context.Context, zeilen []Zeile) (Ergebnis, error) {
 				break
 			}
 			if !merged {
-				if err := l.DAV.AddItem(ctx, l.Ref, z.Text(), herkunft(z.Herkunft)); err != nil {
+				if _, err := l.DAV.AddItem(ctx, l.Ref, z.Text(), herkunft(z.Herkunft)); err != nil {
 					return err
 				}
 				res.Neu++

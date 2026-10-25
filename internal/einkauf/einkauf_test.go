@@ -2,13 +2,16 @@ package einkauf
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/mdopp/haus/internal/caldav"
 	"github.com/mdopp/haus/internal/caldav/davfake"
 	"github.com/mdopp/haus/internal/jellyfin"
 	"github.com/mdopp/haus/internal/merken"
+	"github.com/mdopp/haus/internal/musicbrainz"
 	"github.com/mdopp/haus/internal/notes"
 )
 
@@ -366,4 +369,112 @@ func TestMusikWuensche(t *testing.T) {
 	if _, ok, _ := none.AusLink(ctx, merken.Fetcher{}, "https://youtube.com/watch?v=x", "anna"); ok {
 		t.Error("no list, no wish")
 	}
+}
+
+type fakeSuche struct {
+	fund  musicbrainz.Fund
+	err   error
+	calls chan string
+}
+
+func (s *fakeSuche) Suchen(ctx context.Context, artist, title string, album bool, now time.Time) (musicbrainz.Fund, error) {
+	if s.calls != nil {
+		s.calls <- artist + " – " + title
+	}
+	return s.fund, s.err
+}
+
+// owner 2026-10-25: a wish moves on — ordered as a record with its
+// download or as the file, the file there, the record there — and shows
+// where it is to be had; a search that did not get through is tried again.
+func TestWunschStufen(t *testing.T) {
+	ctx := context.Background()
+	l, _, _ := list(t)
+	l.Changed = nil // the searches tell from their own goroutine
+	s := &fakeSuche{fund: musicbrainz.Fund{Gefunden: true, Album: "Amore", Datum: "2014-10-17", Label: "Problembär"}, calls: make(chan string, 4)}
+	bib := fakeBib{}
+	w := &Wuensche{Listen: l, MB: s, Bib: bib, Dir: t.TempDir()}
+	if _, err := w.Wuenschen(ctx, merken.Lied{Kuenstler: "Wanda", Titel: "Bologna"}, "anna"); err != nil {
+		t.Fatal(err)
+	}
+	if got := <-s.calls; got != "Wanda – Bologna" {
+		t.Fatalf("searched %q", got)
+	}
+	items, _ := l.Andere(MusikListe).Lesen(ctx)
+	uid := items[0].UID
+	deadline := time.Now().Add(2 * time.Second)
+	for w.Stand(uid).Fund == nil && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if st := w.Stand(uid); st.Fund == nil || st.Fund.Album != "Amore" || st.Stufe != StufeWunsch {
+		t.Fatalf("%+v", st)
+	}
+
+	said, err := w.Stufe(ctx, uid, "bestellt-lp")
+	if err != nil || !strings.Contains(said, "als Platte mit Download") || w.Stand(uid).Stufe != StufeBestellt || !w.Stand(uid).LP {
+		t.Fatalf("%q %v %+v", said, err, w.Stand(uid))
+	}
+	// the download is sorted in: the file is there, the record not yet
+	bib["wanda|bologna"] = jellyfin.Treffer{Album: "Amore", Titel: "Bologna"}
+	done, _ := w.Pruefen(ctx)
+	if len(done) != 1 || !strings.Contains(done[0].Satz, "Die Platte ist noch unterwegs") || w.Stand(uid).Stufe != StufeDatei {
+		t.Fatalf("%+v %+v", done, w.Stand(uid))
+	}
+	if again, _ := w.Pruefen(ctx); len(again) != 0 {
+		t.Errorf("told twice: %+v", again)
+	}
+	if items, _ := l.Andere(MusikListe).Lesen(ctx); items[0].Done {
+		t.Error("ticked before the record came")
+	}
+	said, err = w.Stufe(ctx, uid, "platte")
+	if err != nil || !strings.Contains(said, "abgehakt") {
+		t.Fatalf("%q %v", said, err)
+	}
+	if items, _ := l.Andere(MusikListe).Lesen(ctx); !items[0].Done {
+		t.Error("not ticked when the record came")
+	}
+	// the file alone: "Datei ist da" ticks it off
+	w.Wuenschen(ctx, merken.Lied{Kuenstler: "Wanda", Titel: "Salbei"}, "anna")
+	<-s.calls
+	items, _ = l.Andere(MusikListe).Lesen(ctx)
+	uid2 := items[0].UID
+	w.Stufe(ctx, uid2, "bestellt-datei")
+	if said, _ := w.Stufe(ctx, uid2, "datei"); !strings.Contains(said, "ist da und abgehakt") {
+		t.Errorf("%q", said)
+	}
+	if _, err := w.Stufe(ctx, "nix", "platte"); err != ErrNoLine {
+		t.Errorf("unknown: %v", err)
+	}
+
+	// a search that did not get through is tried again after an hour
+	s2 := &fakeSuche{err: errors.New("timeout"), calls: make(chan string, 4)}
+	now := time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC)
+	w2 := &Wuensche{Listen: l, MB: s2, Dir: t.TempDir(), Now: func() time.Time { return now }}
+	w2.Wuenschen(ctx, merken.Lied{Kuenstler: "Bilderbuch", Titel: "Bungalow"}, "")
+	<-s2.calls
+	for i := 0; i < 200 && w2.Stand(firstOpen(t, l)).Versucht.IsZero(); i++ {
+		time.Sleep(5 * time.Millisecond)
+	}
+	w2.Nachsuchen(ctx)
+	select {
+	case got := <-s2.calls:
+		t.Errorf("searched again at once: %q", got)
+	default:
+	}
+	now = now.Add(61 * time.Minute)
+	w2.Nachsuchen(ctx)
+	if got := <-s2.calls; got != "Bilderbuch – Bungalow" {
+		t.Errorf("again: %q", got)
+	}
+}
+
+func firstOpen(t *testing.T, l *Liste) string {
+	items, _ := l.Andere(MusikListe).Lesen(context.Background())
+	for _, it := range items {
+		if !it.Done {
+			return it.UID
+		}
+	}
+	t.Fatal("no open wish")
+	return ""
 }

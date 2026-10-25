@@ -159,6 +159,17 @@ func Einkauf(cfg StartConfig) http.HandlerFunc {
 			var n int
 			n, err = l.Aufraeumen(ctx)
 			said = count(n, "abgehakte Zeile entfernt.", "abgehakte Zeilen entfernt.")
+		case "stufe":
+			if cfg.Wuensche == nil || l.Ref != einkauf.MusikListe {
+				http.Error(w, "Das geht nur auf der Musik-Wunschliste.", http.StatusBadRequest)
+				return
+			}
+			if r.PostForm.Get("schritt") == "suchen" {
+				err = cfg.Wuensche.NeuSuchen(ctx, r.PostForm.Get("uid"))
+				said = "Sucht, wo es das gibt; die Seite zeigt es gleich."
+			} else {
+				said, err = cfg.Wuensche.Stufe(ctx, r.PostForm.Get("uid"), r.PostForm.Get("schritt"))
+			}
 		case "neu":
 			name := strings.Join(strings.Fields(r.PostForm.Get("name")), " ")
 			if name == "" || len([]rune(name)) > 60 {
@@ -264,7 +275,10 @@ const einkaufStyle = `<style>.einkauf{list-style:none;margin:16px 0 0;padding:0;
 .rezeptwahl input[type=checkbox]{width:22px;height:22px;flex:none}.rezeptwahl .portionen{display:flex;align-items:center;gap:10px;margin:14px 0}.rezeptwahl .portionen input{width:8rem;min-height:44px;font:inherit;padding:0 10px;border:1px solid var(--edge);border-radius:12px;background:var(--card);color:var(--ink)}
 .rezeptwahl button{margin:12px 0 0}.rezeptwahl select{min-height:44px;min-width:10rem;font:inherit;padding:0 10px;border:1px solid var(--edge);border-radius:12px;background:var(--card);color:var(--ink)}
 .listen{display:flex;gap:8px;margin:22px 0 -8px;overflow-x:auto}.listen a{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 16px;border-radius:999px;background:var(--card);border:1px solid var(--edge);color:var(--ink);text-decoration:none;font-size:.9rem;white-space:nowrap}
-.listen a[aria-current]{color:var(--accent);border-color:var(--accent);font-weight:600}.einkauf .kaufen{margin:6px 4px 0;font-size:.85rem;color:var(--muted)}.einkauf .kaufen a{display:inline-block;padding:10px 2px}.listen .meine{font-size:.7rem;color:var(--muted);font-weight:400}</style>`
+.listen a[aria-current]{color:var(--accent);border-color:var(--accent);font-weight:600}.einkauf .kaufen{margin:6px 4px 0;font-size:.85rem;color:var(--muted)}.einkauf .kaufen a{display:inline-block;padding:10px 2px}
+.wunsch{margin:6px 4px 4px}.wunsch p{margin:4px 0}.wunsch .chip{display:inline-block;padding:2px 10px;margin-right:6px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-weight:600;font-size:.8rem}
+.wunsch .fund{font-size:.9rem}.wunsch ul.wo{list-style:none;margin:4px 0;padding:0}.wunsch ul.wo li{padding:0}.wunsch ul.wo a{display:inline-block;padding:10px 2px;font-weight:600}.wunsch ul.wo small{color:var(--muted)}
+.wunsch .schritte{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 0}.wunsch .schritte form{margin:0}.listen .meine{font-size:.7rem;color:var(--muted);font-weight:400}</style>`
 
 // listName is the list's name among lists; the household's shopping list
 // is "Einkauf" before it is made.
@@ -364,21 +378,8 @@ func writeEinkauf(w http.ResponseWriter, r *http.Request, cfg StartConfig, l *ei
 			}
 		}
 		b.WriteString("</span></button></form>")
-		if music && !it.Done { // where to buy it as a file, and the link it came from
-			b.WriteString("<p class=kaufen>Kaufen: ")
-			for i, s := range einkauf.Kaufen(it.Summary) {
-				if i > 0 {
-					b.WriteString(" · ")
-				}
-				b.WriteString(`<a href="` + html.EscapeString(s[1]) + `" rel="noopener noreferrer" target=_blank>` + s[0] + `</a>`)
-			}
-			for _, p := range strings.Split(it.Herkunft, ", ") {
-				if strings.HasPrefix(p, "https://") {
-					b.WriteString(` · <a href="` + html.EscapeString(p) + `" rel="noopener noreferrer" target=_blank>Anhören</a>`)
-					break
-				}
-			}
-			b.WriteString("</p>")
+		if music && !it.Done {
+			b.WriteString(wunschKarte(cfg, act, it))
 		}
 		b.WriteString("</li>")
 	}
@@ -543,4 +544,102 @@ func writeRezepte(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
 // RezeptAufDieListe is a recipe note's way to the list.
 func RezeptAufDieListe(name string) string {
 	return EinkaufRezeptePath + "?n=" + url.QueryEscape(name)
+}
+
+// wunschKarte is a wish's stage, where it is to be had (MusicBrainz:
+// album, date, label, the band's and label's shops), the searches in the
+// shops, the link it came from, and the buttons to move it on.
+func wunschKarte(cfg StartConfig, act string, it caldav.Item) string {
+	var b strings.Builder
+	var st einkauf.Stand
+	if cfg.Wuensche != nil {
+		st = cfg.Wuensche.Stand(it.UID)
+	}
+	b.WriteString("<div class=wunsch>")
+	switch st.Stufe {
+	case einkauf.StufeBestellt:
+		was := "als Datei"
+		if st.LP {
+			was = "Platte mit Download"
+		}
+		b.WriteString("<p class=stufe><span class=chip>Bestellt</span> am " + st.Bestellt.Format("02.01.") + ", " + was + "</p>")
+	case einkauf.StufeDatei:
+		b.WriteString("<p class=stufe><span class=chip>Datei da</span> Platte unterwegs seit " + st.Bestellt.Format("02.01.") + "</p>")
+	}
+	f := st.Fund
+	switch {
+	case st.Sucht:
+		b.WriteString("<p class=k>Sucht, wo es das gibt …</p>")
+	case f != nil && f.Gefunden:
+		line := "Auf „" + html.EscapeString(f.Album) + "“"
+		if len(f.Datum) >= 4 {
+			if f.Kommt {
+				line = "Erscheint am " + html.EscapeString(germanDate(f.Datum)) + " auf „" + html.EscapeString(f.Album) + "“: vorbestellen"
+			} else {
+				line += " (" + f.Datum[:4] + ")"
+			}
+		}
+		if f.Label != "" {
+			line += " · Label " + html.EscapeString(f.Label)
+		}
+		b.WriteString("<p class=fund>" + line + "</p>")
+		if len(f.Links) > 0 {
+			b.WriteString("<ul class=wo>")
+			for _, l := range f.Links {
+				b.WriteString(`<li><a href="` + html.EscapeString(l.URL) + `" rel="noopener noreferrer" target=_blank>` + html.EscapeString(l.Wo) + `</a> <small>` + html.EscapeString(l.Was) + `</small></li>`)
+			}
+			b.WriteString("</ul>")
+		}
+	case f != nil:
+		b.WriteString("<p class=k>MusicBrainz kennt es nicht; die Suchen unten finden es vielleicht.</p>")
+	case cfg.Wuensche != nil && cfg.Wuensche.MB != nil && !st.Versucht.IsZero():
+		b.WriteString("<p class=k>Die Suche kam nicht durch (MusicBrainz antwortete nicht); Haus versucht es stündlich wieder.</p>")
+	}
+	b.WriteString("<p class=kaufen>Suchen: ")
+	for i, s := range einkauf.Kaufen(it.Summary) {
+		if i > 0 {
+			b.WriteString(" · ")
+		}
+		b.WriteString(`<a href="` + html.EscapeString(s[1]) + `" rel="noopener noreferrer" target=_blank>` + s[0] + `</a>`)
+	}
+	for _, p := range strings.Split(it.Herkunft, ", ") {
+		if strings.HasPrefix(p, "https://") {
+			b.WriteString(` · <a href="` + html.EscapeString(p) + `" rel="noopener noreferrer" target=_blank>Anhören</a>`)
+			break
+		}
+	}
+	b.WriteString("</p>")
+	if cfg.Wuensche != nil && cfg.Wuensche.Dir != "" {
+		btn := func(step, label, running string) {
+			b.WriteString(`<form method=post action="` + act + `"><input type=hidden name=tun value=stufe><input type=hidden name=uid value="` + html.EscapeString(it.UID) +
+				`"><input type=hidden name=schritt value=` + step + `><button data-laeuft="` + running + `">` + label + `</button></form>`)
+		}
+		b.WriteString("<div class=schritte>")
+		switch st.Stufe {
+		case einkauf.StufeWunsch:
+			btn("bestellt-lp", "Bestellt: Platte + Download", "Merkt sich …")
+			btn("bestellt-datei", "Bestellt: nur Datei", "Merkt sich …")
+		case einkauf.StufeBestellt:
+			btn("datei", "Datei ist da", "Merkt sich …")
+			if st.LP {
+				btn("platte", "Platte ist da", "Hakt ab …")
+			}
+		case einkauf.StufeDatei:
+			btn("platte", "Platte ist da", "Hakt ab …")
+		}
+		if cfg.Wuensche.MB != nil && !st.Sucht {
+			btn("suchen", "Neu suchen", "Sucht …")
+		}
+		b.WriteString("</div>")
+	}
+	b.WriteString("</div>")
+	return b.String()
+}
+
+// germanDate is JJJJ-MM-TT as TT.MM.JJJJ; anything shorter as it is.
+func germanDate(d string) string {
+	if t, err := time.Parse("2006-01-02", d); err == nil {
+		return t.Format("02.01.2006")
+	}
+	return d
 }

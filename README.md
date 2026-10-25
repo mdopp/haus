@@ -953,6 +953,18 @@ already in the music is "Hast du schon … auf dem Album …", and every 15
 minutes the open wishes are looked up: one that arrived is ticked off and
 its wisher told (`laib_tell`). Nothing is downloaded from YouTube.
 
+Where a wish is to be had comes from MusicBrainz (no key, one request a
+second, in the background after the wish and again hourly when it did not
+answer): the album a song is on and when it comes out ("Erscheint am …:
+vorbestellen"), its label, and the shops the release, the band and the
+label name — Bandcamp first (a record there mostly comes with its download
+at once), mail order, the band's and the label's pages, known download
+shops. Shops are never asked themselves (Bandcamp lets no program in).
+Each wish moves through stages kept in `musikwuensche.json` in HAUS_DATA:
+*Wunsch* → *Bestellt* (a record with its download, or the file alone) →
+*Datei da* (the record on its way; set by hand, or by Jellyfin when the
+download is sorted in) → ticked off when all of it is there.
+
 ## Podcasts (haus#123)
 
 `GET /podcasts`, under Mehr, with Audiobookshelf (`HAUS_ABS_URL`,

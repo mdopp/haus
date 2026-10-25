@@ -28,6 +28,7 @@ import (
 	"github.com/mdopp/haus/internal/haushalt"
 	"github.com/mdopp/haus/internal/jellyfin"
 	"github.com/mdopp/haus/internal/laib"
+	"github.com/mdopp/haus/internal/musicbrainz"
 	"github.com/mdopp/haus/internal/napi"
 	"github.com/mdopp/haus/internal/pages"
 	"github.com/mdopp/haus/internal/persona"
@@ -177,11 +178,16 @@ const episodeEvery = 15 * time.Minute
 // to who subscribed, through Laib's tell (laib#676) — only once Laib has
 // the verb, so no episode is taken as told before anyone could be.
 // tickWishes looks every wishEvery whether a wish on the music wish list
-// has arrived in the music, ticks it off and tells who wished it.
+// has arrived in the music (with Jellyfin), moves it on and tells who
+// wished it; and looks up again where a wish is that MusicBrainz did not
+// answer for.
 func tickWishes(ctx context.Context, w *einkauf.Wuensche, l *laib.Client) {
 	t := time.NewTicker(wishEvery)
 	defer t.Stop()
 	for {
+		if err := w.Nachsuchen(ctx); err != nil {
+			log.Printf("haus: musikwünsche: looking up again: %v", err)
+		}
 		done, err := w.Pruefen(ctx)
 		if err != nil {
 			log.Printf("haus: musikwünsche: %v", err)
@@ -189,6 +195,9 @@ func tickWishes(ctx context.Context, w *einkauf.Wuensche, l *laib.Client) {
 		for _, d := range done {
 			log.Printf("haus: musikwunsch arrived for %q", d.Person)
 			if d.Person == "" {
+				continue
+			}
+			if l == nil {
 				continue
 			}
 			if ok, _ := l.Takes(ctx, "tell", "person"); ok {
@@ -302,9 +311,10 @@ func main() {
 		hh.Podcasts = pods
 	}
 	if hh.Calendar != nil {
-		hh.Einkauf = einkauf.Open(hh.Calendar)              // haus#118: the household's shopping list, haus/einkauf
-		hh.Wuensche = &einkauf.Wuensche{Listen: hh.Einkauf} // a shared song goes on haus/liste-musik
-		if jf := jellyfin.FromEnv(); jf != nil {            // laib#695: "hast du schon", and arrived wishes ticked off
+		hh.Einkauf = einkauf.Open(hh.Calendar) // haus#118: the household's shopping list, haus/einkauf
+		// a shared song goes on haus/liste-musik, with its stages and where it is (MusicBrainz)
+		hh.Wuensche = &einkauf.Wuensche{Listen: hh.Einkauf, Dir: dataDir, MB: musicbrainz.New(hh.Fetcher)}
+		if jf := jellyfin.FromEnv(); jf != nil { // laib#695: "hast du schon", and arrived wishes ticked off
 			hh.Wuensche.Bib = jf
 		}
 	}
@@ -339,9 +349,7 @@ func main() {
 	defer stop()
 	if hh.Calendar != nil { // the household's calendar and address book there from the start (owner 2026-10-24)
 		go ensureHaushalt(ctx, hh.Calendar)
-		if hh.Wuensche.Bib != nil && ops != nil {
-			go tickWishes(ctx, hh.Wuensche, ops)
-		}
+		go tickWishes(ctx, hh.Wuensche, ops)
 	}
 	if pods != nil && ops != nil {
 		go tellNewEpisodes(ctx, pods, ops) // haus#123: a new episode to who subscribed

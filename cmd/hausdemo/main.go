@@ -103,7 +103,7 @@ func main() {
 	if _, err := cal.MakeList(context.Background(), "", "baumarkt", "Baumarkt"); err != nil { // a named list beside it (haus#119)
 		log.Fatal(err)
 	}
-	wishes := &einkauf.Wuensche{Listen: list} // the music wish list with one wish
+	wishes := &einkauf.Wuensche{Listen: list, Dir: dir} // the music wish list with one wish, its stages kept
 	if _, err := wishes.Wuenschen(context.Background(), merken.Lied{Kuenstler: "Wanda", Titel: "Salbei", Link: "https://youtube.com/watch?v=Ca7RfL4m744"}, "anna"); err != nil {
 		log.Fatal(err)
 	}
