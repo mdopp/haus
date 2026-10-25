@@ -6,6 +6,7 @@ import (
 	"html"
 	"log"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -63,7 +64,7 @@ func Notizen(cfg StartConfig) http.HandlerFunc {
 		b := familyHead(r, cfg, "Notizen", "Notizen")
 		b.WriteString(noteStyle + "<h1>Notizen</h1><p class=k>" + html.EscapeString(saysNotesHow()) + "</p>")
 		if q == "" {
-			b.WriteString(newNoteForm("", "", r.URL.Query().Get("neu") == "1"))
+			b.WriteString(newNoteForm("", "", "", notes.Tags(r.URL.Query()["tag"]), r.URL.Query().Get("neu") == "1")) // a filter's tags ticked
 		}
 		b.WriteString(`<form method=get action=/notizen role=search>` +
 			`<input type=search name=q value="` + html.EscapeString(q) + `" placeholder="` + field + `" aria-label="` + field + `"> <button data-laeuft="Sucht …">Suchen</button></form>`)
@@ -121,16 +122,32 @@ func Notizen(cfg StartConfig) http.HandlerFunc {
 			return
 		}
 
-		var recent []notes.Entry
-		var err error
-		fetch(r, func(ctx context.Context) { recent, err = cfg.Notes.Recent(ctx, maxNewest) })
-		logErrs("notizen", map[string]error{"notes": err})
-		if err != nil {
+		var recent, tagged []notes.Entry
+		var counts []notes.TagCount
+		var err, terr error
+		want := notes.Tags(r.URL.Query()["tag"])
+		fetch(r, func(ctx context.Context) { recent, err = cfg.Notes.Recent(ctx, maxNewest) },
+			func(ctx context.Context) { tagged, counts, terr = cfg.Notes.ByTags(ctx, want, maxTagged) })
+		logErrs("notizen", map[string]error{"notes": err, "tags": terr})
+		if terr == nil {
+			b.WriteString(tagNav(counts, want))
+		}
+		switch {
+		case err != nil:
 			b.WriteString("<p class=k>" + saysNoNotes + "</p>")
-		} else {
+		case len(want) > 0:
+			c := cards.Card{Title: "Notizen mit #" + strings.Join(want, " #")}
+			for _, n := range tagged {
+				c.AddLink(summary(n.Title), entryDetail(n, now, loc), cards.NotePage(n.Name))
+			}
+			if c.Empty() {
+				c.Add("Keine Notiz trägt diese Tags.", "")
+			}
+			b.WriteString(c.HTML())
+		default:
 			c := cards.Card{Title: "Zuletzt geändert"}
 			for _, n := range recent {
-				c.AddLink(summary(n.Title), "geändert "+dayWord(n.Changed, now, loc)+" "+n.Changed.In(loc).Format("15:04"), cards.NotePage(n.Name))
+				c.AddLink(summary(n.Title), entryDetail(n, now, loc), cards.NotePage(n.Name))
 			}
 			if c.Empty() {
 				c.Add("Noch keine Notizen", "")
@@ -209,7 +226,9 @@ func notePage(w http.ResponseWriter, r *http.Request, cfg StartConfig, ref strin
 	if said := noteSaid[r.URL.Query().Get("gesagt")]; said != "" {
 		b.WriteString("<div class=gut role=status><span class=punkt></span><p>" + html.EscapeString(said) + "</p></div>")
 	}
-	for _, p := range paragraphs(n.Text) {
+	b.WriteString(kopfLine(n.Kopf))
+	_, body := notes.SplitKopf(n.Text)
+	for _, p := range paragraphs(body) {
 		b.WriteString("<p class=notiz>" + html.EscapeString(p) + "</p>")
 	}
 	if n.Truncated {
@@ -283,13 +302,16 @@ var noteSaid = map[string]string{"angelegt": "Notiz angelegt.", "gespeichert": "
 // noteStyle is the note forms' look: a roomy field, phone first.
 const noteStyle = `<style>.notizform label{display:block;font-size:.85rem;color:var(--muted);margin:12px 0 6px}
 .notizform input[type=text],.notizform textarea{width:100%;font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--edge);border-radius:12px;padding:10px 14px}
-.notizform input[type=text]{min-height:44px}.notizform button:disabled{opacity:.6}.notizform textarea{min-height:12rem;resize:vertical;line-height:1.45}.notizform button{margin:12px 0 0;min-height:44px}
+.notizform input[type=text],.notizform select{min-height:44px}.notizform select{width:100%;font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--edge);border-radius:12px;padding:0 10px}
+.tagwahl{border:0;padding:0;margin:12px 0 0;display:flex;flex-wrap:wrap;gap:8px}.tagwahl legend{font-size:.85rem;color:var(--muted);margin-bottom:6px}.tagwahl .tag{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 14px;border:1px solid var(--edge);border-radius:999px;margin:0;color:var(--ink)}
+.tagfilter{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 0}.tagfilter a{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 14px;border-radius:999px;background:var(--card);border:1px solid var(--edge);color:var(--ink);text-decoration:none}
+.tagfilter a[aria-current]{border-color:var(--accent);color:var(--accent);font-weight:600}.kopf a{text-decoration:none}.notizform button:disabled{opacity:.6}.notizform textarea{min-height:12rem;resize:vertical;line-height:1.45}.notizform button{margin:12px 0 0;min-height:44px}
 details.neu{margin:16px 0}details.neu summary{cursor:pointer;font-weight:600;min-height:44px;display:flex;align-items:center;color:var(--accent)}
 .wege{display:flex;gap:16px;align-items:center;flex-wrap:wrap}.wege .knopf{display:inline-flex;align-items:center;min-height:44px;padding:0 18px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-weight:600;text-decoration:none}
 .vorher{white-space:pre-wrap;border:1px solid var(--edge);border-radius:12px;padding:10px 14px;background:var(--card);font-size:.9rem;max-height:20rem;overflow:auto}</style>`
 
 // newNoteForm is „Neue Notiz“, folded unless asked for or after a problem.
-func newNoteForm(title, text string, open bool) string {
+func newNoteForm(title, text, art string, tags []string, open bool) string {
 	o := ""
 	if open {
 		o = " open"
@@ -297,6 +319,7 @@ func newNoteForm(title, text string, open bool) string {
 	return `<details class=neu` + o + `><summary>Neue Notiz</summary><form class=notizform method=post action=/notizen>` +
 		`<label for=titel>Titel</label><input id=titel type=text name=titel required maxlength=200 value="` + html.EscapeString(title) + `">` +
 		`<label for=text>Text</label><textarea id=text name=text>` + html.EscapeString(text) + `</textarea>` +
+		kopfFields(art, tags) +
 		`<button data-laeuft="Legt an …">Anlegen</button></form></details>`
 }
 
@@ -316,6 +339,7 @@ func noteWrite(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
 	}
 	who := r.Header.Get("Remote-User")
 	text := r.PostForm.Get("text")
+	art, tags := kopfFrom(r.PostForm)
 	ref := strings.TrimLeft(strings.TrimPrefix(r.URL.Path, "/notizen"), "/")
 	if ref == "" {
 		title := oneLine(r.PostForm.Get("titel"))
@@ -329,14 +353,14 @@ func noteWrite(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
 		var name string
 		var err error
 		if problem == "" {
-			if name, err = cfg.Notes.Create(title, text); err != nil {
+			if name, err = cfg.Notes.CreateWith(title, text, notes.Kopf{}.Set(art, tags)); err != nil {
 				log.Printf("haus: notizen: new %q by %s: %v", title, who, err)
 				problem = saysNoteNotSaved
 			}
 		}
 		if problem != "" {
 			b := familyHead(r, cfg, "Notizen", "Notizen")
-			b.WriteString(noteStyle + "<h1>Notizen</h1><div class=achtung role=alert><p>" + html.EscapeString(problem) + "</p></div>" + newNoteForm(title, text, true))
+			b.WriteString(noteStyle + "<h1>Notizen</h1><div class=achtung role=alert><p>" + html.EscapeString(problem) + "</p></div>" + newNoteForm(title, text, art, tags, true))
 			writePage(w, http.StatusBadRequest, b)
 			return
 		}
@@ -353,12 +377,22 @@ func noteWrite(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
 		noteEdit(w, r, cfg, ref, http.StatusBadRequest, saysNoteTooLong, text)
 		return
 	}
+	var was notes.Note
+	var rerr error
+	fetch(r, func(ctx context.Context) { was, rerr = cfg.Notes.Read(ctx, ref) })
+	if rerr != nil && !errors.Is(rerr, notes.ErrNotFound) && !errors.Is(rerr, notes.ErrOutside) && !errors.Is(rerr, notes.ErrHidden) {
+		log.Printf("haus: notizen: %s by %s: %v", ref, who, rerr)
+		noteEdit(w, r, cfg, ref, http.StatusOK, saysNoteNotSaved, text)
+		return
+	}
+	body := text
+	text = was.Kopf.Set(art, tags).With(body) // the head from the fields, its other lines kept
 	switch err := cfg.Notes.Update(ref, text, time.Unix(0, ns)); {
 	case err == nil:
 		log.Printf("haus: notizen: %s gespeichert by %s", ref, who)
 		http.Redirect(w, r, cards.NotePage(ref)+"?gesagt=gespeichert", http.StatusSeeOther)
 	case errors.Is(err, notes.ErrChanged):
-		noteEdit(w, r, cfg, ref, http.StatusConflict, saysNoteChanged, text)
+		noteEdit(w, r, cfg, ref, http.StatusConflict, saysNoteChanged, body)
 	case errors.Is(err, notes.ErrNotFound), errors.Is(err, notes.ErrOutside), errors.Is(err, notes.ErrHidden):
 		missing{http.StatusNotFound, "Diese Notiz gibt es nicht.", "Notizen", "/notizen", "Alle Notizen"}.write(w, r, cfg)
 	default:
@@ -390,7 +424,7 @@ func noteEdit(w http.ResponseWriter, r *http.Request, cfg StartConfig, ref strin
 	title := summary(n.Title)
 	b := familyHead(r, cfg, title, "Notizen")
 	b.WriteString(noteStyle + "<h1>" + html.EscapeString(title) + " bearbeiten</h1>")
-	text := n.Text
+	k, text := notes.SplitKopf(n.Text)
 	if problem != "" {
 		b.WriteString("<div class=achtung role=alert><p>" + html.EscapeString(problem) + "</p></div>")
 		if code == http.StatusConflict {
@@ -401,7 +435,129 @@ func noteEdit(w http.ResponseWriter, r *http.Request, cfg StartConfig, ref strin
 	b.WriteString(`<form class=notizform method=post action="` + html.EscapeString(cards.NotePage(n.Name)) + `">` +
 		`<input type=hidden name=stand value=` + strconv.FormatInt(n.Changed.UnixNano(), 10) + `>` +
 		`<label for=text>Text (die erste Zeile „# …“ ist der Titel)</label><textarea id=text name=text>` + html.EscapeString(text) + `</textarea>` +
+		kopfFields(k.Art, k.Tags) +
 		`<button data-laeuft="Speichert …">Speichern</button></form>` +
 		`<p><a href="` + html.EscapeString(cards.NotePage(n.Name)) + `">Abbrechen</a></p>`)
 	writePage(w, code, b)
+}
+
+// maxTagged is how many notes a tag filter lists.
+const maxTagged = 50
+
+// kopfFrom reads a form's kind (art) and tags: the offered ones ticked
+// (tag) and the others typed, comma-separated (tags).
+func kopfFrom(f url.Values) (string, []string) {
+	tags := append([]string{}, f["tag"]...)
+	tags = append(tags, strings.Split(f.Get("tags"), ",")...)
+	return f.Get("art"), notes.Tags(tags)
+}
+
+// kopfFields are a note's kind and tags in a form: the kinds to choose,
+// the offered tags to tick, the others to type.
+func kopfFields(art string, tags []string) string {
+	var b strings.Builder
+	b.WriteString(`<label for=art>Art</label><select id=art name=art>`)
+	for _, a := range notes.Arten {
+		sel := ""
+		if a.Key == art || art == "" && a.Key == "notiz" {
+			sel = " selected"
+		}
+		b.WriteString(`<option value=` + a.Key + sel + `>` + a.Name + `</option>`)
+	}
+	b.WriteString(`</select><fieldset class=tagwahl><legend>Tags</legend>`)
+	has := map[string]bool{}
+	for _, t := range tags {
+		has[t] = true
+	}
+	offered := map[string]bool{}
+	for _, t := range notes.Vorschlaege {
+		offered[t] = true
+		chk := ""
+		if has[t] {
+			chk = " checked"
+		}
+		b.WriteString(`<label class=tag><input type=checkbox name=tag value=` + t + chk + `> #` + t + `</label>`)
+	}
+	var other []string
+	for _, t := range tags {
+		if !offered[t] {
+			other = append(other, t)
+		}
+	}
+	b.WriteString(`</fieldset><label for=tags>Weitere Tags, mit Komma getrennt</label><input id=tags type=text name=tags autocomplete=off value="` +
+		html.EscapeString(strings.Join(other, ", ")) + `" placeholder="z. B. vegetarisch, sommer-2027">`)
+	return b.String()
+}
+
+// tagNav is the tags as a filter: each with how many notes carry it, a tap
+// adds it to the filter or takes it out again.
+func tagNav(counts []notes.TagCount, want []string) string {
+	if len(counts) == 0 {
+		return ""
+	}
+	on := map[string]bool{}
+	for _, t := range want {
+		on[t] = true
+	}
+	var b strings.Builder
+	b.WriteString(`<nav class=tagfilter aria-label="Nach Tags filtern">`)
+	for _, c := range counts {
+		q := url.Values{}
+		for _, t := range want {
+			if t != c.Tag {
+				q.Add("tag", t)
+			}
+		}
+		if !on[c.Tag] {
+			q.Add("tag", c.Tag)
+		}
+		href := "/notizen"
+		if len(q) > 0 {
+			href += "?" + q.Encode()
+		}
+		cur := ""
+		if on[c.Tag] {
+			cur = " aria-current=true"
+		}
+		b.WriteString(`<a href="` + html.EscapeString(href) + `"` + cur + `>#` + html.EscapeString(c.Tag) + ` <span class=k>` + strconv.Itoa(c.N) + `</span></a>`)
+	}
+	if len(want) > 0 {
+		b.WriteString(`<a href=/notizen class=alle>alle</a>`)
+	}
+	b.WriteString(`</nav>`)
+	return b.String()
+}
+
+// entryDetail is a listed note's kind, tags and when it changed.
+func entryDetail(n notes.Entry, now time.Time, loc *time.Location) string {
+	var parts []string
+	if n.Kopf.Art != "" {
+		parts = append(parts, notes.ArtName(n.Kopf.Art))
+	}
+	if len(n.Kopf.Tags) > 0 {
+		parts = append(parts, "#"+strings.Join(n.Kopf.Tags, " #"))
+	}
+	parts = append(parts, "geändert "+dayWord(n.Changed, now, loc)+" "+n.Changed.In(loc).Format("15:04"))
+	return strings.Join(parts, " · ")
+}
+
+// kopfLine is a note's kind and tags under its title, each tag leading to
+// the notes that carry it, and where it came from.
+func kopfLine(k notes.Kopf) string {
+	if k.Art == "" && len(k.Tags) == 0 && k.Quelle == "" {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString(`<p class="k kopf">`)
+	if k.Art != "" {
+		b.WriteString(html.EscapeString(notes.ArtName(k.Art)))
+	}
+	for _, t := range k.Tags {
+		b.WriteString(` <a href="/notizen?tag=` + url.QueryEscape(t) + `">#` + html.EscapeString(t) + `</a>`)
+	}
+	if u, err := url.Parse(k.Quelle); err == nil && (u.Scheme == "https" || u.Scheme == "http") && u.Host != "" {
+		b.WriteString(` · <a href="` + html.EscapeString(k.Quelle) + `" rel="noopener noreferrer" target=_blank>Quelle: ` + html.EscapeString(u.Host) + `</a>`)
+	}
+	b.WriteString(`</p>`)
+	return b.String()
 }

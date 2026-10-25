@@ -74,6 +74,23 @@ test('a note is written and changed', async ({ page }) => {
   await expect(page.getByText('im Keller links')).toBeVisible();
 });
 
+test('a note gets a kind and tags and is found by its tag', async ({ page }) => {
+  await page.goto('/notizen');
+  await page.locator('summary', { hasText: 'Neue Notiz' }).click();
+  await page.getByLabel('Titel').fill('Lasagne');
+  await page.getByLabel('Text', { exact: true }).fill('Nudeln, Tomaten');
+  await page.getByLabel('Art').selectOption('rezept');
+  await page.getByLabel('#kochen').check();
+  await page.getByLabel('Weitere Tags, mit Komma getrennt').fill('italienisch');
+  await page.getByRole('button', { name: 'Anlegen' }).click();
+  await expect(page.getByRole('status')).toContainText('Notiz angelegt.');
+  await expect(page.locator('.kopf')).toContainText('Rezept');
+  await page.locator('.kopf a', { hasText: '#italienisch' }).click();
+  await expect(page).toHaveURL(/tag=italienisch/);
+  await expect(page.getByRole('link', { name: 'Lasagne' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Einkaufsliste' })).toHaveCount(0);
+});
+
 test('music goes up in pieces and arrives whole', async ({ page, request }) => {
   await page.goto('/musik');
   const big = Buffer.alloc(9 * 1024 * 1024, 7); // two pieces
@@ -101,7 +118,7 @@ test('a form in a card stacks its fields on a phone', async ({ page }) => {
 // screen, a field to type in has room, a button is big enough for a
 // finger, and no text runs out of its box.
 const PAGES = ['/start', '/raeume', '/raeume/light.kueche', '/medien', '/energie', '/kalender', '/kalender/verwalten',
-  '/notizen', '/notizen/einkaufsliste.md', '/notizen/einkaufsliste.md?bearbeiten=1', '/mehr', '/musik'];
+  '/notizen', '/notizen?tag=kochen', '/notizen/einkaufsliste.md', '/notizen/einkaufsliste.md?bearbeiten=1', '/mehr', '/musik'];
 for (const path of PAGES) {
   test(`layout of ${path}`, async ({ page }) => {
     await page.goto(path);
