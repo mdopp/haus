@@ -1202,7 +1202,7 @@ func notizAusLink(ctx context.Context, cfg Config, n *notes.Dir, a map[string]an
 	}
 	out := got.Kurz
 	if pub := strings.TrimRight(cfg.PublicURL, "/"); pub != "" {
-		out += "\nIn Haus: " + pub + "/notizen/" + url.PathEscape(got.Name)
+		out += "\nIn Haus: " + pub + cards.NotePage(got.Name)
 	}
 	return out, nil
 }
