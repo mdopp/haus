@@ -237,6 +237,9 @@ func notePage(w http.ResponseWriter, r *http.Request, cfg StartConfig, ref strin
 		b.WriteString("<p class=k>Die Notiz ist länger; hier steht ihr Anfang. Bearbeiten geht bei ihr nur über das Netzlaufwerk.</p>")
 	}
 	b.WriteString("<p class=wege>")
+	if n.Kopf.Art == "rezept" && cfg.Einkauf != nil { // haus#118
+		b.WriteString(`<a class=knopf href="` + html.EscapeString(RezeptAufDieListe(n.Name)) + `">Auf die Einkaufsliste</a> `)
+	}
 	if !n.Truncated {
 		b.WriteString(`<a class=knopf href="` + html.EscapeString(cards.NotePage(n.Name)) + `?bearbeiten=1">Bearbeiten</a> `)
 	}

@@ -1,8 +1,10 @@
 package haushalt
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/mdopp/haus/internal/einkauf"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -1343,5 +1345,40 @@ func TestPodcastAbonnieren(t *testing.T) {
 	}
 	if mine, _ := svc.Meine("anna"); len(mine) != 1 {
 		t.Fatalf("%v", mine)
+	}
+}
+
+// haus#118: "Lasagne und Curry für 4 auf die Einkaufsliste", "Milch auf
+// die Einkaufsliste" — the same thing added up, the recipe as its origin;
+// a recipe not kept said so; the list read back.
+func TestEinkaufsliste(t *testing.T) {
+	dav := davfake.New("haus", "pw")
+	defer dav.Close()
+	l := einkauf.Open(&caldav.Client{URL: dav.URL, User: "haus", Password: "pw"})
+	if err := l.Ensure(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "lasagne.md"), []byte("---\nart: rezept\n---\n# Lasagne\n\n*Für 4 Portionen*\n\n## Zutaten\n\n- 2 Zwiebeln\n- 200 g Mehl\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, "curry.md"), []byte("---\nart: rezept\n---\n# Rotes Curry\n\n*Für 2 Portionen*\n\n## Zutaten\n\n- 1 Zwiebel\n"), 0o644)
+	nd, err := notes.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := Handler(Config{Token: tok, Loc: berlin(t), Einkauf: l, Notes: nd})
+	text, isErr := call(t, h, "einkaufsliste_dazu", map[string]any{"rezepte": "Lasagne und das Curry", "portionen": "4", "dinge": "Milch"})
+	if isErr || !strings.HasPrefix(text, "Auf der Einkaufsliste: 3 neu, 0 dazugezählt. Aus den Rezepten: Lasagne, Rotes Curry.") || !strings.Contains(text, "- 4 Zwiebeln") {
+		t.Fatalf("%q", text)
+	}
+	text, isErr = call(t, h, "einkaufsliste_dazu", map[string]any{"dinge": "1 l Milch", "rezepte": "Pizza"})
+	if isErr || !strings.Contains(text, "0 neu, 1 dazugezählt") || !strings.Contains(text, "Nicht gefunden: Pizza") {
+		t.Fatalf("%q", text)
+	}
+	if text, isErr = call(t, h, "einkaufsliste_dazu", map[string]any{"rezepte": "Pizza"}); !isErr || !strings.Contains(text, "Kein gemerktes Rezept heißt „Pizza“") {
+		t.Errorf("only a missing recipe: %q", text)
+	}
+	text, _ = call(t, h, "einkaufsliste", map[string]any{})
+	if text != "Auf der Einkaufsliste:\n- 1 l Milch\n- 4 Zwiebeln (Lasagne, Rotes Curry)\n- 200 g Mehl (Lasagne)\n" {
+		t.Errorf("%q", text)
 	}
 }

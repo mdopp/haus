@@ -68,6 +68,7 @@ var tabs = []tab{
 // pages (owner 2026-10-24): the household's days, memory and papers.
 var haushaltPages = []tab{
 	{"Kalender", "/kalender", ""},
+	{"Einkauf", EinkaufPath, ""},
 	{"Notizen", "/notizen", ""},
 	{"Dokumente", DokumentePath, ""},
 }
@@ -93,7 +94,7 @@ func tabOf(page string) string {
 	switch page {
 	case "Räume", "Medien":
 		return "Geräte"
-	case "Kalender", "Notizen", "Dokumente":
+	case "Kalender", "Einkauf", "Notizen", "Dokumente":
 		return "Haushalt"
 	}
 	for _, m := range mehr {
@@ -106,7 +107,7 @@ func tabOf(page string) string {
 
 // shows says which entries this box and this person have.
 func shows(r *http.Request, cfg StartConfig) map[string]bool {
-	return map[string]bool{"Start": true, "Geräte": cfg.HA != nil, "Haushalt": cfg.Calendar != nil || cfg.Notes != nil || cfg.hasDocs(), "Mehr": true,
+	return map[string]bool{"Start": true, "Geräte": cfg.HA != nil, "Haushalt": cfg.Calendar != nil || cfg.Einkauf != nil || cfg.Notes != nil || cfg.hasDocs(), "Mehr": true, "Einkauf": cfg.Einkauf != nil,
 		"Energie": cfg.HA != nil, "Kalender": cfg.Calendar != nil, "Notizen": cfg.Notes != nil, "Dokumente": cfg.hasDocs(),
 		"Apps einrichten": cfg.Laib != nil || cfg.Samba != nil, "Musik hinzufügen": cfg.MusicInbox != "", "Podcasts": cfg.Podcasts != nil,
 		"Netzlaufwerk": cfg.Samba != nil && r.Header.Get("Remote-User") != "", "Box": isAdmin(r),
@@ -191,7 +192,7 @@ form[role=search]{display:flex;gap:8px;margin:16px 0 0}
 .antwort pre{margin:8px 0 0;padding:10px 12px;overflow-x:auto;background:var(--panel);border:1px solid var(--line);border-radius:10px;font:.8rem/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;overflow-wrap:normal}.notiz{white-space:pre-wrap;overflow-wrap:anywhere}
 .achtung{margin:16px 0 0;padding:12px 14px;background:var(--danger-soft);border:1px solid var(--danger);border-radius:14px}.achtung p{margin:0}.achtung p+p{margin-top:4px;color:var(--muted)}
 .achtung p:first-child::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--danger);margin-right:8px;vertical-align:1px}
-.achtung.selbst{background:var(--warn-soft);border-color:var(--warn)}.achtung.selbst p:first-child::before{background:var(--warn)}
+div.gut{display:flex;gap:8px;align-items:flex-start;margin:16px 0 0;padding:12px 14px;border:1px solid var(--ok);border-radius:14px}div.gut p{margin:0}.achtung.selbst{background:var(--warn-soft);border-color:var(--warn)}.achtung.selbst p:first-child::before{background:var(--warn)}
 .ruhig{display:flex;gap:8px;align-items:flex-start;margin:26px 2px 0;color:var(--muted);font-size:.8rem}.punkt{width:8px;height:8px;margin-top:.45em;border-radius:50%;background:var(--ok);flex:none}.punkt.grau{background:var(--faint)}
 .weiter-in{margin:18px 2px 0;font-size:.9rem}.weiter-in a{font-weight:600;text-decoration:none}.weiter-in a::after{content:" ↗"}.weiter-in .k{display:block;font-size:.8rem;margin-top:2px}
 summary{padding:10px 0;cursor:pointer}.stern{margin:20px 0 0}.stern p{margin:6px 2px 0;font-size:.85rem}

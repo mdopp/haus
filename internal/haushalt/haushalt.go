@@ -18,6 +18,7 @@ import (
 	"os"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -25,6 +26,7 @@ import (
 
 	"github.com/mdopp/haus/internal/caldav"
 	"github.com/mdopp/haus/internal/cards"
+	"github.com/mdopp/haus/internal/einkauf"
 	"github.com/mdopp/haus/internal/judge"
 	"github.com/mdopp/haus/internal/library"
 	"github.com/mdopp/haus/internal/mcpserver"
@@ -41,6 +43,7 @@ type Config struct {
 	Calendar  *caldav.Client    // nil: no calendar or reminder tools
 	Fetcher   merken.Fetcher    // how notiz_aus_link fetches a page (haus#117); the tests' allows 127.0.0.1
 	Podcasts  *podcasts.Service // the family's podcasts (haus#123); nil: no podcast tool
+	Einkauf   *einkauf.Liste    // the household's shopping list (haus#118); nil: no list tools
 	Contacts  *caldav.Client    // nil: no contact tools (the same Radicale account)
 	Notes     *notes.Dir        // nil: no note tools
 	Library   *qmd.Client       // the memory library's search (haus#13); nil, or no Notes: no notizen_finden
@@ -333,6 +336,45 @@ func Tools(cfg Config) []mcpserver.Tool {
 				return res.Satz, nil
 			},
 		})
+	}
+	if l := cfg.Einkauf; l != nil {
+		out = append(out,
+			mcpserver.Tool{
+				Name: "einkaufsliste_dazu",
+				Description: "Schreibt auf die gemeinsame Einkaufsliste des Haushalts: einzelne Dinge („Milch, 500 g Mehl“) und/oder die Zutaten " +
+					"gemerkter Rezepte, auf eine Zahl Portionen umgerechnet („Lasagne und Curry für 4“: rezepte „Lasagne, Curry“, portionen „4“). " +
+					"Gleiches wird zusammengezählt. Sag danach kurz, was jetzt auf der Liste steht.",
+				Schema: obj(map[string]any{"dinge": str("Was auf die Liste soll, durch Komma getrennt, mit Menge wenn gesagt; leer, wenn nur Rezepte"),
+					"rezepte":   str("Namen gemerkter Rezepte, durch Komma getrennt; leer, wenn keine"),
+					"portionen": str("Für wie viele Portionen die Rezepte gerechnet werden, als Zahl; leer: wie im Rezept")}),
+				Call: func(ctx context.Context, a map[string]any) (string, error) { return einkaufDazu(ctx, l, cfg.Notes, a) },
+			},
+			mcpserver.Tool{
+				Name:        "einkaufsliste",
+				Description: "Liest die gemeinsame Einkaufsliste des Haushalts: was noch fehlt, und wofür (welches Rezept).",
+				Schema:      obj(map[string]any{}),
+				Call: func(ctx context.Context, a map[string]any) (string, error) {
+					items, err := l.Lesen(ctx)
+					if err != nil {
+						return "", err
+					}
+					var b strings.Builder
+					for _, it := range items {
+						if it.Done {
+							continue
+						}
+						b.WriteString("- " + it.Summary)
+						if it.Herkunft != "" {
+							b.WriteString(" (" + it.Herkunft + ")")
+						}
+						b.WriteString("\n")
+					}
+					if b.Len() == 0 {
+						return "Die Einkaufsliste ist leer.", nil
+					}
+					return "Auf der Einkaufsliste:\n" + b.String(), nil
+				},
+			})
 	}
 	cc := cfg.PhoneCountry
 	if cc == "" {
@@ -1163,4 +1205,62 @@ func notizAusLink(ctx context.Context, cfg Config, n *notes.Dir, a map[string]an
 		out += "\nIn Haus: " + pub + "/notizen/" + url.PathEscape(got.Name)
 	}
 	return out, nil
+}
+
+// einkaufDazu puts things and recipes' ingredients on the shopping list
+// (haus#118) and says what it did, a recipe it did not find too.
+func einkaufDazu(ctx context.Context, l *einkauf.Liste, d *notes.Dir, a map[string]any) (string, error) {
+	var zs []einkauf.Zeile
+	for _, s := range strings.FieldsFunc(mcpserver.Str(a, "dinge"), func(r rune) bool { return r == ',' || r == '\n' || r == ';' }) {
+		if p := einkauf.Parse(s); p.Ding != "" {
+			zs = append(zs, einkauf.Zeile{Posten: p})
+		}
+	}
+	var names, missing []string
+	for _, s := range strings.FieldsFunc(mcpserver.Str(a, "rezepte"), func(r rune) bool { return r == ',' || r == ';' }) {
+		for _, n := range strings.Split(s, " und ") {
+			if n = strings.TrimSpace(n); n != "" {
+				names = append(names, n)
+			}
+		}
+	}
+	var found []string
+	if len(names) > 0 {
+		if d == nil {
+			return "", errors.New("Rezepte gibt es hier nicht: Die Notizen sind nicht eingerichtet.")
+		}
+		portionen, _ := strconv.Atoi(strings.Fields(mcpserver.Str(a, "portionen") + " 0")[0])
+		rs, miss, err := einkauf.Finden(ctx, d, names)
+		if err != nil {
+			return "", err
+		}
+		missing = miss
+		for _, r := range rs {
+			found = append(found, r.Titel)
+		}
+		zs = append(zs, einkauf.Fuer(rs, portionen)...)
+	}
+	if len(zs) == 0 {
+		if len(missing) > 0 {
+			return "", fmt.Errorf("Kein gemerktes Rezept heißt „%s“. Ein Rezept merkt man sich, indem man mir seinen Link schickt.", strings.Join(missing, "“, „"))
+		}
+		return "", errors.New("Nichts gesagt, was auf die Liste soll.")
+	}
+	res, err := l.Dazu(ctx, zs)
+	if err != nil {
+		return "", err
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "Auf der Einkaufsliste: %d neu, %d dazugezählt.", res.Neu, res.Addiert)
+	if len(found) > 0 {
+		b.WriteString(" Aus den Rezepten: " + strings.Join(found, ", ") + ".")
+	}
+	if len(missing) > 0 {
+		b.WriteString(" Nicht gefunden: " + strings.Join(missing, ", ") + " (kein gemerktes Rezept dieses Namens).")
+	}
+	b.WriteString("\nGeschrieben:")
+	for _, z := range einkauf.Merge(zs) {
+		b.WriteString("\n- " + z.Text())
+	}
+	return b.String(), nil
 }

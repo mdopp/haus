@@ -11,6 +11,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"log"
@@ -26,6 +27,7 @@ import (
 	"github.com/mdopp/haus/internal/caldav"
 	"github.com/mdopp/haus/internal/caldav/davfake"
 	"github.com/mdopp/haus/internal/cards"
+	"github.com/mdopp/haus/internal/einkauf"
 	"github.com/mdopp/haus/internal/favoriten"
 	"github.com/mdopp/haus/internal/ha"
 	"github.com/mdopp/haus/internal/ha/hafake"
@@ -75,6 +77,9 @@ func main() {
 	notesDir := filepath.Join(dir, "notes")
 	os.MkdirAll(notesDir, 0o755)
 	os.WriteFile(filepath.Join(notesDir, "einkaufsliste.md"), []byte("# Einkaufsliste\n\nMilch\nBrot\n"), 0o644)
+	os.MkdirAll(filepath.Join(notesDir, "rezepte"), 0o755)
+	os.WriteFile(filepath.Join(notesDir, "rezepte", "lasagne.md"), []byte("---\nart: rezept\ntags: [kochen]\n---\n# Lasagne\n\n*Für 4 Portionen · 1 Std.*\n\n"+
+		"## Zutaten\n\n- 500 g Hackfleisch\n- 2 Zwiebeln\n- 1 Dose Tomaten\n- 250 g Lasagneplatten\n\n## Zubereitung\n\n1. Soße kochen.\n2. Schichten und backen.\n"), 0o644)
 	nd, err := notes.Open(notesDir)
 	if err != nil {
 		log.Fatal(err)
@@ -90,8 +95,14 @@ func main() {
 	defer absFake.Close()
 	pods := podcasts.Open(&abs.Client{URL: absFake.URL, Token: "demo"}, dir)
 	pods.Fetch = merken.Fetcher{AllowPrivate: true}
-	cfg := pages.StartConfig{Podcasts: pods, HA: &ha.Client{URL: fake.URL, Token: "demo"}, Notes: nd, Favorites: favoriten.Open(dir), MusicInbox: inbox,
-		Calendar: &caldav.Client{URL: dav.URL, User: "haus", Password: "demo", Loc: time.Local}, Views: ansicht.Open(dir),
+	cal := &caldav.Client{URL: dav.URL, User: "haus", Password: "demo", Loc: time.Local}
+	list := einkauf.Open(cal)
+	if err := list.Ensure(context.Background()); err != nil {
+		log.Fatal(err)
+	}
+	live := &pages.Live{}
+	cfg := pages.StartConfig{Einkauf: list, Podcasts: pods, HA: &ha.Client{URL: fake.URL, Token: "demo"}, Notes: nd, Favorites: favoriten.Open(dir), MusicInbox: inbox,
+		Calendar: cal, Views: ansicht.Open(dir),
 		RadicalePublicURL: "https://caldav.example", Fetcher: merken.Fetcher{AllowPrivate: true}}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/start", pages.Start(cfg))
@@ -131,7 +142,11 @@ func main() {
 			`"recipeYield":"4","totalTime":"PT40M","recipeIngredient":["1 Hokkaido","1 l Gemüsebrühe","200 ml Kokosmilch"],` +
 			`"recipeInstructions":[{"@type":"HowToStep","text":"Kürbis würfeln."},{"@type":"HowToStep","text":"In Brühe kochen und pürieren."}]}</script></head><body></body></html>`))
 	})
-	mux.Handle(pages.LivePath, &pages.Live{HA: cfg.HA})
+	live.HA = cfg.HA
+	list.Changed = func() { live.Tell(pages.EinkaufLive) }
+	mux.Handle(pages.LivePath, live)
+	mux.HandleFunc(pages.EinkaufPath, pages.Einkauf(cfg))
+	mux.HandleFunc(pages.EinkaufRezeptePath, pages.Einkauf(cfg))
 	mux.HandleFunc("/demo/fehler", func(w http.ResponseWriter, r *http.Request) {
 		n, _ := strconv.Atoi(r.URL.Query().Get("status"))
 		fake.FailCalls(n)
