@@ -118,15 +118,29 @@ func Address(s string) (*url.URL, error) {
 
 // Fetch gets a page: its final address and its text as UTF-8.
 func (f Fetcher) Fetch(ctx context.Context, u *url.URL) (string, string, error) {
-	if err := checkURL(u); err != nil {
+	final, ct, raw, charset, err := f.Get(ctx, u)
+	if err != nil {
 		return "", "", err
+	}
+	if ct != "" && ct != "text/html" && ct != "application/xhtml+xml" {
+		return "", "", ErrNoPage
+	}
+	return final, toUTF8(raw, charset), nil
+}
+
+// Get fetches whatever is at an address (a page, a feed, an API's JSON),
+// by the same rules: its final address, its media type, its bytes and
+// the charset the server named.
+func (f Fetcher) Get(ctx context.Context, u *url.URL) (string, string, []byte, string, error) {
+	if err := checkURL(u); err != nil {
+		return "", "", nil, "", err
 	}
 	if !f.AllowPrivate {
 		if ip, err := netip.ParseAddr(u.Hostname()); err == nil && !public(ip) {
-			return "", "", ErrPrivate
+			return "", "", nil, "", ErrPrivate
 		}
 		if h := strings.ToLower(u.Hostname()); h == "localhost" || strings.HasSuffix(h, ".local") || strings.HasSuffix(h, ".internal") || strings.HasSuffix(h, ".box") || strings.HasSuffix(h, ".lan") || strings.HasSuffix(h, ".home.arpa") || !strings.Contains(h, ".") {
-			return "", "", ErrPrivate
+			return "", "", nil, "", ErrPrivate
 		}
 	}
 	wait := f.Wait
@@ -137,7 +151,7 @@ func (f Fetcher) Fetch(ctx context.Context, u *url.URL) (string, string, error) 
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
-		return "", "", ErrNoAddress
+		return "", "", nil, "", ErrNoAddress
 	}
 	req.Header.Set("User-Agent", userAgent)
 	req.Header.Set("Accept", "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5")
@@ -145,27 +159,24 @@ func (f Fetcher) Fetch(ctx context.Context, u *url.URL) (string, string, error) 
 	res, err := f.client().Do(req)
 	if err != nil {
 		if errors.Is(err, ErrPrivate) {
-			return "", "", ErrPrivate
+			return "", "", nil, "", ErrPrivate
 		}
 		var ue *url.Error
 		if errors.As(err, &ue) && errors.Is(ue.Err, ErrNoAddress) {
-			return "", "", ErrNoAddress
+			return "", "", nil, "", ErrNoAddress
 		}
-		return "", "", ErrNoAnswer
+		return "", "", nil, "", ErrNoAnswer
 	}
 	defer res.Body.Close()
 	if res.StatusCode >= 400 {
-		return "", "", fmt.Errorf("Die Seite sagt „%d“: %w", res.StatusCode, ErrNoPage)
+		return "", "", nil, "", fmt.Errorf("Die Seite sagt „%d“: %w", res.StatusCode, ErrNoPage)
 	}
 	ct, params, _ := mime.ParseMediaType(res.Header.Get("Content-Type"))
-	if ct != "" && ct != "text/html" && ct != "application/xhtml+xml" {
-		return "", "", ErrNoPage
-	}
 	raw, err := io.ReadAll(io.LimitReader(res.Body, maxPage))
 	if err != nil {
-		return "", "", ErrNoAnswer
+		return "", "", nil, "", ErrNoAnswer
 	}
-	return res.Request.URL.String(), toUTF8(raw, params["charset"]), nil
+	return res.Request.URL.String(), ct, raw, params["charset"], nil
 }
 
 // toUTF8 is a page's bytes as text: UTF-8 as it is, Latin-1 or

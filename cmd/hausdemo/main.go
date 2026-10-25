@@ -20,6 +20,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/mdopp/haus/internal/abs"
+	"github.com/mdopp/haus/internal/abs/absfake"
 	"github.com/mdopp/haus/internal/ansicht"
 	"github.com/mdopp/haus/internal/caldav"
 	"github.com/mdopp/haus/internal/caldav/davfake"
@@ -30,6 +32,7 @@ import (
 	"github.com/mdopp/haus/internal/merken"
 	"github.com/mdopp/haus/internal/notes"
 	"github.com/mdopp/haus/internal/pages"
+	"github.com/mdopp/haus/internal/podcasts"
 )
 
 func main() {
@@ -83,7 +86,11 @@ func main() {
 	defer dav.Close()
 	dav.AddCalendar("/haus/haushalt/", "Haushalt")
 	dav.AddPrincipal("anna")
-	cfg := pages.StartConfig{HA: &ha.Client{URL: fake.URL, Token: "demo"}, Notes: nd, Favorites: favoriten.Open(dir), MusicInbox: inbox,
+	absFake := absfake.New("demo")
+	defer absFake.Close()
+	pods := podcasts.Open(&abs.Client{URL: absFake.URL, Token: "demo"}, dir)
+	pods.Fetch = merken.Fetcher{AllowPrivate: true}
+	cfg := pages.StartConfig{Podcasts: pods, HA: &ha.Client{URL: fake.URL, Token: "demo"}, Notes: nd, Favorites: favoriten.Open(dir), MusicInbox: inbox,
 		Calendar: &caldav.Client{URL: dav.URL, User: "haus", Password: "demo", Loc: time.Local}, Views: ansicht.Open(dir),
 		RadicalePublicURL: "https://caldav.example", Fetcher: merken.Fetcher{AllowPrivate: true}}
 	mux := http.NewServeMux()
@@ -113,6 +120,11 @@ func main() {
 	mux.HandleFunc("/notizen", pages.Notizen(cfg))
 	mux.HandleFunc(cards.NotePages, pages.Notizen(cfg))
 	mux.HandleFunc("/mehr", pages.Mehr(cfg))
+	mux.HandleFunc(pages.PodcastsPath, pages.Podcasts(cfg))
+	mux.HandleFunc("/demo/feed.xml", func(w http.ResponseWriter, r *http.Request) { // a podcast's feed; the fake ABS knows it by this address
+		w.Header().Set("Content-Type", "application/rss+xml")
+		w.Write([]byte(`<?xml version="1.0"?><rss version="2.0"><channel><title>Demo-Podcast</title></channel></rss>`))
+	})
 	mux.HandleFunc("/demo/rezept", func(w http.ResponseWriter, r *http.Request) { // a recipe page to keep, as Chefkoch marks one up
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Write([]byte(`<html><head><title>Kürbissuppe</title><script type="application/ld+json">{"@type":"Recipe","name":"Kürbissuppe",` +
@@ -133,6 +145,7 @@ func main() {
 		r.Header.Set("Remote-Groups", "family,admins")
 		mux.ServeHTTP(w, r)
 	})
+	absFake.AddFeed("http://"+*addr+"/demo/feed.xml", "Demo-Podcast")
 	srv := &http.Server{Addr: *addr, Handler: anna, ReadHeaderTimeout: 5 * time.Second}
 	log.Printf("hausdemo: http://%s/start (fakes only, not for a box)", *addr)
 	log.Fatal(srv.ListenAndServe())

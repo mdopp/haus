@@ -31,6 +31,7 @@ import (
 	"github.com/mdopp/haus/internal/merken"
 	"github.com/mdopp/haus/internal/notes"
 	"github.com/mdopp/haus/internal/paperless"
+	"github.com/mdopp/haus/internal/podcasts"
 	"github.com/mdopp/haus/internal/qmd"
 )
 
@@ -39,6 +40,7 @@ type Config struct {
 	Token     string            // HAUS_HAUSHALT_TOKEN, the Bote's bearer
 	Calendar  *caldav.Client    // nil: no calendar or reminder tools
 	Fetcher   merken.Fetcher    // how notiz_aus_link fetches a page (haus#117); the tests' allows 127.0.0.1
+	Podcasts  *podcasts.Service // the family's podcasts (haus#123); nil: no podcast tool
 	Contacts  *caldav.Client    // nil: no contact tools (the same Radicale account)
 	Notes     *notes.Dir        // nil: no note tools
 	Library   *qmd.Client       // the memory library's search (haus#13); nil, or no Notes: no notizen_finden
@@ -315,6 +317,22 @@ func Tools(cfg Config) []mcpserver.Tool {
 				},
 			})
 		}
+	}
+	if pods := cfg.Podcasts; pods != nil {
+		out = append(out, mcpserver.Tool{
+			Name: "podcast_abonnieren",
+			Description: "Abonniert einen Podcast für die Person, die ihn schickt: ein Link von Apple Podcasts, der Website des Podcasts, die Feed-Adresse " +
+				"oder ein Spotify-Link (dann über den Namen). Die Box lädt immer die letzten 3 Folgen, und die Person bekommt bei jeder neuen Folge Bescheid. Sag danach kurz, was abonniert wurde.",
+			Schema: obj(map[string]any{"link": str("Der Link zum Podcast"),
+				"person": str("Wer den Podcast will: der Benutzername der Person, die schreibt")}, "link", "person"),
+			Call: func(ctx context.Context, a map[string]any) (string, error) {
+				res, err := pods.Abonnieren(ctx, mcpserver.Str(a, "person"), mcpserver.Str(a, "link"))
+				if err != nil {
+					return "", err
+				}
+				return res.Satz, nil
+			},
+		})
 	}
 	cc := cfg.PhoneCountry
 	if cc == "" {

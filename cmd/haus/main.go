@@ -15,6 +15,7 @@ import (
 	"time"
 	_ "time/tzdata" // the image is scratch: TZ needs the zone database inside the binary
 
+	"github.com/mdopp/haus/internal/abs"
 	"github.com/mdopp/haus/internal/ansicht"
 	"github.com/mdopp/haus/internal/bote"
 	"github.com/mdopp/haus/internal/caldav"
@@ -27,6 +28,7 @@ import (
 	"github.com/mdopp/haus/internal/napi"
 	"github.com/mdopp/haus/internal/pages"
 	"github.com/mdopp/haus/internal/persona"
+	"github.com/mdopp/haus/internal/podcasts"
 	"github.com/mdopp/haus/internal/samba"
 	"github.com/mdopp/haus/internal/schalter"
 	"github.com/mdopp/haus/internal/usage"
@@ -67,6 +69,7 @@ type site struct {
 	// haus#68: the Dokumente page's mail address, Paperless's public address and whether it is LAN-only
 	docsMail, paperlessPublic string
 	paperlessLAN              bool
+	podcasts                  *podcasts.Service // haus#123: the family's podcasts in Audiobookshelf; nil, no page
 }
 
 // routes is Haus's whole surface: /napi for the app, /mcp/haushalt for the
@@ -82,7 +85,7 @@ func routes(s site) http.Handler {
 	pagesMux := http.NewServeMux()
 	// the family's pages (haus#12): each card only from a backend that is set; a
 	// page whose backend is not set says what is missing (laib#418)
-	family := pages.StartConfig{Laib: s.ops, Witness: s.napi.Witness, LaibURL: s.laibURL, HA: s.napi.HA, Energy: s.napi.Energy, Calendar: s.hh.Calendar, Contacts: s.hh.Contacts,
+	family := pages.StartConfig{Podcasts: s.podcasts, Laib: s.ops, Witness: s.napi.Witness, LaibURL: s.laibURL, HA: s.napi.HA, Energy: s.napi.Energy, Calendar: s.hh.Calendar, Contacts: s.hh.Contacts,
 		Notes: s.hh.Notes, Library: s.hh.Library, Judge: s.hh.Judge, Docs: s.hh.Documents, Loc: s.hh.Loc, Favorites: s.favorites, Bote: s.bote,
 		Samba: s.samba, SambaHost: s.sambaHost, Usage: s.usage, PublicURL: s.publicURL, Welcome: s.welcome, STT: s.stt,
 		HAPublicURL: s.haPublic, Inverted: s.inverted, RadicalePublicURL: s.radicale, Views: s.views,
@@ -103,6 +106,9 @@ func routes(s site) http.Handler {
 	}
 	start := pages.Start(family) // one: the page and its box line share laib's status (haus#67)
 	pagesMux.HandleFunc("/start", start)
+	if s.podcasts != nil {
+		pagesMux.HandleFunc(pages.PodcastsPath, pages.Podcasts(family)) // haus#123
+	}
 	if family.HA != nil {
 		pagesMux.Handle(pages.LivePath, &pages.Live{HA: family.HA}) // the pages' push from Home Assistant
 	}
@@ -153,6 +159,39 @@ func routes(s site) http.Handler {
 // musicInboxMount is where laib's haus template mounts the music inbox
 // (laib#639); Haus takes it when HAUS_MUSIC_INBOX names none.
 const musicInboxMount = "/musik-eingang"
+
+// episodeEvery is how often Haus looks for new podcast episodes.
+const episodeEvery = 15 * time.Minute
+
+// tellNewEpisodes looks for new episodes every episodeEvery and tells each
+// to who subscribed, through Laib's tell (laib#676) — only once Laib has
+// the verb, so no episode is taken as told before anyone could be.
+func tellNewEpisodes(ctx context.Context, pods *podcasts.Service, l *laib.Client) {
+	t := time.NewTicker(episodeEvery)
+	defer t.Stop()
+	said := false
+	for {
+		if ok, _ := l.Takes(ctx, "tell", "person"); ok {
+			msgs, err := pods.Neue(ctx)
+			if err != nil {
+				log.Printf("haus: podcasts: looking for new episodes: %v", err)
+			}
+			for _, m := range msgs {
+				if err := l.Tell(ctx, m.Person, m.Text); err != nil {
+					log.Printf("haus: podcasts: telling %s: %v", m.Person, err)
+				}
+			}
+		} else if !said {
+			log.Printf("haus: podcasts: laib has no tell yet (laib#676): new episodes are not told")
+			said = true
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+	}
+}
 
 // ensureHaushalt makes the household's calendar and address book in
 // Radicale, trying again with a growing pause while Radicale does not
@@ -214,6 +253,11 @@ func main() {
 		log.Fatalf("haus: %v", err)
 	}
 	hh.Version = Version
+	var pods *podcasts.Service
+	if c := abs.FromEnv(); c != nil { // haus#123: HAUS_ABS_URL and HAUS_ABS_TOKEN from laib (laib#676)
+		pods = podcasts.Open(c, dataDir)
+		hh.Podcasts = pods
+	}
 	cfg.Haushalt = hh // haus#10: the tool widgets from the same backends; none set, 404
 	// haus#10: the camera capture into the share's Paperless consume folder; unset, 404
 	if cfg.UploadDir = os.Getenv("HAUS_UPLOAD_DIR"); cfg.UploadDir != "" {
@@ -246,6 +290,9 @@ func main() {
 	if hh.Calendar != nil { // the household's calendar and address book there from the start (owner 2026-10-24)
 		go ensureHaushalt(ctx, hh.Calendar)
 	}
+	if pods != nil && ops != nil {
+		go tellNewEpisodes(ctx, pods, ops) // haus#123: a new episode to who subscribed
+	}
 	counter := usage.FromEnv(os.Getenv)
 	var voice *usage.Voice
 	if counter != nil && cfg.HA != nil {
@@ -259,7 +306,7 @@ func main() {
 	go func() { counter.Run(counting, 5*time.Minute); close(flushed) }()
 	go voice.Run(ctx, time.Minute)
 	mux := routes(site{napi: cfg, hh: hh, store: store, ops: ops, proxySecret: proxySecret, laibURL: laibURL,
-		publicURL: os.Getenv("HAUS_PUBLIC_URL"), tickets: werkstatt.FromEnv(), favorites: favoriten.Open(dataDir), bote: b,
+		publicURL: os.Getenv("HAUS_PUBLIC_URL"), tickets: werkstatt.FromEnv(), favorites: favoriten.Open(dataDir), bote: b, podcasts: pods,
 		samba: samba.FromEnv(), sambaHost: os.Getenv("HAUS_SAMBA_HOST"),
 		usage: counter, voice: voice, welcome: true,
 		stt:      pages.STT{Provider: os.Getenv("HAUS_STT_PROVIDER"), Language: env("HAUS_STT_LANGUAGE", "de")},

@@ -588,6 +588,14 @@ func (c *Client) Note(ctx context.Context, kind, text string) error {
 	return err
 }
 
+// Tell sends one person a short message through Laib (laib#676: the
+// Bote's channel the person has, bote-notify): a new podcast episode for
+// who subscribed (haus#123). A Laib without the verb answers ErrNoTool.
+func (c *Client) Tell(ctx context.Context, person, text string) error {
+	_, err := c.CallTyped(ctx, "tell", map[string]any{"person": person, "text": text})
+	return err
+}
+
 // PersonSignal sets or changes a person's Signal number (laib#596): a
 // box.yml proposal the owner approves; number as E.164.
 func (c *Client) PersonSignal(ctx context.Context, user, number string) (Proposed, error) {

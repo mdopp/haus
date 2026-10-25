@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mdopp/haus/internal/abs"
+	"github.com/mdopp/haus/internal/abs/absfake"
 	"github.com/mdopp/haus/internal/caldav"
 	"github.com/mdopp/haus/internal/caldav/davfake"
 	"github.com/mdopp/haus/internal/judge"
@@ -21,6 +23,7 @@ import (
 	"github.com/mdopp/haus/internal/notes"
 	"github.com/mdopp/haus/internal/paperless"
 	"github.com/mdopp/haus/internal/paperless/paperlessfake"
+	"github.com/mdopp/haus/internal/podcasts"
 	"github.com/mdopp/haus/internal/qmd"
 	"github.com/mdopp/haus/internal/qmd/qmdfake"
 )
@@ -1317,5 +1320,28 @@ func TestNotizAusLink(t *testing.T) {
 	}
 	if text, _ := call(t, s.h, "notiz_aus_link", map[string]any{"link": site.URL + "/kuchen"}); !strings.Contains(text, "schon gemerkt") {
 		t.Fatalf("twice: %q", text)
+	}
+}
+
+// haus#123: a podcast link sent to the Bote subscribes the person who
+// sent it; told what was subscribed.
+func TestPodcastAbonnieren(t *testing.T) {
+	fake := absfake.New("k")
+	defer fake.Close()
+	feeds := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/rss+xml")
+		w.Write([]byte(`<?xml version="1.0"?><rss><channel><title>x</title></channel></rss>`))
+	}))
+	defer feeds.Close()
+	fake.AddFeed(feeds.URL+"/lage", "Lage der Nation")
+	svc := podcasts.Open(&abs.Client{URL: fake.URL, Token: "k"}, t.TempDir())
+	svc.Fetch = merken.Fetcher{AllowPrivate: true}
+	h := Handler(Config{Token: tok, Loc: berlin(t), Podcasts: svc})
+	text, isErr := call(t, h, "podcast_abonnieren", map[string]any{"link": feeds.URL + "/lage", "person": "anna"})
+	if isErr || !strings.HasPrefix(text, "Abonniert: „Lage der Nation“.") {
+		t.Fatalf("%q", text)
+	}
+	if mine, _ := svc.Meine("anna"); len(mine) != 1 {
+		t.Fatalf("%v", mine)
 	}
 }
