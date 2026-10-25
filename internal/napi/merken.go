@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/mdopp/haus/internal/cards"
+	"github.com/mdopp/haus/internal/einkauf"
 	"github.com/mdopp/haus/internal/merken"
 )
 
@@ -71,6 +72,30 @@ func (c Config) merken(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), merkenWait)
 	defer cancel()
+	// a song or an album goes on the music wish list, not into a note
+	person := ""
+	if bearer, ok := bearerOf(r); ok && c.Whoami != nil {
+		person, _ = c.Whoami(bearer)
+	}
+	if g, ok, err := h.Wuensche.AusLink(ctx, h.Fetcher, link, person); ok {
+		if err != nil {
+			code := http.StatusBadGateway
+			if !errors.Is(err, merken.ErrNoAnswer) {
+				log.Printf("haus: napi musikwunsch: %v", err)
+				err = errors.New("Das ließ sich gerade nicht auf die Musik-Wunschliste schreiben. Später noch einmal teilen.")
+				code = http.StatusInternalServerError
+			}
+			answer(code, map[string]string{"error": err.Error()})
+			return
+		}
+		list := ""
+		if pub := strings.TrimRight(h.PublicURL, "/"); pub != "" {
+			list = pub + "/einkauf?liste=" + einkauf.MusikListe.ID()
+		}
+		log.Printf("haus: napi musikwunsch by %s", person)
+		answer(http.StatusOK, map[string]any{"titel": "", "art": "musik", "kurz": g.Satz, "schon": g.Schon || g.Steht, "teilweise": false, "notiz": list})
+		return
+	}
 	got, err := merken.Merken(ctx, h.Fetcher, h.Judge, h.Notes, link, hint)
 	if err != nil {
 		code := http.StatusBadRequest

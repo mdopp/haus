@@ -937,6 +937,22 @@ over `/live` (`haus.einkauf`) to the other open pages; a phone app's change
 shows within a minute. Joshua: `einkaufsliste_dazu(dinge, rezepte,
 portionen)` and `einkaufsliste`.
 
+## Musik-Wunschliste (owner 2026-10-25)
+
+A song or an album shared to Haus — the app's share target, *Aus Link
+merken* on Notizen, a link sent to Joshua (`notiz_aus_link`) — goes on the
+household's list *Musik* (`haus/liste-musik`, made at start) instead of
+into a note: "Künstler – Titel", its origin `von <person>, <link>`. A
+YouTube video counts when YouTube's oEmbed says it is a music video
+(Official Video/Audio, Lyric Video, a VEVO or "- Topic" channel, YouTube
+Music); Spotify tracks and albums by their page. Its lines are never read
+as amounts. On the list each open wish shows who wished it, shops that sell
+music as files (Bandcamp, Qobuz, 7digital) and the link to listen to.
+With Jellyfin (`HAUS_JELLYFIN_URL`, `HAUS_JELLYFIN_TOKEN`, laib#695) a song
+already in the music is "Hast du schon … auf dem Album …", and every 15
+minutes the open wishes are looked up: one that arrived is ticked off and
+its wisher told (`laib_tell`). Nothing is downloaded from YouTube.
+
 ## Podcasts (haus#123)
 
 `GET /podcasts`, under Mehr, with Audiobookshelf (`HAUS_ABS_URL`,

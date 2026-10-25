@@ -44,6 +44,7 @@ type Config struct {
 	Fetcher   merken.Fetcher    // how notiz_aus_link fetches a page (haus#117); the tests' allows 127.0.0.1
 	Podcasts  *podcasts.Service // the family's podcasts (haus#123); nil: no podcast tool
 	Einkauf   *einkauf.Liste    // the household's shopping list (haus#118); nil: no list tools
+	Wuensche  *einkauf.Wuensche // the music wish list (owner 2026-10-25); nil: a song link is a note
 	Contacts  *caldav.Client    // nil: no contact tools (the same Radicale account)
 	Notes     *notes.Dir        // nil: no note tools
 	Library   *qmd.Client       // the memory library's search (haus#13); nil, or no Notes: no notizen_finden
@@ -279,9 +280,11 @@ func Tools(cfg Config) []mcpserver.Tool {
 				Name: "notiz_aus_link",
 				Description: "Merkt sich eine Webseite als Notiz, wenn jemand einen Link schickt: ein Rezept mit Portionen, Zutaten und Zubereitung, " +
 					"eine Album-Rezension mit Band, Wertung und Kern, eine Reise mit Ort, Anbieter und Preis, sonst den Kern der Seite; der Link bleibt dabei, " +
-					"Art und Tags werden gesetzt. Einen Link merkt es sich nur einmal. Sag danach kurz, was gemerkt wurde.",
+					"Art und Tags werden gesetzt. Einen Link merkt es sich nur einmal. Ein Lied oder Album (YouTube-Musikvideo, Spotify) kommt stattdessen auf die " +
+					"Musik-Wunschliste des Haushalts, außer es ist schon in der eigenen Musik. Sag danach kurz, was geschah.",
 				Schema: obj(map[string]any{"link": str("Die Adresse der Seite, https://…"),
-					"hinweis": str("Was die Person dazu schrieb; #wörter darin werden Tags")}, "link"),
+					"hinweis": str("Was die Person dazu schrieb; #wörter darin werden Tags"),
+					"person":  str("Wer den Link schickt: der Benutzername der Person; für die Musik-Wunschliste")}, "link"),
 				Call: func(ctx context.Context, a map[string]any) (string, error) {
 					return notizAusLink(ctx, cfg, n, a)
 				},
@@ -1203,6 +1206,9 @@ func notizenMitTag(ctx context.Context, n *notes.Dir, a map[string]any) (string,
 // notizAusLink keeps a page someone sent as a note (haus#117) and says
 // what was kept, with the note's page in Haus.
 func notizAusLink(ctx context.Context, cfg Config, n *notes.Dir, a map[string]any) (string, error) {
+	if g, ok, err := cfg.Wuensche.AusLink(ctx, cfg.Fetcher, mcpserver.Str(a, "link"), mcpserver.Str(a, "person")); ok {
+		return g.Satz, err
+	}
 	got, err := merken.Merken(ctx, cfg.Fetcher, cfg.Judge, n, mcpserver.Str(a, "link"), mcpserver.Str(a, "hinweis"))
 	if err != nil {
 		return "", err

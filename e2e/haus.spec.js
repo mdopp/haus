@@ -204,7 +204,7 @@ test('a form in a card stacks its fields on a phone', async ({ page }) => {
 // finger, and no text runs out of its box.
 const PAGES = ['/start', '/raeume', '/raeume/light.kueche', '/medien', '/energie', '/kalender', '/kalender/verwalten',
   '/notizen', '/notizen?tag=kochen', '/notizen/einkaufsliste.md', '/notizen/einkaufsliste.md?bearbeiten=1', '/mehr', '/musik', '/podcasts',
-  '/einkauf', '/einkauf?liste=liste-baumarkt', '/einkauf/rezepte', '/einkauf/rezepte?n=rezepte%2Flasagne.md', '/notizen/rezepte/lasagne.md'];
+  '/einkauf', '/einkauf?liste=liste-baumarkt', '/einkauf?liste=liste-musik', '/einkauf/rezepte', '/einkauf/rezepte?n=rezepte%2Flasagne.md', '/notizen/rezepte/lasagne.md'];
 for (const path of PAGES) {
   test(`layout of ${path}`, async ({ page }) => {
     await page.goto(path);

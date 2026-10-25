@@ -14,6 +14,7 @@ import (
 	"github.com/mdopp/haus/internal/caldav"
 	"github.com/mdopp/haus/internal/caldav/davfake"
 	"github.com/mdopp/haus/internal/einkauf"
+	"github.com/mdopp/haus/internal/merken"
 	"github.com/mdopp/haus/internal/notes"
 )
 
@@ -271,4 +272,17 @@ func TestRezepteOnAChosenList(t *testing.T) {
 		`<input type=hidden name=liste value="liste-urlaub">`)
 	rec := post(t, Einkauf(cfg), EinkaufPath, url.Values{"tun": {"rezepte"}, "liste": {"liste-urlaub"}, "z": {"1 Zwiebel\tCurry"}}, "anna", nil)
 	mustContain(t, rec.Body.String(), "<h1>Urlaub</h1>", "<span class=was>1 Zwiebel<small>Curry</small>")
+}
+
+// the music wish list: who wished it, where to buy it as a file, the link
+// it came from; a song link on Notizen goes there, not into a note
+func TestMusikWunschliste(t *testing.T) {
+	l, _ := shoppingList(t)
+	w := &einkauf.Wuensche{Listen: l}
+	w.Wuenschen(context.Background(), merken.Lied{Kuenstler: "Wanda", Titel: "Salbei", Link: "https://youtube.com/watch?v=x"}, "anna")
+	cfg := StartConfig{Einkauf: l, Wuensche: w}
+	_, body, _ := familyPage(t, Einkauf, cfg, "GET", "/einkauf?liste=liste-musik", "family")
+	mustContain(t, body, "<h1>Musik</h1>", "<span class=was>Wanda – Salbei<small>gewünscht von anna</small>",
+		`<p class=kaufen>Kaufen: <a href="https://bandcamp.com/search?q=Wanda+Salbei" rel="noopener noreferrer" target=_blank>Bandcamp</a>`,
+		`<a href="https://youtube.com/watch?v=x" rel="noopener noreferrer" target=_blank>Anhören</a>`)
 }

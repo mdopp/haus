@@ -13,6 +13,7 @@ import (
 	"unicode"
 
 	"github.com/mdopp/haus/internal/cards"
+	"github.com/mdopp/haus/internal/einkauf"
 	"github.com/mdopp/haus/internal/library"
 	"github.com/mdopp/haus/internal/merken"
 	"github.com/mdopp/haus/internal/notes"
@@ -609,6 +610,21 @@ func merkenPost(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
 	link, hint := strings.TrimSpace(r.PostForm.Get("link")), oneLine(r.PostForm.Get("hinweis"))
 	ctx, cancel := context.WithTimeout(r.Context(), merkenWait)
 	defer cancel()
+	if g, ok, err := cfg.Wuensche.AusLink(ctx, cfg.Fetcher, link, r.Header.Get("Remote-User")); ok {
+		if err != nil {
+			log.Printf("haus: musikwunsch by %s: %v", r.Header.Get("Remote-User"), err)
+			say := saysNoteNotSaved
+			if errors.Is(err, merken.ErrNoAnswer) {
+				say = err.Error()
+			}
+			b := familyHead(r, cfg, "Notizen", "Notizen")
+			b.WriteString(noteStyle + "<h1>Notizen</h1>" + merkenForm(link, hint, say))
+			writePage(w, http.StatusBadRequest, b)
+			return
+		}
+		writeEinkauf(w, r, cfg, cfg.Einkauf.Andere(einkauf.MusikListe), g.Satz) // the wish list, saying what happened
+		return
+	}
 	got, err := merken.Merken(ctx, cfg.Fetcher, cfg.Judge, cfg.Notes, link, hint)
 	if err != nil {
 		say := err.Error()

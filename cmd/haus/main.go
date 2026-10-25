@@ -26,6 +26,7 @@ import (
 	"github.com/mdopp/haus/internal/favoriten"
 	"github.com/mdopp/haus/internal/ha"
 	"github.com/mdopp/haus/internal/haushalt"
+	"github.com/mdopp/haus/internal/jellyfin"
 	"github.com/mdopp/haus/internal/laib"
 	"github.com/mdopp/haus/internal/napi"
 	"github.com/mdopp/haus/internal/pages"
@@ -116,7 +117,7 @@ func routes(s site) http.Handler {
 	pagesMux.Handle(pages.LivePath, live)
 	if s.hh.Einkauf != nil { // haus#118: the list, ticked on one phone, fetched again on the others
 		s.hh.Einkauf.Changed = func(r caldav.ListRef) { live.Tell(pages.ListeLive(r)) }
-		family.Einkauf = s.hh.Einkauf
+		family.Einkauf, family.Wuensche = s.hh.Einkauf, s.hh.Wuensche
 		pagesMux.HandleFunc(pages.EinkaufPath, pages.Einkauf(family))
 		pagesMux.HandleFunc(pages.EinkaufRezeptePath, pages.Einkauf(family))
 	}
@@ -175,6 +176,38 @@ const episodeEvery = 15 * time.Minute
 // tellNewEpisodes looks for new episodes every episodeEvery and tells each
 // to who subscribed, through Laib's tell (laib#676) — only once Laib has
 // the verb, so no episode is taken as told before anyone could be.
+// tickWishes looks every wishEvery whether a wish on the music wish list
+// has arrived in the music, ticks it off and tells who wished it.
+func tickWishes(ctx context.Context, w *einkauf.Wuensche, l *laib.Client) {
+	t := time.NewTicker(wishEvery)
+	defer t.Stop()
+	for {
+		done, err := w.Pruefen(ctx)
+		if err != nil {
+			log.Printf("haus: musikwünsche: %v", err)
+		}
+		for _, d := range done {
+			log.Printf("haus: musikwunsch arrived for %q", d.Person)
+			if d.Person == "" {
+				continue
+			}
+			if ok, _ := l.Takes(ctx, "tell", "person"); ok {
+				if err := l.Tell(ctx, d.Person, d.Satz); err != nil {
+					log.Printf("haus: musikwunsch: telling %s: %v", d.Person, err)
+				}
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+	}
+}
+
+// wishEvery is how often the music is asked for the wishes.
+const wishEvery = 15 * time.Minute
+
 func tellNewEpisodes(ctx context.Context, pods *podcasts.Service, l *laib.Client) {
 	t := time.NewTicker(episodeEvery)
 	defer t.Stop()
@@ -209,7 +242,8 @@ func ensureHaushalt(ctx context.Context, c *caldav.Client) {
 	wait := 10 * time.Second
 	for {
 		tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		err := errors.Join(c.EnsureHaushalt(tctx), c.EnsureList(tctx, caldav.Einkauf, einkauf.Name)) // and the shopping list (haus#118)
+		err := errors.Join(c.EnsureHaushalt(tctx), c.EnsureList(tctx, caldav.Einkauf, einkauf.Name), // and the shopping list (haus#118)
+			c.EnsureList(tctx, einkauf.MusikListe, einkauf.MusikName)) // and the music wish list
 		cancel()
 		if err == nil {
 			log.Printf("haus: Haushalt: calendar, address book and shopping list are there")
@@ -268,7 +302,11 @@ func main() {
 		hh.Podcasts = pods
 	}
 	if hh.Calendar != nil {
-		hh.Einkauf = einkauf.Open(hh.Calendar) // haus#118: the household's shopping list, haus/einkauf
+		hh.Einkauf = einkauf.Open(hh.Calendar)              // haus#118: the household's shopping list, haus/einkauf
+		hh.Wuensche = &einkauf.Wuensche{Listen: hh.Einkauf} // a shared song goes on haus/liste-musik
+		if jf := jellyfin.FromEnv(); jf != nil {            // laib#695: "hast du schon", and arrived wishes ticked off
+			hh.Wuensche.Bib = jf
+		}
 	}
 	cfg.Haushalt = hh // haus#10: the tool widgets from the same backends; none set, 404
 	// haus#10: the camera capture into the share's Paperless consume folder; unset, 404
@@ -301,6 +339,9 @@ func main() {
 	defer stop()
 	if hh.Calendar != nil { // the household's calendar and address book there from the start (owner 2026-10-24)
 		go ensureHaushalt(ctx, hh.Calendar)
+		if hh.Wuensche.Bib != nil && ops != nil {
+			go tickWishes(ctx, hh.Wuensche, ops)
+		}
 	}
 	if pods != nil && ops != nil {
 		go tellNewEpisodes(ctx, pods, ops) // haus#123: a new episode to who subscribed
