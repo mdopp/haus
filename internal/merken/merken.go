@@ -13,6 +13,7 @@ package merken
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -175,7 +176,7 @@ func (f Fetcher) Get(ctx context.Context, u *url.URL) (string, string, []byte, s
 			return "", "", nil, "", ErrNoAddress
 		}
 		log.Printf("haus: merken: %s: %v", u.Host, err) // why it did not answer: the name, the way, the time
-		return "", "", nil, "", ErrNoAnswer
+		return "", "", nil, "", why(u.Hostname(), err)
 	}
 	defer res.Body.Close()
 	if res.StatusCode >= 400 {
@@ -185,7 +186,7 @@ func (f Fetcher) Get(ctx context.Context, u *url.URL) (string, string, []byte, s
 	raw, err := io.ReadAll(io.LimitReader(res.Body, maxPage))
 	if err != nil {
 		log.Printf("haus: merken: %s: reading: %v", u.Host, err)
-		return "", "", nil, "", ErrNoAnswer
+		return "", "", nil, "", &NoAnswer{Reason: u.Hostname() + " hat die Seite nicht ganz geschickt; die Verbindung brach ab.", Next: "Gleich noch einmal teilen."}
 	}
 	return res.Request.URL.String(), ct, raw, params["charset"], nil
 }
@@ -209,4 +210,39 @@ func toUTF8(b []byte, charset string) string {
 		return string(r)
 	}
 	return strings.ToValidUTF8(string(b), "�")
+}
+
+// NoAnswer is a page that did not answer, and why, in the family's words:
+// the reason and what to do. It is ErrNoAnswer for errors.Is.
+type NoAnswer struct {
+	Reason, Next string
+}
+
+func (e *NoAnswer) Error() string        { return e.Reason + " " + e.Next }
+func (e *NoAnswer) Is(target error) bool { return target == ErrNoAnswer }
+
+// why is a transport error as a reason: the name not found, no way out,
+// no answer in time, a refused or broken secure connection.
+func why(host string, err error) error {
+	var dns *net.DNSError
+	var op *net.OpError
+	var cert *tls.CertificateVerificationError
+	switch {
+	case errors.As(err, &dns) && dns.IsNotFound:
+		return &NoAnswer{Reason: "Die Box findet " + host + " nicht: Diesen Namen gibt es im Internet nicht.", Next: "Ist der Link vollständig?"}
+	case errors.As(err, &dns):
+		return &NoAnswer{Reason: "Die Box konnte " + host + " nicht nachschlagen: Die Namensauflösung (DNS) antwortet nicht.", Next: "Später noch einmal teilen; bleibt es so, liegt es an der Box."}
+	case errors.Is(err, context.DeadlineExceeded) || isTimeout(err):
+		return &NoAnswer{Reason: host + " hat nicht rechtzeitig geantwortet (" + fetchWait.String() + ").", Next: "Später noch einmal teilen."}
+	case errors.As(err, &cert):
+		return &NoAnswer{Reason: "Die sichere Verbindung zu " + host + " kam nicht zustande: Das Zertifikat der Seite stimmt nicht.", Next: "Die Seite merkt sich Haus so nicht."}
+	case errors.As(err, &op) && op.Op == "dial":
+		return &NoAnswer{Reason: "Die Box kommt nicht zu " + host + " durch: keine Verbindung ins Internet von Haus aus.", Next: "Bleibt es so, liegt es an der Box; sag Bescheid."}
+	}
+	return &NoAnswer{Reason: host + " hat die Verbindung abgelehnt oder abgebrochen.", Next: "Später noch einmal teilen."}
+}
+
+func isTimeout(err error) bool {
+	var t interface{ Timeout() bool }
+	return errors.As(err, &t) && t.Timeout()
 }
