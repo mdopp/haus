@@ -22,6 +22,7 @@ import (
 	"github.com/mdopp/haus/internal/caldav"
 	"github.com/mdopp/haus/internal/cards"
 	"github.com/mdopp/haus/internal/devices"
+	"github.com/mdopp/haus/internal/discogs"
 	"github.com/mdopp/haus/internal/einkauf"
 	"github.com/mdopp/haus/internal/favoriten"
 	"github.com/mdopp/haus/internal/ha"
@@ -94,6 +95,11 @@ func routes(s site) http.Handler {
 		Samba: s.samba, SambaHost: s.sambaHost, Usage: s.usage, PublicURL: s.publicURL, Welcome: s.welcome, STT: s.stt,
 		HAPublicURL: s.haPublic, Inverted: s.inverted, RadicalePublicURL: s.radicale, Views: s.views,
 		DocumentsMail: s.docsMail, PaperlessPublicURL: s.paperlessPublic, PaperlessLANOnly: s.paperlessLAN}
+	// the lists, the music wish list and the shelf, before any page takes its copy of family
+	family.Einkauf, family.Wuensche = s.hh.Einkauf, s.hh.Wuensche
+	if s.hh.Wuensche != nil {
+		family.Regal = s.hh.Wuensche.Regal
+	}
 	family.MusicInbox = os.Getenv("HAUS_MUSIC_INBOX")
 	if fi, err := os.Stat(musicInboxMount); family.MusicInbox == "" && err == nil && fi.IsDir() {
 		family.MusicInbox = musicInboxMount // where laib's haus template mounts it (laib#639)
@@ -118,7 +124,10 @@ func routes(s site) http.Handler {
 	pagesMux.Handle(pages.LivePath, live)
 	if s.hh.Einkauf != nil { // haus#118: the list, ticked on one phone, fetched again on the others
 		s.hh.Einkauf.Changed = func(r caldav.ListRef) { live.Tell(pages.ListeLive(r)) }
-		family.Einkauf, family.Wuensche = s.hh.Einkauf, s.hh.Wuensche
+		if family.Regal != nil {
+			pagesMux.HandleFunc(pages.PlattePath, pages.Platte(family))
+			pagesMux.HandleFunc(pages.PlatteBildPath, pages.Platte(family))
+		}
 		pagesMux.HandleFunc(pages.EinkaufPath, pages.Einkauf(family))
 		pagesMux.HandleFunc(pages.EinkaufRezeptePath, pages.Einkauf(family))
 	}
@@ -316,6 +325,9 @@ func main() {
 		hh.Wuensche = &einkauf.Wuensche{Listen: hh.Einkauf, Dir: dataDir, MB: musicbrainz.New(hh.Fetcher)}
 		if jf := jellyfin.FromEnv(); jf != nil { // laib#695: "hast du schon", and arrived wishes ticked off
 			hh.Wuensche.Bib = jf
+		}
+		if dc := discogs.FromEnv(); dc != nil { // laib#696: the records on the shelf, the wantlist, Platte erfassen
+			hh.Wuensche.Regal = &discogs.Regal{C: dc}
 		}
 	}
 	cfg.Haushalt = hh // haus#10: the tool widgets from the same backends; none set, 404

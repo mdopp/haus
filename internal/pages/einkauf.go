@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/mdopp/haus/internal/caldav"
+	"github.com/mdopp/haus/internal/discogs"
 	"github.com/mdopp/haus/internal/einkauf"
 	"github.com/mdopp/haus/internal/notes"
 )
@@ -164,10 +165,21 @@ func Einkauf(cfg StartConfig) http.HandlerFunc {
 				http.Error(w, "Das geht nur auf der Musik-Wunschliste.", http.StatusBadRequest)
 				return
 			}
-			if r.PostForm.Get("schritt") == "suchen" {
+			switch r.PostForm.Get("schritt") {
+			case "suchen":
 				err = cfg.Wuensche.NeuSuchen(ctx, r.PostForm.Get("uid"))
 				said = "Sucht, wo es das gibt; die Seite zeigt es gleich."
-			} else {
+			case "wantlist":
+				if said, err = cfg.Wuensche.AufWantlist(ctx, r.PostForm.Get("uid")); err != nil && !errors.Is(err, einkauf.ErrNoLine) {
+					var de *discogs.Error
+					if errors.As(err, &de) {
+						http.Error(w, discogsSays(err), http.StatusBadGateway)
+					} else {
+						http.Error(w, err.Error(), http.StatusConflict)
+					}
+					return
+				}
+			default:
 				said, err = cfg.Wuensche.Stufe(ctx, r.PostForm.Get("uid"), r.PostForm.Get("schritt"))
 			}
 		case "neu":
@@ -391,7 +403,10 @@ func writeEinkauf(w http.ResponseWriter, r *http.Request, cfg StartConfig, l *ei
 		b.WriteString(`<form class=einkauf-weg method=post action="` + act + `" data-frage="` + html.EscapeString(count(done, "abgehakte Zeile", "abgehakte Zeilen")) + ` von der Liste nehmen?">` +
 			`<input type=hidden name=tun value=aufraeumen><button data-laeuft="Räumt auf …">Abgehakte entfernen</button></form>`)
 	}
-	if cfg.Notes != nil {
+	if l.Ref == einkauf.MusikListe && cfg.Regal != nil {
+		b.WriteString(`<p class=wege><a class=knopf href=` + PlattePath + `>Platte erfassen</a></p>`)
+	}
+	if cfg.Notes != nil && l.Ref != einkauf.MusikListe {
 		rez := EinkaufRezeptePath
 		if l.Ref != caldav.Einkauf {
 			rez += "?liste=" + url.QueryEscape(l.Ref.ID())
@@ -566,6 +581,9 @@ func wunschKarte(cfg StartConfig, act string, it caldav.Item) string {
 	case einkauf.StufeDatei:
 		b.WriteString("<p class=stufe><span class=chip>Datei da</span> Platte unterwegs seit " + st.Bestellt.Format("02.01.") + "</p>")
 	}
+	if st.Wantlist != 0 {
+		b.WriteString("<p class=stufe><span class=chip>Discogs-Wantlist</span> Discogs meldet sich bei Angeboten</p>")
+	}
 	f := st.Fund
 	switch {
 	case st.Sucht:
@@ -627,6 +645,9 @@ func wunschKarte(cfg StartConfig, act string, it caldav.Item) string {
 		case einkauf.StufeDatei:
 			btn("platte", "Platte ist da", "Hakt ab …")
 		}
+		if cfg.Wuensche.Regal != nil && st.Wantlist == 0 && st.AlbumName(einkaufTitle(it.Summary)) != "" {
+			btn("wantlist", "Auf die Discogs-Wantlist", "Trägt ein …")
+		}
 		if cfg.Wuensche.MB != nil && !st.Sucht {
 			btn("suchen", "Neu suchen", "Sucht …")
 		}
@@ -643,3 +664,6 @@ func germanDate(d string) string {
 	}
 	return d
 }
+
+// einkaufTitle is a wish's title half ("Wanda – Salbei" is Salbei).
+func einkaufTitle(s string) string { _, t := einkauf.Teile(s); return t }
