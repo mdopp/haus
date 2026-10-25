@@ -195,6 +195,27 @@ func (c *Client) Status(ctx context.Context) (Readiness, []Service, error) {
 	return out.Ready, out.Services, err
 }
 
+// ServiceDetail is one service's line from status (its status file's
+// detail with its age, laib#309): "" when it says nothing.
+func (c *Client) ServiceDetail(ctx context.Context, service string) (string, error) {
+	var out struct {
+		Services []Service `json:"services"`
+	}
+	text, err := c.CallTyped(ctx, "status", map[string]any{"service": service})
+	if err != nil {
+		return "", err
+	}
+	if err := json.Unmarshal([]byte(text), &out); err != nil {
+		return "", fmt.Errorf("laib status %s: %w", service, err)
+	}
+	for _, s := range out.Services {
+		if s.Name == service {
+			return s.Detail, nil
+		}
+	}
+	return "", nil
+}
+
 // Inbox lists the open proposals.
 func (c *Client) Inbox(ctx context.Context) ([]Proposal, error) {
 	var out []Proposal

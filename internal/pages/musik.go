@@ -1,6 +1,7 @@
 package pages
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"html"
@@ -26,8 +27,9 @@ import (
 // renamed to the file's name — the contract with the importer, which
 // never touches a dot file. The folder structure is kept.
 const (
-	MusikPath     = "/musik"
-	MusikTeilPath = "/musik/teil"
+	MusikPath      = "/musik"
+	MusikTeilPath  = "/musik/teil"
+	MusikStandPath = "/musik/stand" // how far the box's import is (haus#113), for the page's script
 
 	musikPiece   = 8 << 20        // what one request carries, under any proxy's limit
 	musikMaxFile = int64(4) << 30 // a file, a ZIP of an album or several
@@ -69,6 +71,10 @@ func Musik(cfg StartConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == MusikTeilPath {
 			musikTeil(w, r, cfg)
+			return
+		}
+		if r.URL.Path == MusikStandPath && cfg.MusicInbox != "" {
+			musikStand(w, r, cfg)
 			return
 		}
 		if !showOnly(w, r, "Musik hinzufügen") {
@@ -193,6 +199,20 @@ func musikTeil(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
 			return
 		}
 	}
+	// who uploaded, for the importer's message (laib templates/beets
+	// README, "Uploading from Haus" 2): beside the upload at the inbox's
+	// top, named after it, written before the upload is whole
+	if who := uploader(r.Header.Get("Remote-User")); who != "" {
+		top, _, _ := strings.Cut(final, "/")
+		if f, err := root.OpenFile("._"+top+".von", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o664); err == nil {
+			_, werr := f.WriteString(who + "\n")
+			if cerr := f.Close(); werr != nil || cerr != nil {
+				log.Printf("haus: musik: ._%s.von: %v %v", top, werr, cerr)
+			}
+		} else {
+			log.Printf("haus: musik: ._%s.von: %v", top, err)
+		}
+	}
 	if err := root.Rename(part, final); err != nil {
 		log.Printf("haus: musik: %s → %s: %v", part, final, err)
 		http.Error(w, "Die Datei lässt sich nicht ablegen.", http.StatusInternalServerError)
@@ -209,7 +229,9 @@ const musikStyle = `<style>.musik-wahl{display:flex;gap:10px;flex-wrap:wrap;marg
 // musikScript sends the chosen files one after another, each in pieces,
 // showing each file's progress and how far the whole is; a piece that
 // fails is sent again (three times), one the server already has is
-// skipped. At the end: how many arrived, and that the box sorts them in.
+// skipped. At the end: how many arrived, "Wird einsortiert …", and the
+// import's line from laib once it changed (haus#113), or after six minutes
+// that it takes longer and a message follows.
 const musikScript = `<script>(function(){var PIECE=` + "8388608" + `;
 var lauf=document.getElementById('musik-lauf'),liste=document.getElementById('musik-liste'),stand=document.getElementById('musik-stand');
 if(!window.fetch){return}
@@ -219,7 +241,8 @@ function go(files){if(!files.length)return;lauf.hidden=false;var rows=files.map(
 var p=f.webkitRelativePath?f.webkitRelativePath:f.name;li.innerHTML='<span class=name></span><progress max=100 value=0></progress><span class=k></span>';
 li.querySelector('.name').textContent=p;liste.appendChild(li);return {f:f,p:p,li:li}});var done=0,bad=0,i=0;
 function say(){stand.textContent=(done+bad)+' von '+rows.length+' Dateien'+(bad?(', '+bad+' nicht angekommen'):'')}say();
-function next(){if(i>=rows.length){stand.textContent=done+' von '+rows.length+' Dateien hochgeladen'+(bad?(', '+bad+' nicht'):'')+'. Die Box sortiert sie jetzt ein; in ein paar Minuten sind sie in der Musik.';return}
+function next(){if(i>=rows.length){var up=done+' von '+rows.length+' Dateien hochgeladen'+(bad?(', '+bad+' nicht'):'')+'. ';
+if(!done){stand.textContent=up;return}stand.textContent=up+'Wird einsortiert …';sorted(up,Date.now());return}
 var x=rows[i++];send(x,0,0).then(function(){done++;x.li.querySelector('.k').textContent='angekommen';x.li.querySelector('.k').className='gut';say();next()},
 function(t){bad++;x.li.querySelector('.k').textContent=t;x.li.querySelector('.k').className='fehler';say();next()})}
 function send(x,at,tries){var f=x.f,bar=x.li.querySelector('progress');var end=Math.min(at+PIECE,f.size);
@@ -229,4 +252,66 @@ return fetch('` + MusikTeilPath + `?pfad='+encodeURIComponent(x.p)+'&ab='+at+'&g
 .then(function(a){bar.value=Math.round(a.j.ab*100/f.size);if(a.j.fertig)return;return send(x,a.j.ab,0)})
 .catch(function(e){if(typeof e==='string')return Promise.reject(e);if(e&&e.code&&e.code<500)return Promise.reject(e.t);
 if(tries<3)return new Promise(function(ok){setTimeout(ok,2e3)}).then(function(){return send(x,at,tries+1)});return Promise.reject(e&&e.t?e.t:'Die Verbindung brach ab.')})}
-next()}})()</script>`
+var before=null;fetch('` + MusikStandPath + `',{credentials:'same-origin'}).then(function(r){return r.json()}).then(function(j){if(before===null)before=j.stand}).catch(function(){if(before===null)before=''});
+next()}
+function sorted(up,t0){fetch('` + MusikStandPath + `',{credentials:'same-origin'}).then(function(r){return r.json()}).then(function(j){
+if(j.stand&&before!==null&&j.stand!==before&&!j.wartet){stand.textContent=up+'Einsortiert: '+j.stand+'.';return}throw 0}).catch(function(){
+if(Date.now()-t0>6*60e3){stand.textContent=up+'Das Einsortieren dauert länger. Sobald es fertig ist, bekommst du eine Nachricht; danach ist die Musik in Jellyfin.';return}
+setTimeout(function(){sorted(up,t0)},10e3)})}})()</script>`
+
+// uploader is the signed-in user as the importer takes it: lower case,
+// [a-z0-9._@-], at most 64 characters; else "" (no sidecar).
+func uploader(user string) string {
+	u := strings.ToLower(strings.TrimSpace(user))
+	if u == "" || len(u) > 64 {
+		return ""
+	}
+	for _, r := range u {
+		if !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || strings.ContainsRune("._@-", r)) {
+			return ""
+		}
+	}
+	return u
+}
+
+// musikStand is the import's line from laib's status of beets (haus#113),
+// without the box's prefix and age: {"stand": "zuletzt 12 Titel (2
+// Alben) importiert", "wartet": true while an upload still settles}; ""
+// when laib does not say.
+func musikStand(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
+	if !showOnly(w, r, "Der Stand") {
+		return
+	}
+	out := map[string]any{"stand": "", "wartet": false}
+	if cfg.Laib != nil {
+		ctx, cancel := context.WithTimeout(r.Context(), backendWait)
+		defer cancel()
+		if line, err := cfg.Laib.ServiceDetail(ctx, "beets"); err != nil {
+			log.Printf("haus: musik: laib status beets: %v", err)
+		} else {
+			out["stand"], out["wartet"] = importLine(line)
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	json.NewEncoder(w).Encode(out)
+}
+
+// importLine is beets' detail as the page says it: "Musik-Eingang: zuletzt
+// 12 Titel importiert · 1 Eingang wird noch kopiert · geprüft vor 2 min"
+// is "zuletzt 12 Titel importiert", still settling.
+func importLine(detail string) (string, bool) {
+	parts := strings.Split(detail, " · ")
+	var keep []string
+	wartet := false
+	for _, p := range parts {
+		switch {
+		case strings.HasPrefix(p, "geprüft "):
+		case strings.Contains(p, "noch kopiert"):
+			wartet = true
+		default:
+			keep = append(keep, p)
+		}
+	}
+	return strings.TrimPrefix(strings.Join(keep, " · "), "Musik-Eingang: "), wartet
+}

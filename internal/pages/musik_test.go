@@ -3,6 +3,7 @@ package pages
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/mdopp/haus/internal/laib"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -112,5 +113,50 @@ func TestMusikHinzufuegen(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(inbox, f)); err == nil {
 			t.Errorf("%s written", f)
 		}
+	}
+}
+
+// haus#113: who uploaded goes beside the upload at the inbox's top before
+// it is whole (laib's beets contract), so the importer's message goes to
+// them; after the upload the page shows laib's line of the import.
+func TestMusikSaysWhoAndHowFar(t *testing.T) {
+	inbox := t.TempDir()
+	h := Musik(StartConfig{MusicInbox: inbox})
+	musikPost(t, h, "Beatles/Abbey Road/01 Come Together.flac", 0, 3, []byte("abc"), nil)
+	musikPost(t, h, "lied.mp3", 0, 3, []byte("abc"), nil)
+	musikPost(t, h, "lied.mp3", 0, 3, []byte("abc"), nil) // beside it: lied (2).mp3
+	for name, want := range map[string]string{"._Beatles.von": "anna\n", "._lied.mp3.von": "anna\n", "._lied (2).mp3.von": "anna\n"} {
+		if got, err := os.ReadFile(filepath.Join(inbox, name)); err != nil || string(got) != want {
+			t.Errorf("%s = %q, %v", name, got, err)
+		}
+	}
+	if rec := musikPost(t, h, "x.mp3", 0, 1, []byte("x"), map[string]string{"Remote-User": "Anna Müller"}); rec.Code != 200 {
+		t.Fatalf("%d", rec.Code)
+	}
+	if _, err := os.Stat(filepath.Join(inbox, "._x.mp3.von")); err == nil {
+		t.Error("a name the importer does not take was written")
+	}
+	for in, want := range map[string]string{"anna": "anna", "Erika": "erika", "a b": "", "": "", strings.Repeat("a", 65): "", "ben.k@x-y_z": "ben.k@x-y_z", "ä": ""} {
+		if got := uploader(in); got != want {
+			t.Errorf("uploader(%q) = %q", in, got)
+		}
+	}
+
+	line, wartet := importLine("Musik-Eingang: zuletzt 12 Titel (2 Alben) importiert · 1 Eingang wird noch kopiert · geprüft vor 2 min")
+	if line != "zuletzt 12 Titel (2 Alben) importiert" || !wartet {
+		t.Errorf("%q %v", line, wartet)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := json.Marshal(map[string]any{"services": []map[string]any{{"name": "beets", "state": "grün", "detail": "Musik-Eingang: zuletzt 3 Titel importiert · geprüft gerade eben"}}})
+		json.NewEncoder(w).Encode(map[string]any{"result": map[string]any{"content": []map[string]string{{"text": string(b)}}}})
+	}))
+	defer srv.Close()
+	code, body, hdr := familyPage(t, Musik, StartConfig{MusicInbox: inbox, Laib: &laib.Client{URL: srv.URL, Token: "t"}}, "GET", MusikStandPath, "family")
+	if code != 200 || hdr.Get("Content-Type") != "application/json" || strings.TrimSpace(body) != `{"stand":"zuletzt 3 Titel importiert","wartet":false}` {
+		t.Errorf("%d %q", code, body)
+	}
+	_, body, _ = familyPage(t, Musik, StartConfig{MusicInbox: inbox}, "GET", MusikStandPath, "family")
+	if strings.TrimSpace(body) != `{"stand":"","wartet":false}` {
+		t.Errorf("without laib: %q", body)
 	}
 }

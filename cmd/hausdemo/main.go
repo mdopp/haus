@@ -115,6 +115,7 @@ func main() {
 	mux.HandleFunc("/kalender/verwalten", pages.KalenderVerwalten(cfg))
 	mux.HandleFunc(pages.MusikPath, pages.Musik(cfg))
 	mux.HandleFunc(pages.MusikTeilPath, pages.Musik(cfg))
+	mux.HandleFunc(pages.MusikStandPath, pages.Musik(cfg))                       // haus#113: the import's line
 	mux.HandleFunc("/demo/musik", func(w http.ResponseWriter, r *http.Request) { // what arrived in the inbox, name → size
 		got := map[string]int64{}
 		filepath.WalkDir(inbox, func(p string, d os.DirEntry, err error) error {
