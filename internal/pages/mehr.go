@@ -12,6 +12,7 @@ const mehrPath = "/mehr"
 // What Mehr says of each of its pages, in a line.
 var mehrSays = map[string]string{
 	"Apps einrichten":  "So kommen die Apps der Box auf Handy und Computer",
+	"Podcasts":         "Podcasts per Link abonnieren; Bescheid bei jeder neuen Folge",
 	"Musik hinzufügen": "Lieder, Alben oder ZIPs hochladen; die Box sortiert sie ein",
 	"Netzlaufwerk":     "Dein Passwort für das Netzlaufwerk",
 	"Box":              "Wie es der Box geht, für Admins",

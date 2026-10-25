@@ -103,6 +103,17 @@ test('a recipe link becomes a recipe note', async ({ page, baseURL }) => {
   await expect(page.locator('.kopf a', { hasText: '#herbst' })).toBeVisible();
 });
 
+test('a podcast is subscribed by its link and can be ended', async ({ page, baseURL }) => {
+  await page.goto('/podcasts');
+  await page.getByLabel('Link zum Podcast').fill(baseURL + '/demo/feed.xml');
+  await page.getByRole('button', { name: 'Abonnieren' }).click();
+  await expect(page.getByRole('status')).toContainText('Abonniert: „Demo-Podcast“');
+  await expect(page.locator('#k-meine')).toBeVisible();
+  page.once('dialog', (d) => d.accept());
+  await page.getByRole('button', { name: 'Abo beenden' }).click();
+  await expect(page.getByRole('status')).toContainText('Abo beendet');
+});
+
 test('music goes up in pieces and arrives whole', async ({ page, request }) => {
   await page.goto('/musik');
   const big = Buffer.alloc(9 * 1024 * 1024, 7); // two pieces
@@ -130,7 +141,7 @@ test('a form in a card stacks its fields on a phone', async ({ page }) => {
 // screen, a field to type in has room, a button is big enough for a
 // finger, and no text runs out of its box.
 const PAGES = ['/start', '/raeume', '/raeume/light.kueche', '/medien', '/energie', '/kalender', '/kalender/verwalten',
-  '/notizen', '/notizen?tag=kochen', '/notizen/einkaufsliste.md', '/notizen/einkaufsliste.md?bearbeiten=1', '/mehr', '/musik'];
+  '/notizen', '/notizen?tag=kochen', '/notizen/einkaufsliste.md', '/notizen/einkaufsliste.md?bearbeiten=1', '/mehr', '/musik', '/podcasts'];
 for (const path of PAGES) {
   test(`layout of ${path}`, async ({ page }) => {
     await page.goto(path);

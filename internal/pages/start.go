@@ -25,6 +25,7 @@ import (
 	"github.com/mdopp/haus/internal/napi"
 	"github.com/mdopp/haus/internal/notes"
 	"github.com/mdopp/haus/internal/paperless"
+	"github.com/mdopp/haus/internal/podcasts"
 	"github.com/mdopp/haus/internal/qmd"
 	"github.com/mdopp/haus/internal/samba"
 	"github.com/mdopp/haus/internal/schalter"
@@ -38,6 +39,7 @@ type StartConfig struct {
 	Laib      *laib.Client
 	Witness   *schalter.Witness // who switched what, into the log and Laib's journal (haus#89); nil: the log only
 	Fetcher   merken.Fetcher    // how Notizen fetches a page to keep (haus#117); the tests' allows their 127.0.0.1
+	Podcasts  *podcasts.Service // the family's podcasts in Audiobookshelf (haus#123); nil: no page
 	LaibURL   string            // where Rückgängig lives (the guarantees, admins only)
 	HA        *ha.Client
 	Energy    energie.Map // which sensors Energie reads (haus#12); empty: by friendly name

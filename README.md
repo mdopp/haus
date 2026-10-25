@@ -907,6 +907,24 @@ of the main pages are kept with each run. Locally: `cd e2e && npm ci &&
 npx playwright install chromium && npx playwright test`; `go run
 ./cmd/hausdemo` alone to look at the pages.
 
+## Podcasts (haus#123)
+
+`GET /podcasts`, under Mehr, with Audiobookshelf (`HAUS_ABS_URL`,
+`HAUS_ABS_TOKEN`: an admin user's API key from laib, laib#676). Anyone in
+the family subscribes by a link — the feed, a website (its
+`<link rel=alternate type=application/rss+xml>`), Apple Podcasts (its id
+through Apple's lookup), a Spotify show (its name through Apple's
+search; a Spotify-only show is said to have no feed) — fetched by
+`internal/merken`'s rules. Haus asks ABS to read the feed, subscribes it
+once for the household (`POST /api/podcasts`, auto-download) and sets it
+to keep only the last 3 episodes (owner 2026-10-25); `podcasts.json` in
+HAUS_DATA keeps who subscribed to what. *Meine Podcasts* with *Abo
+beenden* (the last one out takes the podcast off the box), their newest
+episodes. Joshua: `podcast_abonnieren(link, person)`. Every 15 minutes
+Haus looks for new episodes and tells each only to who subscribed,
+through Laib's `tell` (laib#676) — not before Laib has it, so nothing is
+taken as told unsaid.
+
 ## Musik hinzufügen (haus#107)
 
 `GET /musik`, under Mehr, only with laib's music inbox: `HAUS_MUSIC_INBOX`,
