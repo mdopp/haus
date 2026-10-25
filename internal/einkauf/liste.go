@@ -11,28 +11,37 @@ import (
 // Name is the list's name on the phones.
 const Name = "Einkauf"
 
-// Liste is the household's shopping list in Radicale.
+// Liste is one list in Radicale: the household's shopping list, or
+// another (haus#119) through Andere.
 type Liste struct {
 	DAV *caldav.Client
-	// Changed is told after every change Haus makes (the pages' live
-	// stream); nil: nobody listens.
-	Changed func()
+	Ref caldav.ListRef
+	// Changed is told after every change Haus makes, with the list (the
+	// pages' live stream); nil: nobody listens.
+	Changed func(caldav.ListRef)
 
-	mu sync.Mutex
+	mu *sync.Mutex
 }
 
-// Open is the list on c.
-func Open(c *caldav.Client) *Liste { return &Liste{DAV: c} }
+// Open is the household's shopping list on c.
+func Open(c *caldav.Client) *Liste {
+	return &Liste{DAV: c, Ref: caldav.Einkauf, mu: &sync.Mutex{}}
+}
+
+// Andere is another list on the same Radicale, told the same way.
+func (l *Liste) Andere(r caldav.ListRef) *Liste {
+	return &Liste{DAV: l.DAV, Ref: r, Changed: l.Changed, mu: l.mu}
+}
 
 // Ensure makes the list when it is not there yet (at start, so a phone
 // can take it before the first line).
 func (l *Liste) Ensure(ctx context.Context) error {
-	return l.DAV.EnsureList(ctx, caldav.ShoppingList, Name)
+	return l.DAV.EnsureList(ctx, l.Ref, Name)
 }
 
 // Lesen is the list: the open lines first, the ticked-off ones after.
 func (l *Liste) Lesen(ctx context.Context) ([]caldav.Item, error) {
-	return l.DAV.ListItems(ctx, caldav.ShoppingList)
+	return l.DAV.ListItems(ctx, l.Ref)
 }
 
 // Ergebnis is what adding did: lines new, lines added to.
@@ -60,7 +69,7 @@ func (l *Liste) retry(ctx context.Context, fn func([]caldav.Item) error) error {
 		}
 	}
 	if l.Changed != nil {
-		l.Changed()
+		l.Changed(l.Ref)
 	}
 	return err
 }
@@ -94,7 +103,7 @@ func (l *Liste) Dazu(ctx context.Context, zeilen []Zeile) (Ergebnis, error) {
 				break
 			}
 			if !merged {
-				if err := l.DAV.AddItem(ctx, caldav.ShoppingList, z.Text(), herkunft(z.Herkunft)); err != nil {
+				if err := l.DAV.AddItem(ctx, l.Ref, z.Text(), herkunft(z.Herkunft)); err != nil {
 					return err
 				}
 				res.Neu++

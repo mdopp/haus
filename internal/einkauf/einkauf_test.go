@@ -133,7 +133,7 @@ func list(t *testing.T) (*Liste, *davfake.Server, *int) {
 	t.Cleanup(dav.Close)
 	l := Open(&caldav.Client{URL: dav.URL, User: "haus", Password: "pw"})
 	told := 0
-	l.Changed = func() { told++ }
+	l.Changed = func(caldav.ListRef) { told++ }
 	if err := l.Ensure(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -255,5 +255,57 @@ func TestListeRetriesWhenAPhoneChangedTheLine(t *testing.T) {
 	}
 	if got := strings.Join(lines(t, l), "|"); got != "300 g Mehl" {
 		t.Errorf("list = %s", got)
+	}
+}
+
+// haus#119: a list by how someone names it — the household's by default,
+// one's own as "meine" (made on first use), a named one by its name; a
+// person's own list is no one else's.
+func TestWaehle(t *testing.T) {
+	ctx := context.Background()
+	l, dav, _ := list(t)
+	dav.AddPrincipal("anna")
+	dav.AddPrincipal("ben")
+	if _, err := l.DAV.MakeList(ctx, "", "baumarkt", "Baumarkt"); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"", "Einkauf", "einkaufsliste", "die Einkaufsliste"} {
+		if got, _, err := l.Waehle(ctx, "anna", name); err != nil || got.Ref != caldav.Einkauf {
+			t.Errorf("%q → %+v %v", name, got, err)
+		}
+	}
+	if got, _, err := l.Waehle(ctx, "anna", "baumarkt"); err != nil || got.Ref.ID() != "liste-baumarkt" {
+		t.Errorf("baumarkt → %+v %v", got, err)
+	}
+	got, made, err := l.Waehle(ctx, "anna", "meine")
+	if err != nil || !made || got.Ref.ID() != "anna/liste-meine-liste" {
+		t.Fatalf("meine → %+v %v %v", got, made, err)
+	}
+	if again, made, _ := l.Waehle(ctx, "anna", "Meine Liste"); made || again.Ref != got.Ref {
+		t.Errorf("again → %+v %v", again, made)
+	}
+	if _, err := l.Andere(got.Ref).Dazu(ctx, []Zeile{{Posten: Parse("Socken")}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := l.Waehle(ctx, "ben", "Meine Liste"); err != nil { // Ben's own, not Anna's
+		t.Fatal(err)
+	}
+	if ls, _ := l.DAV.Lists(ctx, "ben"); len(ls) != 3 || ls[2].Ref.Person != "ben" {
+		t.Errorf("Ben's lists: %+v", ls)
+	}
+	if _, _, err := l.Waehle(ctx, "anna", "Urlaub"); err == nil || !strings.Contains(err.Error(), "Keine Liste heißt „Urlaub“. Es gibt: Einkauf, Baumarkt, Meine Liste.") {
+		t.Errorf("unknown: %v", err)
+	}
+	l.DAV.MakeList(ctx, "anna", "geschenke", "Geschenke")
+	if _, _, err := l.Waehle(ctx, "anna", "meine"); err == nil || !strings.Contains(err.Error(), "mehrere eigene Listen") {
+		t.Errorf("two own: %v", err)
+	}
+	if _, _, err := l.Waehle(ctx, "", "meine"); err == nil {
+		t.Error("meine without a person")
+	}
+	for id, ok := range map[string]bool{"einkauf": true, "liste-x": true, "anna/liste-x": true, "anna/einkauf": false, "haushalt": false, "anna/../liste-x": false, "a/b/liste-x": false, "": false} {
+		if _, got := caldav.ParseListRef(id); got != ok {
+			t.Errorf("ParseListRef(%q) = %v", id, got)
+		}
 	}
 }

@@ -115,7 +115,7 @@ func routes(s site) http.Handler {
 	live := &pages.Live{HA: family.HA} // the pages' push: Home Assistant's changes and Haus's own
 	pagesMux.Handle(pages.LivePath, live)
 	if s.hh.Einkauf != nil { // haus#118: the list, ticked on one phone, fetched again on the others
-		s.hh.Einkauf.Changed = func() { live.Tell(pages.EinkaufLive) }
+		s.hh.Einkauf.Changed = func(r caldav.ListRef) { live.Tell(pages.ListeLive(r)) }
 		family.Einkauf = s.hh.Einkauf
 		pagesMux.HandleFunc(pages.EinkaufPath, pages.Einkauf(family))
 		pagesMux.HandleFunc(pages.EinkaufRezeptePath, pages.Einkauf(family))
@@ -208,7 +208,7 @@ func ensureHaushalt(ctx context.Context, c *caldav.Client) {
 	wait := 10 * time.Second
 	for {
 		tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		err := errors.Join(c.EnsureHaushalt(tctx), c.EnsureList(tctx, caldav.ShoppingList, einkauf.Name)) // and the shopping list (haus#118)
+		err := errors.Join(c.EnsureHaushalt(tctx), c.EnsureList(tctx, caldav.Einkauf, einkauf.Name)) // and the shopping list (haus#118)
 		cancel()
 		if err == nil {
 			log.Printf("haus: Haushalt: calendar, address book and shopping list are there")

@@ -100,6 +100,9 @@ func main() {
 	if err := list.Ensure(context.Background()); err != nil {
 		log.Fatal(err)
 	}
+	if _, err := cal.MakeList(context.Background(), "", "baumarkt", "Baumarkt"); err != nil { // a named list beside it (haus#119)
+		log.Fatal(err)
+	}
 	live := &pages.Live{}
 	cfg := pages.StartConfig{Einkauf: list, Podcasts: pods, HA: &ha.Client{URL: fake.URL, Token: "demo"}, Notes: nd, Favorites: favoriten.Open(dir), MusicInbox: inbox,
 		Calendar: cal, Views: ansicht.Open(dir),
@@ -144,7 +147,7 @@ func main() {
 			`"recipeInstructions":[{"@type":"HowToStep","text":"Kürbis würfeln."},{"@type":"HowToStep","text":"In Brühe kochen und pürieren."}]}</script></head><body></body></html>`))
 	})
 	live.HA = cfg.HA
-	list.Changed = func() { live.Tell(pages.EinkaufLive) }
+	list.Changed = func(r caldav.ListRef) { live.Tell(pages.ListeLive(r)) }
 	mux.Handle(pages.LivePath, live)
 	mux.HandleFunc(pages.EinkaufPath, pages.Einkauf(cfg))
 	mux.HandleFunc(pages.EinkaufRezeptePath, pages.Einkauf(cfg))

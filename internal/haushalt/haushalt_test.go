@@ -1367,7 +1367,7 @@ func TestEinkaufsliste(t *testing.T) {
 	}
 	h := Handler(Config{Token: tok, Loc: berlin(t), Einkauf: l, Notes: nd})
 	text, isErr := call(t, h, "einkaufsliste_dazu", map[string]any{"rezepte": "Lasagne und das Curry", "portionen": "4", "dinge": "Milch"})
-	if isErr || !strings.HasPrefix(text, "Auf der Einkaufsliste: 3 neu, 0 dazugezählt. Aus den Rezepten: Lasagne, Rotes Curry.") || !strings.Contains(text, "- 4 Zwiebeln") {
+	if isErr || !strings.HasPrefix(text, "Auf der Liste: 3 neu, 0 dazugezählt. Aus den Rezepten: Lasagne, Rotes Curry.") || !strings.Contains(text, "- 4 Zwiebeln") {
 		t.Fatalf("%q", text)
 	}
 	text, isErr = call(t, h, "einkaufsliste_dazu", map[string]any{"dinge": "1 l Milch", "rezepte": "Pizza"})
@@ -1377,8 +1377,17 @@ func TestEinkaufsliste(t *testing.T) {
 	if text, isErr = call(t, h, "einkaufsliste_dazu", map[string]any{"rezepte": "Pizza"}); !isErr || !strings.Contains(text, "Kein gemerktes Rezept heißt „Pizza“") {
 		t.Errorf("only a missing recipe: %q", text)
 	}
+	// "auf meine Liste": the person's own, made on first use, the household's untouched
+	dav.AddPrincipal("anna")
+	text, isErr = call(t, h, "einkaufsliste_dazu", map[string]any{"dinge": "Socken", "liste": "meine", "person": "anna"})
+	if isErr || !strings.HasPrefix(text, "Neue eigene Liste „Meine Liste“ angelegt. Auf der Liste: 1 neu") {
+		t.Fatalf("%q", text)
+	}
+	if text, _ = call(t, h, "einkaufsliste", map[string]any{"liste": "meine", "person": "anna"}); text != "Auf der Liste:\n- Socken\n" {
+		t.Errorf("%q", text)
+	}
 	text, _ = call(t, h, "einkaufsliste", map[string]any{})
-	if text != "Auf der Einkaufsliste:\n- 1 l Milch\n- 4 Zwiebeln (Lasagne, Rotes Curry)\n- 200 g Mehl (Lasagne)\n" {
+	if text != "Auf der Liste:\n- 1 l Milch\n- 4 Zwiebeln (Lasagne, Rotes Curry)\n- 200 g Mehl (Lasagne)\n" {
 		t.Errorf("%q", text)
 	}
 }
