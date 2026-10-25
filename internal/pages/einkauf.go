@@ -180,7 +180,7 @@ func writeEinkauf(w http.ResponseWriter, r *http.Request, cfg StartConfig, said 
 	var err error
 	fetch(r, func(ctx context.Context) { items, err = cfg.Einkauf.Lesen(ctx) })
 	b := familyHead(r, cfg, "Einkauf", "Einkauf")
-	b.WriteString(einkaufStyle + liveRefresh("seite", 60) + `<span hidden>` + EinkaufLive + `</span><h1>Einkauf</h1><p class=k>` + html.EscapeString(saysEinkaufHow) + `</p>`)
+	b.WriteString(noteStyle + einkaufStyle + liveRefresh("seite", 60) + `<span hidden>` + EinkaufLive + `</span><h1>Einkauf</h1><p class=k>` + html.EscapeString(saysEinkaufHow) + `</p>`)
 	if said != "" {
 		b.WriteString("<div class=gut role=status><span class=punkt></span><p>" + html.EscapeString(said) + "</p></div>")
 	}
