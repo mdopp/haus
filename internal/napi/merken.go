@@ -75,8 +75,10 @@ func (c Config) merken(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		code := http.StatusBadRequest
 		switch {
-		case errors.Is(err, merken.ErrNoAnswer), errors.Is(err, context.DeadlineExceeded):
-			code, err = http.StatusBadGateway, merken.ErrNoAnswer
+		case errors.Is(err, merken.ErrNoAnswer): // with its reason (merken.NoAnswer)
+			code = http.StatusBadGateway
+		case errors.Is(err, context.DeadlineExceeded):
+			code, err = http.StatusGatewayTimeout, errors.New("Haus hat länger als "+merkenWait.String()+" gebraucht und aufgegeben. Später noch einmal teilen.")
 		case errors.Is(err, merken.ErrNoAddress), errors.Is(err, merken.ErrPrivate):
 		default:
 			log.Printf("haus: napi merken: %v", err)
