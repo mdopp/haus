@@ -103,8 +103,12 @@ func main() {
 	if _, err := cal.MakeList(context.Background(), "", "baumarkt", "Baumarkt"); err != nil { // a named list beside it (haus#119)
 		log.Fatal(err)
 	}
+	wishes := &einkauf.Wuensche{Listen: list} // the music wish list with one wish
+	if _, err := wishes.Wuenschen(context.Background(), merken.Lied{Kuenstler: "Wanda", Titel: "Salbei", Link: "https://youtube.com/watch?v=Ca7RfL4m744"}, "anna"); err != nil {
+		log.Fatal(err)
+	}
 	live := &pages.Live{}
-	cfg := pages.StartConfig{Einkauf: list, Podcasts: pods, HA: &ha.Client{URL: fake.URL, Token: "demo"}, Notes: nd, Favorites: favoriten.Open(dir), MusicInbox: inbox,
+	cfg := pages.StartConfig{Einkauf: list, Wuensche: wishes, Podcasts: pods, HA: &ha.Client{URL: fake.URL, Token: "demo"}, Notes: nd, Favorites: favoriten.Open(dir), MusicInbox: inbox,
 		Calendar: cal, Views: ansicht.Open(dir),
 		RadicalePublicURL: "https://caldav.example", Fetcher: merken.Fetcher{AllowPrivate: true}}
 	mux := http.NewServeMux()

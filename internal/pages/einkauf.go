@@ -264,7 +264,7 @@ const einkaufStyle = `<style>.einkauf{list-style:none;margin:16px 0 0;padding:0;
 .rezeptwahl input[type=checkbox]{width:22px;height:22px;flex:none}.rezeptwahl .portionen{display:flex;align-items:center;gap:10px;margin:14px 0}.rezeptwahl .portionen input{width:8rem;min-height:44px;font:inherit;padding:0 10px;border:1px solid var(--edge);border-radius:12px;background:var(--card);color:var(--ink)}
 .rezeptwahl button{margin:12px 0 0}.rezeptwahl select{min-height:44px;min-width:10rem;font:inherit;padding:0 10px;border:1px solid var(--edge);border-radius:12px;background:var(--card);color:var(--ink)}
 .listen{display:flex;gap:8px;margin:22px 0 -8px;overflow-x:auto}.listen a{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 16px;border-radius:999px;background:var(--card);border:1px solid var(--edge);color:var(--ink);text-decoration:none;font-size:.9rem;white-space:nowrap}
-.listen a[aria-current]{color:var(--accent);border-color:var(--accent);font-weight:600}.listen .meine{font-size:.7rem;color:var(--muted);font-weight:400}</style>`
+.listen a[aria-current]{color:var(--accent);border-color:var(--accent);font-weight:600}.einkauf .kaufen{margin:6px 4px 0;font-size:.85rem;color:var(--muted)}.einkauf .kaufen a{display:inline-block;padding:10px 2px}.listen .meine{font-size:.7rem;color:var(--muted);font-weight:400}</style>`
 
 // listName is the list's name among lists; the household's shopping list
 // is "Einkauf" before it is made.
@@ -354,10 +354,33 @@ func writeEinkauf(w http.ResponseWriter, r *http.Request, cfg StartConfig, l *ei
 		}
 		b.WriteString(`<li><form method=post action="` + act + `"><input type=hidden name=tun value=haken><input type=hidden name=uid value="` + html.EscapeString(it.UID) +
 			`"><input type=hidden name=erledigt value=` + next + `><button class=posten role=switch aria-checked=` + strconv.FormatBool(it.Done) + `><span class=haken></span><span class=was>` + html.EscapeString(it.Summary))
-		if it.Herkunft != "" {
+		music := l.Ref == einkauf.MusikListe
+		if it.Herkunft != "" && !music {
 			b.WriteString("<small>" + html.EscapeString(it.Herkunft) + "</small>")
 		}
-		b.WriteString("</span></button></form></li>")
+		if music {
+			if who := einkauf.Wer(it.Herkunft); who != "" {
+				b.WriteString("<small>gewünscht von " + html.EscapeString(who) + "</small>")
+			}
+		}
+		b.WriteString("</span></button></form>")
+		if music && !it.Done { // where to buy it as a file, and the link it came from
+			b.WriteString("<p class=kaufen>Kaufen: ")
+			for i, s := range einkauf.Kaufen(it.Summary) {
+				if i > 0 {
+					b.WriteString(" · ")
+				}
+				b.WriteString(`<a href="` + html.EscapeString(s[1]) + `" rel="noopener noreferrer" target=_blank>` + s[0] + `</a>`)
+			}
+			for _, p := range strings.Split(it.Herkunft, ", ") {
+				if strings.HasPrefix(p, "https://") {
+					b.WriteString(` · <a href="` + html.EscapeString(p) + `" rel="noopener noreferrer" target=_blank>Anhören</a>`)
+					break
+				}
+			}
+			b.WriteString("</p>")
+		}
+		b.WriteString("</li>")
 	}
 	b.WriteString("</ul>")
 	if len(items) == 0 {

@@ -7,6 +7,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mdopp/haus/internal/caldav"
+	"github.com/mdopp/haus/internal/caldav/davfake"
+	"github.com/mdopp/haus/internal/einkauf"
 	"github.com/mdopp/haus/internal/haushalt"
 	"github.com/mdopp/haus/internal/merken"
 	"github.com/mdopp/haus/internal/notes"
@@ -88,5 +91,41 @@ func TestShareToHaus(t *testing.T) {
 		if l, hint := sharedLink(in); l != want[0] || hint != want[1] {
 			t.Errorf("sharedLink(%q) = %q, %q", in, l, hint)
 		}
+	}
+}
+
+// owner 2026-10-25: a shared song goes on the music wish list, for who
+// shared it; a YouTube video that is no music video stays a note.
+func TestShareASong(t *testing.T) {
+	yt := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		title := "Wanda - Salbei (Official Video)"
+		if strings.Contains(r.URL.Query().Get("url"), "kochen") {
+			title = "Lasagne kochen"
+		}
+		json.NewEncoder(w).Encode(map[string]string{"title": title, "author_name": "wandamusikVEVO"})
+	}))
+	defer yt.Close()
+	was := merken.YouTubeBase
+	merken.YouTubeBase = yt.URL
+	defer func() { merken.YouTubeBase = was }()
+	dav := davfake.New("haus", "pw")
+	defer dav.Close()
+	l := einkauf.Open(&caldav.Client{URL: dav.URL, User: "haus", Password: "pw"})
+	nd, _ := notes.Open(t.TempDir())
+	h := Handler(Config{Validate: StaticValidator([]string{"dev1"}), Whoami: func(string) (string, bool) { return "anna", true },
+		Haushalt: haushalt.Config{Notes: nd, Fetcher: merken.Fetcher{AllowPrivate: true}, PublicURL: "https://haus.box.test", Einkauf: l, Wuensche: &einkauf.Wuensche{Listen: l}}})
+	code, out := shareText(t, h, "dev1", `{"text":"https://youtube.com/watch?v=Ca7RfL4m744&is=x"}`)
+	if code != 200 || out["art"] != "musik" || out["kurz"] != "Auf der Musik-Wunschliste: „Wanda – Salbei“." || out["notiz"] != "https://haus.box.test/einkauf?liste=liste-musik" {
+		t.Fatalf("%d %v", code, out)
+	}
+	items, _ := l.Andere(einkauf.MusikListe).Lesen(t.Context())
+	if len(items) != 1 || einkauf.Wer(items[0].Herkunft) != "anna" {
+		t.Errorf("%+v", items)
+	}
+	if code, out := shareText(t, h, "dev1", `{"text":"https://youtube.com/watch?v=Ca7RfL4m744"}`); code != 200 || out["schon"] != true {
+		t.Errorf("twice → %d %v", code, out)
+	}
+	if recent, _ := nd.Recent(t.Context(), 5); len(recent) != 0 {
+		t.Errorf("a song made a note: %+v", recent)
 	}
 }

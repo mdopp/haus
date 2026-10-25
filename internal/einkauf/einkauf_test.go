@@ -7,6 +7,8 @@ import (
 
 	"github.com/mdopp/haus/internal/caldav"
 	"github.com/mdopp/haus/internal/caldav/davfake"
+	"github.com/mdopp/haus/internal/jellyfin"
+	"github.com/mdopp/haus/internal/merken"
 	"github.com/mdopp/haus/internal/notes"
 )
 
@@ -307,5 +309,61 @@ func TestWaehle(t *testing.T) {
 		if _, got := caldav.ParseListRef(id); got != ok {
 			t.Errorf("ParseListRef(%q) = %v", id, got)
 		}
+	}
+}
+
+type fakeBib map[string]jellyfin.Treffer // "artist|title"
+
+func (b fakeBib) Find(ctx context.Context, artist, title string) (jellyfin.Treffer, bool, error) {
+	t, ok := b[jellyfin.Plain(artist)+"|"+jellyfin.Plain(title)]
+	return t, ok, nil
+}
+
+// owner 2026-10-25: a shared song goes on the household's list "Musik",
+// unless it is in the music; one that arrives is ticked off and the one
+// who wished it is told; "2Pac – Changes" stays a song, no amount.
+func TestMusikWuensche(t *testing.T) {
+	ctx := context.Background()
+	l, dav, _ := list(t)
+	bib := fakeBib{"wanda|bologna": {Album: "Amore", Titel: "Bologna"}}
+	w := &Wuensche{Listen: l, Bib: bib}
+	g, err := w.Wuenschen(ctx, merken.Lied{Kuenstler: "Wanda", Titel: "Salbei", Link: "https://youtube.com/watch?v=x"}, "anna")
+	if err != nil || g.Schon || !strings.HasPrefix(g.Satz, "Auf der Musik-Wunschliste: „Wanda – Salbei“.") {
+		t.Fatalf("%+v %v", g, err)
+	}
+	if got := dav.DisplayName("/haus/liste-musik/"); got != "Musik" {
+		t.Errorf("list %q", got)
+	}
+	if g, _ := w.Wuenschen(ctx, merken.Lied{Kuenstler: "wanda", Titel: "salbei"}, "ben"); !g.Steht {
+		t.Errorf("twice: %+v", g)
+	}
+	if g, _ := w.Wuenschen(ctx, merken.Lied{Kuenstler: "Wanda", Titel: "Bologna"}, "anna"); !g.Schon || g.Satz != "Hast du schon: „Wanda – Bologna“ auf dem Album „Amore“." {
+		t.Errorf("there already: %+v", g)
+	}
+	w.Wuenschen(ctx, merken.Lied{Kuenstler: "2Pac", Titel: "Changes"}, "")
+	items, _ := l.Andere(MusikListe).Lesen(ctx)
+	if len(items) != 2 || items[0].Summary != "Wanda – Salbei" || items[0].Herkunft != "von anna, https://youtube.com/watch?v=x" || items[1].Summary != "2Pac – Changes" {
+		t.Fatalf("%+v", items)
+	}
+	if done, _ := w.Pruefen(ctx); len(done) != 0 {
+		t.Errorf("nothing arrived yet: %+v", done)
+	}
+	bib["wanda|salbei"] = jellyfin.Treffer{Album: "Ciao!", Titel: "Salbei"}
+	done, err := w.Pruefen(ctx)
+	if err != nil || len(done) != 1 || done[0].Person != "anna" || done[0].Satz != "„Wanda – Salbei“ ist jetzt in deiner Musik, auf dem Album „Ciao!“. Ich habe es auf der Wunschliste abgehakt." {
+		t.Fatalf("%+v %v", done, err)
+	}
+	if items, _ := l.Andere(MusikListe).Lesen(ctx); !items[1].Done {
+		t.Errorf("not ticked: %+v", items)
+	}
+	if done, _ := w.Pruefen(ctx); len(done) != 0 {
+		t.Errorf("told twice: %+v", done)
+	}
+	if k := Kaufen("Wanda – Salbei"); k[0][1] != "https://bandcamp.com/search?q=Wanda+Salbei" {
+		t.Errorf("%v", k)
+	}
+	var none *Wuensche
+	if _, ok, _ := none.AusLink(ctx, merken.Fetcher{}, "https://youtube.com/watch?v=x", "anna"); ok {
+		t.Error("no list, no wish")
 	}
 }
