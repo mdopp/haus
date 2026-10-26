@@ -139,5 +139,5 @@ func (c Config) merken(w http.ResponseWriter, r *http.Request) {
 		note = pub + cards.NotePage(got.Name)
 	}
 	log.Printf("haus: napi merken: %s (%s)", got.Name, got.Art)
-	answer(http.StatusOK, map[string]any{"titel": got.Titel, "art": got.Art, "kurz": got.Kurz, "schon": got.Schon, "teilweise": got.Teilweise, "notiz": note})
+	answer(http.StatusOK, map[string]any{"titel": got.Titel, "art": got.Art, "kurz": got.Kurz, "schon": got.Schon, "aktualisiert": got.Aktualisiert, "teilweise": got.Teilweise, "notiz": note})
 }

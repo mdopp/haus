@@ -101,10 +101,19 @@ func (w *Wuensche) Wuenschen(ctx context.Context, lied merken.Lied, person strin
 	var out Gewuenscht
 	err := l.retry(ctx, func(items []caldav.Item) error {
 		for _, it := range items {
-			if !it.Done && jellyfin.Plain(it.Summary) == jellyfin.Plain(lied.Name()) {
+			if jellyfin.Plain(it.Summary) != jellyfin.Plain(lied.Name()) {
+				continue
+			}
+			if !it.Done {
 				out = Gewuenscht{Steht: true, Satz: "„" + lied.Name() + "“ steht schon auf der Musik-Wunschliste."}
 				return nil
 			}
+			it.Done = false // wished before and ticked off: the same line again, not a second
+			if err := l.DAV.UpdateItem(ctx, it); err != nil {
+				return err
+			}
+			out = Gewuenscht{Steht: true, Satz: "„" + lied.Name() + "“ hattest du schon einmal gewünscht und abgehakt; der Wunsch steht wieder auf der Liste."}
+			return nil
 		}
 		origin := []string{}
 		if person != "" {
