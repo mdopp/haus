@@ -83,8 +83,6 @@ type StartConfig struct {
 	DocumentsMail      string
 	Ablage             *napi.Uploads
 	MusicInbox         string // laib's music inbox, which beets sorts in (haus#107); "": no Musik hinzufügen
-	MusicDir           string // the music itself (HAUS_MUSIC_DIR), for Musik aufräumen; "": no such page
-	DataDir            string // Haus's data folder: Musik aufräumen's plan and what was done
 	PaperlessPublicURL string
 	PaperlessLANOnly   bool
 }
