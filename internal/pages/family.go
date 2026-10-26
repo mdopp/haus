@@ -111,7 +111,7 @@ func tabOf(page string) string {
 func shows(r *http.Request, cfg StartConfig) map[string]bool {
 	return map[string]bool{"Start": true, "Geräte": cfg.HA != nil, "Haushalt": cfg.Calendar != nil || cfg.Einkauf != nil || cfg.Notes != nil || cfg.hasDocs(), "Mehr": true, "Einkauf": cfg.Einkauf != nil,
 		"Energie": cfg.HA != nil, "Kalender": cfg.Calendar != nil, "Notizen": cfg.Notes != nil, "Dokumente": cfg.hasDocs(),
-		"Apps einrichten": cfg.Laib != nil || cfg.Samba != nil, "Musik hinzufügen": cfg.MusicInbox != "", "Podcasts": cfg.Podcasts != nil, "Platte erfassen": cfg.Discogs != nil, "Discogs": cfg.Discogs != nil && r.Header.Get("Remote-User") != "",
+		"Apps einrichten": cfg.Laib != nil || cfg.Samba != nil, "Musik hinzufügen": cfg.MusicInbox != "", "Podcasts": cfg.Podcasts != nil, "Platte erfassen": cfg.Discogs != nil, "Discogs": (cfg.Discogs != nil || cfg.Wuensche != nil) && r.Header.Get("Remote-User") != "",
 		"Netzlaufwerk": cfg.Samba != nil && r.Header.Get("Remote-User") != "", "Box": isAdmin(r),
 		"Adresse": isAdmin(r) && cfg.Laib != nil}
 }
