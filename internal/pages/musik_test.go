@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -152,11 +153,43 @@ func TestMusikSaysWhoAndHowFar(t *testing.T) {
 	}))
 	defer srv.Close()
 	code, body, hdr := familyPage(t, Musik, StartConfig{MusicInbox: inbox, Laib: &laib.Client{URL: srv.URL, Token: "t"}}, "GET", MusikStandPath, "family")
-	if code != 200 || hdr.Get("Content-Type") != "application/json" || strings.TrimSpace(body) != `{"stand":"zuletzt 3 Titel importiert","wartet":false}` {
+	if code != 200 || hdr.Get("Content-Type") != "application/json" || strings.TrimSpace(body) != `{"ergebnis":[],"stand":"zuletzt 3 Titel importiert","wartet":false}` {
 		t.Errorf("%d %q", code, body)
 	}
 	_, body, _ = familyPage(t, Musik, StartConfig{MusicInbox: inbox}, "GET", MusikStandPath, "family")
-	if strings.TrimSpace(body) != `{"stand":"","wartet":false}` {
+	if strings.TrimSpace(body) != `{"ergebnis":[],"stand":"","wartet":false}` {
 		t.Errorf("without laib: %q", body)
+	}
+}
+
+// haus#107 (laib#688): after the upload the page says what became of each
+// upload — its titles and albums, or what was kept back and why — read
+// from beets' own status, only for these uploads since the page started.
+func TestMusikSaysWhatBecameOfIt(t *testing.T) {
+	own := json.RawMessage(`{"letzte":[
+		{"at":"2026-10-26T12:05:00Z","eingang":"KREIS.zip","titel":0,"alben":0,"nicht_importiert":[{"datei":"KREIS.zip","grund":"unsicherer Pfad in der ZIP-Datei"}]},
+		{"at":"2026-10-26T12:04:00Z","eingang":"Ein Lächeln im Gesicht","titel":13,"alben":1,"namen":["Farin Urlaub – Ein Lächeln im Gesicht"]},
+		{"at":"2026-10-26T12:04:30Z","eingang":"lied.mp3","titel":1,"alben":0},
+		{"at":"2026-10-20T10:00:00Z","eingang":"Ein Lächeln im Gesicht","titel":2}]}`)
+	got := uploadResults(own, []string{"Ein Lächeln im Gesicht", "KREIS.zip"}, "2026-10-26T12:00:00Z")
+	want := []Ergebnis{
+		{Eingang: "KREIS.zip", Satz: "KREIS.zip: nicht übernommen: KREIS.zip (unsicherer Pfad in der ZIP-Datei)."},
+		{Eingang: "Ein Lächeln im Gesicht", Satz: "Ein Lächeln im Gesicht: 13 Titel (1 Album): Farin Urlaub – Ein Lächeln im Gesicht in der Musik.", Gut: true},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("%#v", got)
+	}
+	if got := uploadResults(nil, []string{"x"}, "2026-10-26T12:00:00Z"); len(got) != 0 {
+		t.Errorf("nothing said: %v", got)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := json.Marshal(map[string]any{"services": []map[string]any{{"name": "beets", "state": "grün", "detail": "Musik-Eingang: zuletzt 13 Titel importiert", "eigenes": own}}})
+		json.NewEncoder(w).Encode(map[string]any{"result": map[string]any{"content": []map[string]string{{"text": string(b)}}}})
+	}))
+	defer srv.Close()
+	_, body, _ := familyPage(t, Musik, StartConfig{MusicInbox: t.TempDir(), Laib: &laib.Client{URL: srv.URL, Token: "t"}}, "GET",
+		MusikStandPath+"?seit=2026-10-26T12:00:00Z&namen=lied.mp3", "family")
+	if !strings.Contains(body, `"ergebnis":[{"eingang":"lied.mp3","satz":"lied.mp3: 1 Titel in der Musik.","gut":true}]`) {
+		t.Errorf("%s", body)
 	}
 }

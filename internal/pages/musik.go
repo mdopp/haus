@@ -13,6 +13,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Musik hinzufügen (haus#107; owner 2026-10-24: "einfach über die Haus App
@@ -229,9 +230,10 @@ const musikStyle = `<style>.musik-wahl{display:flex;gap:10px;flex-wrap:wrap;marg
 // musikScript sends the chosen files one after another, each in pieces,
 // showing each file's progress and how far the whole is; a piece that
 // fails is sent again (three times), one the server already has is
-// skipped. At the end: how many arrived, "Wird einsortiert …", and the
-// import's line from laib once it changed (haus#113), or after six minutes
-// that it takes longer and a message follows.
+// skipped. At the end: how many arrived, "Wird einsortiert …", and what
+// became of each upload once beets took it (haus#107, laib#688: its titles
+// and albums, or what was kept back and why), or after six minutes that it
+// takes longer and a message follows.
 const musikScript = `<script>(function(){var PIECE=` + "8388608" + `;
 var lauf=document.getElementById('musik-lauf'),liste=document.getElementById('musik-liste'),stand=document.getElementById('musik-stand');
 if(!window.fetch){return}
@@ -239,11 +241,11 @@ if(!window.fetch){return}
 var o=document.createElement('input');o.type='file';if(!('webkitdirectory' in o)){var od=document.querySelector('.ordner');if(od)od.hidden=true}
 function go(files){if(!files.length)return;lauf.hidden=false;var rows=files.map(function(f){var li=document.createElement('li');
 var p=f.webkitRelativePath?f.webkitRelativePath:f.name;li.innerHTML='<span class=name></span><progress max=100 value=0></progress><span class=k></span>';
-li.querySelector('.name').textContent=p;liste.appendChild(li);return {f:f,p:p,li:li}});var done=0,bad=0,i=0;
+li.querySelector('.name').textContent=p;liste.appendChild(li);return {f:f,p:p,li:li}});var done=0,bad=0,i=0,seit=new Date().toISOString(),names=[];
 function say(){stand.textContent=(done+bad)+' von '+rows.length+' Dateien'+(bad?(', '+bad+' nicht angekommen'):'')}say();
 function next(){if(i>=rows.length){var up=done+' von '+rows.length+' Dateien hochgeladen'+(bad?(', '+bad+' nicht'):'')+'. ';
-if(!done){stand.textContent=up;return}stand.textContent=up+'Wird einsortiert …';sorted(up,Date.now());return}
-var x=rows[i++];send(x,0,0).then(function(){done++;x.li.querySelector('.k').textContent='angekommen';x.li.querySelector('.k').className='gut';say();next()},
+if(!done){stand.textContent=up;return}stand.textContent=up+'Wird einsortiert …';sorted(up,Date.now(),names,seit,[]);return}
+var x=rows[i++];send(x,0,0).then(function(){done++;var top=x.p.split('/')[0];if(names.indexOf(top)<0)names.push(top);x.li.querySelector('.k').textContent='angekommen';x.li.querySelector('.k').className='gut';say();next()},
 function(t){bad++;x.li.querySelector('.k').textContent=t;x.li.querySelector('.k').className='fehler';say();next()})}
 function send(x,at,tries){var f=x.f,bar=x.li.querySelector('progress');var end=Math.min(at+PIECE,f.size);
 if(f.size===0)return Promise.reject('Die Datei ist leer.');
@@ -252,12 +254,12 @@ return fetch('` + MusikTeilPath + `?pfad='+encodeURIComponent(x.p)+'&ab='+at+'&g
 .then(function(a){bar.value=Math.round(a.j.ab*100/f.size);if(a.j.fertig)return;return send(x,a.j.ab,0)})
 .catch(function(e){if(typeof e==='string')return Promise.reject(e);if(e&&e.code&&e.code<500)return Promise.reject(e.t);
 if(tries<3)return new Promise(function(ok){setTimeout(ok,2e3)}).then(function(){return send(x,at,tries+1)});return Promise.reject(e&&e.t?e.t:'Die Verbindung brach ab.')})}
-var before=null;fetch('` + MusikStandPath + `',{credentials:'same-origin'}).then(function(r){return r.json()}).then(function(j){if(before===null)before=j.stand}).catch(function(){if(before===null)before=''});
 next()}
-function sorted(up,t0){fetch('` + MusikStandPath + `',{credentials:'same-origin'}).then(function(r){return r.json()}).then(function(j){
-if(j.stand&&before!==null&&j.stand!==before&&!j.wartet){stand.textContent=up+'Einsortiert: '+j.stand+'.';return}throw 0}).catch(function(){
-if(Date.now()-t0>6*60e3){stand.textContent=up+'Das Einsortieren dauert länger. Sobald es fertig ist, bekommst du eine Nachricht; danach ist die Musik in Jellyfin.';return}
-setTimeout(function(){sorted(up,t0)},10e3)})}})()</script>`
+function sorted(up,t0,names,seit,got){var q='?seit='+encodeURIComponent(seit)+names.map(function(n){return '&namen='+encodeURIComponent(n)}).join('');
+fetch('` + MusikStandPath + `'+q,{credentials:'same-origin'}).then(function(r){return r.json()}).then(function(j){got=j.ergebnis||[];
+if(got.length>=names.length){stand.textContent=up+got.map(function(e){return e.satz}).join(' ');return}throw 0}).catch(function(){
+if(Date.now()-t0>6*60e3){stand.textContent=up+got.map(function(e){return e.satz+' '}).join('')+'Das Einsortieren dauert länger. Sobald es fertig ist, bekommst du eine Nachricht; danach ist die Musik in Jellyfin.';return}
+setTimeout(function(){sorted(up,t0,names,seit,got)},10e3)})}})()</script>`
 
 // uploader is the signed-in user as the importer takes it: lower case,
 // [a-z0-9._@-], at most 64 characters; else "" (no sidecar).
@@ -282,14 +284,15 @@ func musikStand(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
 	if !showOnly(w, r, "Der Stand") {
 		return
 	}
-	out := map[string]any{"stand": "", "wartet": false}
+	out := map[string]any{"stand": "", "wartet": false, "ergebnis": []any{}}
 	if cfg.Laib != nil {
 		ctx, cancel := context.WithTimeout(r.Context(), backendWait)
 		defer cancel()
-		if line, err := cfg.Laib.ServiceDetail(ctx, "beets"); err != nil {
+		if line, own, err := cfg.Laib.ServiceStatus(ctx, "beets"); err != nil {
 			log.Printf("haus: musik: laib status beets: %v", err)
 		} else {
 			out["stand"], out["wartet"] = importLine(line)
+			out["ergebnis"] = uploadResults(own, r.URL.Query()["namen"], r.URL.Query().Get("seit"))
 		}
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -314,4 +317,72 @@ func importLine(detail string) (string, bool) {
 		}
 	}
 	return strings.TrimPrefix(strings.Join(keep, " · "), "Musik-Eingang: "), wartet
+}
+
+// Ergebnis is what became of one upload (laib#688, beets' letzte[]): its
+// name as uploaded, the titles and albums sorted in, and what was kept
+// back with why — said as the page says it.
+type Ergebnis struct {
+	Eingang string `json:"eingang"`
+	Satz    string `json:"satz"`
+	Gut     bool   `json:"gut"`
+}
+
+// uploadResults are the results for these uploads (their names at the
+// inbox's top) since seit (RFC 3339, the page's start; a minute's leeway
+// for the clocks), newest first; none when laib does not say.
+func uploadResults(own json.RawMessage, names []string, seit string) []Ergebnis {
+	var st struct {
+		Letzte []struct {
+			At      string   `json:"at"`
+			Eingang string   `json:"eingang"`
+			Titel   int      `json:"titel"`
+			Alben   int      `json:"alben"`
+			Namen   []string `json:"namen"`
+			Nicht   []struct {
+				Datei string `json:"datei"`
+				Grund string `json:"grund"`
+			} `json:"nicht_importiert"`
+		} `json:"letzte"`
+	}
+	out := []Ergebnis{}
+	if len(own) == 0 || json.Unmarshal(own, &st) != nil {
+		return out
+	}
+	want := map[string]bool{}
+	for _, n := range names {
+		want[n] = true
+	}
+	since, err := time.Parse(time.RFC3339, seit)
+	if err != nil {
+		return out
+	}
+	for _, u := range st.Letzte {
+		at, err := time.Parse(time.RFC3339, u.At)
+		if err != nil || at.Before(since.Add(-time.Minute)) || !want[u.Eingang] {
+			continue
+		}
+		e := Ergebnis{Eingang: u.Eingang}
+		var parts []string
+		if u.Titel > 0 {
+			p := count(u.Titel, "Titel", "Titel")
+			if u.Alben > 0 {
+				p += " (" + count(u.Alben, "Album", "Alben") + ")"
+			}
+			if len(u.Namen) > 0 && len(u.Namen) <= 3 {
+				p += ": " + strings.Join(u.Namen, ", ")
+			}
+			parts = append(parts, p+" in der Musik")
+			e.Gut = true
+		}
+		for _, n := range u.Nicht {
+			parts = append(parts, "nicht übernommen: "+n.Datei+" ("+n.Grund+")")
+		}
+		if len(parts) == 0 {
+			parts = append(parts, "nichts übernommen")
+		}
+		e.Satz = u.Eingang + ": " + strings.Join(parts, "; ") + "."
+		out = append(out, e)
+	}
+	return out
 }
