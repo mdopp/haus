@@ -261,3 +261,15 @@ func TestMusikLoeschen(t *testing.T) {
 		t.Errorf("outside → %d", rec.Code)
 	}
 }
+
+// beets names a file inside an upload's folder ("KREIS/folder.jpg: keine
+// Musikdatei"); the folder's line says it (seen on the box, 2026-10-26).
+func TestMusikReasonOfAFolder(t *testing.T) {
+	inbox := t.TempDir()
+	run := filepath.Join(inbox, "_nicht-importiert", "2026-10-26_17-45-00")
+	os.MkdirAll(filepath.Join(run, "KREIS"), 0o755)
+	os.WriteFile(filepath.Join(run, "KREIS", "folder.jpg"), []byte("x"), 0o644)
+	os.WriteFile(filepath.Join(run, "GRUND.txt"), []byte("Musik-Eingang\n\nKREIS/folder.jpg: keine Musikdatei\nKREIS/info.nfo: keine Musikdatei\n"), 0o644)
+	_, body, _ := familyPage(t, Musik, StartConfig{MusicInbox: inbox}, "GET", MusikPath, "family")
+	mustContain(t, body, "<span class=name>KREIS</span><span class=k>folder.jpg: keine Musikdatei; info.nfo: keine Musikdatei</span>")
+}

@@ -149,9 +149,19 @@ func zurueck(inbox string) []liegen {
 		reasons := map[string]string{}
 		if b, err := fs.ReadFile(root.FS(), keptBack+"/"+run.Name()+"/GRUND.txt"); err == nil {
 			for _, l := range strings.Split(string(b), "\n") {
-				if n, g, ok := strings.Cut(l, ": "); ok {
-					reasons[strings.TrimSpace(n)] = strings.TrimSpace(g)
+				n, g, ok := strings.Cut(l, ": ")
+				if !ok {
+					continue
 				}
+				n, g = strings.TrimSpace(n), strings.TrimSpace(g)
+				if top, rest, sub := strings.Cut(n, "/"); sub { // a file inside an upload's folder: the folder's reason names it
+					g = rest + ": " + g
+					if reasons[top] != "" {
+						g = reasons[top] + "; " + g
+					}
+					n = top
+				}
+				reasons[n] = g
 			}
 		}
 		items, _ := fs.ReadDir(root.FS(), keptBack+"/"+run.Name())
