@@ -231,6 +231,9 @@ func tellNewEpisodes(ctx context.Context, pods *podcasts.Service, l *laib.Client
 	defer t.Stop()
 	said := false
 	for {
+		if err := pods.Nachladen(ctx); err != nil { // a subscription with no episode yet
+			log.Printf("haus: podcasts: fetching the first episodes: %v", err)
+		}
 		if ok, _ := l.Takes(ctx, "tell", "person"); ok {
 			msgs, err := pods.Neue(ctx)
 			if err != nil {

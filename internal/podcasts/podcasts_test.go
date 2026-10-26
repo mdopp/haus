@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/mdopp/haus/internal/abs"
 	"github.com/mdopp/haus/internal/abs/absfake"
@@ -93,5 +94,49 @@ func TestNeueFolgenNurAnAbonnenten(t *testing.T) {
 	}
 	if got, _ := s.Neue(ctx); len(got) != 0 {
 		t.Fatalf("told twice: %v", got)
+	}
+}
+
+// owner 2026-10-26: "Die Folgen werden nicht geladen" — ABS's own check
+// takes only episodes after the subscription, so Haus asks for the newest
+// three at once; they are old, so nobody is told of them. A subscription
+// from before is caught up once.
+func TestErsteFolgen(t *testing.T) {
+	s, fake, feeds := service(t)
+	ctx := context.Background()
+	if _, err := s.Abonnieren(ctx, "anna", feeds+"/lage"); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(fake.Loaded, ",") != "Folge 5,Folge 4,Folge 3" {
+		t.Fatalf("loaded %v", fake.Loaded)
+	}
+	s.Neue(ctx) // the first look
+	s.Abonnieren(ctx, "ben", feeds+"/lage")
+	if len(fake.Loaded) != 3 {
+		t.Errorf("loaded again for a second subscriber: %v", fake.Loaded)
+	}
+	if got, _ := s.Neue(ctx); len(got) != 0 {
+		t.Errorf("told of the old ones: %v", got)
+	}
+	fake.Episode("Lage der Nation", "LdN 402", "")
+	if got, _ := s.Neue(ctx); len(got) != 2 {
+		t.Errorf("a new one, to both: %v", got)
+	}
+
+	// a subscription from before Haus fetched the first ones: once
+	st, _ := s.load()
+	st.Abos[0].Geladen, st.Abos[0].Seit = false, time.Time{}
+	st.Abos = append(st.Abos, Abo{Feed: feeds + "/zeit", Item: "nix", Title: "Weg"})
+	s.save(st)
+	fake.Loaded = nil
+	if err := s.Nachladen(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if len(fake.Loaded) != 0 {
+		t.Errorf("fetched for one that has episodes: %v", fake.Loaded)
+	}
+	st, _ = s.load()
+	if !st.Abos[0].Geladen || st.Abos[0].Seit.IsZero() || st.Abos[1].Geladen {
+		t.Errorf("%+v", st.Abos)
 	}
 }

@@ -5,6 +5,7 @@ package absfake
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -23,6 +24,7 @@ type Server struct {
 	episodes []map[string]any
 	Patches  []map[string]any // what PATCH …/media was sent
 	Removed  []string
+	Loaded   []string // the episodes asked to download, by title
 	n        int
 }
 
@@ -38,6 +40,17 @@ func (s *Server) AddFeed(feed, title string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.feeds[feed] = map[string]any{"title": title, "author": "Autor", "feedUrl": feed, "description": "Über " + title}
+}
+
+// feedEpisodes are a feed's five episodes, newest last as feeds often
+// have them: "Folge 1" (oldest) … "Folge 5".
+func feedEpisodes() []any {
+	var out []any
+	for i := 1; i <= 5; i++ {
+		out = append(out, map[string]any{"title": "Folge " + itoa(i), "publishedAt": int64(1_700_000_000_000 + i*86_400_000),
+			"enclosure": map[string]string{"url": "https://example.org/" + itoa(i) + ".mp3", "type": "audio/mpeg"}})
+	}
+	return out
 }
 
 // Items are the subscribed podcasts' ids and titles.
@@ -75,8 +88,10 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	defer s.mu.Unlock()
 	answer := func(v any) { w.Header().Set("Content-Type", "application/json"); json.NewEncoder(w).Encode(v) }
 	var in map[string]any
+	var raw []byte
 	if r.Body != nil {
-		json.NewDecoder(r.Body).Decode(&in)
+		raw, _ = io.ReadAll(r.Body)
+		json.Unmarshal(raw, &in)
 	}
 	switch {
 	case r.Method == "GET" && r.URL.Path == "/api/libraries":
@@ -90,7 +105,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Invalid podcast RSS feed", http.StatusNotFound)
 			return
 		}
-		answer(map[string]any{"podcast": map[string]any{"metadata": md}})
+		answer(map[string]any{"podcast": map[string]any{"metadata": md, "episodes": feedEpisodes()}})
 	case r.Method == "POST" && r.URL.Path == "/api/podcasts":
 		media, _ := in["media"].(map[string]any)
 		md, _ := media["metadata"].(map[string]any)
@@ -102,6 +117,40 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		id := "item" + itoa(s.n)
 		s.items = append(s.items, map[string]any{"id": id, "title": md["title"], "feedUrl": md["feedUrl"], "path": in["path"]})
 		answer(map[string]any{"id": id})
+	case r.Method == "POST" && strings.HasPrefix(r.URL.Path, "/api/podcasts/") && strings.HasSuffix(r.URL.Path, "/download-episodes"):
+		id := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/api/podcasts/"), "/download-episodes")
+		var eps []map[string]any
+		if json.Unmarshal(raw, &eps) != nil || len(eps) == 0 {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		known := false
+		for _, it := range s.items {
+			if it["id"] != id {
+				continue
+			}
+			known = true
+			for _, e := range eps {
+				s.Loaded = append(s.Loaded, e["title"].(string))
+				s.n++
+				s.episodes = append([]map[string]any{{"id": "ep" + itoa(s.n), "libraryItemId": id, "title": e["title"], "publishedAt": e["publishedAt"],
+					"podcast": map[string]any{"metadata": map[string]any{"title": it["title"]}}}}, s.episodes...)
+			}
+		}
+		if !known {
+			http.NotFound(w, r)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	case r.Method == "GET" && strings.HasPrefix(r.URL.Path, "/api/items/"):
+		id := strings.TrimPrefix(r.URL.Path, "/api/items/")
+		var eps []any
+		for _, e := range s.episodes {
+			if e["libraryItemId"] == id {
+				eps = append(eps, map[string]any{"id": e["id"], "title": e["title"]})
+			}
+		}
+		answer(map[string]any{"id": id, "media": map[string]any{"episodes": eps}})
 	case r.Method == "PATCH" && strings.HasPrefix(r.URL.Path, "/api/items/") && strings.HasSuffix(r.URL.Path, "/media"):
 		in["item"] = strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/api/items/"), "/media")
 		s.Patches = append(s.Patches, in)
