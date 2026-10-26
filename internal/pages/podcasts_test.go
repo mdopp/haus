@@ -39,7 +39,7 @@ func TestPodcastsPage(t *testing.T) {
 		t.Fatalf("%d", rec.Code)
 	}
 	mustContain(t, rec.Body.String(), "<div class=gut role=status><span class=punkt></span><p>Abonniert: „Lage der Nation“.", "<h2 id=k-meine>Meine Podcasts</h2>",
-		`data-frage="„Lage der Nation“ nicht mehr abonnieren?"`, "Noch keine Folge geladen")
+		`data-frage="„Lage der Nation“ nicht mehr abonnieren?"`, "Folge 5 <span class=k>Lage der Nation · ") // the newest three, fetched at once
 	fake.Episode("Lage der Nation", "LdN 401", "")
 	_, body, _ = familyPageAs(t, Podcasts, cfg, "GET", PodcastsPath, "anna", "family")
 	mustContain(t, body, "LdN 401 <span class=k>Lage der Nation · ")

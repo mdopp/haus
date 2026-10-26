@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"sort"
 	"strings"
 	"time"
 )
@@ -264,4 +265,57 @@ func (c *Client) Recent(ctx context.Context, lib Library, n int) ([]Episode, err
 			Description: e.Description, Published: time.UnixMilli(e.PublishedAt)})
 	}
 	return eps, nil
+}
+
+// Neueste are the feed's newest n episodes as ABS reads them (its own
+// episode objects, to hand back to DownloadEpisodes), newest first.
+func (c *Client) Neueste(ctx context.Context, feedURL string, n int) ([]json.RawMessage, error) {
+	var out struct {
+		Podcast struct {
+			Episodes []json.RawMessage `json:"episodes"`
+		} `json:"podcast"`
+	}
+	if err := c.do(ctx, http.MethodPost, "/api/podcasts/feed", map[string]string{"rssFeed": feedURL}, &out); err != nil {
+		return nil, err
+	}
+	type dated struct {
+		raw json.RawMessage
+		at  int64
+	}
+	var eps []dated
+	for _, e := range out.Podcast.Episodes {
+		var d struct {
+			PublishedAt int64 `json:"publishedAt"`
+		}
+		json.Unmarshal(e, &d)
+		eps = append(eps, dated{e, d.PublishedAt})
+	}
+	sort.SliceStable(eps, func(i, j int) bool { return eps[i].at > eps[j].at })
+	var res []json.RawMessage
+	for i := 0; i < len(eps) && i < n; i++ {
+		res = append(res, eps[i].raw)
+	}
+	return res, nil
+}
+
+// Laden asks ABS to download these episodes of the podcast now (its own
+// check only takes episodes that come after the subscription).
+func (c *Client) Laden(ctx context.Context, itemID string, episodes []json.RawMessage) error {
+	if len(episodes) == 0 {
+		return nil
+	}
+	return c.do(ctx, http.MethodPost, "/api/podcasts/"+itemID+"/download-episodes", episodes, nil)
+}
+
+// Folgen is how many episodes the podcast has on the box.
+func (c *Client) Folgen(ctx context.Context, itemID string) (int, error) {
+	var out struct {
+		Media struct {
+			Episodes []json.RawMessage `json:"episodes"`
+		} `json:"media"`
+	}
+	if err := c.do(ctx, http.MethodGet, "/api/items/"+itemID, nil, &out); err != nil {
+		return 0, err
+	}
+	return len(out.Media.Episodes), nil
 }

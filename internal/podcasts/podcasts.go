@@ -9,11 +9,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/mdopp/haus/internal/abs"
 	"github.com/mdopp/haus/internal/merken"
@@ -28,6 +30,12 @@ type Abo struct {
 	Item     string   `json:"item"` // ABS's library item
 	Title    string   `json:"title"`
 	Personen []string `json:"personen"`
+	// Seit is when the box subscribed: an episode published before it is
+	// no news to tell (the three fetched at the start are old ones)
+	Seit time.Time `json:"seit,omitzero"`
+	// Geladen: the newest episodes were asked for once (ABS's own check
+	// takes only what comes after the subscription)
+	Geladen bool `json:"geladen,omitempty"`
 }
 
 type state struct {
@@ -135,7 +143,9 @@ func (s *Service) Abonnieren(ctx context.Context, person, link string) (Ergebnis
 			return Ergebnis{}, err
 		}
 	}
-	st.Abos = append(st.Abos, Abo{Feed: pod.FeedURL, Item: item, Title: pod.Title, Personen: []string{person}})
+	a := Abo{Feed: pod.FeedURL, Item: item, Title: pod.Title, Personen: []string{person}, Seit: time.Now()}
+	a.Geladen = s.erste(ctx, a)
+	st.Abos = append(st.Abos, a)
 	return Ergebnis{Title: pod.Title, Satz: satz(pod.Title, found)}, s.save(st)
 }
 
@@ -232,8 +242,9 @@ func (s *Service) Neue(ctx context.Context) ([]Nachricht, error) {
 		seen[id] = true
 	}
 	who := map[string][]string{}
+	since := map[string]time.Time{}
 	for _, a := range st.Abos {
-		who[a.Item] = a.Personen
+		who[a.Item], since[a.Item] = a.Personen, a.Seit
 	}
 	var out []Nachricht
 	for _, e := range eps {
@@ -242,7 +253,9 @@ func (s *Service) Neue(ctx context.Context) ([]Nachricht, error) {
 		}
 		seen[e.ID] = true
 		st.Seen = append(st.Seen, e.ID)
-		if !st.Ready {
+		// the first look, or an old episode fetched at the start (to the
+		// second: ABS keeps milliseconds)
+		if !st.Ready || e.Published.Before(since[e.ItemID].Truncate(time.Second)) {
 			continue
 		}
 		for _, p := range who[e.ItemID] {
@@ -317,4 +330,53 @@ func Bekannt(err error) bool {
 	}
 	msg := err.Error()
 	return strings.HasPrefix(msg, "Diesen Podcast") || strings.HasPrefix(msg, "Abonnieren geht")
+}
+
+// erste asks ABS for the podcast's newest Keep episodes now: its own
+// check takes only what comes after the subscription, so without this the
+// box would stay empty until the next episode (owner 2026-10-26: "Die
+// Folgen werden nicht geladen"). It says whether ABS took the order.
+func (s *Service) erste(ctx context.Context, a Abo) bool {
+	eps, err := s.ABS.Neueste(ctx, a.Feed, abs.Keep)
+	if err == nil {
+		err = s.ABS.Laden(ctx, a.Item, eps)
+	}
+	if err != nil {
+		log.Printf("haus: podcasts: %q: the first episodes: %v", a.Title, err)
+		return false
+	}
+	return true
+}
+
+// Nachladen fetches the first episodes of a subscription that has none on
+// the box and was never asked for them (one made before Haus asked), and
+// dates a subscription made before Haus kept the date.
+func (s *Service) Nachladen(ctx context.Context) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	st, err := s.load()
+	if err != nil {
+		return err
+	}
+	changed := false
+	for i, a := range st.Abos {
+		if a.Seit.IsZero() {
+			st.Abos[i].Seit, changed = time.Now(), true
+		}
+		if a.Geladen {
+			continue
+		}
+		n, err := s.ABS.Folgen(ctx, a.Item)
+		if err != nil {
+			log.Printf("haus: podcasts: %q: %v", a.Title, err)
+			continue
+		}
+		if n > 0 || s.erste(ctx, st.Abos[i]) {
+			st.Abos[i].Geladen, changed = true, true
+		}
+	}
+	if !changed {
+		return nil
+	}
+	return s.save(st)
 }
