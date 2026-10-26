@@ -119,7 +119,14 @@ func TestPlatteErfassen(t *testing.T) {
 	_, body, _ := familyPage(t, Platte, cfg, "GET", PlattePath, "family")
 	mustContain(t, body, "<h1>Platte erfassen</h1>", `name=foto accept="image/*" capture=environment multiple`, "BarcodeDetector", `inputmode=numeric`)
 	_, body, _ = familyPage(t, Mehr, cfg, "GET", "/mehr", "family")
-	mustContain(t, body, "Platte erfassen")
+	mustContain(t, body, "Platte erfassen") // a box without Musik: on Mehr itself
+	cfg.MusicInbox = t.TempDir()            // owner 2026-10-26: else under Musik, not on Mehr
+	_, body, _ = familyPage(t, Mehr, cfg, "GET", "/mehr", "family")
+	mustNotContain(t, body, "Platte erfassen", "Discogs-Konto verbinden")
+	mustContain(t, body, "Hochladen, Platten erfassen, Discogs")
+	_, body, _ = familyPage(t, Musik, cfg, "GET", MusikPath, "family")
+	mustContain(t, body, "<h2 id=m-p>Platten und Wünsche</h2>", `href=/platte>Platte erfassen</a>`, `href=/discogs>Dein Discogs-Konto</a>`, `?liste=liste-musik">Musik-Wunschliste</a>`)
+	mustNotContain(t, body, "noch nicht eingerichtet")
 
 	// the phone read the barcode: Discogs's pressing, to confirm
 	rec := plattePost(t, h, map[string]string{"tun": "suchen", "barcode": "4006381333931"}, false)
