@@ -965,22 +965,28 @@ Each wish moves through stages kept in `musikwuensche.json` in HAUS_DATA:
 *Datei da* (the record on its way; set by hand, or by Jellyfin when the
 download is sorted in) → ticked off when all of it is there.
 
-## Discogs: the shelf, the wantlist, Platte erfassen (owner 2026-10-25)
+## Discogs: each person's shelf and wantlist, Platte erfassen (owner 2026-10-25/26)
 
-With the household's Discogs account (`HAUS_DISCOGS_TOKEN`, its personal
-access token, laib#696) Haus looks into the collection — a wish already on
-the shelf is "Hast du schon auf Vinyl", a wish whose album arrives there
-is ticked off (and taken off the wantlist) — and a wish's album goes on
-the wantlist with one button, so Discogs reports offers. *Platte erfassen*
-(`/platte`, under Mehr and on the list *Musik*): 1–4 photos of a record.
-The phone makes them small and reads a barcode with the browser's
-`BarcodeDetector`; without a barcode the box's model reads catalogue
-number, label, artist and title (`HAUS_LLM_VISION_MODEL`, else the house
-model; only while it has the card, else who has it). Discogs is searched
-by barcode (its check digit checked), then catalogue number and label,
-then artist and title on vinyl; the best five show with their cover
-(through Haus, `/platte/bild`) and why they match, and only *Das ist sie*
-adds one to the collection.
+One Discogs account per person (owner: "es muss doch ein Schlüssel pro
+User sein"), connected through the household's Discogs app ("Joshua";
+its consumer key and secret from laib: `HAUS_DISCOGS_KEY`,
+`HAUS_DISCOGS_SECRET`, laib#696). *Discogs* under Mehr (`/discogs`): "Mit
+Discogs verbinden" sends the person to Discogs, which asks whether the
+app may use their account, and back to `/discogs/zurueck`; Haus keeps
+their token in `discogs-konten.json` (HAUS_DATA, 0600, never shown) for
+them alone, and only for the connection it started for them (OAuth 1.0a,
+PLAINTEXT over https). *Trennen* forgets it. Per person then: a wish already
+on their shelf is "Hast du schon auf Vinyl"; *Auf die Discogs-Wantlist*
+puts a wish's album on the wantlist of who presses it; a wish whose album
+arrives on its wisher's shelf is ticked off and leaves the wantlist.
+*Platte erfassen* (`/platte`): 1–4 photos of a record. The phone makes
+them small and reads a barcode with the browser's `BarcodeDetector`;
+without a barcode the box's model reads catalogue number, label, artist
+and title (`HAUS_LLM_VISION_MODEL`, else the house model; only while it has
+the card, else who has it). Discogs is searched by barcode (its check digit
+checked), then catalogue number and label, then artist and title on vinyl;
+the best five show with their cover (through Haus, `/platte/bild`) and why
+they match, and only *Das ist sie* adds one to the person's collection.
 
 ## Podcasts (haus#123)
 

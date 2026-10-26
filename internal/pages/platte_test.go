@@ -8,6 +8,9 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -20,7 +23,7 @@ import (
 
 // a Discogs that knows Wanda's Amore by barcode and by catalogue number,
 // and keeps what was added
-func discogsFake(t *testing.T) (*discogs.Client, *[]string) {
+func discogsFake(t *testing.T) (*discogs.Regale, *[]string) {
 	var added []string
 	shelf := []any{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -30,6 +33,10 @@ func discogsFake(t *testing.T) (*discogs.Client, *[]string) {
 		switch p := r.URL.Path; {
 		case p == "/oauth/identity":
 			ans(map[string]string{"username": "mdopp"})
+		case p == "/oauth/request_token":
+			w.Write([]byte("oauth_token=rt&oauth_token_secret=rs"))
+		case p == "/oauth/access_token":
+			w.Write([]byte("oauth_token=at2&oauth_token_secret=as2"))
 		case p == "/database/search" && (q.Get("barcode") == "4006381333931" || q.Get("catno") == "PB 011"):
 			ans(map[string]any{"results": []any{amore}})
 		case p == "/database/search":
@@ -48,7 +55,10 @@ func discogsFake(t *testing.T) (*discogs.Client, *[]string) {
 		}
 	}))
 	t.Cleanup(srv.Close)
-	return &discogs.Client{Base: srv.URL, Token: "tok"}, &added
+	dir := t.TempDir()
+	// Anna has connected her Discogs; Ben has not
+	os.WriteFile(filepath.Join(dir, "discogs-konten.json"), []byte(`{"anna":{"name":"mdopp","token":"at","secret":"as"}}`), 0o600)
+	return &discogs.Regale{App: &discogs.App{Key: "ck", Secret: "cs", Base: srv.URL, Web: "https://www.discogs.test"}, Dir: dir}, &added
 }
 
 // a house model that reads a record's label from a photo, or is busy
@@ -102,8 +112,8 @@ func TestPlatteErfassen(t *testing.T) {
 	dc, added := discogsFake(t)
 	l, _ := shoppingList(t)
 	l.Changed = nil
-	w := &einkauf.Wuensche{Listen: l, Dir: t.TempDir(), Regal: &discogs.Regal{C: dc}, MB: fundFake{musicbrainz.Fund{Gefunden: true, Album: "Amore"}}}
-	cfg := StartConfig{Regal: w.Regal, Wuensche: w, Judge: modelFake(t, false)}
+	w := &einkauf.Wuensche{Listen: l, Dir: t.TempDir(), Regale: dc, MB: fundFake{musicbrainz.Fund{Gefunden: true, Album: "Amore"}}}
+	cfg := StartConfig{Discogs: dc, Wuensche: w, Judge: modelFake(t, false)}
 	h := Platte(cfg)
 
 	_, body, _ := familyPage(t, Platte, cfg, "GET", PlattePath, "family")
@@ -129,7 +139,7 @@ func TestPlatteErfassen(t *testing.T) {
 	mustContain(t, rec.Body.String(), "Den Barcode hat Haus auf dem Foto nicht sicher gelesen.", "Gelesen: Katalognummer PB 011 · Label Problembär · Wanda – Amore",
 		"<span class=grund>Katalognummer stimmt</span>")
 	// the model busy: who has the card, and the way without it
-	busy := Platte(StartConfig{Regal: w.Regal, Judge: modelFake(t, true)})
+	busy := Platte(StartConfig{Discogs: dc, Judge: modelFake(t, true)})
 	rec = plattePost(t, busy, map[string]string{"tun": "suchen"}, true)
 	if rec.Code != 400 || !strings.Contains(rec.Body.String(), "Die Grafikkarte nutzt gerade die Werkstatt bis 22:30.") {
 		t.Errorf("busy → %d %q", rec.Code, rec.Body)
@@ -138,14 +148,57 @@ func TestPlatteErfassen(t *testing.T) {
 	// confirmed: into the collection, the waiting wish ticked off
 	w.Wuenschen(context.Background(), merken.Lied{Kuenstler: "Wanda", Titel: "Amore", Album: true}, "anna")
 	rec = plattePost(t, h, map[string]string{"tun": "hinzufuegen", "release": "11", "kuenstler": "Wanda", "titel": "Amore"}, false)
-	mustContain(t, rec.Body.String(), "„Wanda – Amore“ ist in deiner Sammlung.", "ich habe „Wanda – Amore“ auf der Wunschliste abgehakt", "Nächste Platte")
+	mustContain(t, rec.Body.String(), "„Wanda – Amore“ ist in deiner Discogs-Sammlung.", "ich habe „Wanda – Amore“ auf der Wunschliste abgehakt", "Nächste Platte")
 	if strings.Join(*added, ",") != "11" {
 		t.Errorf("added %v", *added)
 	}
-	if g, _ := w.Wuenschen(context.Background(), merken.Lied{Kuenstler: "Wanda", Titel: "Amore", Album: true}, "ben"); !g.Schon || g.Satz != "Hast du schon auf Vinyl: „Amore“ (2014)." {
+	if g, _ := w.Wuenschen(context.Background(), merken.Lied{Kuenstler: "Wanda", Titel: "Amore", Album: true}, "anna"); !g.Schon || g.Satz != "Hast du schon auf Vinyl: „Amore“ (2014)." {
 		t.Errorf("on the shelf: %+v", g)
 	}
 	if code, _, _ := familyPage(t, Platte, StartConfig{}, "GET", PlattePath, "family"); code != http.StatusNotFound {
 		t.Errorf("without Discogs → %d", code)
+	}
+	// Ben has not connected his own: the way to, and no adding to Anna's
+	_, body, _ = familyPageAs(t, Platte, cfg, "GET", PlattePath, "ben", "family")
+	mustContain(t, body, saysDiscogsFirst, `href=/discogs>Discogs verbinden</a>`)
+	mustNotContain(t, body, "Fotos machen")
+	req := httptest.NewRequest("POST", PlattePath, strings.NewReader("tun=hinzufuegen&release=11"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	req.Header.Set("Remote-User", "ben")
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusConflict || len(*added) != 1 {
+		t.Errorf("Ben adding → %d, %v", rec.Code, *added)
+	}
+}
+
+// each person connects their own Discogs: to Discogs and back, their name
+// said; Ben's return cannot finish Anna's; Trennen forgets it
+func TestDiscogsVerbinden(t *testing.T) {
+	dc, _ := discogsFake(t)
+	os.Remove(filepath.Join(dc.Dir, "discogs-konten.json"))
+	cfg := StartConfig{Discogs: dc, PublicURL: "https://haus.box"}
+	h := Discogs(cfg)
+	_, body, _ := familyPage(t, Discogs, cfg, "GET", DiscogsPath, "family")
+	mustContain(t, body, "<h1>Discogs</h1>", "Nicht verbunden", `<form method=post action=/discogs data-ganz><input type=hidden name=tun value=verbinden>`)
+	rec := post(t, h, DiscogsPath, url.Values{"tun": {"verbinden"}}, "anna", nil)
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "https://www.discogs.test/oauth/authorize?oauth_token=rt" {
+		t.Fatalf("%d %q", rec.Code, rec.Header().Get("Location"))
+	}
+	_, body, _ = familyPageAs(t, Discogs, cfg, "GET", DiscogsZurueckPath+"?oauth_token=rt&oauth_verifier=v", "ben", "family")
+	mustContain(t, body, discogs.ErrFremd.Error())
+	post(t, h, DiscogsPath, url.Values{"tun": {"verbinden"}}, "anna", nil)
+	_, body, _ = familyPageAs(t, Discogs, cfg, "GET", DiscogsZurueckPath+"?oauth_token=rt&oauth_verifier=v", "anna", "family")
+	mustContain(t, body, "Verbunden: Haus nutzt jetzt dein Discogs-Konto „mdopp“.", "Verbunden mit „mdopp“ seit", ">Trennen</button>")
+	if _, ok := dc.For("anna"); !ok {
+		t.Fatal("not kept")
+	}
+	_, body, _ = familyPageAs(t, Discogs, cfg, "GET", DiscogsZurueckPath+"?denied=rt", "ben", "family")
+	mustContain(t, body, "abgelehnt")
+	rec = post(t, h, DiscogsPath, url.Values{"tun": {"trennen"}}, "anna", nil)
+	mustContain(t, rec.Body.String(), "Getrennt", "Nicht verbunden")
+	if _, ok := dc.For("anna"); ok {
+		t.Error("still connected")
 	}
 }

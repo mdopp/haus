@@ -1,7 +1,8 @@
-// Package discogs is the household's records on Discogs (owner
-// 2026-10-25): its collection — what is on the shelf — and its wantlist,
-// read and written with the account's personal access token (laib#696:
-// HAUS_DISCOGS_TOKEN). Haus finds a record by its barcode, its catalogue
+// Package discogs is each person's records on Discogs (owner 2026-10-25,
+// 2026-10-26: one account per person): their collection — what is on the
+// shelf — and their wantlist, read and written with their own token, got
+// through the household's app (oauth.go; laib#696: HAUS_DISCOGS_KEY and
+// HAUS_DISCOGS_SECRET). Haus finds a record by its barcode, its catalogue
 // number or its name, adds what the owner confirmed, keeps record wishes on
 // the wantlist and sees when one arrived in the collection. Discogs asks
 // for at most 60 requests a minute and a User-Agent naming the program.
@@ -16,30 +17,26 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 )
 
-// Client is Discogs for one account.
+// Client is Discogs for one account: a personal access token (Token), or
+// the app's consumer key and secret with the person's OAuth token and its
+// secret (owner 2026-10-26: one account per person, connected through the
+// app "Joshua").
 type Client struct {
 	Base  string // https://api.discogs.com; the tests' own
 	Token string
 	HTTP  *http.Client
 
+	ConsumerKey, ConsumerSecret string
+	OAuthToken, OAuthSecret     string
+
 	mu   sync.Mutex
 	user string
-}
-
-// FromEnv is Discogs from HAUS_DISCOGS_TOKEN, or nil without it.
-func FromEnv() *Client {
-	t := strings.TrimSpace(os.Getenv("HAUS_DISCOGS_TOKEN"))
-	if t == "" {
-		return nil
-	}
-	return &Client{Base: "https://api.discogs.com", Token: t}
 }
 
 const userAgent = "Haus/1.0 +https://github.com/mdopp/haus"
@@ -68,7 +65,11 @@ func (c *Client) do(ctx context.Context, method, path string, q url.Values, in, 
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", "Discogs token="+c.Token)
+	if c.ConsumerKey != "" {
+		req.Header.Set("Authorization", oauthHeader(c.ConsumerKey, c.ConsumerSecret, c.OAuthToken, c.OAuthSecret, nil))
+	} else {
+		req.Header.Set("Authorization", "Discogs token="+c.Token)
+	}
 	req.Header.Set("User-Agent", userAgent)
 	if in != nil {
 		req.Header.Set("Content-Type", "application/json")

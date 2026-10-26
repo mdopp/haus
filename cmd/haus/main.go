@@ -98,7 +98,7 @@ func routes(s site) http.Handler {
 	// the lists, the music wish list and the shelf, before any page takes its copy of family
 	family.Einkauf, family.Wuensche = s.hh.Einkauf, s.hh.Wuensche
 	if s.hh.Wuensche != nil {
-		family.Regal = s.hh.Wuensche.Regal
+		family.Discogs = s.hh.Wuensche.Regale
 	}
 	family.MusicInbox = os.Getenv("HAUS_MUSIC_INBOX")
 	if fi, err := os.Stat(musicInboxMount); family.MusicInbox == "" && err == nil && fi.IsDir() {
@@ -124,7 +124,9 @@ func routes(s site) http.Handler {
 	pagesMux.Handle(pages.LivePath, live)
 	if s.hh.Einkauf != nil { // haus#118: the list, ticked on one phone, fetched again on the others
 		s.hh.Einkauf.Changed = func(r caldav.ListRef) { live.Tell(pages.ListeLive(r)) }
-		if family.Regal != nil {
+		if family.Discogs != nil {
+			pagesMux.HandleFunc(pages.DiscogsPath, pages.Discogs(family))        // connect one's own Discogs
+			pagesMux.HandleFunc(pages.DiscogsZurueckPath, pages.Discogs(family)) // the way back from Discogs
 			pagesMux.HandleFunc(pages.PlattePath, pages.Platte(family))
 			pagesMux.HandleFunc(pages.PlatteBildPath, pages.Platte(family))
 		}
@@ -329,8 +331,8 @@ func main() {
 		if jf := jellyfin.FromEnv(); jf != nil { // laib#695: "hast du schon", and arrived wishes ticked off
 			hh.Wuensche.Bib = jf
 		}
-		if dc := discogs.FromEnv(); dc != nil { // laib#696: the records on the shelf, the wantlist, Platte erfassen
-			hh.Wuensche.Regal = &discogs.Regal{C: dc}
+		if app := discogs.AppFromEnv(); app != nil { // each person's own Discogs, through the household's app (laib#696)
+			hh.Wuensche.Regale = &discogs.Regale{App: app, Dir: dataDir}
 		}
 	}
 	cfg.Haushalt = hh // haus#10: the tool widgets from the same backends; none set, 404
