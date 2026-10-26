@@ -25,7 +25,7 @@ func Geraete(store *devices.Store, publicURL string, family StartConfig) http.Ha
 			origin = "https://" + r.Host
 		}
 		b := adminHead(r, family, "Geräte")
-		b.WriteString(unterNav("Geräte") + "<h1>Geräte</h1>")
+		b.WriteString(unterNav("Geräte", family.Usage != nil) + "<h1>Geräte</h1>")
 		if r.Method == http.MethodPost {
 			r.ParseForm()
 			if id := r.Form.Get("entfernen"); id != "" {

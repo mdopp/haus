@@ -61,12 +61,23 @@ func TestBoxComesAtOnceAndFillsItsParts(t *testing.T) {
 	}
 	body := rec.Body.String()
 	mustContain(t, body, `<div id=box-stand data-teil=stand aria-busy=true><h1>Box</h1><p class=k>lädt …</p></div>`,
-		`<div id=box-inbox data-teil=inbox aria-busy=true><h2>Inbox</h2>`, `<div id=box-journal data-teil=journal aria-busy=true><h2>Journal · 24h</h2>`,
-		`["stand","inbox","aufgaben","einladen","journal"].forEach`, "fetch('/box/teil?was='+was", `<noscript><meta http-equiv=refresh content="0;url=/box?ganz=1"></noscript>`, saysPartFailed)
-	mustNotContain(t, body, "Was wird genutzt", "Werkstatt", "Operator:")
+		`<div id=box-inbox data-teil=inbox aria-busy=true><h2>Inbox</h2>`, `<div id=box-bericht data-teil=journal aria-busy=true><h2>Morgenbericht</h2>`,
+		`["stand","inbox","journal"].forEach`, "fetch('/box/teil?was='+was", `<noscript><meta http-equiv=refresh content="0;url=/box?ganz=1"></noscript>`, saysPartFailed,
+		`<nav class=unter aria-label=Box><a href=/box aria-current=page>Übersicht</a><a href=/box/aufgaben>Aufgaben</a><a href=/box/dienste>Dienste</a><a href=/box/journal>Journal</a><a href=/box/personen>Personen</a><a href=/box/geraete>Geräte</a></nav>`)
+	mustNotContain(t, body, "Was wird genutzt", "Werkstatt", "Operator:", "box-laeuft", "box-journal", "box-einladen", "box-aufgaben", ">Nutzung</a>")
 	before(t, body, "box-stand", "box-inbox")
-	before(t, body, "box-bericht", "box-laeuft")
-	before(t, body, "box-laeuft", "box-journal")
+	before(t, body, "box-inbox", "box-bericht")
+	// each topic on its own page (owner 2026-10-26: "zu viele lange Themen vermischt")
+	for page, want := range map[string]string{"/box/dienste": "<h1>Dienste</h1>", "/box/journal": "<h1>Journal</h1>", "/box/personen": "<h1>Personen</h1>"} {
+		rec := boxAt(h, page, "admins")
+		mustContain(t, rec.Body.String(), want, `href=`+page+` aria-current=page>`)
+	}
+	if rec := boxAt(h, "/box/nutzung", "admins"); rec.Code != http.StatusNotFound { // nothing counted on this box
+		t.Errorf("Nutzung without counting → %d", rec.Code)
+	}
+	if rec := boxAt(h, "/box/gibtsnicht", "admins"); rec.Code != http.StatusNotFound {
+		t.Errorf("no such page → %d", rec.Code)
+	}
 	if rec.Header().Get("Cache-Control") != "no-store" {
 		t.Errorf("Cache-Control %q", rec.Header().Get("Cache-Control"))
 	}
@@ -114,7 +125,8 @@ func TestBoxWholeReadsThePartsTogether(t *testing.T) {
 	h := BoxPage(BoxConfig{Laib: slowStatusLaib(t, 300*time.Millisecond), LaibURL: "https://laib.box.test"})
 	rec := boxAt(h, "/box?ganz=1", "admins")
 	body := rec.Body.String()
-	mustContain(t, body, "<div id=box-stand data-teil=stand aria-busy=false>", "Operator:", "<h2>Inbox</h2><p class=k>leer</p>", "<h2>Was läuft</h2>", "paperless")
+	mustContain(t, body, "<div id=box-stand data-teil=stand aria-busy=false>", "Operator:", "<h2>Inbox</h2><p class=k>leer</p>")
+	mustContain(t, boxAt(h, "/box/dienste?ganz=1", "admins").Body.String(), "<h2>Was läuft</h2>", "paperless")
 	mustNotContain(t, body, "fetch('/box/teil", saysPartLoading)
 }
 

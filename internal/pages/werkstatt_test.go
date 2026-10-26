@@ -29,7 +29,7 @@ func TestBoxShowsTheWerkstattTickets(t *testing.T) {
 	}))
 	t.Cleanup(gh.Close)
 	tk := &werkstatt.Tickets{API: gh.URL, Repos: []string{"mdopp/laib"}}
-	page := get(BoxWith(fakeLaib(t, map[string]any{"state": "bereit"}, nil), "https://laib.box.test", tk), "admins")
+	page := getAt(BoxWith(fakeLaib(t, map[string]any{"state": "bereit"}, nil), "https://laib.box.test", tk), "/box/journal?ganz=1", "admins")
 	for _, want := range []string{"Werkstatt", "Tippfehler im README", "https://github.com/mdopp/laib/issues/7", "Lease &lt;hängt&gt;", "wartet auf Claude"} {
 		if !strings.Contains(page, want) {
 			t.Fatalf("the Werkstatt card lacks %q:\n%s", want, page)
@@ -39,7 +39,7 @@ func TestBoxShowsTheWerkstattTickets(t *testing.T) {
 
 // No Werkstatt configured: no card, and the page does not break.
 func TestBoxWithoutAWerkstattHasNoCard(t *testing.T) {
-	page := get(BoxWith(fakeLaib(t, map[string]any{"state": "bereit"}, nil), "https://laib.box.test", nil), "admins")
+	page := getAt(BoxWith(fakeLaib(t, map[string]any{"state": "bereit"}, nil), "https://laib.box.test", nil), "/box/journal?ganz=1", "admins")
 	if strings.Contains(page, "Werkstatt") {
 		t.Fatalf("a card without a Werkstatt:\n%s", page)
 	}
@@ -48,8 +48,8 @@ func TestBoxWithoutAWerkstattHasNoCard(t *testing.T) {
 // GitHub down: the card says so in plain words; the rest of the page stands.
 func TestBoxSaysWhenGitHubDoesNotAnswer(t *testing.T) {
 	tk := &werkstatt.Tickets{API: "http://127.0.0.1:1", Repos: []string{"mdopp/laib"}}
-	page := get(BoxWith(fakeLaib(t, map[string]any{"state": "bereit"}, nil), "https://laib.box.test", tk), "admins")
-	if !strings.Contains(page, "Werkstatt") || !strings.Contains(page, "nicht erreichbar") || !strings.Contains(page, "Was läuft") {
+	page := getAt(BoxWith(fakeLaib(t, map[string]any{"state": "bereit"}, nil), "https://laib.box.test", tk), "/box/journal?ganz=1", "admins")
+	if !strings.Contains(page, "Werkstatt") || !strings.Contains(page, "nicht erreichbar") || !strings.Contains(page, "<h2>Journal · 24h</h2>") {
 		t.Fatalf("GitHub down must be said plainly and not break the page:\n%s", page)
 	}
 }

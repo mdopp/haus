@@ -102,7 +102,7 @@ func suggestUser(first string) string {
 func Einladen(cfg BoxConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
-			http.Redirect(w, r, "/box", http.StatusSeeOther)
+			http.Redirect(w, r, "/box/personen", http.StatusSeeOther)
 			return
 		}
 		if !isAdmin(r) {
