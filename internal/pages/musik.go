@@ -582,7 +582,7 @@ func musikPlatten(r *http.Request, cfg StartConfig) string {
 		return ""
 	}
 	var b strings.Builder
-	b.WriteString(`<section class=karte aria-labelledby=m-p><h2 id=m-p>Platten und Wünsche</h2><p class=wege>`)
+	b.WriteString(`<section class="karte musik-platten" aria-labelledby=m-p><h2 id=m-p>Platten und Wünsche</h2><p class=wege>`)
 	if cfg.Wuensche != nil {
 		b.WriteString(`<a class=knopf href="` + EinkaufPath + `?liste=` + einkauf.MusikListe.ID() + `">Musik-Wunschliste</a> `)
 	}
