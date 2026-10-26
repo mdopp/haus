@@ -223,7 +223,7 @@ func platteBild(w http.ResponseWriter, r *http.Request, rg *discogs.Regal) {
 	w.Write(b)
 }
 
-const platteStyle = `<style>.platte-form label{display:block;font-size:.85rem;color:var(--muted);margin:12px 0 6px}
+const platteStyle = `<style>.karte form.platte-form{display:block}.platte-form .knopf{margin:4px 0 0}.platte-form label{display:block;font-size:.85rem;color:var(--muted);margin:12px 0 6px}
 .platte-form input[type=text]{width:100%;min-height:48px;font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--edge);border-radius:12px;padding:0 14px}
 .platte-form .knopf{position:relative;display:inline-flex;align-items:center;min-height:48px;padding:0 20px;border-radius:999px;background:var(--accent);color:var(--card);font-weight:600;cursor:pointer}
 .platte-form .knopf input{position:absolute;inset:0;opacity:0;cursor:pointer}.platte-form button{margin:16px 0 0;min-height:48px}
