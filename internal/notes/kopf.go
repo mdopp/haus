@@ -2,6 +2,8 @@ package notes
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"io"
 	"io/fs"
@@ -20,7 +22,11 @@ type Kopf struct {
 	Tags   []string // normalised by Tag, in the order given
 	Quelle string   // the address a note was made from
 	Titel  string   // title:, which some older notes carry instead of "# "
-	other  []string // every other line of the head, as it was
+	// what Haus kept of the page and of its own text when it made the note
+	// from a link: the page's fingerprint (stand:) and the text's (inhalt:),
+	// so a link shared again finds a changed page and a note edited since
+	Stand, Inhalt string
+	other         []string // every other line of the head, as it was
 }
 
 // Arten are the kinds a note can be: what Haus can do with it.
@@ -136,6 +142,10 @@ func SplitKopf(text string) (Kopf, string) {
 			k.Quelle = unquote(val)
 		case "title":
 			k.Titel = unquote(val)
+		case "stand":
+			k.Stand = unquote(val)
+		case "inhalt":
+			k.Inhalt = unquote(val)
 		default:
 			k.other = append(k.other, l)
 		}
@@ -153,7 +163,7 @@ func unquote(s string) string {
 
 // Empty says the head has nothing to write.
 func (k Kopf) Empty() bool {
-	return k.Art == "" && len(k.Tags) == 0 && k.Quelle == "" && k.Titel == "" && len(k.other) == 0
+	return k.Art == "" && len(k.Tags) == 0 && k.Quelle == "" && k.Titel == "" && k.Stand == "" && k.Inhalt == "" && len(k.other) == 0
 }
 
 // Text is the head as the file carries it, "" when it is empty: Haus's
@@ -175,6 +185,12 @@ func (k Kopf) Text() string {
 	}
 	if k.Titel != "" {
 		b.WriteString("title: " + oneLine(k.Titel) + "\n")
+	}
+	if k.Stand != "" {
+		b.WriteString("stand: " + oneLine(k.Stand) + "\n")
+	}
+	if k.Inhalt != "" {
+		b.WriteString("inhalt: " + oneLine(k.Inhalt) + "\n")
 	}
 	for _, l := range k.other {
 		b.WriteString(l + "\n")
@@ -326,6 +342,13 @@ func (k Kopf) Set(art string, tags []string) Kopf {
 // ByQuelle is the note made from this address, if there is one: a link
 // kept once is not kept twice (haus#117).
 func (d *Dir) ByQuelle(ctx context.Context, quelle string) (Entry, bool, error) {
+	return d.ByQuelleWie(ctx, quelle, func(s string) string { return s })
+}
+
+// ByQuelleWie is ByQuelle with addresses compared by key (merken.Schluessel:
+// a link shared with ?si=… or utm_… is the same link).
+func (d *Dir) ByQuelleWie(ctx context.Context, quelle string, key func(string) string) (Entry, bool, error) {
+	want := key(quelle)
 	root, err := os.OpenRoot(d.path)
 	if err != nil {
 		return Entry{}, false, err
@@ -360,7 +383,7 @@ func (d *Dir) ByQuelle(ctx context.Context, quelle string) (Entry, bool, error) 
 		}
 		head, _ := io.ReadAll(io.LimitReader(f, 4<<10))
 		f.Close()
-		if k, _ := SplitKopf(string(head)); k.Quelle != "" && k.Quelle == quelle {
+		if k, _ := SplitKopf(string(head)); k.Quelle != "" && key(k.Quelle) == want {
 			found, ok = Entry{Name: name, Title: title(name, head), Kopf: k}, true
 		}
 		return nil
@@ -369,4 +392,11 @@ func (d *Dir) ByQuelle(ctx context.Context, quelle string) (Entry, bool, error) 
 		return Entry{}, false, err
 	}
 	return found, ok, nil
+}
+
+// Inhalt is a note's text as a fingerprint: what Haus wrote, to see later
+// whether someone changed it.
+func Inhalt(body string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(strings.ReplaceAll(body, "\r\n", "\n"))))
+	return hex.EncodeToString(sum[:6])
 }

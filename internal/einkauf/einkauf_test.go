@@ -362,6 +362,14 @@ func TestMusikWuensche(t *testing.T) {
 	if done, _ := w.Pruefen(ctx); len(done) != 0 {
 		t.Errorf("told twice: %+v", done)
 	}
+	// shared again once it arrived: the same line opened again, not a second
+	delete(bib, "wanda|salbei")
+	if g, _ := w.Wuenschen(ctx, merken.Lied{Kuenstler: "Wanda", Titel: "Salbei"}, "anna"); !g.Steht || !strings.Contains(g.Satz, "hattest du schon einmal gewünscht") {
+		t.Errorf("again: %+v", g)
+	}
+	if items, _ := l.Andere(MusikListe).Lesen(ctx); len(items) != 2 {
+		t.Errorf("a second line: %+v", items)
+	}
 	if k := Kaufen("Wanda – Salbei"); k[0][1] != "https://bandcamp.com/search?q=Wanda+Salbei" {
 		t.Errorf("%v", k)
 	}
