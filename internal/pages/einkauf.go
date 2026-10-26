@@ -170,7 +170,7 @@ func Einkauf(cfg StartConfig) http.HandlerFunc {
 				err = cfg.Wuensche.NeuSuchen(ctx, r.PostForm.Get("uid"))
 				said = "Sucht, wo es das gibt; die Seite zeigt es gleich."
 			case "wantlist":
-				if said, err = cfg.Wuensche.AufWantlist(ctx, r.PostForm.Get("uid")); err != nil && !errors.Is(err, einkauf.ErrNoLine) {
+				if said, err = cfg.Wuensche.AufWantlist(ctx, r.PostForm.Get("uid"), person); err != nil && !errors.Is(err, einkauf.ErrNoLine) {
 					var de *discogs.Error
 					if errors.As(err, &de) {
 						http.Error(w, discogsSays(err), http.StatusBadGateway)
@@ -391,7 +391,7 @@ func writeEinkauf(w http.ResponseWriter, r *http.Request, cfg StartConfig, l *ei
 		}
 		b.WriteString("</span></button></form>")
 		if music && !it.Done {
-			b.WriteString(wunschKarte(cfg, act, it))
+			b.WriteString(wunschKarte(cfg, act, it, person))
 		}
 		b.WriteString("</li>")
 	}
@@ -403,7 +403,7 @@ func writeEinkauf(w http.ResponseWriter, r *http.Request, cfg StartConfig, l *ei
 		b.WriteString(`<form class=einkauf-weg method=post action="` + act + `" data-frage="` + html.EscapeString(count(done, "abgehakte Zeile", "abgehakte Zeilen")) + ` von der Liste nehmen?">` +
 			`<input type=hidden name=tun value=aufraeumen><button data-laeuft="Räumt auf …">Abgehakte entfernen</button></form>`)
 	}
-	if l.Ref == einkauf.MusikListe && cfg.Regal != nil {
+	if l.Ref == einkauf.MusikListe && cfg.Discogs != nil {
 		b.WriteString(`<p class=wege><a class=knopf href=` + PlattePath + `>Platte erfassen</a></p>`)
 	}
 	if cfg.Notes != nil && l.Ref != einkauf.MusikListe {
@@ -564,7 +564,7 @@ func RezeptAufDieListe(name string) string {
 // wunschKarte is a wish's stage, where it is to be had (MusicBrainz:
 // album, date, label, the band's and label's shops), the searches in the
 // shops, the link it came from, and the buttons to move it on.
-func wunschKarte(cfg StartConfig, act string, it caldav.Item) string {
+func wunschKarte(cfg StartConfig, act string, it caldav.Item, person string) string {
 	var b strings.Builder
 	var st einkauf.Stand
 	if cfg.Wuensche != nil {
@@ -645,7 +645,7 @@ func wunschKarte(cfg StartConfig, act string, it caldav.Item) string {
 		case einkauf.StufeDatei:
 			btn("platte", "Platte ist da", "Hakt ab …")
 		}
-		if cfg.Wuensche.Regal != nil && st.Wantlist == 0 && st.AlbumName(einkaufTitle(it.Summary)) != "" {
+		if _, ok := cfg.Wuensche.Regale.For(person); ok && st.Wantlist == 0 && st.AlbumName(einkaufTitle(it.Summary)) != "" {
 			btn("wantlist", "Auf die Discogs-Wantlist", "Trägt ein …")
 		}
 		if cfg.Wuensche.MB != nil && !st.Sucht {

@@ -36,12 +36,17 @@ var platteWait = 90 * time.Second
 // katalognummer), tun=hinzufuegen (release, kuenstler, titel).
 func Platte(cfg StartConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if cfg.Regal == nil {
+		if cfg.Discogs == nil {
 			missing{http.StatusNotFound, "Diese Seite gibt es nicht.", "Mehr", mehrPath, "Mehr"}.write(w, r, cfg)
 			return
 		}
+		rg, connected := cfg.Discogs.For(r.Header.Get("Remote-User"))
 		if r.URL.Path == PlatteBildPath {
-			platteBild(w, r, cfg)
+			if !connected {
+				http.NotFound(w, r)
+				return
+			}
+			platteBild(w, r, rg)
 			return
 		}
 		if r.URL.Path != PlattePath {
@@ -52,6 +57,10 @@ func Platte(cfg StartConfig) http.HandlerFunc {
 			if showOnly(w, r, "Platte erfassen") {
 				writePlatte(w, r, cfg, "", nil, nil, discogs.Hinweise{})
 			}
+			return
+		}
+		if !connected {
+			http.Error(w, saysDiscogsFirst, http.StatusConflict)
 			return
 		}
 		if !fromHaus(r) {
@@ -67,9 +76,9 @@ func Platte(cfg StartConfig) http.HandlerFunc {
 		defer cancel()
 		switch r.FormValue("tun") {
 		case "suchen":
-			platteSuchen(ctx, w, r, cfg)
+			platteSuchen(ctx, w, r, cfg, rg)
 		case "hinzufuegen":
-			platteHinzu(ctx, w, r, cfg)
+			platteHinzu(ctx, w, r, cfg, rg)
 		default:
 			http.Error(w, "Das geht hier nicht.", http.StatusBadRequest)
 		}
@@ -79,7 +88,7 @@ func Platte(cfg StartConfig) http.HandlerFunc {
 // platteSuchen reads what there is — the barcode the phone read or typed,
 // a catalogue number typed, else the photos through the model — and shows
 // Discogs's best releases to confirm.
-func platteSuchen(ctx context.Context, w http.ResponseWriter, r *http.Request, cfg StartConfig) {
+func platteSuchen(ctx context.Context, w http.ResponseWriter, r *http.Request, cfg StartConfig, rg *discogs.Regal) {
 	h := discogs.Hinweise{Barcode: strings.TrimSpace(r.FormValue("barcode")), Katalognummer: strings.TrimSpace(r.FormValue("katalognummer"))}
 	var notes []string
 	if h.Barcode != "" && !discogs.EAN(h.Barcode) {
@@ -138,7 +147,7 @@ func platteSuchen(ctx context.Context, w http.ResponseWriter, r *http.Request, c
 		http.Error(w, msg, http.StatusBadRequest)
 		return
 	}
-	ts, err := cfg.Regal.C.Finden(ctx, h)
+	ts, err := rg.C.Finden(ctx, h)
 	if err != nil {
 		log.Printf("haus: platte: discogs: %v", err)
 		http.Error(w, discogsSays(err), http.StatusBadGateway)
@@ -151,7 +160,7 @@ func platteSuchen(ctx context.Context, w http.ResponseWriter, r *http.Request, c
 func discogsSays(err error) string {
 	var e *discogs.Error
 	if errors.As(err, &e) && (e.Status == 401 || e.Status == 403) {
-		return "Discogs lässt Haus nicht hinein: Der Schlüssel stimmt nicht mehr. Hinterleg auf Laibs Seite einen neuen."
+		return "Discogs lässt Haus nicht hinein: Die Verbindung zu deinem Konto gilt nicht mehr. Verbinde Discogs unter Mehr → Discogs neu."
 	}
 	if errors.As(err, &e) && e.Status == 429 {
 		return "Discogs bremst gerade (zu viele Anfragen). In einer Minute noch einmal."
@@ -161,21 +170,21 @@ func discogsSays(err error) string {
 
 // platteHinzu adds the confirmed release, ticks off what waited for it on
 // the music wish list, and says whether the music is there as a file too.
-func platteHinzu(ctx context.Context, w http.ResponseWriter, r *http.Request, cfg StartConfig) {
+func platteHinzu(ctx context.Context, w http.ResponseWriter, r *http.Request, cfg StartConfig, rg *discogs.Regal) {
 	id, err := strconv.Atoi(r.FormValue("release"))
 	if err != nil || id <= 0 {
 		http.Error(w, "Welche Platte? Die Nummer fehlt.", http.StatusBadRequest)
 		return
 	}
-	if err := cfg.Regal.C.Hinzufuegen(ctx, id); err != nil {
+	if err := rg.C.Hinzufuegen(ctx, id); err != nil {
 		log.Printf("haus: platte: adding %d: %v", id, err)
 		http.Error(w, discogsSays(err), http.StatusBadGateway)
 		return
 	}
-	cfg.Regal.Vergessen()
+	rg.Vergessen()
 	artist, title := r.FormValue("kuenstler"), r.FormValue("titel")
 	name := strings.Trim(artist+" – "+title, " –")
-	said := "„" + name + "“ ist in deiner Sammlung."
+	said := "„" + name + "“ ist in deiner Discogs-Sammlung."
 	log.Printf("haus: platte: %s added %d", r.Header.Get("Remote-User"), id)
 	if cfg.Wuensche != nil {
 		if done, err := cfg.Wuensche.Pruefen(ctx); err == nil {
@@ -196,7 +205,7 @@ func platteHinzu(ctx context.Context, w http.ResponseWriter, r *http.Request, cf
 
 // platteBild is a release's cover through Haus: the phone never asks
 // Discogs itself.
-func platteBild(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
+func platteBild(w http.ResponseWriter, r *http.Request, rg *discogs.Regal) {
 	id, err := strconv.Atoi(r.URL.Query().Get("r"))
 	if err != nil || id <= 0 || !showOnly(w, r, "Das Bild") {
 		http.NotFound(w, r)
@@ -204,7 +213,7 @@ func platteBild(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
-	b, ct, err := cfg.Regal.C.Bild(ctx, id)
+	b, ct, err := rg.C.Bild(ctx, id)
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -228,6 +237,11 @@ const platteStyle = `<style>.platte-form label{display:block;font-size:.85rem;co
 func writePlatte(w http.ResponseWriter, r *http.Request, cfg StartConfig, said string, notes []string, ts []discogs.Treffer, h discogs.Hinweise) {
 	b := familyHead(r, cfg, "Platte erfassen", "Platte erfassen")
 	b.WriteString(platteStyle + "<h1>Platte erfassen</h1><p class=k>" + html.EscapeString(saysPlatteHow) + "</p>")
+	if _, ok := cfg.Discogs.For(r.Header.Get("Remote-User")); !ok {
+		b.WriteString("<div class=\"achtung selbst\" role=status><p>" + html.EscapeString(saysDiscogsFirst) + "</p></div><p class=wege><a class=knopf href=" + DiscogsPath + ">Discogs verbinden</a></p>")
+		writePage(w, http.StatusOK, b)
+		return
+	}
 	if said != "" {
 		b.WriteString("<div class=gut role=status><span class=punkt></span><p>" + html.EscapeString(said) + "</p></div>")
 	}
