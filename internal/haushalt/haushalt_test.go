@@ -255,7 +255,7 @@ func TestToolsOnlyWhatWorks(t *testing.T) {
 	cal := []string{"erinnerung_anlegen", "erinnerungen", "termin_anlegen", "termine"}
 	not := []string{"notiz_anlegen", "notiz_aus_link", "notiz_lesen", "notizen_mit_tag", "notizen_suchen"}
 	con := []string{"kontakt_anlegen", "kontakt_lesen", "kontakte_suchen"}
-	doc := []string{"dokumente_suchen"}
+	doc := []string{"dokumente_suchen", "vertraege_finden"}
 	join := func(ls ...[]string) []string {
 		var out []string
 		for _, l := range ls {
@@ -1389,5 +1389,42 @@ func TestEinkaufsliste(t *testing.T) {
 	text, _ = call(t, h, "einkaufsliste", map[string]any{})
 	if text != "Auf der Liste:\n- 1 l Milch\n- 4 Zwiebeln (Lasagne, Rotes Curry)\n- 200 g Mehl (Lasagne)\n" {
 		t.Errorf("%q", text)
+	}
+}
+
+// haus#139: "Wann läuft die Kfz-Versicherung aus?" is answered from the
+// contract fields, with the document's link; a contract without fields is
+// asked through the document chat, and without that said so; never an
+// answer without a document.
+func TestVertraegeFinden(t *testing.T) {
+	f := paperlessfake.New("tok")
+	defer f.Close()
+	f.DocType(1, "Versicherung")
+	f.Tag(9, "prüfen")
+	f.Field(11, "Anbieter", "string")
+	f.Field(12, "Nächster Kündigungstermin", "date")
+	f.Field(13, "Kündigungsfrist", "string")
+	f.Field(14, "Betrag", "monetary")
+	f.Field(15, "Zahlungsintervall", "string")
+	f.Add(paperlessfake.Doc{ID: 1, Title: "Kfz-Versicherung 2026", DocumentType: 1,
+		Fields: map[int]any{11: "HUK-Coburg", 12: "2027-01-01", 13: "1 Monat", 14: "EUR84.50", 15: "monatlich"}},
+		paperlessfake.Doc{ID: 2, Title: "Hausratversicherung", DocumentType: 1, Tags: []int{9}})
+	h := Handler(Config{Token: tok, Loc: berlin(t), Documents: &paperless.Client{URL: f.URL, Token: "tok", PublicURL: "https://paperless.box"}})
+	text, isErr := call(t, h, "vertraege_finden", map[string]any{"frage": "Wann läuft die Kfz-Versicherung aus?"})
+	want := "Kfz-Versicherung 2026 (Versicherung)\n- Anbieter: HUK-Coburg\n- Kündigungsfrist: 1 Monat\n- Nächster Kündigungstermin: 01.01.2027\n" +
+		"- Kündigen bis spätestens: 01.12.2026\n- Betrag: 84,50 € monatlich\nDokument: https://paperless.box/documents/1/details"
+	if isErr || text != want {
+		t.Fatalf("%q", text)
+	}
+	text, _ = call(t, h, "vertraege_finden", map[string]any{"frage": "Was kostet die Hausratversicherung?"})
+	if !strings.Contains(text, "keine Vertragsdaten eingetragen; die Antwort steht nur im Dokument selbst") || !strings.Contains(text, "Unsicher") || !strings.Contains(text, "/documents/2/details") {
+		t.Errorf("no fields, no chat: %q", text)
+	}
+	f.ChatAnswer = "Der Beitrag beträgt 12,40 € im Monat."
+	if text, _ = call(t, h, "vertraege_finden", map[string]any{"frage": "Was kostet die Hausratversicherung?"}); !strings.Contains(text, "Paperless liest im Dokument: Der Beitrag beträgt 12,40 € im Monat.") || !strings.Contains(text, "/documents/2/details") {
+		t.Errorf("the chat: %q", text)
+	}
+	if text, _ = call(t, h, "vertraege_finden", map[string]any{"frage": "Wann endet der Handyvertrag?"}); !strings.HasPrefix(text, "Keinen Vertrag gefunden") {
+		t.Errorf("none: %q", text)
 	}
 }

@@ -29,6 +29,10 @@ type Doc struct {
 	// OriginalFileName is the name of the file Paperless consumed it from;
 	// original_filename__icontains finds it.
 	OriginalFileName string
+	// DocumentType is its type's id (0: none); Fields its custom fields'
+	// values by field id (#139: the contract fields)
+	DocumentType int
+	Fields       map[int]any
 }
 
 // Server is the fake.
@@ -40,7 +44,13 @@ type Server struct {
 	docs           []Doc
 	correspondents map[int]string
 	tags           map[int]string
-	Requests       []*http.Request // every request, in order (headers and URL)
+	types          map[int]string
+	fieldDefs      map[int][2]string // id → name, data_type
+	// ChatAnswer, when set, is what POST /api/documents/chat/ answers
+	// (Paperless 3's document chat); unset: 404, as without the AI.
+	ChatAnswer string
+	ChatAsked  []map[string]any
+	Requests   []*http.Request // every request, in order (headers and URL)
 
 	// Status, when set, is every answer's status, with a body that echoes
 	// the request's Authorization header, as a careless proxy might.
@@ -108,6 +118,26 @@ func (s *Server) Tag(id int, name string) {
 	s.tags[id] = name
 }
 
+// DocType names a document type.
+func (s *Server) DocType(id int, name string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.types == nil {
+		s.types = map[int]string{}
+	}
+	s.types[id] = name
+}
+
+// Field defines a custom field (data_type string, date, monetary …).
+func (s *Server) Field(id int, name, kind string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.fieldDefs == nil {
+		s.fieldDefs = map[int][2]string{}
+	}
+	s.fieldDefs[id] = [2]string{name, kind}
+}
+
 // Seen returns the requests so far.
 func (s *Server) Seen() []*http.Request {
 	s.mu.Lock()
@@ -150,7 +180,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`{"detail":"Ungültiges Token."}`))
 		return
 	}
-	if r.Method != http.MethodGet {
+	if r.Method != http.MethodGet && r.URL.Path != "/api/documents/chat/" {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
@@ -175,6 +205,18 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		named := strings.ToLower(q.Get("original_filename__icontains"))
+		anyOf := func(key string) map[int]bool {
+			if q.Get(key) == "" {
+				return nil
+			}
+			m := map[int]bool{}
+			for _, x := range strings.Split(q.Get(key), ",") {
+				id, _ := strconv.Atoi(x)
+				m[id] = true
+			}
+			return m
+		}
+		ofType, withTag := anyOf("document_type__id__in"), anyOf("tags__id__in")
 		var hits []Doc
 		for _, d := range s.docs {
 			if only != nil && !only[d.ID] {
@@ -182,6 +224,18 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 			}
 			if named != "" && !strings.Contains(strings.ToLower(d.OriginalFileName), named) {
 				continue
+			}
+			if ofType != nil && !ofType[d.DocumentType] {
+				continue
+			}
+			if withTag != nil {
+				hit := false
+				for _, t := range d.Tags {
+					hit = hit || withTag[t]
+				}
+				if !hit {
+					continue
+				}
 			}
 			if needle == "" || found(d, needle) {
 				hits = append(hits, d)
@@ -227,6 +281,16 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 			if d.Correspondent != 0 {
 				m["correspondent"] = d.Correspondent
 			}
+			m["document_type"] = nil
+			if d.DocumentType != 0 {
+				m["document_type"] = d.DocumentType
+			}
+			cf := []map[string]any{}
+			for id, v := range d.Fields {
+				cf = append(cf, map[string]any{"field": id, "value": v})
+			}
+			sort.Slice(cf, func(i, j int) bool { return cf[i]["field"].(int) < cf[j]["field"].(int) })
+			m["custom_fields"] = cf
 			if len(fields) > 0 {
 				for k := range m {
 					if !fields[k] {
@@ -237,12 +301,36 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 			results = append(results, m)
 		}
 		json.NewEncoder(w).Encode(map[string]any{"count": len(hits) + s.CountMore, "next": next, "previous": nil, "results": results})
-	case "/api/correspondents/", "/api/tags/":
+	case "/api/documents/chat/":
+		if r.Method != http.MethodPost || s.ChatAnswer == "" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		var in map[string]any
+		json.NewDecoder(r.Body).Decode(&in)
+		s.ChatAsked = append(s.ChatAsked, in)
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Write([]byte(s.ChatAnswer))
+	case "/api/custom_fields/":
+		results := []map[string]any{}
+		for id, f := range s.fieldDefs {
+			results = append(results, map[string]any{"id": id, "name": f[0], "data_type": f[1]})
+		}
+		json.NewEncoder(w).Encode(map[string]any{"count": len(results), "next": nil, "previous": nil, "results": results})
+	case "/api/correspondents/", "/api/tags/", "/api/document_types/":
 		names := s.correspondents
-		if r.URL.Path == "/api/tags/" {
+		switch r.URL.Path {
+		case "/api/tags/":
 			names = s.tags
+		case "/api/document_types/":
+			names = s.types
 		}
 		results := []map[string]any{}
+		if q.Get("id__in") == "" { // all of them
+			for id, name := range names {
+				results = append(results, map[string]any{"id": id, "name": name})
+			}
+		}
 		for _, x := range strings.Split(q.Get("id__in"), ",") {
 			id, err := strconv.Atoi(x)
 			if name, ok := names[id]; err == nil && ok {
