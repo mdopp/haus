@@ -301,12 +301,14 @@ func writePlatte(w http.ResponseWriter, r *http.Request, cfg StartConfig, said s
 // goes, and reads a barcode from it with the browser's BarcodeDetector
 // when the phone has one; it says what it has.
 const platteScript = `<script>(function(){var i=document.getElementById('platte-fotos');if(!i||i.dataset.an)return;i.dataset.an=1;
-var out=document.getElementById('platte-gewaehlt'),bc=document.getElementById('barcode');
+var out=document.getElementById('platte-gewaehlt'),bc=document.getElementById('barcode'),form=i.form;
 var det=('BarcodeDetector' in window)?new BarcodeDetector({formats:['ean_13','ean_8','upc_a','upc_e']}):null;
+function lies(src){return det?det.detect(src).then(function(c){return c.length?c[0].rawValue:''},function(){return ''}):Promise.resolve('')}
 i.addEventListener('change',function(){var fs=Array.prototype.slice.call(i.files,0,4);if(!fs.length)return;out.textContent='Bereitet '+fs.length+' Foto(s) vor …';
-Promise.all(fs.map(function(f){return createImageBitmap(f).then(function(bm){var d=det?det.detect(bm).catch(function(){return []}):Promise.resolve([]);
-return d.then(function(codes){if(codes.length&&!bc.value)bc.value=codes[0].rawValue;var s=Math.min(1,1600/Math.max(bm.width,bm.height));
+Promise.all(fs.map(function(f){return createImageBitmap(f).then(function(bm){var s=Math.min(1,1600/Math.max(bm.width,bm.height));
 var c=document.createElement('canvas');c.width=Math.round(bm.width*s);c.height=Math.round(bm.height*s);c.getContext('2d').drawImage(bm,0,0,c.width,c.height);
+return lies(bm).then(function(v){return v||lies(c)}).then(function(v){if(v&&!bc.value)bc.value=v;
 return new Promise(function(ok){c.toBlob(function(b){ok(new File([b],f.name.replace(/\.[^.]*$/,'')+'.jpg',{type:'image/jpeg'}))},'image/jpeg',0.85)})})}).catch(function(){return f})}))
 .then(function(small){try{var dt=new DataTransfer();small.forEach(function(f){dt.items.add(f)});i.files=dt.files}catch(e){}
-out.textContent=small.length+' Foto(s) bereit'+(bc.value?', Barcode '+bc.value+' gelesen':'')+'.'})})})()</script>`
+out.textContent=small.length+' Foto(s) bereit. '+(bc.value?'Barcode '+bc.value+' gelesen.':(det?'Auf den Fotos hat das Handy keinen Barcode gefunden; Haus liest sie selbst.':'Dieses Handy liest keinen Barcode selbst; Haus liest die Fotos.'));
+if(form.requestSubmit)form.requestSubmit(form.querySelector('button'));else form.submit()})})})()</script>`

@@ -190,6 +190,19 @@ test('music goes up in pieces and arrives whole', async ({ page, request }) => {
   expect(Object.keys(got).filter((k) => k.includes('.part'))).toEqual([]);
 });
 
+// owner 2026-10-26: after the photo the page stood still at „1 Foto(s)
+// bereit“; it goes on by itself and ends with a sentence (here: this
+// demo has no model to read photos, and no barcode was found)
+test('a record photo is searched without a second tap', async ({ page }) => {
+  await page.goto('/platte');
+  await mark(page);
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+  await page.setInputFiles('#platte-fotos', [{ name: 'rueckseite.png', mimeType: 'image/png', buffer: png }]);
+  await expect(page.locator('#platte-gewaehlt')).toContainText('1 Foto(s) bereit');
+  await expect(page.locator('#haus-hinweis')).toContainText('Haus hat nichts, wonach es suchen kann', { timeout: 15_000 });
+  expect(await stays(page)).toBe(true);
+});
+
 test('a form in a card stacks its fields on a phone', async ({ page }) => {
   await page.goto('/kalender/verwalten');
   await page.locator('summary', { hasText: 'Neuen Kalender anlegen' }).click();
