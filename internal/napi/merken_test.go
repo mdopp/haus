@@ -7,12 +7,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mdopp/haus/internal/abs"
+	"github.com/mdopp/haus/internal/abs/absfake"
 	"github.com/mdopp/haus/internal/caldav"
 	"github.com/mdopp/haus/internal/caldav/davfake"
 	"github.com/mdopp/haus/internal/einkauf"
 	"github.com/mdopp/haus/internal/haushalt"
 	"github.com/mdopp/haus/internal/merken"
 	"github.com/mdopp/haus/internal/notes"
+	"github.com/mdopp/haus/internal/podcasts"
 )
 
 func shareText(t *testing.T, h http.Handler, bearer, body string) (int, map[string]any) {
@@ -127,5 +130,38 @@ func TestShareASong(t *testing.T) {
 	}
 	if recent, _ := nd.Recent(t.Context(), 5); len(recent) != 0 {
 		t.Errorf("a song made a note: %+v", recent)
+	}
+}
+
+// owner 2026-10-26: "Ich hätte jetzt direkt das Abo erwartet" — a shared
+// podcast page is subscribed for who shared it, no note.
+func TestShareAPodcast(t *testing.T) {
+	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/feed/mp3/" {
+			w.Header().Set("Content-Type", "application/rss+xml")
+			w.Write([]byte(`<?xml version="1.0"?><rss xmlns:itunes="x"><channel><title>Lage der Nation</title></channel></rss>`))
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(`<html><head><title>Lage der Nation</title><link rel="alternate" type="application/rss+xml" href="/feed/mp3/"></head></html>`))
+	}))
+	defer site.Close()
+	fake := absfake.New("k")
+	defer fake.Close()
+	fake.AddFeed(site.URL+"/feed/mp3/", "Lage der Nation")
+	pods := podcasts.Open(&abs.Client{URL: fake.URL, Token: "k"}, t.TempDir())
+	pods.Fetch = merken.Fetcher{AllowPrivate: true}
+	nd, _ := notes.Open(t.TempDir())
+	h := Handler(Config{Validate: StaticValidator([]string{"dev1"}), Whoami: func(string) (string, bool) { return "anna", true },
+		Haushalt: haushalt.Config{Notes: nd, Fetcher: merken.Fetcher{AllowPrivate: true}, PublicURL: "https://haus.box.test", Podcasts: pods}})
+	code, out := shareText(t, h, "dev1", `{"text":"Lage der Nation – der Politik-Podcast `+site.URL+`/"}`)
+	if code != 200 || out["art"] != "podcast" || !strings.HasPrefix(out["kurz"].(string), "Abonniert: „Lage der Nation“.") || out["notiz"] != "https://haus.box.test/podcasts" {
+		t.Fatalf("%d %v", code, out)
+	}
+	if mine, _ := pods.Meine("anna"); len(mine) != 1 {
+		t.Errorf("anna's podcasts: %+v", mine)
+	}
+	if recent, _ := nd.Recent(t.Context(), 5); len(recent) != 0 {
+		t.Errorf("a podcast made a note: %+v", recent)
 	}
 }

@@ -610,6 +610,20 @@ func merkenPost(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
 	link, hint := strings.TrimSpace(r.PostForm.Get("link")), oneLine(r.PostForm.Get("hinweis"))
 	ctx, cancel := context.WithTimeout(r.Context(), merkenWait)
 	defer cancel()
+	if res, ok, err := cfg.Podcasts.AusLink(ctx, r.Header.Get("Remote-User"), link); ok { // a podcast is subscribed, not kept
+		if err != nil {
+			if !knownPodcastError(err) {
+				log.Printf("haus: podcast from notizen by %s: %v", r.Header.Get("Remote-User"), err)
+				err = errors.New(saysPodcastsDown)
+			}
+			b := familyHead(r, cfg, "Notizen", "Notizen")
+			b.WriteString(noteStyle + "<h1>Notizen</h1>" + merkenForm(link, hint, err.Error()))
+			writePage(w, http.StatusBadRequest, b)
+			return
+		}
+		writePodcasts(w, r, cfg, http.StatusOK, res.Satz, "", "") // the podcasts, saying what happened
+		return
+	}
 	if g, ok, err := cfg.Wuensche.AusLink(ctx, cfg.Fetcher, link, r.Header.Get("Remote-User")); ok {
 		if err != nil {
 			log.Printf("haus: musikwunsch by %s: %v", r.Header.Get("Remote-User"), err)

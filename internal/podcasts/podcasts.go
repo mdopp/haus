@@ -294,3 +294,27 @@ func firstSentence(s string) string {
 	}
 	return s
 }
+
+// AusLink is a shared link as a subscription, when it is a podcast (a
+// podcast app's address, a feed with audio, a page whose feed has audio):
+// false for any other link, and for none on a box without podcasts (s nil).
+func (s *Service) AusLink(ctx context.Context, person, link string) (Ergebnis, bool, error) {
+	if s == nil || !abs.PodcastLink(ctx, s.Fetch, link) {
+		return Ergebnis{}, false, nil
+	}
+	res, err := s.Abonnieren(ctx, person, link)
+	return res, true, err
+}
+
+// Bekannt is a refusal said in the family's words already (shown as it
+// is); any other error is the box's trouble, said in a sentence by the
+// caller.
+func Bekannt(err error) bool {
+	for _, e := range []error{abs.ErrNoFeed, abs.ErrNoFeedFound, abs.ErrSpotifyOnly, abs.ErrNoLibrary, merken.ErrNoAddress, merken.ErrPrivate, merken.ErrNoAnswer} {
+		if errors.Is(err, e) {
+			return true
+		}
+	}
+	msg := err.Error()
+	return strings.HasPrefix(msg, "Diesen Podcast") || strings.HasPrefix(msg, "Abonnieren geht")
+}

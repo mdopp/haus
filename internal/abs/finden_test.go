@@ -82,3 +82,44 @@ func TestFindFeedSpotifyOnly(t *testing.T) {
 		t.Error("isFeed")
 	}
 }
+
+// owner 2026-10-26: a shared podcast is subscribed, not kept as a note —
+// but a blog with a feed is a page, and no page is searched by its name.
+func TestPodcastLink(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/lage":
+			w.Header().Set("Content-Type", "text/html")
+			w.Write([]byte(`<html><head><link rel="alternate" type="application/rss+xml" title="Podcast Feed" href="/feed/mp3/"></head></html>`))
+		case "/feed/mp3/":
+			w.Header().Set("Content-Type", "application/rss+xml")
+			w.Write([]byte(`<?xml version="1.0"?><rss xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd"><channel><item><enclosure url="x.mp3" type="audio/mpeg"/></item></channel></rss>`))
+		case "/blog":
+			w.Header().Set("Content-Type", "text/html")
+			w.Write([]byte(`<html><head><title>Ein Blog</title><link rel="alternate" type="application/rss+xml" href="/blogfeed"></head></html>`))
+		case "/blogfeed":
+			w.Header().Set("Content-Type", "application/rss+xml")
+			w.Write([]byte(`<?xml version="1.0"?><rss><channel><item><title>Text</title></item></channel></rss>`))
+		default:
+			w.Header().Set("Content-Type", "text/html")
+			w.Write([]byte(`<html><head><title>Lage der Nation</title></head></html>`))
+		}
+	}))
+	defer srv.Close()
+	f := merken.Fetcher{AllowPrivate: true}
+	ctx := context.Background()
+	for link, want := range map[string]bool{
+		srv.URL + "/lage":                             true,
+		srv.URL + "/feed/mp3/":                        true,
+		srv.URL + "/blog":                             false,
+		srv.URL + "/irgendwas":                        false, // a page named like a podcast is still a page
+		"https://podcasts.apple.com/de/podcast/x/id1": true,
+		"https://open.spotify.com/show/2x":            true,
+		"https://open.spotify.com/track/2x":           false,
+		"kein link":                                   false,
+	} {
+		if got := PodcastLink(ctx, f, link); got != want {
+			t.Errorf("PodcastLink(%s) = %v", link, got)
+		}
+	}
+}

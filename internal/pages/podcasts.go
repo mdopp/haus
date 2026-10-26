@@ -11,7 +11,7 @@ import (
 
 	"github.com/mdopp/haus/internal/abs"
 	"github.com/mdopp/haus/internal/cards"
-	"github.com/mdopp/haus/internal/merken"
+	"github.com/mdopp/haus/internal/podcasts"
 )
 
 // PodcastsPath is the family's podcasts (haus#123): subscribe by a link,
@@ -73,15 +73,7 @@ func Podcasts(cfg StartConfig) http.HandlerFunc {
 }
 
 // knownPodcastError is a refusal said in the family's words already.
-func knownPodcastError(err error) bool {
-	for _, e := range []error{abs.ErrNoFeed, abs.ErrNoFeedFound, abs.ErrSpotifyOnly, abs.ErrNoLibrary, merken.ErrNoAddress, merken.ErrPrivate, merken.ErrNoAnswer} {
-		if errors.Is(err, e) {
-			return true
-		}
-	}
-	msg := err.Error()
-	return strings.HasPrefix(msg, "Diesen Podcast") || strings.HasPrefix(msg, "Abonnieren geht")
-}
+func knownPodcastError(err error) bool { return podcasts.Bekannt(err) }
 
 // writePodcasts is the page: what was just said, the subscribe form, one's
 // podcasts and their newest episodes.

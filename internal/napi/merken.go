@@ -14,6 +14,7 @@ import (
 	"github.com/mdopp/haus/internal/cards"
 	"github.com/mdopp/haus/internal/einkauf"
 	"github.com/mdopp/haus/internal/merken"
+	"github.com/mdopp/haus/internal/podcasts"
 )
 
 // Share → Haus (haus#120): the app is a target for a link or a text shared
@@ -76,6 +77,27 @@ func (c Config) merken(w http.ResponseWriter, r *http.Request) {
 	person := ""
 	if bearer, ok := bearerOf(r); ok && c.Whoami != nil {
 		person, _ = c.Whoami(bearer)
+	}
+	if res, ok, err := h.Podcasts.AusLink(ctx, person, link); ok { // a podcast is subscribed, not kept
+		if err != nil {
+			code := http.StatusBadRequest
+			switch {
+			case errors.Is(err, merken.ErrNoAnswer):
+				code = http.StatusBadGateway
+			case !podcasts.Bekannt(err):
+				log.Printf("haus: napi podcast: %v", err)
+				code, err = http.StatusBadGateway, errors.New("Das Abo ließ sich gerade nicht anlegen: Audiobookshelf antwortet nicht. Später noch einmal teilen.")
+			}
+			answer(code, map[string]string{"error": err.Error()})
+			return
+		}
+		page := ""
+		if pub := strings.TrimRight(h.PublicURL, "/"); pub != "" {
+			page = pub + "/podcasts"
+		}
+		log.Printf("haus: napi podcast by %s", person)
+		answer(http.StatusOK, map[string]any{"titel": res.Title, "art": "podcast", "kurz": res.Satz, "schon": res.Schon, "teilweise": false, "notiz": page})
+		return
 	}
 	if g, ok, err := h.Wuensche.AusLink(ctx, h.Fetcher, link, person); ok {
 		if err != nil {
