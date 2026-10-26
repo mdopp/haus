@@ -201,22 +201,34 @@ func (c *Client) Status(ctx context.Context) (Readiness, []Service, error) {
 // ServiceDetail is one service's line from status (its status file's
 // detail with its age, laib#309): "" when it says nothing.
 func (c *Client) ServiceDetail(ctx context.Context, service string) (string, error) {
+	d, _, err := c.ServiceStatus(ctx, service)
+	return d, err
+}
+
+// ServiceStatus is one service's line and what its status file says of
+// itself beyond it (laib#688: "eigenes", e.g. beets' uploads and their
+// results), raw for the caller to read.
+func (c *Client) ServiceStatus(ctx context.Context, service string) (string, json.RawMessage, error) {
 	var out struct {
-		Services []Service `json:"services"`
+		Services []struct {
+			Name    string          `json:"name"`
+			Detail  string          `json:"detail"`
+			Eigenes json.RawMessage `json:"eigenes"`
+		} `json:"services"`
 	}
 	text, err := c.CallTyped(ctx, "status", map[string]any{"service": service})
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	if err := json.Unmarshal([]byte(text), &out); err != nil {
-		return "", fmt.Errorf("laib status %s: %w", service, err)
+		return "", nil, fmt.Errorf("laib status %s: %w", service, err)
 	}
 	for _, s := range out.Services {
 		if s.Name == service {
-			return s.Detail, nil
+			return s.Detail, s.Eigenes, nil
 		}
 	}
-	return "", nil
+	return "", nil, nil
 }
 
 // Inbox lists the open proposals.
