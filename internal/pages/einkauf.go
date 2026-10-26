@@ -405,6 +405,8 @@ func writeEinkauf(w http.ResponseWriter, r *http.Request, cfg StartConfig, l *ei
 	}
 	if l.Ref == einkauf.MusikListe && cfg.Discogs != nil {
 		b.WriteString(`<p class=wege><a class=knopf href=` + PlattePath + `>Platte erfassen</a></p>`)
+	} else if l.Ref == einkauf.MusikListe && cfg.Wuensche != nil {
+		b.WriteString(keyHintStyle + keyHint(r, cfg, "Discogs", saysDiscogsEnables, publicBase(r, cfg)+r.URL.RequestURI(), discogsKeys))
 	}
 	if cfg.Notes != nil && l.Ref != einkauf.MusikListe {
 		rez := EinkaufRezeptePath

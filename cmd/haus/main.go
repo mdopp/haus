@@ -124,8 +124,8 @@ func routes(s site) http.Handler {
 	pagesMux.Handle(pages.LivePath, live)
 	if s.hh.Einkauf != nil { // haus#118: the list, ticked on one phone, fetched again on the others
 		s.hh.Einkauf.Changed = func(r caldav.ListRef) { live.Tell(pages.ListeLive(r)) }
+		pagesMux.HandleFunc(pages.DiscogsPath, pages.Discogs(family)) // connect one's own Discogs; without the app's keys, how to set them
 		if family.Discogs != nil {
-			pagesMux.HandleFunc(pages.DiscogsPath, pages.Discogs(family))        // connect one's own Discogs
 			pagesMux.HandleFunc(pages.DiscogsZurueckPath, pages.Discogs(family)) // the way back from Discogs
 			pagesMux.HandleFunc(pages.PlattePath, pages.Platte(family))
 			pagesMux.HandleFunc(pages.PlatteBildPath, pages.Platte(family))

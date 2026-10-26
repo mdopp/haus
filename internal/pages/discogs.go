@@ -21,8 +21,9 @@ const (
 	DiscogsPath        = "/discogs"
 	DiscogsZurueckPath = "/discogs/zurueck"
 
-	saysDiscogsHow   = "Verbinde dein eigenes Discogs-Konto: Platte erfassen trägt dann in deine Sammlung ein, Wünsche kommen auf deine Wantlist, und Haus sagt dir, was du schon auf Vinyl hast. Jede Person verbindet ihr eigenes Konto."
-	saysDiscogsFirst = "Verbinde zuerst dein Discogs-Konto: unter Mehr → Discogs, einmal „Mit Discogs verbinden“."
+	saysDiscogsHow     = "Verbinde dein eigenes Discogs-Konto: Platte erfassen trägt dann in deine Sammlung ein, Wünsche kommen auf deine Wantlist, und Haus sagt dir, was du schon auf Vinyl hast. Jede Person verbindet ihr eigenes Konto."
+	saysDiscogsEnables = "Damit verbindet jede und jeder im Haus das eigene Discogs-Konto: Haus sieht, welche Platten du schon hast, setzt Wünsche auf deine Wantlist und trägt fotografierte Platten in deine Sammlung ein."
+	saysDiscogsFirst   = "Verbinde zuerst dein Discogs-Konto: unter Mehr → Discogs, einmal „Mit Discogs verbinden“."
 )
 
 // Discogs is the page, its POSTs (tun=verbinden, tun=trennen) and the way
@@ -30,8 +31,18 @@ const (
 func Discogs(cfg StartConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		user := r.Header.Get("Remote-User")
-		if cfg.Discogs == nil || user == "" || (r.URL.Path != DiscogsPath && r.URL.Path != DiscogsZurueckPath) {
+		if user == "" || (r.URL.Path != DiscogsPath && r.URL.Path != DiscogsZurueckPath) {
 			missing{http.StatusNotFound, "Diese Seite gibt es nicht.", "Mehr", mehrPath, "Mehr"}.write(w, r, cfg)
+			return
+		}
+		if cfg.Discogs == nil { // the household's app is not set: say so, and an admin gets the way to its keys
+			if !showOnly(w, r, "Discogs") {
+				return
+			}
+			b := familyHead(r, cfg, "Discogs", "Discogs")
+			b.WriteString(keyHintStyle + "<h1>Discogs</h1><p class=k>" + html.EscapeString(saysDiscogsHow) + "</p>")
+			b.WriteString(keyHint(r, cfg, "Discogs", saysDiscogsEnables, publicBase(r, cfg)+DiscogsPath, discogsKeys))
+			writePage(w, http.StatusOK, b)
 			return
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
