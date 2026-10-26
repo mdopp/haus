@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -78,13 +79,26 @@ func Musik(cfg StartConfig) http.HandlerFunc {
 			musikStand(w, r, cfg)
 			return
 		}
-		if !showOnly(w, r, "Musik hinzufügen") {
-			return
-		}
 		if cfg.MusicInbox == "" || r.URL.Path != MusikPath {
 			missing{http.StatusNotFound, "Diese Seite gibt es nicht.", "Mehr", mehrPath, "Mehr"}.write(w, r, cfg)
 			return
 		}
+		if r.Method == http.MethodPost {
+			musikNochmal(w, r, cfg)
+			return
+		}
+		if !showOnly(w, r, "Musik hinzufügen") {
+			return
+		}
+		writeMusik(w, r, cfg, "", "")
+	}
+}
+
+// writeMusik is the page: what was just done, the pickers, the place for
+// the uploads' progress, and what beets did not take, each to try again.
+// again is an upload put back just now: the script follows its import.
+func writeMusik(w http.ResponseWriter, r *http.Request, cfg StartConfig, said, again string) {
+	{
 		b := familyHead(r, cfg, "Musik hinzufügen", "Musik hinzufügen")
 		b.WriteString(musikStyle + "<h1>Musik hinzufügen</h1><p class=k>" + html.EscapeString(saysMusikHow) + "</p>")
 		accept := ".mp3,.flac,.m4a,.ogg,.opus,.wav,.zip,audio/*,application/zip"
@@ -92,10 +106,148 @@ func Musik(cfg StartConfig) http.HandlerFunc {
 			`<label class=knopf>Dateien wählen<input type=file id=musik-dateien multiple accept="` + accept + `"></label>` +
 			`<label class="knopf ordner">Ordner wählen<input type=file id=musik-ordner webkitdirectory multiple></label></div>` +
 			`<p class=k>` + html.EscapeString(saysMusikFolder) + `</p></section>`)
+		if said != "" {
+			b.WriteString("<div class=gut role=status><span class=punkt></span><p>" + html.EscapeString(said) + "</p></div>")
+		}
 		b.WriteString(`<section class=karte aria-labelledby=m-l hidden id=musik-lauf><h2 id=m-l>Hochladen</h2><p id=musik-stand role=status aria-live=polite></p><ul id=musik-liste class=musik-liste></ul></section>`)
+		if again != "" {
+			b.WriteString(`<div hidden id=musik-nochmal data-name="` + html.EscapeString(again) + `" data-seit="` + time.Now().UTC().Format(time.RFC3339) + `"></div>`)
+		}
+		b.WriteString(nichtUebernommen(cfg))
 		b.WriteString(musikScript)
 		writePage(w, http.StatusOK, b)
 	}
+}
+
+// keptBack is the importer's folder for what it did not take (laib
+// templates/beets: _nicht-importiert/<Datum Uhrzeit>/, GRUND.txt beside).
+const keptBack = "_nicht-importiert"
+
+// liegen is one upload beets kept back: where, its name, why.
+type liegen struct {
+	run, name, grund string
+}
+
+// zurueck are the uploads beets kept back, the newest run first, at most
+// 20, each with the reason GRUND.txt names.
+func zurueck(inbox string) []liegen {
+	root, err := os.OpenRoot(inbox)
+	if err != nil {
+		return nil
+	}
+	defer root.Close()
+	runs, err := fs.ReadDir(root.FS(), keptBack)
+	if err != nil {
+		return nil
+	}
+	sort.Slice(runs, func(i, j int) bool { return runs[i].Name() > runs[j].Name() })
+	var out []liegen
+	for _, run := range runs {
+		if !run.IsDir() || strings.HasPrefix(run.Name(), ".") {
+			continue
+		}
+		reasons := map[string]string{}
+		if b, err := fs.ReadFile(root.FS(), keptBack+"/"+run.Name()+"/GRUND.txt"); err == nil {
+			for _, l := range strings.Split(string(b), "\n") {
+				if n, g, ok := strings.Cut(l, ": "); ok {
+					reasons[strings.TrimSpace(n)] = strings.TrimSpace(g)
+				}
+			}
+		}
+		items, _ := fs.ReadDir(root.FS(), keptBack+"/"+run.Name())
+		for _, it := range items {
+			if it.Name() == "GRUND.txt" || strings.HasPrefix(it.Name(), ".") {
+				continue
+			}
+			out = append(out, liegen{run: run.Name(), name: it.Name(), grund: reasons[it.Name()]})
+			if len(out) == 20 {
+				return out
+			}
+		}
+	}
+	return out
+}
+
+// nichtUebernommen is the card of what beets kept back, each with
+// "Noch einmal einsortieren"; none when there is nothing.
+func nichtUebernommen(cfg StartConfig) string {
+	kept := zurueck(cfg.MusicInbox)
+	if len(kept) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString(`<section class=karte aria-labelledby=m-n><h2 id=m-n>Nicht übernommen</h2><p class=k>Das hat die Box nicht einsortiert. Was inzwischen gehen sollte, legt „Noch einmal einsortieren“ zurück in den Musik-Eingang.</p><ul class=musik-liste>`)
+	for _, k := range kept {
+		b.WriteString("<li><span class=name>" + html.EscapeString(k.name) + "</span>")
+		if k.grund != "" {
+			b.WriteString("<span class=k>" + html.EscapeString(k.grund) + "</span>")
+		}
+		b.WriteString(`<form method=post action=` + MusikPath + `><input type=hidden name=tun value=nochmal><input type=hidden name=lauf value="` + html.EscapeString(k.run) +
+			`"><input type=hidden name=name value="` + html.EscapeString(k.name) + `"><button data-laeuft="Legt zurück …">Noch einmal einsortieren</button></form></li>`)
+	}
+	b.WriteString("</ul></section>")
+	return b.String()
+}
+
+// musikNochmal puts an upload beets kept back into the inbox again, under
+// its own name (beside one there already), for who asked: the importer
+// takes it in about a minute. A run left with only its GRUND.txt goes.
+func musikNochmal(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
+	if !fromHaus(r) {
+		http.Error(w, "Das geht nur von Haus' eigener Seite.", http.StatusForbidden)
+		return
+	}
+	r.ParseForm()
+	run, name := r.PostForm.Get("lauf"), r.PostForm.Get("name")
+	if r.PostForm.Get("tun") != "nochmal" || !plainName(run) || !plainName(name) || name == "GRUND.txt" {
+		http.Error(w, "Diese Datei gibt es hier nicht.", http.StatusBadRequest)
+		return
+	}
+	root, err := os.OpenRoot(cfg.MusicInbox)
+	if err != nil {
+		http.Error(w, "Der Musik-Eingang ist gerade nicht erreichbar.", http.StatusServiceUnavailable)
+		return
+	}
+	defer root.Close()
+	from := keptBack + "/" + run + "/" + name
+	if _, err := root.Lstat(from); err != nil {
+		http.Error(w, "Diese Datei liegt nicht mehr unter „Nicht übernommen“.", http.StatusConflict)
+		return
+	}
+	to := name
+	for i := 2; ; i++ {
+		if _, err := root.Lstat(to); errors.Is(err, fs.ErrNotExist) {
+			break
+		}
+		ext := path.Ext(name)
+		to = strings.TrimSuffix(name, ext) + " (" + strconv.Itoa(i) + ")" + ext
+		if i > 99 {
+			http.Error(w, "Diese Datei gibt es im Eingang schon zu oft.", http.StatusConflict)
+			return
+		}
+	}
+	if who := uploader(r.Header.Get("Remote-User")); who != "" {
+		if f, err := root.OpenFile("._"+to+".von", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o664); err == nil {
+			f.WriteString(who + "\n")
+			f.Close()
+		}
+	}
+	if err := root.Rename(from, to); err != nil {
+		log.Printf("haus: musik: again %s: %v", from, err)
+		http.Error(w, "Die Datei ließ sich nicht zurücklegen.", http.StatusInternalServerError)
+		return
+	}
+	if rest, err := fs.ReadDir(root.FS(), keptBack+"/"+run); err == nil && (len(rest) == 0 || (len(rest) == 1 && rest[0].Name() == "GRUND.txt")) {
+		root.Remove(keptBack + "/" + run + "/GRUND.txt")
+		root.Remove(keptBack + "/" + run)
+	}
+	log.Printf("haus: musik: %s put %s back into the inbox", r.Header.Get("Remote-User"), name)
+	writeMusik(w, r, cfg, "„"+name+"“ liegt wieder im Musik-Eingang. Die Box sortiert es in etwa einer Minute ein.", to)
+}
+
+// plainName is one path part, no folder, nothing hidden or leaving.
+func plainName(s string) bool {
+	return s != "" && s != "." && s != ".." && !strings.ContainsAny(s, "/\\\x00") && !strings.HasPrefix(s, ".") && len(s) <= 255
 }
 
 // musikTeil takes one piece: ?pfad=<place>&ab=<offset>&gesamt=<size>, the
@@ -255,6 +407,7 @@ return fetch('` + MusikTeilPath + `?pfad='+encodeURIComponent(x.p)+'&ab='+at+'&g
 .catch(function(e){if(typeof e==='string')return Promise.reject(e);if(e&&e.code&&e.code<500)return Promise.reject(e.t);
 if(tries<3)return new Promise(function(ok){setTimeout(ok,2e3)}).then(function(){return send(x,at,tries+1)});return Promise.reject(e&&e.t?e.t:'Die Verbindung brach ab.')})}
 next()}
+var back=document.getElementById('musik-nochmal');if(back){lauf.hidden=false;stand.textContent='Wird einsortiert …';sorted('',Date.now(),[back.getAttribute('data-name')],back.getAttribute('data-seit'),[])}
 function sorted(up,t0,names,seit,got){var q='?seit='+encodeURIComponent(seit)+names.map(function(n){return '&namen='+encodeURIComponent(n)}).join('');
 fetch('` + MusikStandPath + `'+q,{credentials:'same-origin'}).then(function(r){return r.json()}).then(function(j){got=j.ergebnis||[];
 if(got.length>=names.length){stand.textContent=up+got.map(function(e){return e.satz}).join(' ');return}throw 0}).catch(function(){

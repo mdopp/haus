@@ -6,6 +6,7 @@ import (
 	"github.com/mdopp/haus/internal/laib"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -191,5 +192,45 @@ func TestMusikSaysWhatBecameOfIt(t *testing.T) {
 		MusikStandPath+"?seit=2026-10-26T12:00:00Z&namen=lied.mp3", "family")
 	if !strings.Contains(body, `"ergebnis":[{"eingang":"lied.mp3","satz":"lied.mp3: 1 Titel in der Musik.","gut":true}]`) {
 		t.Errorf("%s", body)
+	}
+}
+
+// owner 2026-10-26: what beets kept back can go into the inbox again — a
+// ZIP refused before laib's fix to its path check is taken now.
+func TestMusikNochmal(t *testing.T) {
+	inbox := t.TempDir()
+	run := filepath.Join(inbox, "_nicht-importiert", "2026-10-24_18-11-01")
+	os.MkdirAll(run, 0o755)
+	os.WriteFile(filepath.Join(run, "KREIS.zip"), []byte("PK.."), 0o644)
+	os.WriteFile(filepath.Join(run, "GRUND.txt"), []byte("Musik-Eingang, 2026-10-24\nDiese Dateien …\n\nKREIS.zip: unsicherer Pfad in der ZIP-Datei (absolut): /\n"), 0o644)
+	cfg := StartConfig{MusicInbox: inbox}
+	_, body, _ := familyPage(t, Musik, cfg, "GET", MusikPath, "family")
+	mustContain(t, body, "<h2 id=m-n>Nicht übernommen</h2>", "<span class=name>KREIS.zip</span><span class=k>unsicherer Pfad in der ZIP-Datei (absolut): /</span>",
+		`<input type=hidden name=lauf value="2026-10-24_18-11-01"><input type=hidden name=name value="KREIS.zip"><button data-laeuft="Legt zurück …">Noch einmal einsortieren</button>`)
+
+	h := Musik(cfg)
+	for _, bad := range []url.Values{{"tun": {"nochmal"}, "lauf": {".."}, "name": {"KREIS.zip"}}, {"tun": {"nochmal"}, "lauf": {"2026-10-24_18-11-01"}, "name": {"../x"}},
+		{"tun": {"nochmal"}, "lauf": {"2026-10-24_18-11-01"}, "name": {"GRUND.txt"}}} {
+		if rec := post(t, h, MusikPath, bad, "anna", nil); rec.Code != http.StatusBadRequest {
+			t.Errorf("%v → %d", bad, rec.Code)
+		}
+	}
+	if rec := post(t, h, MusikPath, url.Values{"tun": {"nochmal"}, "lauf": {"2026-10-24_18-11-01"}, "name": {"KREIS.zip"}}, "anna", map[string]string{"Sec-Fetch-Site": "cross-site"}); rec.Code != http.StatusForbidden {
+		t.Errorf("cross-site → %d", rec.Code)
+	}
+	rec := post(t, h, MusikPath, url.Values{"tun": {"nochmal"}, "lauf": {"2026-10-24_18-11-01"}, "name": {"KREIS.zip"}}, "anna", nil)
+	mustContain(t, rec.Body.String(), "„KREIS.zip“ liegt wieder im Musik-Eingang.", `id=musik-nochmal data-name="KREIS.zip"`)
+	mustNotContain(t, rec.Body.String(), "Nicht übernommen")
+	if b, _ := os.ReadFile(filepath.Join(inbox, "KREIS.zip")); string(b) != "PK.." {
+		t.Errorf("not in the inbox: %q", b)
+	}
+	if b, _ := os.ReadFile(filepath.Join(inbox, "._KREIS.zip.von")); string(b) != "anna\n" {
+		t.Errorf("who: %q", b)
+	}
+	if _, err := os.Stat(run); err == nil {
+		t.Error("the empty run stayed")
+	}
+	if rec := post(t, h, MusikPath, url.Values{"tun": {"nochmal"}, "lauf": {"2026-10-24_18-11-01"}, "name": {"KREIS.zip"}}, "anna", nil); rec.Code != http.StatusConflict {
+		t.Errorf("twice → %d", rec.Code)
 	}
 }
