@@ -192,3 +192,18 @@ func TestMusikAufraeumenKeepsTheLastCopy(t *testing.T) {
 	mustContain(t, body, "„Alligatoah/Musik ist keine Loesung“ bleibt, wie es ist.")
 	mustNotContain(t, body, "Alben ·")
 }
+
+// a plan that names the copy that stays as a download too: it stays
+func TestMusikAufraeumenNeverDeletesTheKeptCopy(t *testing.T) {
+	cfg, music, _ := aufraeumenHouse(t)
+	alb := "Alligatoah/Musik ist keine Loesung"
+	p, _ := loadMusikPlan(cfg)
+	p.Alben[0].Befunde = append(p.Alben[0].Befunde, planBefund{Datei: "02 - Musik ist keine Lösung.mp3", Art: "netz"})
+	b, _ := json.Marshal(p)
+	os.WriteFile(filepath.Join(cfg.DataDir, musikPlanFile), b, 0o600)
+	aufraeumenDo(t, cfg, url.Values{"tun": {"album-netz"}, "album": {alb}})
+	aufraeumenDo(t, cfg, url.Values{"tun": {"album-doppelt"}, "album": {alb}})
+	if _, err := os.Stat(filepath.Join(music, alb, "02 - Musik ist keine Lösung.mp3")); err != nil {
+		t.Error("the kept copy went")
+	}
+}

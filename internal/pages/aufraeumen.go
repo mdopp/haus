@@ -450,9 +450,13 @@ func musikAufraeumenTun(w http.ResponseWriter, r *http.Request, cfg StartConfig)
 			if _, ok := done["album:"+a.Album]; ok {
 				continue
 			}
+			kept := map[string]bool{} // a copy that stays is never deleted, whatever else the plan says
+			for _, f := range a.Befunde {
+				kept[f.Behalten] = true
+			}
 			for _, f := range a.Befunde {
 				file := a.Album + "/" + f.Datei
-				if f.Art != art || !musicPath(file) || strings.Contains(f.Datei, "/") || !p.open(root, done, file, file) {
+				if f.Art != art || kept[f.Datei] || !musicPath(file) || strings.Contains(f.Datei, "/") || !p.open(root, done, file, file) {
 					continue
 				}
 				if art == "doppelt" { // the copy that stays must be there, or nothing goes
