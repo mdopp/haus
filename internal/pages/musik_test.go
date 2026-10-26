@@ -234,3 +234,30 @@ func TestMusikNochmal(t *testing.T) {
 		t.Errorf("twice → %d", rec.Code)
 	}
 }
+
+// owner 2026-10-26: "Wenn ich sie einsortieren kann, sollte ich die auch
+// löschen können" — asked first, then gone, a folder too.
+func TestMusikLoeschen(t *testing.T) {
+	inbox := t.TempDir()
+	run := filepath.Join(inbox, "_nicht-importiert", "2026-10-25_09-00-00")
+	os.MkdirAll(filepath.Join(run, "Kaputtes Album"), 0o755)
+	os.WriteFile(filepath.Join(run, "Kaputtes Album", "01.mp3"), []byte("x"), 0o644)
+	os.WriteFile(filepath.Join(run, "rest.mp3"), []byte("x"), 0o644)
+	os.WriteFile(filepath.Join(run, "GRUND.txt"), []byte("Kaputtes Album: beschädigt\n"), 0o644)
+	cfg := StartConfig{MusicInbox: inbox}
+	_, body, _ := familyPage(t, Musik, cfg, "GET", MusikPath, "family")
+	mustContain(t, body, `data-frage="„Kaputtes Album“ endgültig löschen?"><input type=hidden name=tun value=loeschen>`, `<button class=weg data-laeuft="Löscht …">Löschen</button>`)
+	h := Musik(cfg)
+	rec := post(t, h, MusikPath, url.Values{"tun": {"loeschen"}, "lauf": {"2026-10-25_09-00-00"}, "name": {"Kaputtes Album"}}, "anna", nil)
+	mustContain(t, rec.Body.String(), "„Kaputtes Album“ ist gelöscht.", "rest.mp3")
+	if _, err := os.Stat(filepath.Join(run, "Kaputtes Album")); err == nil {
+		t.Error("still there")
+	}
+	post(t, h, MusikPath, url.Values{"tun": {"loeschen"}, "lauf": {"2026-10-25_09-00-00"}, "name": {"rest.mp3"}}, "anna", nil)
+	if _, err := os.Stat(run); err == nil {
+		t.Error("the empty run stayed")
+	}
+	if rec := post(t, h, MusikPath, url.Values{"tun": {"loeschen"}, "lauf": {".."}, "name": {"musik"}}, "anna", nil); rec.Code != http.StatusBadRequest {
+		t.Errorf("outside → %d", rec.Code)
+	}
+}
