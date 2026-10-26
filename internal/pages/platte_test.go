@@ -209,3 +209,11 @@ func TestDiscogsVerbinden(t *testing.T) {
 		t.Error("still connected")
 	}
 }
+
+// owner 2026-10-26 (a screenshot): on a phone the fields stood side by
+// side; a card's form is a row (.karte form), this one stacks
+func TestPlatteStacksOnAPhone(t *testing.T) {
+	if !strings.Contains(platteStyle, ".karte form.platte-form{display:block}") {
+		t.Fatal("the Platte form takes the card's row layout")
+	}
+}
