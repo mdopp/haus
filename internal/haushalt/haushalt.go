@@ -424,6 +424,14 @@ func Tools(cfg Config) []mcpserver.Tool {
 			Description: "Sucht in den Dokumenten der Familie (Paperless, Volltext) und zeigt Datum, Absender, Titel, Schlagworte und einen Link; nur lesen.",
 			Schema:      obj(map[string]any{"text": str("Wonach gesucht wird, z. B. Rechnung Stadtwerke")}, "text"),
 			Call:        func(ctx context.Context, a map[string]any) (string, error) { return dokumenteSuchen(ctx, d, pub, a) },
+		}, mcpserver.Tool{
+			Name: "vertraege_finden",
+			Description: "Beantwortet Fragen zu Verträgen, Versicherungen und Bescheiden der Familie aus den Vertragsdaten in Paperless " +
+				"(Anbieter, Vertragsnummer, Laufzeit, Kündigungsfrist, nächster Kündigungstermin, bis wann gekündigt werden muss, Betrag), " +
+				"immer mit dem Dokument und seinem Link. Bei Fragen wie „Wann läuft die Kfz-Versicherung aus?“ oder „Bis wann muss ich den Stromvertrag kündigen?“ " +
+				"dieses Werkzeug zuerst nutzen, vor dokumente_suchen. Sag, wenn ein Wert unsicher ist.",
+			Schema: obj(map[string]any{"frage": str("Die Frage, wie die Person sie stellte")}, "frage"),
+			Call:   func(ctx context.Context, a map[string]any) (string, error) { return vertraegeFinden(ctx, d, a) },
 		})
 		plainFrom(from, "Paperless")
 	}
@@ -1284,6 +1292,71 @@ func einkaufDazu(ctx context.Context, l *einkauf.Liste, d *notes.Dir, a map[stri
 	b.WriteString("\nGeschrieben:")
 	for _, z := range einkauf.Merge(zs) {
 		b.WriteString("\n- " + z.Text())
+	}
+	return b.String(), nil
+}
+
+// vertraegeFinden answers a question about a contract from Paperless's
+// contract fields (haus#139, laib#721), always naming the document; a
+// contract without fields is asked through Paperless's document chat, and
+// without that, said so with its link. Never an answer without a document.
+func vertraegeFinden(ctx context.Context, d *paperless.Client, a map[string]any) (string, error) {
+	frage := mcpserver.Str(a, "frage")
+	var arten []string
+	for _, x := range strings.Split(os.Getenv("HAUS_VERTRAG_ARTEN"), ",") {
+		if x = strings.TrimSpace(x); x != "" {
+			arten = append(arten, x)
+		}
+	}
+	vs, err := d.Vertraege(ctx, frage, arten, 3)
+	if err != nil {
+		return "", err
+	}
+	if len(vs) == 0 {
+		return "Keinen Vertrag gefunden, der zu „" + frage + "“ passt. Mit dokumente_suchen lässt sich im Volltext suchen.", nil
+	}
+	var b strings.Builder
+	for i, v := range vs {
+		if i > 0 {
+			b.WriteString("\n\n")
+		}
+		b.WriteString(v.Title)
+		if v.Art != "" {
+			b.WriteString(" (" + v.Art + ")")
+		}
+		b.WriteString("\n")
+		said := false
+		for _, name := range []string{"Anbieter", "Vertragsnummer", "Vertragsbeginn", "Vertragsende", "Kündigungsfrist", "Nächster Kündigungstermin"} {
+			if val := v.Felder[name]; val != "" {
+				b.WriteString("- " + name + ": " + val + "\n")
+				said = true
+			}
+		}
+		if !v.KuendigenBis.IsZero() {
+			b.WriteString("- Kündigen bis spätestens: " + v.KuendigenBis.Format("02.01.2006") + "\n")
+		}
+		if val := v.Felder["Betrag"]; val != "" {
+			b.WriteString("- Betrag: " + strings.TrimSpace(val+" "+v.Felder["Zahlungsintervall"]) + "\n")
+			said = true
+		}
+		if !said {
+			answer, err := d.Chat(ctx, v.ID, frage)
+			switch {
+			case err == nil && answer != "":
+				b.WriteString("Keine Vertragsdaten eingetragen; Paperless liest im Dokument: " + answer + "\n")
+			default:
+				if err != nil && !errors.Is(err, paperless.ErrNoChat) {
+					log.Printf("haus: vertraege: chat %d: %v", v.ID, err)
+				}
+				b.WriteString("Zu diesem Dokument sind keine Vertragsdaten eingetragen; die Antwort steht nur im Dokument selbst.\n")
+			}
+		}
+		if v.Unsicher {
+			b.WriteString("Unsicher: Das Dokument trägt das Schlagwort „prüfen“, die Werte bitte im Dokument nachsehen.\n")
+		}
+		if v.Link != "" {
+			b.WriteString("Dokument: " + v.Link)
+		}
 	}
 	return b.String(), nil
 }
