@@ -41,7 +41,8 @@ func TestBoxReadsAsLines(t *testing.T) {
 		json.NewEncoder(w).Encode(map[string]any{"result": map[string]any{"content": []map[string]string{{"text": text}}}})
 	}))
 	t.Cleanup(srv.Close)
-	page := get(Box(&laib.Client{URL: srv.URL, Token: "t"}, "https://laib.box.test"), "admins")
+	h := Box(&laib.Client{URL: srv.URL, Token: "t"}, "https://laib.box.test")
+	page := getAt(h, "/box/dienste?ganz=1", "admins") + getAt(h, "/box/journal?ganz=1", "admins")
 	mustContain(t, page, "overflow-wrap:break-word",
 		`<h2>Was läuft</h2><ul class=zeilen><li><span class="punkt gelb" role=img aria-label="gelb"></span><span class=was><b>paperless</b><span class=text>Redis langsam</span>`,
 		`<span class="punkt gruen" role=img aria-label="grün"></span><span class=was><b>auth</b><span class=text>Passwort-Mails über smtp.gmail.com · geprüft vor 28 h</span>`,

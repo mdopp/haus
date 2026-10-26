@@ -253,7 +253,7 @@ func boxWithUsage(t *testing.T, c *usage.Counter, v *usage.Voice) http.HandlerFu
 func TestBoxCardWhatIsUsed(t *testing.T) {
 	fake, c := metrics(t)
 	aMonth(fake)
-	page := get(boxWithUsage(t, c, nil), "admins")
+	page := getAt(boxWithUsage(t, c, nil), "/box/nutzung?ganz=1", "admins")
 	for _, want := range []string{"Was wird genutzt", "letzten 30 Tage", "nie, wer",
 		"Am meisten genutzt", "Start geöffnet", "120", "Räume geöffnet", "Licht ausgeschaltet", "17", "Vom Widget „Gerät“ aus geöffnet",
 		"Kaum oder nie genutzt", "Kalender geöffnet", "Energie geöffnet",
@@ -261,7 +261,7 @@ func TestBoxCardWhatIsUsed(t *testing.T) {
 		"Im Chat", "40 Anfragen", "3 davon nicht beantwortet", "Termine nachgesehen (12)", "Geräte ausgeschaltet (6)", "Gedächtnis (5)",
 		"Per Stimme", "30 hat Home Assistant selbst verstanden", "5 an die KI weitergereicht", "4 hat niemand verstanden",
 		"Was niemand beantworten konnte", "Wann kommt der Müll?", "9×", "im Chat", "Mach die &lt;Musik&gt; lauter", "per Stimme", "30 Tage", "ohne Namen",
-		"Was läuft"} {
+		`aria-current=page>Nutzung</a>`} {
 		if !strings.Contains(page, want) {
 			t.Errorf("the card lacks %q", want)
 		}
@@ -284,7 +284,7 @@ func TestBoxCardWhatIsUsed(t *testing.T) {
 func TestBoxCardEmpty(t *testing.T) {
 	_, c := metrics(t)
 	c.Started = time.Date(2026, 10, 16, 21, 30, 0, 0, time.Local)
-	page := get(boxWithUsage(t, c, nil), "admins")
+	page := getAt(boxWithUsage(t, c, nil), "/box/nutzung?ganz=1", "admins")
 	if !strings.Contains(page, "Was wird genutzt") || !strings.Contains(page, "Noch nichts gezählt") || !strings.Contains(page, "16.10.") {
 		t.Errorf("the empty card does not say so:\n%s", page)
 	}
@@ -295,8 +295,8 @@ func TestBoxCardEmpty(t *testing.T) {
 func TestBoxCardWhenUsageMetricsIsDown(t *testing.T) {
 	fake, c := metrics(t)
 	fake.Down(true)
-	page := get(boxWithUsage(t, c, nil), "admins")
-	if !strings.Contains(page, "Die Nutzungszahlen lassen sich gerade nicht lesen.") || !strings.Contains(page, "Was läuft") {
+	page := getAt(boxWithUsage(t, c, nil), "/box/nutzung?ganz=1", "admins")
+	if !strings.Contains(page, "Die Nutzungszahlen lassen sich gerade nicht lesen.") || !strings.Contains(page, "<h1>Nutzung</h1>") {
 		t.Errorf("down must be one plain line:\n%s", page)
 	}
 	for _, leak := range []string{"503", "127.0.0.1", fake.URL} {
@@ -309,12 +309,12 @@ func TestBoxCardWhenUsageMetricsIsDown(t *testing.T) {
 // Without usage-metrics configured there is no card and no word about it;
 // the family never sees it (Box sends them to Start).
 func TestBoxCardOnlyWhenCountingAndOnlyForAdmins(t *testing.T) {
-	if page := get(boxWithUsage(t, nil, nil), "admins"); strings.Contains(page, "genutzt") {
+	if page := getAt(boxWithUsage(t, nil, nil), "/box/nutzung?ganz=1", "admins"); strings.Contains(page, "genutzt") {
 		t.Errorf("a card without usage-metrics:\n%s", page)
 	}
 	fake, c := metrics(t)
 	aMonth(fake)
-	req := httptest.NewRequest("GET", "/box?ganz=1", nil)
+	req := httptest.NewRequest("GET", "/box/nutzung?ganz=1", nil)
 	req.Header.Set("Remote-User", "ben")
 	req.Header.Set("Remote-Groups", "family")
 	rec := httptest.NewRecorder()
@@ -338,7 +338,7 @@ func TestBoxCardSaysWhyVoiceIsNotCounted(t *testing.T) {
 	fakeHA.AssistAdmin(false)
 	v := &usage.Voice{HA: &ha.Client{URL: fakeHA.URL, Token: "ha-token"}, Counter: c, Since: time.Now(), Log: func(string, ...any) {}}
 	v.Poll(context.Background())
-	page := get(boxWithUsage(t, c, v), "admins")
+	page := getAt(boxWithUsage(t, c, v), "/box/nutzung?ganz=1", "admins")
 	if !strings.Contains(page, "Sprachbefehle werden nicht gezählt") || !strings.Contains(page, "Administrator") {
 		t.Errorf("the refusal is not said:\n%s", page)
 	}

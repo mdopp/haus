@@ -49,7 +49,7 @@ func Icon() http.HandlerFunc {
 
 // adminStyle is the admin cards in the house palette: tables as cards,
 // section labels, the states' colours, Box's sub-links as pills.
-const adminStyle = `<style>.unter{display:flex;gap:8px;margin:18px 0 0}.unter a{display:inline-flex;align-items:center;min-height:40px;padding:0 16px;border-radius:999px;background:var(--card);border:1px solid var(--edge);color:var(--ink);text-decoration:none;font-size:.85rem}.unter a[aria-current]{color:var(--accent);border-color:var(--accent)}
+const adminStyle = `<style>.unter{display:flex;gap:8px;margin:18px 0 0;overflow-x:auto;padding-bottom:4px}.unter a{flex:none}.unter a{display:inline-flex;align-items:center;min-height:40px;padding:0 16px;border-radius:999px;background:var(--card);border:1px solid var(--edge);color:var(--ink);text-decoration:none;font-size:.85rem}.unter a[aria-current]{color:var(--accent);border-color:var(--accent)}
 h2{font-size:.72rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:26px 2px 8px}
 table{width:100%;border-collapse:separate;border-spacing:0;background:var(--card);border:1px solid var(--edge);border-radius:14px;overflow:hidden}
 td,th{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top;overflow-wrap:break-word}tr:last-child td{border-bottom:0}
@@ -61,15 +61,51 @@ form{display:inline}input:not([type]),input[type=text],input[type=email]{font:in
 .zeilen .text{display:block;font-size:.9rem;color:var(--muted)}.punkt.gelb{background:var(--warn)}.punkt.rot{background:var(--danger)}.punkt.k{background:var(--faint)}
 code{overflow-wrap:anywhere;font:.8rem ui-monospace,SFMono-Regular,Menlo,monospace}</style>`
 
-// unterNav is Box's two pages, the current one marked.
-func unterNav(current string) string {
-	mark := func(n string) string {
-		if n == current {
-			return " aria-current=page"
-		}
-		return ""
+// boxPage is one of Box's pages (owner 2026-10-26: "zu viele vor allem
+// lange Themen vermischt"): where it is, its pill, its heading.
+type boxPage struct{ path, name, title string }
+
+// boxPages are Box's pages in the pills' order; Geräte is its own handler.
+var boxPages = []boxPage{
+	{"/box", "Übersicht", ""},
+	{AufgabenPath, "Aufgaben", "Box-Aufgaben"},
+	{"/box/dienste", "Dienste", "Dienste"},
+	{"/box/journal", "Journal", "Journal"},
+	{"/box/personen", "Personen", "Personen"},
+	{"/box/nutzung", "Nutzung", "Nutzung"},
+}
+
+// boxPageOf is the page a path shows; a POST's answer shows the page its
+// card is on (an invitation: Personen).
+func boxPageOf(path string, cfg BoxConfig) (boxPage, bool) {
+	if path == invitePath {
+		path = "/box/personen"
 	}
-	return "<nav class=unter><a href=/box" + mark("Box") + ">Box</a><a href=/box/geraete" + mark("Geräte") + ">Geräte</a></nav>"
+	for _, p := range boxPages {
+		if p.path == path && (p.path != "/box/nutzung" || cfg.Family.Usage != nil) {
+			return p, true
+		}
+	}
+	return boxPage{}, false
+}
+
+// unterNav is Box's pages, the current one marked; Nutzung only where it
+// is counted. It scrolls sideways on a phone.
+func unterNav(current string, usage bool) string {
+	var b strings.Builder
+	b.WriteString("<nav class=unter aria-label=Box>")
+	for _, p := range append(append([]boxPage{}, boxPages...), boxPage{"/box/geraete", "Geräte", ""}) {
+		if p.name == "Nutzung" && !usage {
+			continue
+		}
+		b.WriteString("<a href=" + p.path)
+		if p.name == current {
+			b.WriteString(" aria-current=page")
+		}
+		b.WriteString(">" + p.name + "</a>")
+	}
+	b.WriteString("</nav>")
+	return b.String()
 }
 
 // Box is the admins' page: readiness, the inbox (read-only — deciding
@@ -105,6 +141,10 @@ func BoxPage(cfg BoxConfig) http.HandlerFunc {
 			boxPartAnswer(w, r, cfg)
 			return
 		}
+		if _, ok := boxPageOf(r.URL.Path, cfg); !ok {
+			missing{http.StatusNotFound, "Diese Seite gibt es nicht.", "Box", "/box", "Box"}.write(w, r, cfg.Family)
+			return
+		}
 		writeBox(w, r, cfg, http.StatusOK, invitation{})
 	}
 }
@@ -127,18 +167,39 @@ const (
 // it loads, and the part that fills it.
 type boxSlot struct{ id, title, part string }
 
-// boxSlots are the Box page's places, in the page's order; a part may
-// fill several (laib's status: the top and Was läuft).
+// boxSlotsOn are one Box page's places, in its order; a part may fill
+// several (laib's status: the top and Was läuft), each where it is.
+func boxSlotsOn(cfg BoxConfig, page string) []boxSlot {
+	switch page {
+	case "/box":
+		return []boxSlot{{"box-stand", "", "stand"}, {"box-inbox", "Inbox", "inbox"}, {"box-bericht", "Morgenbericht", "journal"}}
+	case AufgabenPath:
+		return []boxSlot{{"box-aufgaben", "Box-Aufgaben", "aufgaben"}}
+	case "/box/dienste":
+		return []boxSlot{{"box-laeuft", "Was läuft", "stand"}}
+	case "/box/journal":
+		slots := []boxSlot{{"box-journal", "Journal · 24h", "journal"}}
+		if cfg.Tickets != nil {
+			slots = append(slots, boxSlot{"box-werkstatt", "Werkstatt", "werkstatt"})
+		}
+		return slots
+	case "/box/personen":
+		return []boxSlot{{"box-einladen", "Person einladen", "einladen"}}
+	case "/box/nutzung":
+		if cfg.Family.Usage != nil {
+			return []boxSlot{{"box-genutzt", "Was wird genutzt", "genutzt"}}
+		}
+	}
+	return nil
+}
+
+// boxSlots are all Box's places: the parts the script may ask for.
 func boxSlots(cfg BoxConfig) []boxSlot {
-	slots := []boxSlot{{"box-stand", "", "stand"}, {"box-inbox", "Inbox", "inbox"}, {"box-aufgaben", "Box-Aufgaben", "aufgaben"}, {"box-einladen", "Person einladen", "einladen"},
-		{"box-bericht", "Morgenbericht", "journal"}}
-	if cfg.Family.Usage != nil {
-		slots = append(slots, boxSlot{"box-genutzt", "Was wird genutzt", "genutzt"})
+	var all []boxSlot
+	for _, p := range boxPages {
+		all = append(all, boxSlotsOn(cfg, p.path)...)
 	}
-	if cfg.Tickets != nil {
-		slots = append(slots, boxSlot{"box-werkstatt", "Werkstatt", "werkstatt"})
-	}
-	return append(slots, boxSlot{"box-laeuft", "Was läuft", "stand"}, boxSlot{"box-journal", "Journal · 24h", "journal"})
+	return all
 }
 
 // boxPart reads one part and renders its places: slot id → HTML. Each
@@ -164,10 +225,28 @@ func boxPart(ctx context.Context, r *http.Request, cfg BoxConfig, part string, i
 			if ready.AufgabenFaellig > 0 {
 				due = fmt.Sprintf(", <span class=gelb>%d fällig</span>", ready.AufgabenFaellig)
 			}
-			fmt.Fprintf(&b, "<p><a href=#box-aufgaben>%d Box-Aufgaben offen</a>%s</p>", ready.Aufgaben, due)
+			fmt.Fprintf(&b, "<p><a href=%s>%d Box-Aufgaben offen</a>%s</p>", AufgabenPath, ready.Aufgaben, due)
 		}
 		if ready.Lock != "" {
 			fmt.Fprintf(&b, "<p class=gelb>gesperrt: %s</p>", html.EscapeString(ready.Lock))
+		}
+		// what is not green, on the overview too; all of it under Dienste
+		var notGreen []laib.Service
+		for _, s := range rows {
+			if c := cls(s.State); c == "rot" || c == "gelb" {
+				notGreen = append(notGreen, s)
+			}
+		}
+		if len(notGreen) > 0 {
+			b.WriteString("<ul class=zeilen>")
+			for _, s := range notGreen {
+				fmt.Fprintf(&b, "<li>%s<span class=was><b>%s</b>", dot(cls(s.State), s.State), html.EscapeString(s.Name))
+				if d := oneLine(s.Detail); d != "" {
+					b.WriteString("<span class=text>" + linkAufgaben(html.EscapeString(trim(d, 160))) + "</span>")
+				}
+				b.WriteString("</span></li>")
+			}
+			b.WriteString("</ul><p><a href=/box/dienste>Alle Dienste</a></p>")
 		}
 		// one line per service, its state a dot (the word for a screen
 		// reader); what is not green first
@@ -286,7 +365,11 @@ func writeBox(w http.ResponseWriter, r *http.Request, cfg BoxConfig, code int, i
 // writeBoxWith is writeBox with places filled already (a POST's outcome in
 // its card, haus#115).
 func writeBoxWith(w http.ResponseWriter, r *http.Request, cfg BoxConfig, code int, inv invitation, pre map[string]string) {
-	slots := boxSlots(cfg)
+	page, _ := boxPageOf(r.URL.Path, cfg)
+	if page.path == "" {
+		page = boxPages[0]
+	}
+	slots := boxSlotsOn(cfg, page.path)
 	filled := map[string]string{}
 	for id, h := range pre {
 		filled[id] = h
@@ -314,8 +397,15 @@ func writeBoxWith(w http.ResponseWriter, r *http.Request, cfg BoxConfig, code in
 		}
 		wg.Wait()
 	}
-	b := adminHead(r, cfg.Family, "Box")
-	b.WriteString(unterNav("Box"))
+	title := "Box"
+	if page.title != "" {
+		title = page.title
+	}
+	b := adminHead(r, cfg.Family, title)
+	b.WriteString(unterNav(page.name, cfg.Family.Usage != nil))
+	if page.title != "" {
+		b.WriteString("<h1>" + html.EscapeString(page.title) + "</h1>")
+	}
 	var parts []string
 	seen := map[string]bool{}
 	for _, s := range slots {

@@ -38,7 +38,7 @@ var aufgabeRef = regexp.MustCompile(`Box-Aufgabe #(\d+)`)
 // linkAufgaben makes each "Box-Aufgabe #N" in escaped text a link to its
 // place on the page (a finding deferred to it, laib#667).
 func linkAufgaben(escaped string) string {
-	return aufgabeRef.ReplaceAllString(escaped, `<a href="#aufgabe-$1">Box-Aufgabe #$1</a>`)
+	return aufgabeRef.ReplaceAllString(escaped, `<a href="`+AufgabenPath+`#aufgabe-$1">Box-Aufgabe #$1</a>`)
 }
 
 // Aufgaben answers the card's two POSTs: tun=erledigt (id) and tun=spaeter
@@ -47,7 +47,7 @@ func linkAufgaben(escaped string) string {
 func Aufgaben(cfg BoxConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
-			http.Redirect(w, r, "/box#box-aufgaben", http.StatusSeeOther)
+			BoxPage(cfg)(w, r) // the page Box-Aufgaben
 			return
 		}
 		if !adminOnly(w, r) {

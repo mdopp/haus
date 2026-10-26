@@ -166,7 +166,7 @@ func TestEinladenWithoutTheToolSaysSo(t *testing.T) {
 	if rec.Code != http.StatusNotImplemented || !strings.Contains(rec.Body.String(), saysInviteMissing) {
 		t.Fatalf("%d\n%s", rec.Code, rec.Body.String())
 	}
-	box := get(BoxPage(BoxConfig{Laib: f.client(t), LaibURL: "https://laib.box.test"}), "admins")
+	box := getAt(BoxPage(BoxConfig{Laib: f.client(t), LaibURL: "https://laib.box.test"}), "/box/personen?ganz=1", "admins")
 	if !strings.Contains(box, saysInviteMissing) || strings.Contains(box, "action=/box/einladen") {
 		t.Fatalf("the Box card without the tool:\n%s", box)
 	}
@@ -200,7 +200,7 @@ func TestEinladenOnlyAdminsAndOnlyComplete(t *testing.T) {
 	req := httptest.NewRequest("GET", "/box/einladen", nil)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
-	if rec.Code != 303 || rec.Header().Get("Location") != "/box" {
+	if rec.Code != 303 || rec.Header().Get("Location") != "/box/personen" {
 		t.Errorf("GET: %d %q", rec.Code, rec.Header().Get("Location"))
 	}
 }
@@ -220,7 +220,7 @@ func TestEinladenInvitesToTheFamilyOnly(t *testing.T) {
 func TestEinladenListsThePendingAndResends(t *testing.T) {
 	f := &inviteLaib{pending: []map[string]any{{"user": "ben", "name": "Ben Beispiel", "email": "ben@example.org", "invited_at": "2026-10-17T12:00:00Z"}},
 		reply: map[string]any{"user": "ben", "mailed": true, "message": "Ben bekommt die Mail noch einmal."}}
-	box := get(BoxPage(BoxConfig{Laib: f.client(t), LaibURL: "https://laib.box.test"}), "admins")
+	box := getAt(BoxPage(BoxConfig{Laib: f.client(t), LaibURL: "https://laib.box.test"}), "/box/personen?ganz=1", "admins")
 	for _, w := range []string{saysPendingTitle, "Ben Beispiel", "ben · ben@example.org", "eingeladen am 17. Oktober 2026", "Erneut senden", "name=erneut value=1"} {
 		if !strings.Contains(box, w) {
 			t.Errorf("the card lacks %q", w)
@@ -257,7 +257,7 @@ func TestLifetime(t *testing.T) {
 // for the owner's approval, with the way to the proposal.
 func TestEinladenTakesTheSignalNumber(t *testing.T) {
 	f := &inviteLaib{reply: map[string]any{"user": "carola", "mailed": true}}
-	box := get(BoxPage(BoxConfig{Laib: f.client(t), LaibURL: "https://laib.box.test"}), "admins")
+	box := getAt(BoxPage(BoxConfig{Laib: f.client(t), LaibURL: "https://laib.box.test"}), "/box/personen?ganz=1", "admins")
 	mustNotContain(t, box, "Signal-Nummer", `name=signal`)
 	// a number typed at an older Laib is not passed on
 	invite(t, f, url.Values{"vorname": {"Carola"}, "email": {"c@example.org"}, "signal": {"+49 170 0000001"}}, "admins")
@@ -266,7 +266,7 @@ func TestEinladenTakesTheSignalNumber(t *testing.T) {
 	}
 
 	f = &inviteLaib{signal: true, reply: map[string]any{"user": "carola", "mailed": true, "proposal": 77}}
-	box = get(BoxPage(BoxConfig{Laib: f.client(t), LaibURL: "https://laib.box.test"}), "admins")
+	box = getAt(BoxPage(BoxConfig{Laib: f.client(t), LaibURL: "https://laib.box.test"}), "/box/personen?ganz=1", "admins")
 	mustContain(t, box, `<label for=signal>Signal-Nummer</label><input id=signal name=signal type=tel`, saysSignalHint)
 	rec := invite(t, f, url.Values{"vorname": {"Carola"}, "email": {"c@example.org"}, "signal": {"0049 (170) 000-0001"}}, "admins")
 	if rec.Code != 200 || len(f.calls) != 1 || f.calls[0]["signal"] != "+491700000001" {
@@ -299,10 +299,10 @@ func TestEinladenTakesTheSignalNumber(t *testing.T) {
 // Laib has the verb; a wrong name or number reaches nothing.
 func TestEinladenSetsTheSignalNumberLater(t *testing.T) {
 	old := &inviteLaib{}
-	mustNotContain(t, get(BoxPage(BoxConfig{Laib: old.client(t), LaibURL: "https://laib.box.test"}), "admins"), "Signal-Nummer nachtragen")
+	mustNotContain(t, getAt(BoxPage(BoxConfig{Laib: old.client(t), LaibURL: "https://laib.box.test"}), "/box/personen?ganz=1", "admins"), "Signal-Nummer nachtragen")
 
 	f := &inviteLaib{signal: true}
-	mustContain(t, get(BoxPage(BoxConfig{Laib: f.client(t), LaibURL: "https://laib.box.test"}), "admins"),
+	mustContain(t, getAt(BoxPage(BoxConfig{Laib: f.client(t), LaibURL: "https://laib.box.test"}), "/box/personen?ganz=1", "admins"),
 		"<h3 id=signal-nachtragen>Signal-Nummer nachtragen</h3>", `<input type=hidden name=tun value=signal>`, `name=signal type=tel required`)
 	rec := invite(t, f, url.Values{"tun": {"signal"}, "benutzer": {"anna"}, "signal": {"0170 0000001"}}, "admins")
 	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), saysBadSignal) {

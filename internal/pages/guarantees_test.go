@@ -32,8 +32,12 @@ func fakeLaib(t *testing.T, ready map[string]any, rows []map[string]any) *laib.C
 	return &laib.Client{URL: srv.URL, Token: "t"}
 }
 
-func get(h http.HandlerFunc, groups string) string {
-	req := httptest.NewRequest("GET", "/box?ganz=1", nil)
+func get(h http.HandlerFunc, groups string) string { return getAt(h, "/box?ganz=1", groups) }
+
+// getAt is a Box page (haus: Übersicht, Aufgaben, Dienste, Journal,
+// Personen, Nutzung), whole.
+func getAt(h http.HandlerFunc, target, groups string) string {
+	req := httptest.NewRequest("GET", target, nil)
 	req.Header.Set("Remote-User", "anna")
 	if groups != "" {
 		req.Header.Set("Remote-Groups", groups)

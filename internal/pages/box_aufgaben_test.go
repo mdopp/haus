@@ -174,7 +174,7 @@ func TestBoxAufgaben(t *testing.T) {
 		t.Errorf("slow → %d %q", rec.Code, rec.Body)
 	}
 
-	if got := linkAufgaben("gelb (zurückgestellt → Box-Aufgabe #3 „Spiegel“)"); got != `gelb (zurückgestellt → <a href="#aufgabe-3">Box-Aufgabe #3</a> „Spiegel“)` {
+	if got := linkAufgaben("gelb (zurückgestellt → Box-Aufgabe #3 „Spiegel“)"); got != `gelb (zurückgestellt → <a href="/box/aufgaben#aufgabe-3">Box-Aufgabe #3</a> „Spiegel“)` {
 		t.Errorf("%q", got)
 	}
 }
