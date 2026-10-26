@@ -281,7 +281,7 @@ func Tools(cfg Config) []mcpserver.Tool {
 				Description: "Merkt sich eine Webseite als Notiz, wenn jemand einen Link schickt: ein Rezept mit Portionen, Zutaten und Zubereitung, " +
 					"eine Album-Rezension mit Band, Wertung und Kern, eine Reise mit Ort, Anbieter und Preis, sonst den Kern der Seite; der Link bleibt dabei, " +
 					"Art und Tags werden gesetzt. Einen Link merkt es sich nur einmal. Ein Lied oder Album (YouTube-Musikvideo, Spotify) kommt stattdessen auf die " +
-					"Musik-Wunschliste des Haushalts, außer es ist schon in der eigenen Musik. Sag danach kurz, was geschah.",
+					"Musik-Wunschliste des Haushalts, außer es ist schon in der eigenen Musik; ein Podcast wird für die Person abonniert. Sag danach kurz, was geschah.",
 				Schema: obj(map[string]any{"link": str("Die Adresse der Seite, https://…"),
 					"hinweis": str("Was die Person dazu schrieb; #wörter darin werden Tags"),
 					"person":  str("Wer den Link schickt: der Benutzername der Person; für die Musik-Wunschliste")}, "link"),
@@ -1206,6 +1206,9 @@ func notizenMitTag(ctx context.Context, n *notes.Dir, a map[string]any) (string,
 // notizAusLink keeps a page someone sent as a note (haus#117) and says
 // what was kept, with the note's page in Haus.
 func notizAusLink(ctx context.Context, cfg Config, n *notes.Dir, a map[string]any) (string, error) {
+	if res, ok, err := cfg.Podcasts.AusLink(ctx, mcpserver.Str(a, "person"), mcpserver.Str(a, "link")); ok {
+		return res.Satz, err
+	}
 	if g, ok, err := cfg.Wuensche.AusLink(ctx, cfg.Fetcher, mcpserver.Str(a, "link"), mcpserver.Str(a, "person")); ok {
 		return g.Satz, err
 	}

@@ -12,7 +12,9 @@ import (
 	"github.com/mdopp/haus/internal/merken"
 )
 
-func rel(kind, u string) map[string]any { return map[string]any{"type": kind, "url": map[string]string{"resource": u}} }
+func rel(kind, u string) map[string]any {
+	return map[string]any{"type": kind, "url": map[string]string{"resource": u}}
+}
 
 // a MusicBrainz that knows Wanda's Salbei: on a single and on an album to
 // come, the album on a label with a Bandcamp, the band with a homepage

@@ -139,3 +139,66 @@ func appleLookup(ctx context.Context, f merken.Fetcher, api string) (string, err
 	}
 	return out.Results[0].FeedURL, nil
 }
+
+// podcastHosts are where a link is a podcast by its address alone.
+var podcastHosts = []string{"podcasts.apple.com", "pca.st", "pocketcasts.com", "overcast.fm", "castbox.fm", "podcasts.google.com", "podcastaddict.com", "fyyd.de"}
+
+var (
+	reEnclosure = regexp.MustCompile(`(?is)<enclosure\s[^>]*type\s*=\s*["']audio/`)
+	reItunes    = regexp.MustCompile(`(?i)xmlns:itunes\s*=`)
+)
+
+// PodcastLink says whether a shared link is a podcast to subscribe to,
+// not a page to keep: a podcast app's or directory's address, a Spotify
+// show, a feed with audio, or a page whose own feed carries audio. A blog's
+// feed without audio is no podcast; a page is never searched by its name.
+func PodcastLink(ctx context.Context, f merken.Fetcher, link string) bool {
+	u, err := merken.Address(link)
+	if err != nil {
+		return false
+	}
+	host := strings.TrimPrefix(strings.ToLower(u.Hostname()), "www.")
+	for _, h := range podcastHosts {
+		if host == h || strings.HasSuffix(host, "."+h) {
+			return true
+		}
+	}
+	if host == "open.spotify.com" {
+		return strings.Contains(u.Path, "/show/") || strings.Contains(u.Path, "/episode/")
+	}
+	final, ct, raw, _, err := f.Get(ctx, u)
+	if err != nil {
+		return false
+	}
+	body := string(raw[:min(len(raw), 1<<20)])
+	if isFeed(ct, body) {
+		return audioFeed(body)
+	}
+	for _, l := range reAltFeed.FindAllString(body, -1) {
+		if !reType.MatchString(l) {
+			continue
+		}
+		h := reHref.FindStringSubmatch(l)
+		if h == nil {
+			continue
+		}
+		ref, err := url.Parse(html.UnescapeString(h[1]))
+		if err != nil {
+			continue
+		}
+		base, _ := url.Parse(final)
+		fu := base.ResolveReference(ref)
+		_, _, feed, _, err := f.Get(ctx, fu)
+		if err == nil && audioFeed(string(feed[:min(len(feed), 1<<20)])) {
+			return true
+		}
+		break // the page's first feed is its own; a second is a comments feed
+	}
+	return false
+}
+
+// audioFeed is a feed whose items carry audio, or that names itself for
+// podcast apps (the iTunes namespace).
+func audioFeed(body string) bool {
+	return reEnclosure.MatchString(body) || reItunes.MatchString(body)
+}
