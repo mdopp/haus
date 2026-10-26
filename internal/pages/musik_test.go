@@ -46,7 +46,7 @@ func TestMusikHinzufuegen(t *testing.T) {
 	h := Musik(cfg)
 
 	_, body, _ := familyPage(t, Musik, cfg, "GET", MusikPath, "family")
-	mustContain(t, body, "<h1>Musik</h1>", "<h2 class=musik-teil>Musik hinzufügen</h2>", saysMusikHow, `id=musik-dateien multiple`, `webkitdirectory`, "fetch('"+MusikTeilPath)
+	mustContain(t, body, "<h1>Musik hinzufügen</h1>", saysMusikHow, `id=musik-dateien multiple`, `webkitdirectory`, "fetch('"+MusikTeilPath)
 	mustContain(t, mehrOf(t, body), `href=/musik aria-current=page>`)
 	_, body, _ = familyPage(t, Mehr, StartConfig{}, "GET", "/mehr", "family")
 	mustNotContain(t, body, `href=/musik`)
