@@ -176,14 +176,17 @@ func nichtUebernommen(cfg StartConfig) string {
 		return ""
 	}
 	var b strings.Builder
-	b.WriteString(`<section class=karte aria-labelledby=m-n><h2 id=m-n>Nicht übernommen</h2><p class=k>Das hat die Box nicht einsortiert. Was inzwischen gehen sollte, legt „Noch einmal einsortieren“ zurück in den Musik-Eingang.</p><ul class=musik-liste>`)
+	b.WriteString(`<section class=karte aria-labelledby=m-n><h2 id=m-n>Nicht übernommen</h2><p class=k>Das hat die Box nicht einsortiert. Was inzwischen gehen sollte, legt „Noch einmal einsortieren“ zurück in den Musik-Eingang; was du nicht brauchst, „Löschen“.</p><ul class=musik-liste>`)
 	for _, k := range kept {
 		b.WriteString("<li><span class=name>" + html.EscapeString(k.name) + "</span>")
 		if k.grund != "" {
 			b.WriteString("<span class=k>" + html.EscapeString(k.grund) + "</span>")
 		}
-		b.WriteString(`<form method=post action=` + MusikPath + `><input type=hidden name=tun value=nochmal><input type=hidden name=lauf value="` + html.EscapeString(k.run) +
-			`"><input type=hidden name=name value="` + html.EscapeString(k.name) + `"><button data-laeuft="Legt zurück …">Noch einmal einsortieren</button></form></li>`)
+		hidden := `<input type=hidden name=lauf value="` + html.EscapeString(k.run) + `"><input type=hidden name=name value="` + html.EscapeString(k.name) + `">`
+		b.WriteString(`<div class=musik-tun><form method=post action=` + MusikPath + `><input type=hidden name=tun value=nochmal>` + hidden +
+			`<button data-laeuft="Legt zurück …">Noch einmal einsortieren</button></form>` +
+			`<form method=post action=` + MusikPath + ` data-frage="„` + html.EscapeString(k.name) + `“ endgültig löschen?"><input type=hidden name=tun value=loeschen>` + hidden +
+			`<button class=weg data-laeuft="Löscht …">Löschen</button></form></div></li>`)
 	}
 	b.WriteString("</ul></section>")
 	return b.String()
@@ -191,15 +194,16 @@ func nichtUebernommen(cfg StartConfig) string {
 
 // musikNochmal puts an upload beets kept back into the inbox again, under
 // its own name (beside one there already), for who asked: the importer
-// takes it in about a minute. A run left with only its GRUND.txt goes.
+// takes it in about a minute; or (tun=loeschen) deletes it. A run left
+// with only its GRUND.txt goes.
 func musikNochmal(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
 	if !fromHaus(r) {
 		http.Error(w, "Das geht nur von Haus' eigener Seite.", http.StatusForbidden)
 		return
 	}
 	r.ParseForm()
-	run, name := r.PostForm.Get("lauf"), r.PostForm.Get("name")
-	if r.PostForm.Get("tun") != "nochmal" || !plainName(run) || !plainName(name) || name == "GRUND.txt" {
+	run, name, tun := r.PostForm.Get("lauf"), r.PostForm.Get("name"), r.PostForm.Get("tun")
+	if (tun != "nochmal" && tun != "loeschen") || !plainName(run) || !plainName(name) || name == "GRUND.txt" {
 		http.Error(w, "Diese Datei gibt es hier nicht.", http.StatusBadRequest)
 		return
 	}
@@ -212,6 +216,17 @@ func musikNochmal(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
 	from := keptBack + "/" + run + "/" + name
 	if _, err := root.Lstat(from); err != nil {
 		http.Error(w, "Diese Datei liegt nicht mehr unter „Nicht übernommen“.", http.StatusConflict)
+		return
+	}
+	if tun == "loeschen" { // the owner, 2026-10-26: what can be put back can be deleted
+		if err := root.RemoveAll(from); err != nil {
+			log.Printf("haus: musik: deleting %s: %v", from, err)
+			http.Error(w, "Die Datei ließ sich nicht löschen.", http.StatusInternalServerError)
+			return
+		}
+		tidyRun(root, run)
+		log.Printf("haus: musik: %s deleted %s", r.Header.Get("Remote-User"), from)
+		writeMusik(w, r, cfg, "„"+name+"“ ist gelöscht.", "")
 		return
 	}
 	to := name
@@ -237,10 +252,7 @@ func musikNochmal(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
 		http.Error(w, "Die Datei ließ sich nicht zurücklegen.", http.StatusInternalServerError)
 		return
 	}
-	if rest, err := fs.ReadDir(root.FS(), keptBack+"/"+run); err == nil && (len(rest) == 0 || (len(rest) == 1 && rest[0].Name() == "GRUND.txt")) {
-		root.Remove(keptBack + "/" + run + "/GRUND.txt")
-		root.Remove(keptBack + "/" + run)
-	}
+	tidyRun(root, run)
 	log.Printf("haus: musik: %s put %s back into the inbox", r.Header.Get("Remote-User"), name)
 	writeMusik(w, r, cfg, "„"+name+"“ liegt wieder im Musik-Eingang. Die Box sortiert es in etwa einer Minute ein.", to)
 }
@@ -377,7 +389,7 @@ func musikTeil(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
 
 const musikStyle = `<style>.musik-wahl{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0 0}.musik-wahl .knopf{position:relative;display:inline-flex;align-items:center;min-height:44px;padding:0 18px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-weight:600;cursor:pointer}
 .musik-wahl input{position:absolute;inset:0;opacity:0;cursor:pointer}.musik-liste{list-style:none;margin:10px 0 0;padding:0}.musik-liste li{padding:8px 0;border-top:1px solid var(--line);font-size:.9rem}
-.musik-liste .name{overflow-wrap:anywhere}.musik-liste progress{display:block;width:100%;height:6px;margin:6px 0 0;accent-color:var(--accent)}.musik-liste .fehler{color:var(--danger)}.musik-liste .gut{color:var(--ok)}</style>`
+.musik-liste .name{overflow-wrap:anywhere;display:block}.musik-tun{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 0}.musik-tun form{margin:0}.musik-tun .weg{background:var(--danger-soft);color:var(--danger)}.musik-liste progress{display:block;width:100%;height:6px;margin:6px 0 0;accent-color:var(--accent)}.musik-liste .fehler{color:var(--danger)}.musik-liste .gut{color:var(--ok)}</style>`
 
 // musikScript sends the chosen files one after another, each in pieces,
 // showing each file's progress and how far the whole is; a piece that
@@ -538,4 +550,12 @@ func uploadResults(own json.RawMessage, names []string, seit string) []Ergebnis 
 		out = append(out, e)
 	}
 	return out
+}
+
+// tidyRun removes a run of kept-back uploads left with only its GRUND.txt.
+func tidyRun(root *os.Root, run string) {
+	if rest, err := fs.ReadDir(root.FS(), keptBack+"/"+run); err == nil && (len(rest) == 0 || (len(rest) == 1 && rest[0].Name() == "GRUND.txt")) {
+		root.Remove(keptBack + "/" + run + "/GRUND.txt")
+		root.Remove(keptBack + "/" + run)
+	}
 }
