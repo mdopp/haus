@@ -14,6 +14,7 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
+	"github.com/mdopp/haus/internal/discogs"
 	"log"
 	"net/http"
 	"os"
@@ -107,8 +108,11 @@ func main() {
 	if _, err := wishes.Wuenschen(context.Background(), merken.Lied{Kuenstler: "Wanda", Titel: "Salbei", Link: "https://youtube.com/watch?v=Ca7RfL4m744"}, "anna"); err != nil {
 		log.Fatal(err)
 	}
+	// Anna's Discogs is connected (owner 2026-10-26: Platte erfassen on a phone is checked too); the app reaches no Discogs
+	os.WriteFile(filepath.Join(dir, "discogs-konten.json"), []byte(`{"anna":{"name":"anna","token":"t","secret":"s"}}`), 0o600)
+	shelves := &discogs.Regale{App: &discogs.App{Key: "demo", Secret: "demo", Base: "http://127.0.0.1:1", Web: "https://www.discogs.test"}, Dir: dir}
 	live := &pages.Live{}
-	cfg := pages.StartConfig{Einkauf: list, Wuensche: wishes, Podcasts: pods, HA: &ha.Client{URL: fake.URL, Token: "demo"}, Notes: nd, Favorites: favoriten.Open(dir), MusicInbox: inbox,
+	cfg := pages.StartConfig{Einkauf: list, Wuensche: wishes, Discogs: shelves, Podcasts: pods, HA: &ha.Client{URL: fake.URL, Token: "demo"}, Notes: nd, Favorites: favoriten.Open(dir), MusicInbox: inbox,
 		Calendar: cal, Views: ansicht.Open(dir),
 		RadicalePublicURL: "https://caldav.example", Fetcher: merken.Fetcher{AllowPrivate: true}}
 	mux := http.NewServeMux()
@@ -121,6 +125,8 @@ func main() {
 	mux.HandleFunc("/kalender", pages.Kalender(cfg))
 	mux.HandleFunc("/kalender/verwalten", pages.KalenderVerwalten(cfg))
 	mux.HandleFunc(pages.MusikPath, pages.Musik(cfg))
+	mux.HandleFunc(pages.PlattePath, pages.Platte(cfg))
+	mux.HandleFunc(pages.DiscogsPath, pages.Discogs(cfg))
 	mux.HandleFunc(pages.MusikTeilPath, pages.Musik(cfg))
 	mux.HandleFunc(pages.MusikStandPath, pages.Musik(cfg))                       // haus#113: the import's line
 	mux.HandleFunc("/demo/musik", func(w http.ResponseWriter, r *http.Request) { // what arrived in the inbox, name → size
