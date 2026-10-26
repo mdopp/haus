@@ -77,10 +77,10 @@ var haushaltPages = []tab{
 // for admins, the box — each only when this box has it; then the account
 // with Abmelden. What the family uses day to day has a tab of its own.
 var mehr = []tab{
+	{"Musik hinzufügen", MusikPath, `<path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/>`},
 	{"Platte erfassen", PlattePath, `<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/>`},
 	{"Discogs", DiscogsPath, `<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>`},
 	{"Podcasts", PodcastsPath, `<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>`},
-	{"Musik", MusikPath, `<path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/>`},
 	{"Apps einrichten", willkommenPath, `<rect x="6" y="3" width="12" height="18" rx="2"/><path d="M11 18h2"/>`},
 	{"Netzlaufwerk", "/netzlaufwerk", `<rect x="3" y="5" width="18" height="6" rx="1.5"/><rect x="3" y="13" width="18" height="6" rx="1.5"/><path d="M7 8h.01M7 16h.01"/>`},
 	{"Box", "/box", `<rect x="3" y="7" width="18" height="12" rx="2"/><path d="M3 11h18M8 15h2"/>`},
@@ -111,9 +111,8 @@ func tabOf(page string) string {
 func shows(r *http.Request, cfg StartConfig) map[string]bool {
 	return map[string]bool{"Start": true, "Geräte": cfg.HA != nil, "Haushalt": cfg.Calendar != nil || cfg.Einkauf != nil || cfg.Notes != nil || cfg.hasDocs(), "Mehr": true, "Einkauf": cfg.Einkauf != nil,
 		"Energie": cfg.HA != nil, "Kalender": cfg.Calendar != nil, "Notizen": cfg.Notes != nil, "Dokumente": cfg.hasDocs(),
-		"Apps einrichten": cfg.Laib != nil || cfg.Samba != nil, "Musik": cfg.MusicInbox != "", "Podcasts": cfg.Podcasts != nil,
-		// Platte erfassen and Discogs live on Musik (owner 2026-10-26); on their own only on a box without it
-		"Platte erfassen": cfg.Discogs != nil && cfg.MusicInbox == "", "Discogs": (cfg.Discogs != nil || cfg.Wuensche != nil) && cfg.MusicInbox == "" && r.Header.Get("Remote-User") != "",
+		"Apps einrichten": cfg.Laib != nil || cfg.Samba != nil, "Musik hinzufügen": cfg.MusicInbox != "", "Podcasts": cfg.Podcasts != nil,
+		"Platte erfassen": cfg.Discogs != nil, "Discogs": (cfg.Discogs != nil || cfg.Wuensche != nil) && r.Header.Get("Remote-User") != "",
 		"Netzlaufwerk": cfg.Samba != nil && r.Header.Get("Remote-User") != "", "Box": isAdmin(r),
 		"Adresse": isAdmin(r) && cfg.Laib != nil}
 }

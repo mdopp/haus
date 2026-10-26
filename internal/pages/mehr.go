@@ -11,15 +11,18 @@ const mehrPath = "/mehr"
 
 // What Mehr says of each of its pages, in a line.
 var mehrSays = map[string]string{
-	"Apps einrichten": "So kommen die Apps der Box auf Handy und Computer",
-	"Podcasts":        "Podcasts per Link abonnieren; Bescheid bei jeder neuen Folge",
-	"Platte erfassen": "Eine Schallplatte fotografieren und in deine Discogs-Sammlung eintragen",
-	"Discogs":         "Dein Discogs-Konto verbinden: Sammlung, Wantlist, Platte erfassen",
-	"Musik":           "Hochladen, Platten erfassen, Discogs und die Musik-Wunschliste",
-	"Netzlaufwerk":    "Dein Passwort für das Netzlaufwerk",
-	"Box":             "Wie es der Box geht, für Admins",
-	"Adresse":         "Wo das Haus steht, für Admins",
+	"Apps einrichten":  "So kommen die Apps der Box auf Handy und Computer",
+	"Podcasts":         "Podcasts per Link abonnieren; Bescheid bei jeder neuen Folge",
+	"Platte erfassen":  "Eine Schallplatte fotografieren und in deine Discogs-Sammlung eintragen",
+	"Discogs":          "Dein Discogs-Konto verbinden: Sammlung, Wantlist, Platte erfassen",
+	"Musik hinzufügen": "Lieder, Alben oder ZIPs hochladen; die Box sortiert sie ein",
+	"Netzlaufwerk":     "Dein Passwort für das Netzlaufwerk",
+	"Box":              "Wie es der Box geht, für Admins",
+	"Adresse":          "Wo das Haus steht, für Admins",
 }
+
+// mehrMusik are Mehr's pages under the heading Musik.
+var mehrMusik = map[string]bool{"Musik hinzufügen": true, "Platte erfassen": true, "Discogs": true}
 
 // Mehr is the bar's fourth entry on the phone (haus#67): the pages that
 // have no entry of their own — Energie, Medien, Notizen, Dokumente, Netzlaufwerk, Box
@@ -38,11 +41,19 @@ func Mehr(cfg StartConfig) http.HandlerFunc {
 		show := shows(r, cfg)
 		b := familyHead(r, cfg, "Mehr", "Mehr")
 		b.WriteString("<h1>Mehr</h1>")
-		pages := cards.Card{Title: "Seiten"}
+		musik, pages := cards.Card{Title: "Musik"}, cards.Card{Title: "Seiten"} // the music's pages under their own heading (owner 2026-10-26)
 		for _, t := range mehr {
-			if show[t.name] {
+			if !show[t.name] {
+				continue
+			}
+			if mehrMusik[t.name] {
+				musik.AddLink(t.name, mehrSays[t.name], t.href)
+			} else {
 				pages.AddLink(t.name, mehrSays[t.name], t.href)
 			}
+		}
+		if len(musik.Rows) > 0 {
+			b.WriteString(musik.HTML())
 		}
 		b.WriteString(pages.HTML())
 		konto := cards.Card{Title: "Konto"}
