@@ -71,6 +71,7 @@ type site struct {
 	inverted    map[string]bool // haus#64: covers wired the wrong way round, shown and set turned over
 	radicale    string          // haus#66: Radicale's public address, its web page and the phones' CalDAV addresses; empty, none
 	views       *ansicht.Store  // haus#66: each person's calendar colours and hidden calendars
+	dataDir     string          // Haus's data folder (HAUS_DATA)
 	// haus#68: the Dokumente page's mail address, Paperless's public address and whether it is LAN-only
 	docsMail, paperlessPublic string
 	paperlessLAN              bool
@@ -104,6 +105,10 @@ func routes(s site) http.Handler {
 	if fi, err := os.Stat(musicInboxMount); family.MusicInbox == "" && err == nil && fi.IsDir() {
 		family.MusicInbox = musicInboxMount // where laib's haus template mounts it (laib#639)
 	}
+	family.MusicDir, family.DataDir = os.Getenv("HAUS_MUSIC_DIR"), s.dataDir
+	if fi, err := os.Stat(musicMount); family.MusicDir == "" && err == nil && fi.IsDir() {
+		family.MusicDir = musicMount // the music, for Musik aufräumen (owner 2026-10-26)
+	}
 	if family.MusicInbox != "" { // haus#107: the music inbox beets sorts in
 		if fi, err := os.Stat(family.MusicInbox); err != nil || !fi.IsDir() {
 			log.Printf("haus: HAUS_MUSIC_INBOX %s is not a folder (yet): uploads answer 503 until it is", family.MusicInbox)
@@ -111,6 +116,9 @@ func routes(s site) http.Handler {
 		pagesMux.HandleFunc(pages.MusikPath, pages.Musik(family))
 		pagesMux.HandleFunc(pages.MusikTeilPath, pages.Musik(family))
 		pagesMux.HandleFunc(pages.MusikStandPath, pages.Musik(family)) // haus#113: the import's line
+		if family.MusicDir != "" {
+			pagesMux.HandleFunc(pages.MusikAufraeumenPath, pages.MusikAufraeumen(family))
+		}
 	}
 	if s.napi.UploadDir != "" { // haus#68: the page's way into Paperless's inbox, the app's folder
 		family.Ablage = napi.NewUploads(s.napi.UploadDir)
@@ -181,6 +189,10 @@ func routes(s site) http.Handler {
 // musicInboxMount is where laib's haus template mounts the music inbox
 // (laib#639); Haus takes it when HAUS_MUSIC_INBOX names none.
 const musicInboxMount = "/musik-eingang"
+
+// musicMount is where laib's haus template mounts the music itself, for
+// Musik aufräumen; Haus takes it when HAUS_MUSIC_DIR names none.
+const musicMount = "/musik"
 
 // episodeEvery is how often Haus looks for new podcast episodes.
 const episodeEvery = 15 * time.Minute
@@ -389,7 +401,7 @@ func main() {
 		usage: counter, voice: voice, welcome: true,
 		stt:      pages.STT{Provider: os.Getenv("HAUS_STT_PROVIDER"), Language: env("HAUS_STT_LANGUAGE", "de")},
 		haPublic: haPublic, inverted: pages.InvertedFromList(os.Getenv("HAUS_COVER_INVERTED")),
-		radicale: radicalePublic, views: ansicht.Open(dataDir),
+		radicale: radicalePublic, views: ansicht.Open(dataDir), dataDir: dataDir,
 		docsMail: docsMail, paperlessPublic: paperlessPublic, paperlessLAN: paperlessLAN})
 	addr := env("HAUS_LISTEN", "127.0.0.1:8650")
 	log.Printf("haus %s: listening on %s as %s, laib %s, home assistant %v, haushalt %d tools, memory library %v (tidy-up %v), uploads %q, the Bote %v, counting %v (voice %v), pages only behind the proxy secret", Version, addr, pages.House.Display, ops.URL, cfg.HA != nil, len(haushalt.Tools(hh)), hh.Library != nil, hh.Judge != nil, cfg.UploadDir, b != nil, counter != nil, voice != nil)

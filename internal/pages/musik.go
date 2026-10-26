@@ -114,6 +114,11 @@ func writeMusik(w http.ResponseWriter, r *http.Request, cfg StartConfig, said, a
 			b.WriteString(`<div hidden id=musik-nochmal data-name="` + html.EscapeString(again) + `" data-seit="` + time.Now().UTC().Format(time.RFC3339) + `"></div>`)
 		}
 		b.WriteString(nichtUebernommen(cfg))
+		if cfg.MusicDir != "" && cfg.DataDir != "" && isAdmin(r) {
+			if _, err := os.Stat(path.Join(cfg.DataDir, musikPlanFile)); err == nil {
+				b.WriteString(`<p><a href="` + MusikAufraeumenPath + `">Musik aufräumen</a>: Vorschläge zu unklaren Titeln und Alben</p>`)
+			}
+		}
 		b.WriteString(musikScript)
 		writePage(w, http.StatusOK, b)
 	}
