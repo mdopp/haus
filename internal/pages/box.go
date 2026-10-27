@@ -70,6 +70,7 @@ var boxPages = []boxPage{
 	{"/box", "Übersicht", ""},
 	{AufgabenPath, "Aufgaben", "Box-Aufgaben"},
 	{"/box/dienste", "Dienste", "Dienste"},
+	{"/box/operator", "Operator", "Was der Operator kann"},
 	{"/box/personen", "Personen", "Personen"},
 	{"/box/nutzung", "Nutzung", "Nutzung"},
 }
@@ -184,6 +185,8 @@ func boxSlotsOn(cfg BoxConfig, page string) []boxSlot {
 		return []boxSlot{{"box-dienste", "Nicht grün", "stand"}}
 	case "/box/personen":
 		return []boxSlot{{"box-einladen", "Person einladen", "einladen"}}
+	case "/box/operator": // owner 2026-10-27: the skills, read only (laib#839)
+		return []boxSlot{{"box-operator", "Was der Operator kann", "operator"}}
 	case "/box/nutzung":
 		if cfg.Family.Usage != nil {
 			return []boxSlot{{"box-genutzt", "Was wird genutzt", "genutzt"}}
@@ -264,6 +267,9 @@ func boxPart(ctx context.Context, r *http.Request, cfg BoxConfig, part string, i
 		return map[string]string{"box-einladen": inviteCard(ctx, c, inv)}
 	case "aufgaben":
 		return map[string]string{"box-aufgaben": aufgabenCard(ctx, c, time.Now(), "", "")}
+	case "operator":
+		now, loc := cfg.Family.clock()
+		return map[string]string{"box-operator": operatorCard(ctx, c, now, loc)}
 	case "bericht":
 		// the newest morning report only; the journal is Laib's page's
 		// (haus#157)

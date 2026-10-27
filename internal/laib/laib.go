@@ -54,6 +54,46 @@ type Readiness struct {
 		At         string `json:"at"`
 		Reversible bool   `json:"reversible"`
 	} `json:"lastChange"`
+	// OperatorWork is what the Operator is at; Skills each skill's last
+	// run by its name (laib#839)
+	OperatorWork struct {
+		Skills map[string]SkillRun `json:"skills"`
+	} `json:"operatorWork"`
+}
+
+// SkillRun is a skill's last run: when, how it ended and why, what it caused.
+type SkillRun struct {
+	At      time.Time `json:"at"`
+	Outcome string    `json:"outcome"`
+	Why     string    `json:"why"`
+	Caused  string    `json:"caused"`
+}
+
+// Skill is one of the Operator's skills as `laib skill list` gives it (laib#839).
+type Skill struct {
+	Name        string `json:"name"`
+	Source      string `json:"source"` // builtin | state
+	Description string `json:"description"`
+	Trigger     struct {
+		Every  string `json:"every"`
+		Daily  string `json:"daily"`
+		Weekly string `json:"weekly"`
+		Event  string `json:"event"`
+	} `json:"trigger"`
+	Tools   []string `json:"tools"`
+	Modell  string   `json:"modell"` // frei | urteil | nein
+	Status  string   `json:"status"` // active | paused | refused
+	Refused string   `json:"refused"`
+}
+
+// Skills are the Operator's skills; ErrNoTool while Haus's hand may not list them.
+func (c *Client) Skills(ctx context.Context) ([]Skill, error) {
+	var out []Skill
+	text, err := c.CallTyped(ctx, "skill", map[string]any{"action": "list"})
+	if err != nil {
+		return nil, err
+	}
+	return out, decodeJSON("skill", text, &out)
 }
 
 // Service is one row of `laib status --json`.services.

@@ -63,7 +63,7 @@ func TestBoxComesAtOnceAndFillsItsParts(t *testing.T) {
 	mustContain(t, body, `<div id=box-stand data-teil=stand aria-busy=true><h1>Box</h1><p class=k>lädt …</p></div>`,
 		`<div id=box-inbox data-teil=inbox aria-busy=true><h2>Inbox</h2>`, `<div id=box-bericht data-teil=bericht aria-busy=true><h2>Morgenbericht</h2>`,
 		`["stand","inbox","bericht"].forEach`, "fetch('/box/teil?was='+was", `<noscript><meta http-equiv=refresh content="0;url=/box?ganz=1"></noscript>`, saysPartFailed,
-		`<nav class=unter aria-label=Box><a href=/box aria-current=page>Übersicht</a><a href=/box/aufgaben>Aufgaben</a><a href=/box/dienste>Dienste</a><a href=/box/personen>Personen</a><a href=/box/geraete>Geräte</a><a href=/adresse>Adresse</a></nav>`)
+		`<nav class=unter aria-label=Box><a href=/box aria-current=page>Übersicht</a><a href=/box/aufgaben>Aufgaben</a><a href=/box/dienste>Dienste</a><a href=/box/operator>Operator</a><a href=/box/personen>Personen</a><a href=/box/geraete>Geräte</a><a href=/adresse>Adresse</a></nav>`)
 	mustNotContain(t, body, "Was wird genutzt", "Werkstatt", "Operator:", "box-dienste", "box-journal", "box-einladen", "box-aufgaben", ">Nutzung</a>")
 	before(t, body, "box-stand", "box-inbox")
 	before(t, body, "box-inbox", "box-bericht")
