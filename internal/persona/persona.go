@@ -18,6 +18,8 @@ type Persona struct {
 	Display   string            `json:"display"`
 	Languages []string          `json:"languages"`
 	Greeting  map[string]string `json:"greeting"`
+	Phrase    string            `json:"phrase"`   // how to wake it, „Hey Joshua“
+	Wakeword  string            `json:"wakeword"` // the wake word model's id, hey_joshua
 	Colors    map[string]string `json:"colors"`
 	Icon      []byte            `json:"-"` // icon.svg, for the pages
 	IconPNG   []byte            `json:"-"` // icon.png, for the phone (haus#28, laib#191)

@@ -82,6 +82,7 @@ type StartConfig struct {
 	// whether it opens only at home (HAUS_PAPERLESS_LAN_ONLY)
 	DocumentsMail      string
 	Ablage             *napi.Uploads
+	WakeRecordings     string // where the family's takes of the wake phrase go (laib#828); "": no Stimme page
 	MusicInbox         string // laib's music inbox, which beets sorts in (haus#107); "": no Musik hinzufügen
 	PaperlessPublicURL string
 	PaperlessLANOnly   bool
