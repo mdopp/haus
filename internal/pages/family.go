@@ -213,7 +213,7 @@ button[disabled]{opacity:.55;cursor:default}.sprechen .hinweis{margin:8px 4px 0;
 .gespraech .denkt{display:flex;align-items:center;gap:8px;margin:12px 0 0;padding:12px 0 0;border-top:1px solid var(--line);color:var(--muted)}.antwort+.denkt{border-top:0;padding-top:0}.denkt .sek{font-size:.8rem;font-variant-numeric:tabular-nums}
 .laeuft{flex:none;width:14px;height:14px;border-radius:50%;border:2px solid var(--accent-soft);border-top-color:var(--accent);animation:dreht 1s linear infinite}@keyframes dreht{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.laeuft{animation:none;background:var(--accent)}}
-@media (min-width:900px){body{max-width:none;margin:0;padding:0 calc(15rem + 40px) 48px 40px;display:grid;grid-template-columns:repeat(2,minmax(0,32rem));column-gap:24px;align-content:start;align-items:start}
+@media (min-width:900px){body{max-width:none;margin:0;padding:0 calc(15rem + 40px) 48px 40px;display:grid;grid-template-columns:repeat(2,minmax(0,32rem));column-gap:24px;align-content:start;align-items:start;justify-content:center}
 body>*{grid-column:1/-1}body>.karte{grid-column:auto}body>.karte.kacheln{grid-column:1/-1}.konto{display:none}
 .tabs{top:0;left:auto;right:0;bottom:0;width:15rem;flex-direction:column;justify-content:flex-start;gap:2px;padding:20px 12px;border-top:0;border-left:1px solid var(--line);overflow-y:auto}
 .tabs a{flex:none;max-width:none;min-height:44px;flex-direction:row;justify-content:flex-start;gap:12px;padding:0 12px;border-radius:10px;font-size:.92rem;color:var(--ink)}.tabs a:hover{background:var(--card)}
