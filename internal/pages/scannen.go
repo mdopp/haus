@@ -532,6 +532,11 @@ func stacks(r *http.Request, cfg StartConfig, all []laib.Stack) string {
 			break
 		}
 		b.WriteString(`<li><b>` + html.EscapeString(stackLine(s)) + `</b> <span class=k>` + html.EscapeString(stackDetail(s, now, loc)) + `</span>`)
+		if s.Ende == "nachholen" {
+			if m := oneLine(strings.TrimPrefix(strings.TrimSpace(s.Meldung), "Scan wartet:")); m != "" {
+				b.WriteString(`<p class=k>` + html.EscapeString(strings.TrimSpace(m)) + `</p>`)
+			}
+		}
 		if isAdmin(r) {
 			b.WriteString(einzelheiten(s.Einzelheiten))
 		}
@@ -563,6 +568,8 @@ func stackLine(s laib.Stack) string {
 		return "Verworfen, nichts abgelegt"
 	case "fehler":
 		return "Ging schief"
+	case "nachholen": // laib#831: the model failed mid-split; the service does it again by itself
+		return "Wird nachgeholt"
 	}
 	switch n := len(s.Dokumente); n {
 	case 0:

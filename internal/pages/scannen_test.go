@@ -438,3 +438,14 @@ func TestScannenListsWhatPaperlessStillHas(t *testing.T) {
 		t.Fatalf("Paperless away: %+v", got)
 	}
 }
+
+// laib#831: a stack the model could not split waits and is done again by
+// the service itself; Haus says so, with the service's sentence
+func TestScannenSaysAStackIsDoneAgain(t *testing.T) {
+	st := map[string]any{"zustand": "bereit", "scanner": true, "letzte": []any{map[string]any{
+		"stapel": "2026-10-27T19-32-41", "ende": "nachholen", "quelle": "scanner", "seiten": 36,
+		"meldung": "Scan wartet: Das Trennen wird nachgeholt, sobald das Hausmodell wieder antwortet. Bis dahin liegt nichts davon in Paperless."}}}
+	body := scanPage(t, &scanLaib{status: st}, "family")
+	mustContain(t, body, "<b>Wird nachgeholt</b>", "Das Trennen wird nachgeholt, sobald das Hausmodell wieder antwortet.", `value=start><button>Stapel scannen</button>`)
+	mustNotContain(t, body, "Kein Dokument", "Scan wartet:")
+}
