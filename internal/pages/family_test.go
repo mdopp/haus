@@ -64,9 +64,9 @@ func mehrOf(t *testing.T, body string) string {
 // family page, the item pages too. The bar is Start · Geräte · Haushalt ·
 // Energie · Mehr, each with its icon and only when its backend is set;
 // every page is in exactly one: Räume, things and Medien are Geräte;
-// Kalender, Notizen and Dokumente Haushalt, with their pills on top; Mehr
-// holds the settings and, for admins, Box, then who is signed in and
-// Abmelden — no page the family uses day to day.
+// Kalender, Einkauf and Notizen Haushalt, with their pills on top; Mehr
+// holds Dokumente (owner 2026-10-27: Dokumente unter Mehr), the settings
+// and, for admins, Box, then who is signed in and Abmelden.
 func TestFamilyTabBar(t *testing.T) {
 	fake, hc := house(t)
 	fake.Set("light.flur", "on", map[string]any{"friendly_name": "Flurlicht"})
@@ -126,6 +126,47 @@ func TestFamilyTabBar(t *testing.T) {
 	_, body, _ = familyPage(t, Start, StartConfig{}, "GET", "/start", "family")
 	mustContain(t, body, "href=/start aria-current=page>", "href=/mehr>")
 	mustNotContain(t, body, "href=/raeume", "href=/energie", "href=/medien", "href=/kalender", "href=/notizen", "Räume", "Geräte", "Haushalt", "Energie", "Medien", "Kalender", "Notizen")
+}
+
+// haus#159, owner 2026-10-27: Dokumente is under Mehr, with its icon and
+// only when the box has documents; the Haushalt pills are Kalender, Einkauf
+// and Notizen, and a box with documents only has no Haushalt tab.
+func TestDokumenteUnderMehr(t *testing.T) {
+	if got := tabOf("Dokumente"); got != "Mehr" {
+		t.Errorf("tabOf(Dokumente) = %q, want Mehr", got)
+	}
+	_, cal := calendar(t)
+	nd := notesDir(t, nil)
+	_, docs := dokumente(t)
+	all := docs
+	all.Calendar, all.Notes = cal, nd
+	// Dokumente marks Mehr and its own entry there, no pills
+	_, body, _ := familyPage(t, Dokumente, all, "GET", "/dokumente", "family")
+	mustContain(t, barOf(t, body), "href=/mehr aria-current=page>")
+	mustNotContain(t, barOf(t, body), "href=/kalender aria-current", "href=/dokumente")
+	more := mehrOf(t, body)
+	mustContain(t, more, "href=/dokumente aria-current=page><svg viewBox=\"0 0 24 24\" aria-hidden=true><", "</svg>Dokumente</a>")
+	mustNotContain(t, more, "aria-hidden=true></svg>Dokumente")
+	mustNotContain(t, body, "class=unterseiten")
+	// Kalender's pills no longer hold Dokumente
+	_, body, _ = familyPage(t, Kalender, all, "GET", "/kalender", "family")
+	pills := between(t, body, "<nav class=unterseiten aria-label=Haushalt>", "</nav>")
+	mustContain(t, pills, ">Kalender</a>", ">Notizen</a>")
+	mustNotContain(t, pills, "Dokumente")
+	mustContain(t, mehrOf(t, body), "href=/dokumente>")
+	// Mehr's page lists it, with its line
+	_, body, _ = familyPage(t, Mehr, all, "GET", "/mehr", "family")
+	mustContain(t, body, mehrSays["Dokumente"])
+	if mehrSays["Dokumente"] == "" {
+		t.Error("Mehr says nothing of Dokumente")
+	}
+	// documents only: no Haushalt tab, Dokumente under Mehr
+	_, body, _ = familyPage(t, Dokumente, docs, "GET", "/dokumente", "family")
+	mustNotContain(t, barOf(t, body), "Haushalt")
+	mustContain(t, mehrOf(t, body), "href=/dokumente aria-current=page>")
+	// no documents: no entry
+	_, body, _ = familyPage(t, Mehr, StartConfig{Calendar: cal}, "GET", "/mehr", "family")
+	mustNotContain(t, body, "/dokumente")
 }
 
 // haus#67: on the phone the bar is at the bottom; from 900 px it is a list

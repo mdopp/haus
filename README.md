@@ -79,12 +79,12 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   like its tab): on the phone a bar at the bottom, icon and name — Start ·
   Geräte (`/raeume`: what plays on top as *Läuft gerade* with its buttons
   and ☆, once; then the rooms; `/medien` stays reachable and counts as
-  Geräte) · Haushalt (Kalender, Notizen, Dokumente as pills on top of each;
+  Geräte) · Haushalt (Kalender, Einkauf, Notizen as pills on top of each;
   the tab leads to the first this box has) · Energie · Mehr — each only
-  when its backend is set. `GET /mehr` holds the settings only: Apps
-  einrichten, the Netzlaufwerk password, Box and Adresse for admins, each
-  only when this box has it, and *Konto* with who is signed in and
-  *Abmelden*. Start: the day (*Heute und demnächst*) first, then *Meine
+  when its backend is set. `GET /mehr` holds Dokumente (owner 2026-10-27:
+  Dokumente unter Mehr, haus#159), the music, Apps einrichten, the
+  Netzlaufwerk password, Box for admins, each only when this box has it,
+  and *Konto* with who is signed in and *Abmelden*. Start: the day (*Heute und demnächst*) first, then *Meine
   Geräte*, *Im Haus*, and Energie in one line (the roof, the house, the
   battery's charge, the grid) leading to Energie. From 900 px wide the bar is a list on the
   right, Mehr open in it (its entries, who is signed in, Abmelden; Mehr's
