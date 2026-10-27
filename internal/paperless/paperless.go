@@ -361,3 +361,24 @@ func (c *Client) names(ctx context.Context, path string, ids map[int]bool) map[i
 	}
 	return out
 }
+
+// Have is which of these original file names Paperless still holds a
+// document of (a scan's documents, haus 2026-10-27: the owner deletes
+// some); an error when Paperless does not answer, then nothing is known.
+func (c *Client) Have(ctx context.Context, names []string) (map[string]bool, error) {
+	out := map[string]bool{}
+	for _, n := range names {
+		if n == "" || out[n] {
+			continue
+		}
+		var page struct {
+			Count int `json:"count"`
+		}
+		q := url.Values{"original_filename__icontains": {n}, "fields": {"id"}, "page_size": {"1"}}
+		if err := c.get(ctx, "/api/documents/", q, &page); err != nil {
+			return nil, err
+		}
+		out[n] = page.Count > 0
+	}
+	return out, nil
+}

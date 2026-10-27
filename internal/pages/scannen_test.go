@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/mdopp/haus/internal/laib"
+	"github.com/mdopp/haus/internal/paperless"
+	"github.com/mdopp/haus/internal/paperless/paperlessfake"
 )
 
 // a Laib with laib#568's verb scan: status prints the service's status
@@ -111,8 +113,10 @@ func TestScannenOffersAStackOnlyWithAScanner(t *testing.T) {
 		mustContain(t, body, `\\kraftwerk\data\scan-eingang`, "nur zu Hause im WLAN")
 	}
 	body := scanPage(t, &scanLaib{status: map[string]any{"zustand": "scannt", "seite": 12, "scanner": true}}, "family")
-	mustContain(t, body, "<b>Scannt</b>", "Seite 12", "data-auffrischen=5>")
-	mustNotContain(t, body, "Stapel scannen", "action=/scannen>")
+	mustContain(t, body, "<b>Scannt</b>", "Seite 12", "data-auffrischen=5>", saysScanBusy) // owner 2026-10-27: where the button went
+	mustNotContain(t, body, "value=start>", "action=/scannen>")
+	body = scanPage(t, &scanLaib{status: map[string]any{"zustand": "trennt", "detail": "trennt 47 Seiten", "scanner": true}}, "family")
+	mustContain(t, body, "Das Hausmodell liest 47 Seiten", saysScanBusy)
 }
 
 // haus#76: the last stacks with what came of them — how many documents,
@@ -407,4 +411,30 @@ func TestScannenShowsEinzelheitenToAdmins(t *testing.T) {
 		"Die Suche lief nicht durch – bitte noch einmal versuchen.", "Im Heimnetz wurden 7 Geräte direkt gefragt.",
 		"<p class=adresse>scanimage: not found</p>", "<p class=adresse>sane_start: Error during device I/O</p>")
 	mustNotContain(t, scanPage(t, f, "family"), "Einzelheiten", "timed out", "Error during device I/O", "scanimage")
+}
+
+// owner 2026-10-27: „es stehen da noch Scans die es gar nicht mehr in
+// paperless gibt“ — a stack filed again shows once, its newest run, and
+// what was deleted in Paperless is not listed
+func TestScannenListsWhatPaperlessStillHas(t *testing.T) {
+	fake := paperlessfake.New("pl")
+	defer fake.Close()
+	fake.Add(paperlessfake.Doc{ID: 1, Title: "Rechnung 2023", OriginalFileName: "2023-06-15 Mosel - Rechnung 2023.pdf"})
+	doc := func(d string) laib.StackDoc { return laib.StackDoc{Titel: strings.TrimSuffix(d, ".pdf"), Datei: d} }
+	all := []laib.Stack{
+		{Stapel: "A", Ende: "fertig", Dokumente: []laib.StackDoc{doc("2023-06-15 Mosel - Rechnung 2023.pdf"), doc("2023-06-22 Mosel - Brief.pdf")}},
+		{Stapel: "A", Ende: "fertig", Dokumente: []laib.StackDoc{doc("Mosel - Dokument.pdf")}},
+		{Stapel: "B", Ende: "fertig", Dokumente: []laib.StackDoc{doc("2022-10-07 Bohlen - Lieferschein.pdf")}},
+		{Stapel: "C", Ende: "abgebrochen"},
+	}
+	cfg := StartConfig{Docs: &paperless.Client{URL: fake.URL, Token: "pl"}}
+	got := shownStacks(httptest.NewRequest("GET", "/dokumente", nil), cfg, all)
+	if len(got) != 2 || got[0].Stapel != "A" || len(got[0].Dokumente) != 1 || got[0].Dokumente[0].Titel != "2023-06-15 Mosel - Rechnung 2023" || got[1].Stapel != "C" {
+		t.Fatalf("shown: %+v", got)
+	}
+	// Paperless not answering: as the service says, each stack once
+	cfg.Docs = &paperless.Client{URL: "http://127.0.0.1:1", Token: "pl"}
+	if got := shownStacks(httptest.NewRequest("GET", "/dokumente", nil), cfg, all); len(got) != 3 || len(got[0].Dokumente) != 2 {
+		t.Fatalf("Paperless away: %+v", got)
+	}
 }

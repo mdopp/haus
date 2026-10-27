@@ -567,11 +567,14 @@ type Stack struct {
 	Leer    int    `json:"leer"`
 	Meldung string `json:"meldung"` // the closing message as the person got it
 	// Einzelheiten is the raw error of a stack gone wrong (laib#589)
-	Einzelheiten string `json:"einzelheiten"`
-	Dokumente    []struct {
-		Titel string `json:"titel"`
-		Datei string `json:"datei"` // its original file name in Paperless
-	} `json:"dokumente"`
+	Einzelheiten string     `json:"einzelheiten"`
+	Dokumente    []StackDoc `json:"dokumente"`
+}
+
+// StackDoc is one document a stack filed.
+type StackDoc struct {
+	Titel string `json:"titel"`
+	Datei string `json:"datei"` // its original file name in Paperless
 }
 
 // ScanStatus reads what the scanner does now.
