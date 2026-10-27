@@ -254,7 +254,7 @@ func TestProtocolShape(t *testing.T) {
 func TestToolsOnlyWhatWorks(t *testing.T) {
 	cal := []string{"erinnerung_anlegen", "erinnerungen", "termin_anlegen", "termine"}
 	not := []string{"notiz_anlegen", "notiz_aus_link", "notiz_lesen", "notizen_mit_tag", "notizen_suchen"}
-	con := []string{"kontakt_anlegen", "kontakt_lesen", "kontakte_suchen"}
+	con := []string{"kontakt_anlegen", "kontakt_ergaenzen", "kontakt_lesen", "kontakte_suchen"}
 	doc := []string{"dokumente_suchen", "vertraege_finden"}
 	join := func(ls ...[]string) []string {
 		var out []string

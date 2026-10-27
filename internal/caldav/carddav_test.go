@@ -354,3 +354,102 @@ func TestContactErrorsNotKalender(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 }
+
+// A firm's card carries its categories, IBANs and note, and reads back so.
+func TestFirmCardRoundTrip(t *testing.T) {
+	ct := Contact{Name: "Beispiel GmbH", Org: "Beispiel GmbH", Categories: []string{"Firma"}, IBANs: []string{"DE89370400440532013000"},
+		Note: "IBAN: DE89 3704 0044 0532 0130 00\nQuelle: https://paperless.example/documents/7/"}
+	root, err := Parse(ct.VCF(time.Now()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := Contacts(root)
+	if len(got) != 1 || got[0].Org != "Beispiel GmbH" || len(got[0].Categories) != 1 || got[0].Categories[0] != "Firma" ||
+		len(got[0].IBANs) != 1 || got[0].IBANs[0] != "DE89370400440532013000" || got[0].Note != ct.Note {
+		t.Fatalf("%+v", got)
+	}
+	if !strings.Contains(ct.VCF(time.Now()), "X-IBAN:DE89370400440532013000\r\n") {
+		t.Fatal("no X-IBAN line")
+	}
+	root, _ = Parse(card("p", "Paul", "CATEGORIES:Familie,Firma\r\nNOTE:eins\r\nNOTE:zwei\r\n"))
+	if p := Contacts(root)[0]; len(p.Categories) != 2 || p.Categories[1] != "Firma" || p.Note != "eins\nzwei" {
+		t.Fatalf("%+v", p)
+	}
+}
+
+// AmendCard keeps every line of the card (the phone's photo, its groups),
+// adds the new ones, carries the note on, and writes only over the ETag it
+// read; a phone's edit in between is ErrChanged.
+func TestAmendCard(t *testing.T) {
+	fake := davfake.New("bote", "pw")
+	defer fake.Close()
+	fake.AddAddressBook("/bote/kontakte/", "Haushalt")
+	fake.Put("/bote/kontakte/oma.vcf", phoneCard)
+	fake.Put("/bote/kontakte/b.vcf", card("b", "Beispiel GmbH", "CATEGORIES:Firma\r\nNOTE:Ansprechpartner: Frau Muster\r\nREV:20200101T000000Z\r\n"))
+	c := &Client{URL: fake.URL, User: "bote", Password: "pw"}
+	ctx := context.Background()
+	cards, partial, err := c.Cards(ctx)
+	if err != nil || partial || len(cards) != 2 {
+		t.Fatalf("%v %v %v", cards, partial, err)
+	}
+	var b, oma Card
+	for _, cd := range cards {
+		switch cd.UID {
+		case "b":
+			b = cd
+		case "oma-1":
+			oma = cd
+		}
+	}
+	if err := c.AmendCard(ctx, b, []string{"TEL:+49 30 1234567", "X-IBAN:DE89370400440532013000"}, "IBAN: DE89 3704 0044 0532 0130 00"); err != nil {
+		t.Fatal(err)
+	}
+	got := fake.Objects()["/bote/kontakte/b.vcf"]
+	for _, want := range []string{"UID:b\r\n", "FN:Beispiel GmbH\r\n", "CATEGORIES:Firma\r\n", "TEL:+49 30 1234567\r\n", "X-IBAN:DE89370400440532013000\r\n",
+		`NOTE:Ansprechpartner: Frau Muster\nIBAN: DE89 3704 0044 0532 0130 00` + "\r\n", "END:VCARD\r\n"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("lacks %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "REV:2020") || strings.Count(got, "NOTE") != 1 || !strings.HasSuffix(got, "END:VCARD\r\n") {
+		t.Fatalf("REV renewed, one NOTE, END last:\n%s", got)
+	}
+	if h := fake.Header[len(fake.Header)-1]; h.Get("If-Match") == "" || !strings.HasPrefix(h.Get("Content-Type"), "text/vcard") {
+		t.Fatalf("a write over a card says its ETag: %v", h)
+	}
+	if err := c.AmendCard(ctx, oma, []string{"TEL:0711 1"}, ""); err != nil {
+		t.Fatal(err)
+	}
+	got = fake.Objects()["/bote/kontakte/oma.vcf"]
+	for _, want := range []string{"item1.EMAIL;TYPE=INTERNET:erna@example.org", "PHOTO;ENCODING=b;TYPE=JPEG:QUJD", "TEL:0711 1", "BDAY:1941-03-09"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("lacks %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "NOTE") {
+		t.Fatalf("no note given, none written:\n%s", got)
+	}
+	// b was written since it was read: its old ETag no longer holds
+	if err := c.AmendCard(ctx, b, []string{"TEL:1"}, ""); err != ErrChanged {
+		t.Fatalf("stale ETag: %v, want ErrChanged", err)
+	}
+	if err := c.AmendCard(ctx, Card{Contact: Contact{UID: "x"}}, []string{"TEL:1"}, ""); err == nil {
+		t.Fatal("a card without its href and ETag is not written")
+	}
+}
+
+// A firm's work address is one ADR;TYPE=WORK, every part escaped, and
+// reads back as a letter has it.
+func TestWorkAddress(t *testing.T) {
+	a := Address{Street: "Musterweg 1; Hinterhaus", Code: "12345", Locality: "Beispielstadt", Country: "DE"}
+	if got := a.Line(); got != `ADR;TYPE=WORK:;;Musterweg 1\; Hinterhaus;Beispielstadt;;12345;DE` {
+		t.Fatalf("line %q", got)
+	}
+	if a.String() != "Musterweg 1; Hinterhaus, 12345 Beispielstadt, DE" {
+		t.Fatalf("string %q", a.String())
+	}
+	root, _ := Parse(Contact{Name: "Beispiel GmbH", WorkAddress: &a}.VCF(time.Now()))
+	if got := Contacts(root)[0].Addresses; len(got) != 1 || got[0] != a.String() {
+		t.Fatalf("read back %v", got)
+	}
+}
