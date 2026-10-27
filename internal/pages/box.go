@@ -94,7 +94,8 @@ func boxPageOf(path string, cfg BoxConfig) (boxPage, bool) {
 func unterNav(current string, usage bool) string {
 	var b strings.Builder
 	b.WriteString("<nav class=unter aria-label=Box>")
-	for _, p := range append(append([]boxPage{}, boxPages...), boxPage{"/box/geraete", "Geräte", ""}) {
+	// Adresse is set once, when the box is set up: an admin's page, under Box (owner 2026-10-27)
+	for _, p := range append(append([]boxPage{}, boxPages...), boxPage{"/box/geraete", "Geräte", ""}, boxPage{adressePath, "Adresse", ""}) {
 		if p.name == "Nutzung" && !usage {
 			continue
 		}
