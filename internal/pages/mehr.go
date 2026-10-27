@@ -18,7 +18,6 @@ var mehrSays = map[string]string{
 	"Musik":           "Hochladen, Platten erfassen, Discogs und die Musik-Wunschliste",
 	"Netzlaufwerk":    "Dein Passwort für das Netzlaufwerk",
 	"Box":             "Wie es der Box geht, für Admins",
-	"Adresse":         "Wo das Haus steht, für Admins",
 }
 
 // Mehr is the bar's fourth entry on the phone (haus#67): the pages that

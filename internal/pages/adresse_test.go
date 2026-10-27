@@ -90,9 +90,8 @@ func TestAdresseShowsTheAddressAndTheForm(t *testing.T) {
 	if len(l.calls) != 1 || !reflect.DeepEqual(l.calls[0], map[string]any{"action": "show"}) {
 		t.Fatalf("laib got %v", l.calls)
 	}
-	// Adresse is under Mehr, marked there
-	mustContain(t, mehrOf(t, body), "href="+adressePath+" aria-current=page>")
-	mustContain(t, barOf(t, body), "href=/mehr aria-current=page>")
+	// owner 2026-10-27: Adresse is set once, at setup: under Box, beside its pages
+	mustContain(t, body, `<nav class=unter aria-label=Box>`, "<a href="+adressePath+" aria-current=page>Adresse</a>")
 
 	// nothing set yet: the form with Deutschland, nothing pretended
 	l.block = map[string]any{}
@@ -193,10 +192,10 @@ func TestAdresseIsForAdminsOnly(t *testing.T) {
 	if code != http.StatusSeeOther || hdr.Get("Location") != "/start" || strings.Contains(body, "Musterweg") {
 		t.Fatalf("family: %d %v", code, hdr)
 	}
-	_, body, _ = familyPage(t, Mehr, cfg, "GET", "/mehr", "family")
-	mustNotContain(t, body, "href="+adressePath)
-	_, body, _ = familyPage(t, Mehr, cfg, "GET", "/mehr", "admins")
-	mustContain(t, body, "href="+adressePath)
+	for _, g := range []string{"family", "admins"} { // not on Mehr: under Box
+		_, body, _ = familyPage(t, Mehr, cfg, "GET", "/mehr", g)
+		mustNotContain(t, body, "href="+adressePath)
+	}
 	rec := post(t, AdresseVorschlagen(cfg), adresseSet, url.Values{"street": {"Musterweg 12"}}, "anna", map[string]string{"Remote-Groups": "family"})
 	if rec.Code == http.StatusSeeOther && rec.Header().Get("Location") != "/start" {
 		t.Fatalf("family POST: %d %v", rec.Code, rec.Header())

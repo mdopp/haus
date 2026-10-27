@@ -84,7 +84,6 @@ var mehr = []tab{
 	{"Apps einrichten", willkommenPath, `<rect x="6" y="3" width="12" height="18" rx="2"/><path d="M11 18h2"/>`},
 	{"Netzlaufwerk", "/netzlaufwerk", `<rect x="3" y="5" width="18" height="6" rx="1.5"/><rect x="3" y="13" width="18" height="6" rx="1.5"/><path d="M7 8h.01M7 16h.01"/>`},
 	{"Box", "/box", `<rect x="3" y="7" width="18" height="12" rx="2"/><path d="M3 11h18M8 15h2"/>`},
-	{"Adresse", adressePath, `<path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/>`},
 }
 
 // abmeldenIcon is the way out's.
@@ -114,8 +113,7 @@ func shows(r *http.Request, cfg StartConfig) map[string]bool {
 		"Apps einrichten": cfg.Laib != nil || cfg.Samba != nil, "Musik": cfg.MusicInbox != "", "Podcasts": cfg.Podcasts != nil,
 		// Platte erfassen and Discogs live on Musik (owner 2026-10-26); on their own only on a box without it
 		"Platte erfassen": cfg.Discogs != nil && cfg.MusicInbox == "", "Discogs": (cfg.Discogs != nil || cfg.Wuensche != nil) && cfg.MusicInbox == "" && r.Header.Get("Remote-User") != "",
-		"Netzlaufwerk": cfg.Samba != nil && r.Header.Get("Remote-User") != "", "Box": isAdmin(r),
-		"Adresse": isAdmin(r) && cfg.Laib != nil}
+		"Netzlaufwerk": cfg.Samba != nil && r.Header.Get("Remote-User") != "", "Box": isAdmin(r)}
 }
 
 func navLink(b *strings.Builder, t tab, class string, current bool) {
