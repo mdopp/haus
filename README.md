@@ -283,7 +283,18 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     scanner that scans to the network drive
     (`\\<HAUS_SAMBA_HOST>\data\scan-eingang`) and the last five stacks with
     their documents, each a link to Paperless's search by its title where
-    Paperless opens. A box without the service shows the family no section;
+    Paperless opens. *Trennblätter* (haus#161): one line on what they do,
+    a number field (5, 1–50) and *Trennblätter drucken*, which opens
+    `GET /scannen/trennblatt?anzahl=n` — that many A4 sheets, one per page
+    (`@page` A4, a page break after each), each with a Code 128 barcode
+    reading exactly `PATCH T` (code set B with its checksum, drawn by
+    `internal/code128` as inline SVG: 1.2 mm a module, 13.4 cm plus a 12 mm
+    quiet zone each side, 3 cm tall), *PATCH T* under it and *Trennblatt –
+    zwischen zwei Dokumente legen. Wiederverwendbar.*; *Drucken* and
+    *Zurück* above them, not printed; nothing loaded from elsewhere. Laib's
+    scan service (laib#814) and Paperless-ngx split a stack at that sheet.
+    A number outside 1–50 is the nearest end, and more than 50 says so.
+    A box without the service shows the family no section;
     a Laib before v0.20.0, or a policy.yml without `scan` for the haus hand,
     tells an admin so.
     *Scanner einrichten* (haus#77, laib#571), admins only, folded unless no

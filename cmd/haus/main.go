@@ -149,8 +149,9 @@ func routes(s site) http.Handler {
 	pagesMux.HandleFunc(cards.ThingPages, pages.Ding(family))
 	pagesMux.HandleFunc(cards.ReminderPages, pages.Erinnerung(family))
 	pagesMux.HandleFunc(cards.ContactPages, pages.Kontakt(family))
-	pagesMux.HandleFunc(pages.DokumentePath, pages.Dokumente(family)) // the ways into the archive (haus#68)
-	pagesMux.HandleFunc(pages.ScannenPath, pages.Scannen(family))     // the Dokumente page's scan orders to Laib (haus#76, laib#568)
+	pagesMux.HandleFunc(pages.DokumentePath, pages.Dokumente(family))   // the ways into the archive (haus#68)
+	pagesMux.HandleFunc(pages.ScannenPath, pages.Scannen(family))       // the Dokumente page's scan orders to Laib (haus#76, laib#568)
+	pagesMux.HandleFunc(pages.TrennblattPath, pages.Trennblatt(family)) // separator sheets to print, PATCH T (haus#161)
 	pagesMux.HandleFunc(cards.DocumentPages, pages.Dokument(family))
 	pagesMux.HandleFunc(cards.NotePages, pages.Notizen(family))                   // a note's own page
 	pagesMux.HandleFunc(cards.SwitchPath, pages.Schalten(family))                 // a page's switch, the widgets' rule (haus#35)
