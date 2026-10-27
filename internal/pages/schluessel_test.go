@@ -37,6 +37,10 @@ func TestDiscogsWithoutKeysSaysHow(t *testing.T) {
 
 	_, body, _ = familyPage(t, Mehr, cfg, "GET", mehrPath, "family")
 	mustContain(t, body, "Discogs")
+	cfg.MusicInbox = t.TempDir() // under Musik: the same note, back to Musik
+	_, body, _ = familyPage(t, Musik, cfg, "GET", MusikPath, "admins")
+	mustContain(t, body, "Discogs ist noch nicht eingerichtet.", "zurueck=https%3A%2F%2Fhaus.box.test%2Fmusik", "Musik-Wunschliste")
+	mustNotContain(t, body, `href=/platte>`)
 
 	cfg.LaibURL = "" // no laib page known: where to find it, in words
 	_, body, _ = familyPage(t, Discogs, cfg, "GET", DiscogsPath, "admins")
