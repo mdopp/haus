@@ -53,8 +53,9 @@ const (
 type tab struct{ name, href, icon string }
 
 // tabs are the bar (haus#67; owner 2026-10-24): Start, Geräte (the rooms,
-// what plays on top), Haushalt (Kalender, Notizen, Dokumente), Energie,
-// Mehr (the account and the settings) — each only when its backend is set;
+// what plays on top), Haushalt (Kalender, Einkauf, Notizen), Energie,
+// Mehr (Dokumente, the account and the settings; owner 2026-10-27:
+// Dokumente unter Mehr) — each only when its backend is set;
 // Mehr always, it holds the account. Every page is in exactly one.
 var tabs = []tab{
 	{"Start", "/start", `<path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z"/>`},
@@ -65,18 +66,20 @@ var tabs = []tab{
 }
 
 // haushaltPages is what the Haushalt tab holds, as pills on top of each of its
-// pages (owner 2026-10-24): the household's days, memory and papers.
+// pages (owner 2026-10-24): the household's days, shopping and memory; the
+// papers are under Mehr (owner 2026-10-27: Dokumente unter Mehr, haus#159).
 var haushaltPages = []tab{
 	{"Kalender", "/kalender", ""},
 	{"Einkauf", EinkaufPath, ""},
 	{"Notizen", "/notizen", ""},
-	{"Dokumente", DokumentePath, ""},
 }
 
-// mehr is what Mehr holds (haus#67; owner 2026-10-24): the settings and,
+// mehr is what Mehr holds (haus#67; owner 2026-10-24): Dokumente (owner
+// 2026-10-27: Dokumente unter Mehr, haus#159), the music, the settings and,
 // for admins, the box — each only when this box has it; then the account
 // with Abmelden. What the family uses day to day has a tab of its own.
 var mehr = []tab{
+	{"Dokumente", DokumentePath, `<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/>`},
 	{"Platte erfassen", PlattePath, `<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/>`},
 	{"Discogs", DiscogsPath, `<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>`},
 	{"Podcasts", PodcastsPath, `<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>`},
@@ -90,12 +93,13 @@ var mehr = []tab{
 const abmeldenIcon = `<path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4M10 16l-4-4 4-4M6 12h10"/>`
 
 // tabOf is the bar entry a page belongs to: Räume and Medien are Geräte,
-// Kalender, Notizen and Dokumente Haushalt, what Mehr holds is Mehr.
+// Kalender, Einkauf and Notizen Haushalt, what Mehr holds (Dokumente too,
+// owner 2026-10-27: Dokumente unter Mehr) is Mehr.
 func tabOf(page string) string {
 	switch page {
 	case "Räume", "Medien":
 		return "Geräte"
-	case "Kalender", "Einkauf", "Notizen", "Dokumente":
+	case "Kalender", "Einkauf", "Notizen":
 		return "Haushalt"
 	}
 	for _, m := range mehr {
@@ -108,7 +112,7 @@ func tabOf(page string) string {
 
 // shows says which entries this box and this person have.
 func shows(r *http.Request, cfg StartConfig) map[string]bool {
-	return map[string]bool{"Start": true, "Geräte": cfg.HA != nil, "Haushalt": cfg.Calendar != nil || cfg.Einkauf != nil || cfg.Notes != nil || cfg.hasDocs(), "Mehr": true, "Einkauf": cfg.Einkauf != nil,
+	return map[string]bool{"Start": true, "Geräte": cfg.HA != nil, "Haushalt": cfg.Calendar != nil || cfg.Einkauf != nil || cfg.Notes != nil, "Mehr": true, "Einkauf": cfg.Einkauf != nil,
 		"Energie": cfg.HA != nil, "Kalender": cfg.Calendar != nil, "Notizen": cfg.Notes != nil, "Dokumente": cfg.hasDocs(),
 		"Apps einrichten": cfg.Laib != nil || cfg.Samba != nil, "Musik": cfg.MusicInbox != "", "Podcasts": cfg.Podcasts != nil,
 		// Platte erfassen and Discogs live on Musik (owner 2026-10-26); on their own only on a box without it

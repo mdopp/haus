@@ -11,6 +11,7 @@ const mehrPath = "/mehr"
 
 // What Mehr says of each of its pages, in a line.
 var mehrSays = map[string]string{
+	"Dokumente":       "Briefe, Rechnungen und Verträge ablegen und wiederfinden",
 	"Apps einrichten": "So kommen die Apps der Box auf Handy und Computer",
 	"Podcasts":        "Podcasts per Link abonnieren; Bescheid bei jeder neuen Folge",
 	"Platte erfassen": "Eine Schallplatte fotografieren und in deine Discogs-Sammlung eintragen",
@@ -20,9 +21,10 @@ var mehrSays = map[string]string{
 	"Box":             "Wie es der Box geht, für Admins",
 }
 
-// Mehr is the bar's fourth entry on the phone (haus#67): the pages that
-// have no entry of their own — Energie, Medien, Notizen, Dokumente, Netzlaufwerk, Box
-// and Adresse for admins, each only when this box has it — and the account: who is
+// Mehr is the bar's last entry on the phone (haus#67): the pages that
+// have no entry of their own — Dokumente (owner 2026-10-27: Dokumente
+// unter Mehr), the music, Apps einrichten, Netzlaufwerk, Box for admins,
+// each only when this box has it — and the account: who is
 // signed in, and Abmelden. On a wide window the list on the right holds
 // the same, open.
 func Mehr(cfg StartConfig) http.HandlerFunc {
