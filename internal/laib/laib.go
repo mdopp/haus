@@ -63,6 +63,19 @@ type Service struct {
 	State  string            `json:"state"` // grün | gelb | rot
 	Units  map[string]string `json:"units"`
 	Detail string            `json:"detail,omitempty"`
+	// Title and Beschreibung are the service as Laib's own page names it
+	// (laib v0.43.0: media → „Jellyfin“, „Filme, Serien, Musik“); Haus
+	// names a service only by them, so both pages read the same
+	Title        string `json:"title,omitempty"`
+	Beschreibung string `json:"beschreibung,omitempty"`
+}
+
+// Titel is the service's name as Laib gives it, its id from an older Laib.
+func (s Service) Titel() string {
+	if t := strings.TrimSpace(s.Title); t != "" {
+		return t
+	}
+	return s.Name
 }
 
 // Proposal is one inbox entry.

@@ -241,7 +241,7 @@ func boxPart(ctx context.Context, r *http.Request, cfg BoxConfig, part string, i
 		if len(notGreen) > 0 {
 			b.WriteString("<ul class=zeilen>")
 			for _, s := range notGreen {
-				fmt.Fprintf(&b, "<li>%s<span class=was><b>%s</b>", dot(cls(s.State), s.State), html.EscapeString(s.Name))
+				fmt.Fprintf(&b, "<li>%s<span class=was>%s", dot(cls(s.State), s.State), serviceLabel(s))
 				if d := oneLine(s.Detail); d != "" {
 					b.WriteString("<span class=text>" + linkAufgaben(html.EscapeString(trim(d, 160))) + "</span>")
 				}
@@ -257,7 +257,7 @@ func boxPart(ctx context.Context, r *http.Request, cfg BoxConfig, part string, i
 		sorted := append([]laib.Service(nil), rows...)
 		sort.SliceStable(sorted, func(i, j int) bool { return order[cls(sorted[i].State)] < order[cls(sorted[j].State)] })
 		for _, s := range sorted {
-			fmt.Fprintf(&l, "<li>%s<span class=was><b>%s</b>", dot(cls(s.State), s.State), html.EscapeString(s.Name))
+			fmt.Fprintf(&l, "<li>%s<span class=was>%s", dot(cls(s.State), s.State), serviceLabel(s))
 			if d := oneLine(s.Detail); d != "" {
 				l.WriteString("<span class=text>" + linkAufgaben(html.EscapeString(d)) + "</span>")
 			}
@@ -538,4 +538,17 @@ func werkstattCard(ctx context.Context, t *werkstatt.Tickets) string {
 	}
 	b.WriteString("</table>")
 	return b.String()
+}
+
+// serviceLabel is a service as Laib's page shows it: its title, what it
+// is beside it, its id small.
+func serviceLabel(s laib.Service) string {
+	out := "<b>" + html.EscapeString(s.Titel()) + "</b>"
+	if d := strings.TrimSpace(s.Beschreibung); d != "" {
+		out += " <span class=k>" + html.EscapeString(d) + "</span>"
+	}
+	if s.Titel() != s.Name {
+		out += " <small class=k>" + html.EscapeString(s.Name) + "</small>"
+	}
+	return out
 }
