@@ -203,6 +203,20 @@ test('a record photo is searched without a second tap', async ({ page }) => {
   expect(await stays(page)).toBe(true);
 });
 
+// owner 2026-10-27 (a screenshot): on a wide screen the content stood at the left edge; it is centred
+// in the room beside the menu
+test('on a wide screen the content is centred beside the menu', async ({ page }) => {
+  await page.setViewportSize({ width: 1800, height: 900 });
+  await page.goto('/start');
+  const m = await page.evaluate(() => {
+    const menu = document.querySelector('.tabs').getBoundingClientRect();
+    const cards = [...document.querySelectorAll('body > .karte, body > section, body > h1')].map((e) => e.getBoundingClientRect()).filter((r) => r.width > 0);
+    const left = Math.min(...cards.map((r) => r.left)), right = Math.max(...cards.map((r) => r.right));
+    return { links: left, rechts: menu.left - right };
+  });
+  expect(Math.abs(m.links - m.rechts), JSON.stringify(m)).toBeLessThan(60);
+});
+
 test('a form in a card stacks its fields on a phone', async ({ page }) => {
   await page.goto('/kalender/verwalten');
   await page.locator('summary', { hasText: 'Neuen Kalender anlegen' }).click();
