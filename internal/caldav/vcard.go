@@ -25,6 +25,28 @@ type Contact struct {
 	Birthday string
 	// Addresses are the postal addresses (ADR), each one line.
 	Addresses []string
+	// Categories are CATEGORIES' values; "Firma" marks a firm's card
+	// Haus made from a document (haus#163).
+	Categories []string
+	// IBANs are X-IBAN's values, as written (Haus writes them without
+	// spaces).
+	IBANs []string
+	// Note is the NOTE text, several NOTE properties one line each.
+	Note string
+}
+
+// FirmCategory marks a card kontakt_ergaenzen made: only such a card is
+// ever added to (haus#163).
+const FirmCategory = "Firma"
+
+// IsFirm says whether the card carries CATEGORIES Firma.
+func (ct Contact) IsFirm() bool {
+	for _, c := range ct.Categories {
+		if strings.EqualFold(strings.TrimSpace(c), FirmCategory) {
+			return true
+		}
+	}
+	return false
 }
 
 // NewUUID is a random urn:uuid (RFC 4122 version 4), a card's UID.
@@ -61,6 +83,19 @@ func (ct Contact) VCF(now time.Time) string {
 	}
 	if bd := bdayValue(ct.Birthday); bd != "" {
 		fold(&b, "BDAY:"+bd)
+	}
+	if len(ct.Categories) > 0 {
+		var cs []string
+		for _, c := range ct.Categories {
+			cs = append(cs, EscapeText(c))
+		}
+		fold(&b, "CATEGORIES:"+strings.Join(cs, ","))
+	}
+	for _, i := range ct.IBANs {
+		fold(&b, "X-IBAN:"+EscapeText(i))
+	}
+	if ct.Note != "" {
+		fold(&b, "NOTE:"+EscapeText(ct.Note))
 	}
 	fold(&b, "REV:"+utc(now))
 	fold(&b, "END:VCARD")
@@ -159,6 +194,21 @@ func Contacts(root *Component) []Contact {
 				if a := address(p.Value); a != "" {
 					ct.Addresses = append(ct.Addresses, a)
 				}
+			case "CATEGORIES":
+				for _, c := range listParts(p.Value) {
+					if c = strings.TrimSpace(c); c != "" {
+						ct.Categories = append(ct.Categories, c)
+					}
+				}
+			case "X-IBAN":
+				if v = strings.TrimSpace(v); v != "" {
+					ct.IBANs = append(ct.IBANs, v)
+				}
+			case "NOTE":
+				if ct.Note != "" {
+					ct.Note += "\n"
+				}
+				ct.Note += v
 			}
 		}
 		out = append(out, ct)
@@ -189,6 +239,23 @@ func parts(v string) []string {
 		}
 	}
 	return append(out, cur.String())
+}
+
+// listParts splits a list value (CATEGORIES) at its unescaped commas,
+// each part unescaped.
+func listParts(v string) []string {
+	var out []string
+	start := 0
+	for i := 0; i < len(v); i++ {
+		switch v[i] {
+		case '\\':
+			i++
+		case ',':
+			out = append(out, UnescapeText(v[start:i]))
+			start = i + 1
+		}
+	}
+	return append(out, UnescapeText(v[start:]))
 }
 
 // joinSome joins the parts that are not blank, each on one line.
