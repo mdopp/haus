@@ -30,6 +30,7 @@ const (
 	saysSetupHow    = "Ein Scanner im Netz scannt Stapel direkt von hier. Suchen findet Epson- und AirScan-Geräte im selben Netz; sonst die Adresse von Hand."
 	saysFolderSetup = "Ein Scanner, der in einen Netzwerkordner scannt, wird in seinem eigenen Menü eingerichtet:"
 	saysNoStacks    = "Noch kein Stapel. Was gescannt ist, steht hier mit seinen Dokumenten."
+	saysScanBusy    = "„Stapel scannen“ kommt wieder, sobald dieser Stapel in Paperless liegt."
 	saysStackHow    = "Eine Datei ist ein Stapel; die Box trennt die Dokumente selbst, entfernt leere Seiten und legt alles in Paperless ab."
 	saysAsked       = "Im Heimnetz wurden %d Geräte direkt gefragt."
 	saysNotFound    = "Kein Scanner gefunden. Ist er an und im selben Netz? Sonst unten die Adresse von Hand eintragen, etwa epson2:net:192.168.178.87."
@@ -270,6 +271,9 @@ func scanState(st laib.Scan) (string, string) {
 		}
 		return "Abgebrochen", "Den Rest einlegen, dann „Weiter“."
 	case "trennt":
+		if n := pagesOf(st.Detail); n > 0 {
+			return "Trennt die Dokumente", "Das Hausmodell liest " + strconv.Itoa(n) + " Seiten; das dauert ein paar Minuten."
+		}
 		return "Trennt die Dokumente", "Das Hausmodell liest die Seiten."
 	case "legt-ab":
 		return "Legt die Dokumente ab", ""
@@ -323,6 +327,8 @@ func scanSection(r *http.Request, cfg StartConfig, s scanning) string {
 		b.WriteString(`<div class=knoepfe>` + order("Weiter", "weiter") + order("Abschließen", "abschliessen") + order("Verwerfen", "verwerfen") + `</div>`)
 	case st.Scanner && (st.Zustand == "bereit" || st.Zustand == "fertig" || st.Zustand == "fehler"):
 		b.WriteString(`<div class=knoepfe>` + order("Stapel scannen", "start") + `</div>`)
+	case st.Scanner && busy(st.Zustand): // owner 2026-10-27: where is the button? say when it comes back
+		b.WriteString(`<p class=k>` + html.EscapeString(saysScanBusy) + `</p>`)
 	}
 	eingang := st.Eingang
 	if eingang == "" {
@@ -513,6 +519,10 @@ func stacks(r *http.Request, cfg StartConfig, all []laib.Stack) string {
 	if len(all) == 0 {
 		return b.String() + `<p class=k>` + html.EscapeString(saysNoStacks) + `</p>`
 	}
+	all = shownStacks(r, cfg, all)
+	if len(all) == 0 {
+		return b.String() + `<p class=k>` + html.EscapeString(saysNoStacks) + `</p>`
+	}
 	now, loc := cfg.clock()
 	opens := cfg.paperlessOpens(r)
 	b.WriteString(`<ul class=stapel>`)
@@ -606,3 +616,72 @@ const scanStyle = `<style>.scannen .zustand{margin:10px 0 0}.scannen .knoepfe{di
 .einrichten ul.k{margin:6px 0 0;padding-left:18px;font-size:.85rem}.scannen .gut,.scannen .achtung{margin:10px 0 0}
 .laeuft{margin:12px 0 0;font-weight:600}.laeuft::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--accent);margin-right:8px;vertical-align:1px;animation:puls 1.2s ease-in-out infinite}
 @keyframes puls{50%{opacity:.25}}@media (prefers-reduced-motion:reduce){.laeuft::before{animation:none}}.scannen button:disabled{opacity:.6}</style>`
+
+var pagesRE = regexp.MustCompile(`(\d+) Seiten`)
+
+// pagesOf is the page count in the service's detail („trennt 47 Seiten“), 0 for none.
+func pagesOf(detail string) int {
+	if m := pagesRE.FindStringSubmatch(detail); m != nil {
+		n, _ := strconv.Atoi(m[1])
+		return n
+	}
+	return 0
+}
+
+// shownStacks are the stacks as they stand now (owner 2026-10-27: „es
+// stehen da noch Scans die es gar nicht mehr in paperless gibt“): a stack
+// filed again (redo) only once, its newest run; a document deleted in
+// Paperless left out, and a stack whose documents are all gone with it.
+// Paperless not answering: the list as the service says.
+func shownStacks(r *http.Request, cfg StartConfig, all []laib.Stack) []laib.Stack {
+	seen := map[string]bool{}
+	var out []laib.Stack
+	for _, s := range all { // newest first
+		if s.Stapel != "" && seen[s.Stapel] {
+			continue
+		}
+		seen[s.Stapel] = true
+		out = append(out, s)
+		if len(out) == maxStacks {
+			break
+		}
+	}
+	if cfg.Docs == nil {
+		return out
+	}
+	var names []string
+	for _, s := range out {
+		for _, d := range s.Dokumente {
+			names = append(names, d.Datei)
+		}
+	}
+	if len(names) == 0 {
+		return out
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), backendWait)
+	defer cancel()
+	have, err := cfg.Docs.Have(ctx, names)
+	if err != nil {
+		log.Printf("haus: dokumente page: which scans Paperless still has: %v", err)
+		return out
+	}
+	kept := out[:0]
+	for _, s := range out {
+		if len(s.Dokumente) == 0 {
+			kept = append(kept, s)
+			continue
+		}
+		docs := s.Dokumente[:0:0]
+		for _, d := range s.Dokumente {
+			if d.Datei == "" || have[d.Datei] {
+				docs = append(docs, d)
+			}
+		}
+		if len(docs) == 0 {
+			continue
+		}
+		s.Dokumente = docs
+		kept = append(kept, s)
+	}
+	return kept
+}

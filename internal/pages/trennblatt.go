@@ -39,10 +39,11 @@ var separatorSVG = func() string {
 // separators is Scannen's part for the sheets: what they do, how many,
 // and the button to the print page.
 func separators() string {
-	return `<h3>Trennblätter</h3><p class=k>` + html.EscapeString(saysSeparatorHow) + `</p>` +
+	// owner 2026-10-27: rarely needed, so folded away
+	return `<details class=trennblaetter><summary>Trennblätter drucken</summary><p class=k>` + html.EscapeString(saysSeparatorHow) + `</p>` +
 		`<form method=get action=` + TrennblattPath + ` class=trennblatt><label for=anzahl>Wie viele?</label>` +
 		`<input id=anzahl type=number name=anzahl value=` + strconv.Itoa(separatorsPlain) + ` min=1 max=` + strconv.Itoa(separatorsMax) + ` step=1 required inputmode=numeric>` +
-		`<button data-laeuft="Öffnet …">Trennblätter drucken</button></form>`
+		`<button data-laeuft="Öffnet …">Trennblätter drucken</button></form></details>`
 }
 
 // separatorCount is ?anzahl= within 1–50; none or no number is 5, and

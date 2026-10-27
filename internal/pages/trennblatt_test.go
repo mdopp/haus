@@ -21,11 +21,11 @@ func getTrennblatt(t *testing.T, method, target string) *httptest.ResponseRecord
 // a number field (5, from 1 to 50) and a button that opens the print page.
 func TestScannenOffersSeparatorSheets(t *testing.T) {
 	body := scanPage(t, &scanLaib{status: map[string]any{"zustand": "bereit", "scanner": true}}, "family")
-	mustContain(t, body, "<h3>Trennblätter</h3>", saysSeparatorHow,
+	mustContain(t, body, "<details class=trennblaetter><summary>Trennblätter drucken</summary>", saysSeparatorHow, // owner 2026-10-27: folded, rarely needed
 		`<form method=get action=/scannen/trennblatt class=trennblatt>`,
 		`<input id=anzahl type=number name=anzahl value=5 min=1 max=50 step=1 required inputmode=numeric>`,
 		`<button data-laeuft="Öffnet …">Trennblätter drucken</button>`)
-	before(t, body, "<h3>Trennblätter</h3>", "<h3>Letzte Stapel</h3>")
+	before(t, body, "<summary>Trennblätter drucken</summary>", "<h3>Letzte Stapel</h3>")
 	// no separator sheets where Scannen is not there for the family
 	mustNotContain(t, scanPage(t, &scanLaib{unset: true}, "family"), "Trennblätter")
 }
