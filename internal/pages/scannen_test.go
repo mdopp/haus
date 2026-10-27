@@ -228,7 +228,7 @@ func TestScannerEinrichtenShowsTheSetup(t *testing.T) {
 	mustContain(t, body, `<details id=scanner class=einrichten><summary>Scanner einrichten</summary>`, // a scanner is set: closed
 		"Scanner antwortet", "epson2:net:192.168.178.87",
 		`value=pruefen><button data-laeuft="Prüft den Scanner …">Erneut prüfen</button>`, `value=probe><button data-laeuft="Liest eine Probeseite …">Probeseite</button>`,
-		`value=suchen><button data-laeuft="Sucht im Netz nach Scannern …">Scanner suchen</button>`,
+		`value=suchen><button data-laeuft="Sucht nach Scannern …">Scanner suchen</button>`,
 		"Epson PID 0899 flatbed scanner", `<input type=hidden name=geraet value="epson2:net:192.168.178.87"><button aria-label="Epson PID 0899 flatbed scanner einrichten">Diesen einrichten</button>`,
 		`name=geraet value="airscan:e0:Brother MFC"`, "2 Scanner gefunden", "Adresse von Hand",
 		`\\kraftwerk\data`, "scan-eingang", "href=/netzlaufwerk>Netzlaufwerk</a>")
@@ -240,7 +240,7 @@ func TestScannerEinrichtenShowsTheSetup(t *testing.T) {
 		"pruefung": map[string]any{"geraet": "", "ok": false, "at": "2026-10-22T20:00:00Z", "detail": "kein Scanner eingerichtet (SCANNER ist leer)"},
 		"suche":    map[string]any{"zustand": "läuft", "at": "2026-10-22T20:01:00Z", "funde": []any{}}}
 	body = scanPage(t, f, "family,admins")
-	mustContain(t, body, `<details id=scanner class=einrichten open>`, "Sucht im Netz nach Scannern", "data-auffrischen=5>",
+	mustContain(t, body, `<details id=scanner class=einrichten open>`, "Sucht nach Scannern", "data-auffrischen=5>",
 		`<div class="achtung selbst"><p>kein Scanner eingerichtet`)
 	mustNotContain(t, body, "Scanner suchen</button>", "Probeseite", "Erneut prüfen")
 }
@@ -333,14 +333,14 @@ func TestScannerEinrichtenFollowsTheOrder(t *testing.T) {
 
 	// pressed, the service has not written yet: Sucht …, no button, look again soon
 	body = scanPageAt(t, f, admins, after("suchen", 2*time.Second))
-	mustContain(t, body, `<details id=scanner class=einrichten open>`, `<p class=laeuft role=status>Sucht im Netz nach Scannern …</p>`, "data-auffrischen=2>")
+	mustContain(t, body, `<details id=scanner class=einrichten open>`, `<p class=laeuft role=status>Sucht nach Scannern …</p>`, "data-auffrischen=2>")
 	mustNotContain(t, body, "Scanner suchen</button>", saysNotFound) // the old result is not this one's
 
 	// the service runs it
 	f.status["suche"] = map[string]any{"zustand": "läuft", "at": at(-time.Second), "funde": []any{}}
 	body = scanPageAt(t, f, admins, after("suchen", 3*time.Second))
-	mustContain(t, body, "Sucht im Netz nach Scannern …", "data-auffrischen=2>")
-	if strings.Count(body, "Sucht im Netz nach Scannern …</p>") != 1 {
+	mustContain(t, body, "Sucht nach Scannern …", "data-auffrischen=2>")
+	if strings.Count(body, "Sucht nach Scannern …</p>") != 1 {
 		t.Errorf("one Sucht:\n%s", body)
 	}
 
@@ -348,7 +348,7 @@ func TestScannerEinrichtenFollowsTheOrder(t *testing.T) {
 	f.status["suche"] = map[string]any{"zustand": "fertig", "at": at(0), "funde": []any{}, "detail": "kein Scanner gefunden: das Gerät an, im selben Netz?"}
 	body = scanPageAt(t, f, admins, after("suchen", 4*time.Second))
 	mustContain(t, body, `<div class="achtung selbst" role=alert><p>`+saysNotFound, `<input id=geraet autofocus `, "Scanner suchen</button>")
-	mustNotContain(t, body, "<div hidden data-auffrischen", "Sucht im Netz nach Scannern …</p>", "das Gerät an, im selben Netz?")
+	mustNotContain(t, body, "<div hidden data-auffrischen", "Sucht nach Scannern …</p>", "das Gerät an, im selben Netz?")
 
 	// done with finds: each to choose
 	f.status["suche"] = map[string]any{"zustand": "fertig", "at": at(0), "funde": []map[string]any{{"geraet": "epson2:net:192.168.178.87", "name": "Epson WF-3540"}}}
@@ -366,11 +366,11 @@ func TestScannerEinrichtenFollowsTheOrder(t *testing.T) {
 	f.status["suche"] = old
 	body = scanPageAt(t, f, admins, after("suchen", 61*time.Second))
 	mustContain(t, body, `<div class=achtung role=alert><p>Laib hat den Auftrag angenommen, aber nach einer Minute kein Ergebnis gemeldet.`, "Scanner suchen</button>")
-	mustNotContain(t, body, "<div hidden data-auffrischen", "Sucht im Netz nach Scannern …</p>")
+	mustNotContain(t, body, "<div hidden data-auffrischen", "Sucht nach Scannern …</p>")
 
 	// a link too old, or made up: no following
 	for _, target := range []string{after("suchen", time.Hour), "/dokumente?tut=suchen&seit=x", "/dokumente?tut=start&seit=" + strconv.FormatInt(now.Unix(), 10)} {
-		mustNotContain(t, scanPageAt(t, f, admins, target), "<div hidden data-auffrischen", "Laib hat den Auftrag", "Sucht im Netz nach Scannern …</p>")
+		mustNotContain(t, scanPageAt(t, f, admins, target), "<div hidden data-auffrischen", "Laib hat den Auftrag", "Sucht nach Scannern …</p>")
 	}
 
 	// Prüfen: waits for a check as new as the order, then shows it at the button
