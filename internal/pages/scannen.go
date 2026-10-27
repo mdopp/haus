@@ -27,13 +27,13 @@ const (
 	saysScanSilent  = "Der Scanner antwortet gerade nicht."
 	saysScanNotDone = "Das hat nicht geklappt: Der Scanner antwortet gerade nicht."
 	saysScanUnset   = "Scannen ist auf dieser Box noch nicht eingerichtet. „Scannen einrichten“ legt einen Vorschlag in die Inbox; die Box richtet den Dienst ein, sobald du ihn freigibst."
-	saysSetupHow    = "Ein Scanner im Netz scannt Stapel direkt von hier. Suchen findet Epson- und AirScan-Geräte im selben Netz; sonst die Adresse von Hand."
+	saysSetupHow    = "Ein Scanner am Server (USB) oder im Netz scannt Stapel direkt von hier. „Suchen“ findet ihn; sonst den Gerätenamen von Hand."
 	saysFolderSetup = "Ein Scanner, der in einen Netzwerkordner scannt, wird in seinem eigenen Menü eingerichtet:"
 	saysNoStacks    = "Noch kein Stapel. Was gescannt ist, steht hier mit seinen Dokumenten."
 	saysScanBusy    = "„Stapel scannen“ kommt wieder, sobald dieser Stapel in Paperless liegt."
 	saysStackHow    = "Eine Datei ist ein Stapel; die Box trennt die Dokumente selbst, entfernt leere Seiten und legt alles in Paperless ab."
 	saysAsked       = "Im Heimnetz wurden %d Geräte direkt gefragt."
-	saysNotFound    = "Kein Scanner gefunden. Ist er an und im selben Netz? Sonst unten die Adresse von Hand eintragen, etwa epson2:net:192.168.178.87."
+	saysNotFound    = "Kein Scanner gefunden. Ist er an, am Server eingesteckt oder im selben Netz? Sonst unten den Gerätenamen von Hand eintragen, etwa epson2:net:192.168.178.87 für einen Scanner im Netz."
 	saysOrderLate   = "Laib hat den Auftrag angenommen, aber nach %s kein Ergebnis gemeldet. Noch einmal versuchen; sonst weiß laib diag mehr."
 	maxStacks       = 5
 )
@@ -51,7 +51,7 @@ var scanWaits = map[string]time.Duration{"suchen": time.Minute, "pruefen": 30 * 
 
 // scanRuns is what the page says while a setup order runs, and what its
 // button says the moment it is pressed.
-var scanRuns = map[string]string{"suchen": "Sucht im Netz nach Scannern …", "pruefen": "Prüft den Scanner …", "probe": "Liest eine Probeseite …"}
+var scanRuns = map[string]string{"suchen": "Sucht nach Scannern …", "pruefen": "Prüft den Scanner …", "probe": "Liest eine Probeseite …"}
 
 // scanGeraet is a SANE device as laib#571 takes it (scanimage -L's name,
 // nothing that could break the unit's line).
@@ -61,7 +61,7 @@ var scanGeraet = regexp.MustCompile(`^[a-z0-9_]+:[^"'\\\n\r%$]{1,120}$`)
 // no device lands in the URL (adresse's way)
 var scanSaid = map[string]string{
 	"vorgeschlagen":  "Vorgeschlagen. Der Vorschlag liegt in Laibs Eingang, der Owner gibt ihn dort frei; dann richtet Laib den Scanner ein und prüft ihn von selbst.",
-	"geraet":         "Die Adresse nimmt Laib so nicht: etwa epson2:net:192.168.178.87, ohne Anführungszeichen, % und $.",
+	"geraet":         "Diesen Gerätenamen nimmt Laib so nicht: etwa epson2:net:192.168.178.87, ohne Anführungszeichen, % und $.",
 	"nicht-moeglich": "Das ging gerade nicht. Später noch einmal versuchen; sonst weiß laib diag mehr.",
 }
 
@@ -341,6 +341,7 @@ func scanSection(r *http.Request, cfg StartConfig, s scanning) string {
 	b.WriteString(`<p class=k>Oder den Scanner in den Ordner <span class=adresse>` + html.EscapeString(where) + `</span> scannen lassen (nur zu Hause im WLAN). ` + html.EscapeString(saysStackHow) + `</p>`)
 	b.WriteString(separators())
 	b.WriteString(stacks(r, cfg, st.Letzte))
+	b.WriteString(auswertung(r, cfg, st.Auswertung))
 	if isAdmin(r) {
 		b.WriteString(scannerSetup(r, cfg, st, s.order))
 	}
@@ -691,4 +692,33 @@ func shownStacks(r *http.Request, cfg StartConfig, all []laib.Stack) []laib.Stac
 		kept = append(kept, s)
 	}
 	return kept
+}
+
+// auswertung is what Dokumente last read from contracts and invoices
+// (laib ADR 0028): its sentence and when; a run that failed says so, its
+// raw lines folded away for an admin. Nothing before the first run.
+func auswertung(r *http.Request, cfg StartConfig, a laib.ScanAuswertung) string {
+	if a.Zustand == "" || oneLine(a.Detail) == "" {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString(`<h3>Verträge und Rechnungen</h3><p`)
+	if a.Zustand == "fehler" {
+		b.WriteString(` class=fehler`)
+	}
+	b.WriteString(`>` + html.EscapeString(oneLine(a.Detail)))
+	if t, err := time.Parse(time.RFC3339, a.At); err == nil && a.Zustand != "läuft" {
+		now, loc := cfg.clock()
+		t = t.In(loc)
+		when := dayWords(t, loc)
+		if y, m, d := now.In(loc).Date(); t.Year() == y && t.Month() == m && t.Day() == d {
+			when = "heute"
+		}
+		b.WriteString(` <span class=k>` + html.EscapeString(when+", "+t.Format("15:04")) + `</span>`)
+	}
+	b.WriteString(`</p>`)
+	if a.Zustand == "fehler" && isAdmin(r) {
+		b.WriteString(einzelheiten(a.Einzelheiten))
+	}
+	return b.String()
 }
