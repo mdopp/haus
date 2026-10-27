@@ -100,6 +100,7 @@ func routes(s site) http.Handler {
 	if s.hh.Wuensche != nil {
 		family.Discogs = s.hh.Wuensche.Regale
 	}
+	family.WakeRecordings = os.Getenv("HAUS_WAKE_RECORDINGS") // laib#828; before any page takes its copy of family
 	family.MusicInbox = os.Getenv("HAUS_MUSIC_INBOX")
 	if fi, err := os.Stat(musicInboxMount); family.MusicInbox == "" && err == nil && fi.IsDir() {
 		family.MusicInbox = musicInboxMount // where laib's haus template mounts it (laib#639)
@@ -117,6 +118,10 @@ func routes(s site) http.Handler {
 	}
 	start := pages.Start(family) // one: the page and its box line share laib's status (haus#67)
 	pagesMux.HandleFunc("/start", start)
+	// laib#828: the folder laib mounts for the family's takes of the wake phrase
+	if family.WakeRecordings != "" {
+		pagesMux.HandleFunc(pages.StimmePath, pages.Stimme(family))
+	}
 	if s.podcasts != nil {
 		pagesMux.HandleFunc(pages.PodcastsPath, pages.Podcasts(family)) // haus#123
 	}

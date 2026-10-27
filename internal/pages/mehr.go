@@ -13,6 +13,7 @@ const mehrPath = "/mehr"
 var mehrSays = map[string]string{
 	"Dokumente":       "Briefe, Rechnungen und Verträge ablegen und wiederfinden",
 	"Apps einrichten": "So kommen die Apps der Box auf Handy und Computer",
+	"Stimme":          "Das Weckwort einsprechen, damit es deine Stimme erkennt",
 	"Podcasts":        "Podcasts per Link abonnieren; Bescheid bei jeder neuen Folge",
 	"Platte erfassen": "Eine Schallplatte fotografieren und in deine Discogs-Sammlung eintragen",
 	"Discogs":         "Dein Discogs-Konto verbinden: Sammlung, Wantlist, Platte erfassen",
