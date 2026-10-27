@@ -530,6 +530,19 @@ type Scan struct {
 	// the scanner's setup (laib#571), kept until the next search or check
 	Suche    ScanSuche    `json:"suche"`
 	Pruefung ScanPruefung `json:"pruefung"`
+	// Auswertung is Dokumente's last run over contracts and invoices
+	// (laib ADR 0028, mdopp/dokumente): when Paperless took new documents,
+	// and hourly
+	Auswertung ScanAuswertung `json:"auswertung"`
+}
+
+// ScanAuswertung is what the evaluation of contracts and invoices did.
+type ScanAuswertung struct {
+	Zustand      string `json:"zustand"` // aus | läuft | fertig | fehler; "": none yet
+	At           string `json:"at"`
+	Anlass       string `json:"anlass"` // neue Dokumente | stündlich
+	Detail       string `json:"detail"` // a sentence for the family
+	Einzelheiten string `json:"einzelheiten"`
 }
 
 // ScanSuche is the last search for scanners on the network.

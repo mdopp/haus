@@ -449,3 +449,20 @@ func TestScannenSaysAStackIsDoneAgain(t *testing.T) {
 	mustContain(t, body, "<b>Wird nachgeholt</b>", "Das Trennen wird nachgeholt, sobald das Hausmodell wieder antwortet.", `value=start><button>Stapel scannen</button>`)
 	mustNotContain(t, body, "Kein Dokument", "Scan wartet:")
 }
+
+// laib ADR 0028: Dokumente reads contracts and invoices when Paperless takes
+// new documents; Scannen says what its last run did
+func TestScannenSaysWhatTheEvaluationDid(t *testing.T) {
+	st := map[string]any{"zustand": "bereit", "scanner": true, "auswertung": map[string]any{
+		"zustand": "fertig", "at": "2026-10-14T07:02:00Z", "anlass": "neue Dokumente",
+		"detail": "Nach neuen Dokumenten ausgewertet. Gelesen: 2 Verträge, 1 Rechnung. 1 Dokument zum Prüfen markiert."}}
+	body := scanPage(t, &scanLaib{status: st}, "family")
+	mustContain(t, body, "<h3>Verträge und Rechnungen</h3><p>Nach neuen Dokumenten ausgewertet. Gelesen: 2 Verträge, 1 Rechnung. 1 Dokument zum Prüfen markiert.", "heute, 09:02")
+	st["auswertung"] = map[string]any{"zustand": "fehler", "at": "2026-10-14T07:02:00Z", "detail": "Die Auswertung brach ab; der nächste Lauf versucht es wieder.", "einzelheiten": "vertraege: Traceback"}
+	body = scanPage(t, &scanLaib{status: st}, "family")
+	mustContain(t, body, "<p class=fehler>Die Auswertung brach ab")
+	mustNotContain(t, body, "Traceback")
+	mustContain(t, scanPage(t, &scanLaib{status: st}, "admins"), "vertraege: Traceback")
+	delete(st, "auswertung") // an older Laib, or no run yet
+	mustNotContain(t, scanPage(t, &scanLaib{status: st}, "family"), "Verträge und Rechnungen")
+}
