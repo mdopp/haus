@@ -9,7 +9,9 @@ import (
 	"net/mail"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/mdopp/haus/internal/caldav"
 	"github.com/mdopp/haus/internal/mcpserver"
@@ -29,9 +31,9 @@ const (
 )
 
 // ergaenzenFields is the answer's field order.
-var ergaenzenFields = []string{"firma", "ansprechpartner", "telefon", "email", "iban"}
+var ergaenzenFields = []string{"firma", "ansprechpartner", "telefon", "email", "iban", "anschrift"}
 
-var fieldLabel = map[string]string{"firma": "Firma", "ansprechpartner": "Ansprechpartner", "telefon": "Telefon", "email": "E-Mail", "iban": "IBAN"}
+var fieldLabel = map[string]string{"firma": "Firma", "ansprechpartner": "Ansprechpartner", "telefon": "Telefon", "email": "E-Mail", "iban": "IBAN", "anschrift": "Anschrift"}
 
 // ibanLen is the length of the IBANs of the countries the family will meet
 // most; another country's must be 15 to 34 characters.
@@ -117,6 +119,51 @@ func (e *ergaenzung) set(field, status, grund string) {
 // itself with its reason.
 type ergaenzenArgs struct {
 	firma, ansprechpartner, telefon, email, iban, quelle string
+	anschrift                                            *caldav.Address
+}
+
+var plzDE = regexp.MustCompile(`^[0-9]{5}$`)
+
+// readAnschrift is the address argument: an object of strasse, plz, ort
+// and land (default DE), each one line; a German PLZ is five digits.
+func readAnschrift(raw any) (*caldav.Address, string) {
+	m, ok := raw.(map[string]any)
+	if !ok {
+		return nil, "keine Anschrift: erwarte strasse, plz, ort und optional land"
+	}
+	part := func(k string) (string, bool) {
+		v, isStr := m[k].(string)
+		if m[k] != nil && !isStr {
+			return "", false
+		}
+		v = oneLine(v)
+		return v, utf8.RuneCountInString(v) <= MaxField
+	}
+	var a caldav.Address
+	var okS, okP, okO, okL bool
+	a.Street, okS = part("strasse")
+	a.Code, okP = part("plz")
+	a.Locality, okO = part("ort")
+	a.Country, okL = part("land")
+	if !okS || !okP || !okO || !okL {
+		return nil, "Anschrift: jeder Teil ist Text, höchstens " + strconv.Itoa(MaxField) + " Zeichen"
+	}
+	if a.Street == "" || a.Code == "" || a.Locality == "" {
+		return nil, "Anschrift unvollständig: strasse, plz und ort gehören dazu"
+	}
+	if a.Country == "" {
+		a.Country = "DE"
+	}
+	if len(a.Country) == 2 {
+		a.Country = strings.ToUpper(a.Country)
+	}
+	switch strings.ToLower(a.Country) {
+	case "de", "deutschland", "germany":
+		if !plzDE.MatchString(a.Code) {
+			return nil, "„" + cut(a.Code, 20) + "“ ist keine deutsche PLZ (fünf Ziffern)"
+		}
+	}
+	return &a, ""
 }
 
 func readErgaenzen(a map[string]any, e *ergaenzung) (ergaenzenArgs, error) {
@@ -146,6 +193,13 @@ func readErgaenzen(a map[string]any, e *ergaenzung) (ergaenzenArgs, error) {
 			e.set("email", stAbgelehnt, fmt.Sprintf("„%s“ ist keine E-Mail-Adresse", cut(oneLine(m), 100)))
 		} else {
 			v.email = m
+		}
+	}
+	if raw, ok := a["anschrift"]; ok && raw != nil {
+		if adr, grund := readAnschrift(raw); adr != nil {
+			v.anschrift = adr
+		} else {
+			e.set("anschrift", stAbgelehnt, grund)
 		}
 	}
 	if i := mcpserver.Str(a, "iban"); strings.TrimSpace(i) != "" {
@@ -263,6 +317,8 @@ func given(v ergaenzenArgs, f string) bool {
 		return v.email != ""
 	case "iban":
 		return v.iban != ""
+	case "anschrift":
+		return v.anschrift != nil
 	}
 	return true
 }
@@ -287,6 +343,10 @@ func ergaenzenNew(ctx context.Context, c *caldav.Client, v ergaenzenArgs, e erga
 		ct.IBANs = []string{v.iban}
 		note = append(note, "IBAN: "+groupIBAN(v.iban))
 		e.set("iban", stAngelegt, "")
+	}
+	if v.anschrift != nil {
+		ct.WorkAddress = v.anschrift
+		e.set("anschrift", stAngelegt, "")
 	}
 	if v.quelle != "" {
 		note = append(note, "Quelle: "+v.quelle)
@@ -370,6 +430,24 @@ func ergaenzenOne(ctx context.Context, c *caldav.Client, cc string, v ergaenzenA
 			add = append(add, "X-IBAN:"+v.iban)
 			note = append(note, "IBAN: "+groupIBAN(v.iban))
 			e.set("iban", stErgaenzt, "")
+		}
+	}
+	if v.anschrift != nil {
+		want := v.anschrift.String()
+		same := false
+		for _, have := range cd.Addresses {
+			same = same || strings.EqualFold(oneLine(have), want)
+		}
+		switch {
+		case same:
+			e.set("anschrift", stVorhanden, "")
+		case len(cd.Addresses) > 0:
+			e.set("anschrift", stVorhanden, "eingetragen ist „"+listAll(cd.Addresses, MaxField, "; ")+"“; bleibt")
+		case !firm:
+			e.set("anschrift", stAbgelehnt, notOurs)
+		default:
+			add = append(add, v.anschrift.Line())
+			e.set("anschrift", stErgaenzt, "")
 		}
 	}
 	e.Kontakt = cd.UID

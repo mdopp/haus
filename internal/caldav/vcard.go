@@ -33,7 +33,26 @@ type Contact struct {
 	IBANs []string
 	// Note is the NOTE text, several NOTE properties one line each.
 	Note string
+	// WorkAddress, when set, is written as ADR;TYPE=WORK (a new card
+	// only; a card read has its addresses in Addresses).
+	WorkAddress *Address
 }
+
+// Address is a postal address as Haus writes one (haus#163).
+type Address struct {
+	Street, Code, Locality, Country string
+}
+
+// value is the ADR value: post box;extended;street;locality;region;code;country.
+func (a Address) value() string {
+	return ";;" + EscapeText(a.Street) + ";" + EscapeText(a.Locality) + ";;" + EscapeText(a.Code) + ";" + EscapeText(a.Country)
+}
+
+// Line is the address as one content line, ADR;TYPE=WORK.
+func (a Address) Line() string { return "ADR;TYPE=WORK:" + a.value() }
+
+// String is the address as a card read shows it (Contact.Addresses).
+func (a Address) String() string { return address(a.value()) }
 
 // FirmCategory marks a card kontakt_ergaenzen made: only such a card is
 // ever added to (haus#163).
@@ -83,6 +102,9 @@ func (ct Contact) VCF(now time.Time) string {
 	}
 	if bd := bdayValue(ct.Birthday); bd != "" {
 		fold(&b, "BDAY:"+bd)
+	}
+	if ct.WorkAddress != nil {
+		fold(&b, ct.WorkAddress.Line())
 	}
 	if len(ct.Categories) > 0 {
 		var cs []string

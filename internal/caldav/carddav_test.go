@@ -437,3 +437,19 @@ func TestAmendCard(t *testing.T) {
 		t.Fatal("a card without its href and ETag is not written")
 	}
 }
+
+// A firm's work address is one ADR;TYPE=WORK, every part escaped, and
+// reads back as a letter has it.
+func TestWorkAddress(t *testing.T) {
+	a := Address{Street: "Musterweg 1; Hinterhaus", Code: "12345", Locality: "Beispielstadt", Country: "DE"}
+	if got := a.Line(); got != `ADR;TYPE=WORK:;;Musterweg 1\; Hinterhaus;Beispielstadt;;12345;DE` {
+		t.Fatalf("line %q", got)
+	}
+	if a.String() != "Musterweg 1; Hinterhaus, 12345 Beispielstadt, DE" {
+		t.Fatalf("string %q", a.String())
+	}
+	root, _ := Parse(Contact{Name: "Beispiel GmbH", WorkAddress: &a}.VCF(time.Now()))
+	if got := Contacts(root)[0].Addresses; len(got) != 1 || got[0] != a.String() {
+		t.Fatalf("read back %v", got)
+	}
+}

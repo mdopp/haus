@@ -564,19 +564,22 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     `kontakt_anlegen(name, telefon?, email?, geburtstag?)` (a vCard 4.0
     with a random `urn:uuid` UID; `geburtstag` `JJJJ-MM-TT` or `--MM-TT`),
     `kontakt_ergaenzen(firma, ansprechpartner?, telefon?, email?, iban?,
-    quelle?)` (haus#163, for laib's paperless helper: a firm from a
+    quelle?, anschrift?)` (`anschrift` an object `{strasse, plz, ort,
+    land?}`, `land` default `DE`) (haus#163, for laib's paperless helper: a firm from a
     document). It finds the card by ORG or FN equal to `firma` (case and
     spaces ignored), else the same email, else the same IBAN (`X-IBAN` or
     one in the note); several at one step narrow to the `CATEGORIES:Firma`
     card, else nothing is written (`mehrdeutig`). None: a new card with
-    ORG = FN = firma, `CATEGORIES:Firma`, TEL, EMAIL, `X-IBAN` and one NOTE
+    ORG = FN = firma, `CATEGORIES:Firma`, TEL, EMAIL, `ADR;TYPE=WORK`, `X-IBAN` and one NOTE
     (`Ansprechpartner: …`, `IBAN: …` in groups of four, `Quelle: <link>`).
     One: only what is missing is added — a second TEL or EMAIL, an empty
-    contact person or IBAN, the source line; a value there is never
-    changed, a different IBAN is never written (`abweichend`, the caller
+    contact person, IBAN or address (only when the card has no ADR), the
+    source line; a value there is never changed (another address is
+    `vorhanden`, the stored one in `gruende`), a different IBAN is never written (`abweichend`, the caller
     marks the document `prüfen`), and a card without `CATEGORIES:Firma`
     (one the family made) gets nothing (`abgelehnt`). The IBAN must pass
-    mod 97; a phone, email or IBAN that is none is refused for itself.
+    mod 97, a German PLZ five digits; a phone, email, IBAN or address that
+    is none is refused for itself.
     The answer is a German line, then one JSON line:
     `{"status": "angelegt|ergaenzt|unveraendert|mehrdeutig", "kontakt":
     "<uid>", "felder": {"firma": …, "telefon": …}, "gruende": {…}}`, each

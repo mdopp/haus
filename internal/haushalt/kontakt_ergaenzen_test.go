@@ -240,3 +240,70 @@ func TestIBAN(t *testing.T) {
 		}
 	}
 }
+
+var anschrift = map[string]any{"strasse": "Musterweg 1", "plz": "12345", "ort": "Beispielstadt"}
+
+// An address is set on a new card (land DE when not said), filled on a
+// firm's card without one, never written over one that is there, and
+// never added to a family card; a German PLZ is five digits.
+func TestKontaktErgaenzenAnschrift(t *testing.T) {
+	s := newSetup(t, want{contacts: true})
+	_, e := ergaenzen(t, s, map[string]any{"firma": "Beispiel Bau GmbH", "anschrift": anschrift})
+	felder(t, e, map[string]string{"firma": "angelegt", "anschrift": "angelegt"})
+	if _, vcf := onlyCard(t, s); !strings.Contains(vcf, "ADR;TYPE=WORK:;;Musterweg 1;Beispielstadt;;12345;DE\r\n") {
+		t.Fatalf("no work address:\n%s", vcf)
+	}
+	// another address: kept, the stored one said, nothing written
+	_, before := onlyCard(t, s)
+	_, e = ergaenzen(t, s, map[string]any{"firma": "Beispiel Bau GmbH", "anschrift": map[string]any{"strasse": "Andere Str. 9", "plz": "54321", "ort": "Anderswo"}})
+	if e.Felder["anschrift"] != "vorhanden" || !strings.Contains(e.Gruende["anschrift"], "Musterweg 1, 12345 Beispielstadt") || e.Status != "unveraendert" {
+		t.Fatalf("%+v", e)
+	}
+	if _, vcf := onlyCard(t, s); vcf != before || strings.Contains(vcf, "Anderswo") {
+		t.Fatalf("an address was written over:\n%s", vcf)
+	}
+	_, e = ergaenzen(t, s, map[string]any{"firma": "Beispiel Bau GmbH", "anschrift": anschrift})
+	if e.Felder["anschrift"] != "vorhanden" || e.Gruende["anschrift"] != "" {
+		t.Fatalf("the same address: %+v", e)
+	}
+
+	// a firm's card without an address is filled, a foreign country kept
+	s = newSetup(t, want{contacts: true})
+	ergaenzen(t, s, map[string]any{"firma": "Beispiel Logistik AG"})
+	_, e = ergaenzen(t, s, map[string]any{"firma": "Beispiel Logistik AG", "anschrift": map[string]any{"strasse": "Beispielgasse 3", "plz": "1010", "ort": "Wien", "land": "AT"}})
+	if e.Status != "ergaenzt" || e.Felder["anschrift"] != "ergaenzt" {
+		t.Fatalf("%+v", e)
+	}
+	if _, vcf := onlyCard(t, s); !strings.Contains(vcf, "ADR;TYPE=WORK:;;Beispielgasse 3;Wien;;1010;AT\r\n") {
+		t.Fatalf("not filled:\n%s", vcf)
+	}
+
+	// a family card gets none
+	s = newSetup(t, want{contacts: true})
+	card := "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:paul\r\nFN:Paul Plan\r\nORG:Plan Bau\r\nEND:VCARD\r\n"
+	s.fake.Put("/bote/kontakte/paul.vcf", card)
+	_, e = ergaenzen(t, s, map[string]any{"firma": "Plan Bau", "anschrift": anschrift})
+	if e.Felder["anschrift"] != "abgelehnt" {
+		t.Fatalf("%+v", e)
+	}
+	if _, got := onlyCard(t, s); got != card {
+		t.Fatalf("a family card was written:\n%s", got)
+	}
+
+	// a German PLZ is five digits; an address lacking a part is none
+	for _, bad := range []any{
+		map[string]any{"strasse": "Musterweg 1", "plz": "1234", "ort": "Beispielstadt"},
+		map[string]any{"strasse": "Musterweg 1", "plz": "1234a", "ort": "Beispielstadt", "land": "de"},
+		map[string]any{"strasse": "Musterweg 1", "plz": "12345"},
+		"Musterweg 1, 12345 Beispielstadt",
+	} {
+		s = newSetup(t, want{contacts: true})
+		_, e = ergaenzen(t, s, map[string]any{"firma": "Beispiel Bau GmbH", "anschrift": bad})
+		if e.Felder["anschrift"] != "abgelehnt" || e.Gruende["anschrift"] == "" {
+			t.Fatalf("%v: %+v", bad, e)
+		}
+		if _, vcf := onlyCard(t, s); strings.Contains(vcf, "ADR") {
+			t.Fatalf("%v written:\n%s", bad, vcf)
+		}
+	}
+}
