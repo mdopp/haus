@@ -33,7 +33,9 @@ var skillModell = map[string]string{
 
 var skillStatus = map[string]string{"active": "aktiv", "paused": "ruht", "refused": "verweigert"}
 
-var skillOutcome = map[string]string{"ran": "lief", "skipped": "übersprungen", "failed": "schiefgegangen", "error": "schiefgegangen"}
+// skillOutcome is a run's end as laib#839's runner says it; another word shows as it comes
+var skillOutcome = map[string]string{"green": "lief, alles gut", "unchanged": "lief, nichts Neues", "skipped": "übersprungen",
+	"escalated": "an dich weitergegeben", "rejected": "abgewiesen", "error": "schiefgegangen"}
 
 var weekdayWords = map[string]string{"Mo": "montags", "Di": "dienstags", "Mi": "mittwochs", "Do": "donnerstags", "Fr": "freitags", "Sa": "samstags", "So": "sonntags"}
 
