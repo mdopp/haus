@@ -107,12 +107,12 @@ func TestScannenOffersAStackOnlyWithAScanner(t *testing.T) {
 		mustContain(t, body, `value=start><button>Stapel scannen</button>`)
 		before(t, body, "Dokument ablegen", "<h2>Scannen</h2>")
 		body = scanPage(t, &scanLaib{status: map[string]any{"zustand": z, "scanner": false}}, "family")
-		mustNotContain(t, body, "Stapel scannen", "action=/scannen")
+		mustNotContain(t, body, "Stapel scannen", "action=/scannen>")
 		mustContain(t, body, `\\kraftwerk\data\scan-eingang`, "nur zu Hause im WLAN")
 	}
 	body := scanPage(t, &scanLaib{status: map[string]any{"zustand": "scannt", "seite": 12, "scanner": true}}, "family")
 	mustContain(t, body, "<b>Scannt</b>", "Seite 12", "data-auffrischen=5>")
-	mustNotContain(t, body, "Stapel scannen", "action=/scannen")
+	mustNotContain(t, body, "Stapel scannen", "action=/scannen>")
 }
 
 // haus#76: the last stacks with what came of them — how many documents,

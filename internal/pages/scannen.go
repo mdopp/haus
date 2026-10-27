@@ -333,6 +333,7 @@ func scanSection(r *http.Request, cfg StartConfig, s scanning) string {
 		where = `\\` + cfg.SambaHost + `\data\` + eingang
 	}
 	b.WriteString(`<p class=k>Oder den Scanner in den Ordner <span class=adresse>` + html.EscapeString(where) + `</span> scannen lassen (nur zu Hause im WLAN). ` + html.EscapeString(saysStackHow) + `</p>`)
+	b.WriteString(separators())
 	b.WriteString(stacks(r, cfg, st.Letzte))
 	if isAdmin(r) {
 		b.WriteString(scannerSetup(r, cfg, st, s.order))
@@ -597,6 +598,7 @@ func stackDetail(s laib.Stack, now time.Time, loc *time.Location) string {
 }
 
 const scanStyle = `<style>.scannen .zustand{margin:10px 0 0}.scannen .knoepfe{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 0}.scannen .knoepfe button{margin:0;width:auto}
+.trennblatt{display:flex;flex-wrap:wrap;align-items:end;gap:8px;margin:8px 0 0}.trennblatt label{width:100%}.trennblatt input{width:6em;margin:0}.trennblatt button{margin:0;width:auto}
 .scannen h3{font-size:.85rem;margin:18px 0 0;color:var(--muted);font-weight:600}.stapel{margin:6px 0 0;padding:0;list-style:none}.stapel>li{padding:8px 0;border-top:1px solid var(--line)}
 .stapel ul{margin:4px 0 0;padding-left:18px}.stapel li li{font-size:.9rem;overflow-wrap:anywhere}
 .einrichten{margin:18px 0 0;padding:12px 0 0;border-top:1px solid var(--line)}.einrichten summary{cursor:pointer;font-weight:600;min-height:44px;display:flex;align-items:center}
