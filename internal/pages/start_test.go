@@ -463,8 +463,17 @@ func TestStartHeuteUndDemnaechstEmptySaysHow(t *testing.T) {
 // needed: nobody automatic on it, or the data not backed up for days.
 func TestStartBoxLine(t *testing.T) {
 	loc := berlin(t)
-	ok := []map[string]any{{"name": "immich", "state": "grün"}, {"name": "paperless", "state": "grün"}}
-	down := []map[string]any{{"name": "immich", "state": "rot"}, {"name": "paperless", "state": "rot"}, {"name": "media", "state": "gelb"}}
+	immich := map[string]any{"name": "immich", "title": "Immich", "beschreibung": "Fotos"}
+	paperless := map[string]any{"name": "paperless", "title": "Paperless", "beschreibung": "Dokumente"}
+	row := func(s map[string]any, state string) map[string]any {
+		r := map[string]any{"state": state}
+		for k, v := range s {
+			r[k] = v
+		}
+		return r
+	}
+	ok := []map[string]any{row(immich, "grün"), row(paperless, "grün")}
+	down := []map[string]any{row(immich, "rot"), row(paperless, "rot"), {"name": "media", "title": "Jellyfin", "beschreibung": "Filme, Serien, Musik", "state": "gelb"}}
 	for _, c := range []struct {
 		name  string
 		ready map[string]any
@@ -476,9 +485,9 @@ func TestStartBoxLine(t *testing.T) {
 		{"all well", allGreen(t), ok, nil, "Alles in Ordnung · eure Daten sind von gestern Abend gesichert", ""},
 		{"backed up tonight", readyAt(t, time.Date(2026, 10, 14, 3, 12, 0, 0, loc), "läuft"), ok, nil, "Alles in Ordnung · eure Daten sind von heute Nacht gesichert", ""},
 		{"two down, the box on it", allGreen(t), down,
-			[]string{"Gerade nicht erreichbar: Fotos und Dokumente.", "Die Box versucht, das selbst zu beheben.", "Eure Daten sind von gestern Abend gesichert."}, "", "selbst"},
+			[]string{"Gerade nicht erreichbar: Immich (Fotos) und Paperless (Dokumente).", "Die Box versucht, das selbst zu beheben.", "Eure Daten sind von gestern Abend gesichert."}, "", "selbst"},
 		{"down, nobody automatic", readyAt(t, time.Date(2026, 10, 13, 21, 31, 0, 0, loc), "aus"), down[:1],
-			[]string{"Gerade nicht erreichbar: Fotos.", "Wer die Box betreut, weiß Bescheid."}, "", "hilfe"},
+			[]string{"Gerade nicht erreichbar: Immich (Fotos).", "Wer die Box betreut, weiß Bescheid."}, "", "hilfe"},
 		{"no backup for days", readyAt(t, time.Date(2026, 10, 10, 21, 0, 0, 0, loc), "läuft"), ok,
 			[]string{"Eure Daten sind seit 3 Tagen nicht gesichert.", "Die Box versucht, das selbst zu beheben."}, "", "hilfe"},
 		{"never backed up", readyAt(t, time.Time{}, "fehlt"), ok,

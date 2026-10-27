@@ -10,19 +10,13 @@ import (
 	"github.com/mdopp/haus/internal/laib"
 )
 
-// familyNames: what a service is called at the kitchen table.
-var familyNames = map[string]string{
-	"immich": "Fotos", "media": "Musik und Filme", "audiobookshelf": "Hörbücher", "paperless": "Dokumente",
-	"vaultwarden": "Passwörter", "radicale": "Kalender und Kontakte", "home-assistant": "das Haus (Licht, Heizung)",
-	"file-share": "Dateien", "bote": "der Bote", "auth": "die Anmeldung", "caddy": "der Zugang", "adguard": "das Internet im Haus",
-	"frage": "Frage", "stimme": "die Stimme", "music-assistant": "Musik im Haus", "haus": "Haus", "mosquitto": "die Geräte",
-}
-
-func familyName(svc string) string {
-	if n, ok := familyNames[svc]; ok {
-		return n
+// familyLabel is a service in the family's lines: Laib's name for it and
+// what it is, „Immich (Fotos)“ (owner 2026-10-27: the same names as Laib's page).
+func familyLabel(s laib.Service) string {
+	if d := strings.TrimSpace(s.Beschreibung); d != "" && d != s.Titel() {
+		return s.Titel() + " (" + d + ")"
 	}
-	return svc
+	return s.Titel()
 }
 
 // guarantees renders the three lines the family sees first (haus#2):
@@ -36,7 +30,7 @@ func guarantees(ready laib.Readiness, rows []laib.Service, admin bool, laibURL s
 	var down []string
 	for _, s := range rows {
 		if s.State == "rot" {
-			down = append(down, familyName(s.Name))
+			down = append(down, familyLabel(s))
 		}
 	}
 	if len(down) == 0 {
@@ -117,7 +111,7 @@ func familyBox(ready laib.Readiness, rows []laib.Service, err error, quiet bool,
 	var down []string
 	for _, s := range rows {
 		if s.State == "rot" {
-			down = append(down, familyName(s.Name))
+			down = append(down, familyLabel(s))
 		}
 	}
 	if len(down) > 0 {

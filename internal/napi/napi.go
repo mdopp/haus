@@ -151,7 +151,7 @@ func Handler(c Config) http.Handler {
 			case "gelb":
 				health = "degraded"
 			}
-			out = append(out, map[string]string{"name": s.Name, "activeState": active, "subState": sub, "health": health, "detail": s.Detail})
+			out = append(out, map[string]string{"name": s.Name, "title": s.Titel(), "beschreibung": s.Beschreibung, "activeState": active, "subState": sub, "health": health, "detail": s.Detail})
 		}
 		writeJSON(w, map[string]any{"services": out})
 	}))
