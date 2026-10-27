@@ -61,14 +61,14 @@ func TestBoxComesAtOnceAndFillsItsParts(t *testing.T) {
 	}
 	body := rec.Body.String()
 	mustContain(t, body, `<div id=box-stand data-teil=stand aria-busy=true><h1>Box</h1><p class=k>lädt …</p></div>`,
-		`<div id=box-inbox data-teil=inbox aria-busy=true><h2>Inbox</h2>`, `<div id=box-bericht data-teil=journal aria-busy=true><h2>Morgenbericht</h2>`,
-		`["stand","inbox","journal"].forEach`, "fetch('/box/teil?was='+was", `<noscript><meta http-equiv=refresh content="0;url=/box?ganz=1"></noscript>`, saysPartFailed,
-		`<nav class=unter aria-label=Box><a href=/box aria-current=page>Übersicht</a><a href=/box/aufgaben>Aufgaben</a><a href=/box/dienste>Dienste</a><a href=/box/journal>Journal</a><a href=/box/personen>Personen</a><a href=/box/geraete>Geräte</a><a href=/adresse>Adresse</a></nav>`)
-	mustNotContain(t, body, "Was wird genutzt", "Werkstatt", "Operator:", "box-laeuft", "box-journal", "box-einladen", "box-aufgaben", ">Nutzung</a>")
+		`<div id=box-inbox data-teil=inbox aria-busy=true><h2>Inbox</h2>`, `<div id=box-bericht data-teil=bericht aria-busy=true><h2>Morgenbericht</h2>`,
+		`["stand","inbox","bericht"].forEach`, "fetch('/box/teil?was='+was", `<noscript><meta http-equiv=refresh content="0;url=/box?ganz=1"></noscript>`, saysPartFailed,
+		`<nav class=unter aria-label=Box><a href=/box aria-current=page>Übersicht</a><a href=/box/aufgaben>Aufgaben</a><a href=/box/dienste>Dienste</a><a href=/box/personen>Personen</a><a href=/box/geraete>Geräte</a><a href=/adresse>Adresse</a></nav>`)
+	mustNotContain(t, body, "Was wird genutzt", "Werkstatt", "Operator:", "box-dienste", "box-journal", "box-einladen", "box-aufgaben", ">Nutzung</a>")
 	before(t, body, "box-stand", "box-inbox")
 	before(t, body, "box-inbox", "box-bericht")
 	// each topic on its own page (owner 2026-10-26: "zu viele lange Themen vermischt")
-	for page, want := range map[string]string{"/box/dienste": "<h1>Dienste</h1>", "/box/journal": "<h1>Journal</h1>", "/box/personen": "<h1>Personen</h1>"} {
+	for page, want := range map[string]string{"/box/dienste": "<h1>Dienste</h1>", "/box/personen": "<h1>Personen</h1>"} {
 		rec := boxAt(h, page, "admins")
 		mustContain(t, rec.Body.String(), want, `href=`+page+` aria-current=page>`)
 	}
@@ -96,13 +96,15 @@ func TestBoxComesAtOnceAndFillsItsParts(t *testing.T) {
 		return got
 	}
 	got := parts("inbox")
-	mustContain(t, got["box-inbox"], "<h2>Inbox</h2>", "leer")
-	got = parts("journal")
+	mustContain(t, got["box-inbox"], "<h2>Inbox</h2>", "Keine Karte wartet")
+	got = parts("bericht")
 	mustContain(t, got["box-bericht"], "<h2>Morgenbericht</h2>")
-	mustContain(t, got["box-journal"], "<h2>Journal · 24h</h2><ul class=zeilen>")
+	if _, ok := got["box-journal"]; ok {
+		t.Error("a journal copy on Box")
+	}
 	got = parts("stand")
 	mustContain(t, got["box-stand"], "<h1>Box · <span class=gruen>bereit</span>", "Operator:")
-	mustContain(t, got["box-laeuft"], "<h2>Was läuft</h2>", "paperless")
+	mustContain(t, got["box-dienste"], "Alle Dienste laufen.", "Alle Dienste auf der Laib-Seite")
 
 	// a part that does not come in time says so in its place
 	old := boxPartWait
@@ -125,13 +127,13 @@ func TestBoxWholeReadsThePartsTogether(t *testing.T) {
 	h := BoxPage(BoxConfig{Laib: slowStatusLaib(t, 300*time.Millisecond), LaibURL: "https://laib.box.test"})
 	rec := boxAt(h, "/box?ganz=1", "admins")
 	body := rec.Body.String()
-	mustContain(t, body, "<div id=box-stand data-teil=stand aria-busy=false>", "Operator:", "<h2>Inbox</h2><p class=k>leer</p>")
-	mustContain(t, boxAt(h, "/box/dienste?ganz=1", "admins").Body.String(), "<h2>Was läuft</h2>", "paperless")
+	mustContain(t, body, "<div id=box-stand data-teil=stand aria-busy=false>", "Operator:", "<h2>Inbox</h2><p class=k>Keine Karte wartet auf eine Entscheidung.</p>")
+	mustContain(t, boxAt(h, "/box/dienste?ganz=1", "admins").Body.String(), "Alle Dienste laufen.")
 	mustNotContain(t, body, "fetch('/box/teil", saysPartLoading)
 }
 
-// haus#96 (laib#593): the journal part asks for what it shows — the newest
-// 25, and the newest morning report — never 36 hours.
+// haus#96 (laib#593), haus#157: the report part asks for what it shows —
+// the newest morning report, nothing else of the journal.
 func TestBoxJournalAsksForWhatItShows(t *testing.T) {
 	var mu sync.Mutex
 	var asked []map[string]any
@@ -156,12 +158,12 @@ func TestBoxJournalAsksForWhatItShows(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 	h := BoxPage(BoxConfig{Laib: &laib.Client{URL: srv.URL, Token: "t"}, LaibURL: "https://laib.box.test"})
-	rec := boxAt(h, "/box/teil?was=journal", "admins")
+	rec := boxAt(h, "/box/teil?was=bericht", "admins")
 	mustContain(t, rec.Body.String(), "Nachts alles ruhig.")
-	if len(asked) != 2 {
+	if len(asked) != 1 {
 		t.Fatalf("asked %v", asked)
 	}
-	want := map[string]bool{`{"limit":"25"}`: true, `{"kind":"report","limit":"1"}`: true}
+	want := map[string]bool{`{"kind":"report","limit":"1"}`: true}
 	for _, a := range asked {
 		b, _ := json.Marshal(a)
 		if !want[string(b)] {

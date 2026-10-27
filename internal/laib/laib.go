@@ -1,7 +1,6 @@
 // Package laib is Haus's client for the box: Laib's MCP endpoint, one tool
-// call per verb, JSON back. Two tokens: the ops hand reads and restarts,
-// the human token approves and rejects (ADR 0012: Haus never decides, it
-// delivers the admin's verdict).
+// call per verb, JSON back. Haus holds the haus hand's token only; it
+// never decides (ADR 0012, haus#1): verdicts are given on Laib's page.
 package laib
 
 import (
@@ -252,7 +251,7 @@ func (c *Client) Inbox(ctx context.Context) ([]Proposal, error) {
 }
 
 // JournalLatest is the newest n entries, of a note kind when kind is set
-// (report is the morning report), oldest first like Journal (laib#593):
+// (report is the morning report), oldest first (laib#593):
 // the Box page asks for what it shows, not 36 hours of it.
 func (c *Client) JournalLatest(ctx context.Context, n int, kind string) ([]Entry, error) {
 	args := map[string]any{"limit": strconv.Itoa(n)}
@@ -268,20 +267,8 @@ func (c *Client) JournalLatest(ctx context.Context, n int, kind string) ([]Entry
 	return out, err
 }
 
-// Journal lists entries since a duration like "24h".
-func (c *Client) Journal(ctx context.Context, since string) ([]Entry, error) {
-	var out []Entry
-	err := c.callJSON(ctx, "journal", "--since "+since, &out)
-	return out, err
-}
-
-// Approve, Reject and Restart pass the verdict or the action on.
-func (c *Client) Approve(ctx context.Context, id int) (string, error) {
-	return c.Call(ctx, "approve", fmt.Sprint(id))
-}
-func (c *Client) Reject(ctx context.Context, id int) (string, error) {
-	return c.Call(ctx, "reject", fmt.Sprint(id))
-}
+// Restart passes the action on. There is no Approve or Reject: the haus
+// hand may not decide, deciding is Laib's page's (ADR 0012, haus#157).
 func (c *Client) Restart(ctx context.Context, service string) (string, error) {
 	return c.Call(ctx, "restart", service)
 }
