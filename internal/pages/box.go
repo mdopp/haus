@@ -70,7 +70,6 @@ var boxPages = []boxPage{
 	{"/box", "Übersicht", ""},
 	{AufgabenPath, "Aufgaben", "Box-Aufgaben"},
 	{"/box/dienste", "Dienste", "Dienste"},
-	{"/box/journal", "Journal", "Journal"},
 	{"/box/personen", "Personen", "Personen"},
 	{"/box/nutzung", "Nutzung", "Nutzung"},
 }
@@ -109,9 +108,10 @@ func unterNav(current string, usage bool) string {
 	return b.String()
 }
 
-// Box is the admins' page: readiness, the inbox (read-only — deciding
-// happens on Laib's own page, the one approval surface, ADR 0012), what
-// runs, the journal. laibURL is where Freigeben lives.
+// Box is the admins' page: readiness, how many inbox cards wait, what is
+// not green, the morning report. The full service list, the inbox's cards
+// and the journal are Laib's own page's (haus#157, owner 2026-10-27);
+// Box links there. laibURL is that page.
 func Box(c *laib.Client, laibURL string) http.HandlerFunc { return BoxWith(c, laibURL, nil) }
 
 // BoxWith is Box with the Werkstatt's tickets as a card (haus#15); nil, no card.
@@ -173,17 +173,15 @@ type boxSlot struct{ id, title, part string }
 func boxSlotsOn(cfg BoxConfig, page string) []boxSlot {
 	switch page {
 	case "/box":
-		return []boxSlot{{"box-stand", "", "stand"}, {"box-inbox", "Inbox", "inbox"}, {"box-bericht", "Morgenbericht", "journal"}}
-	case AufgabenPath:
-		return []boxSlot{{"box-aufgaben", "Box-Aufgaben", "aufgaben"}}
-	case "/box/dienste":
-		return []boxSlot{{"box-laeuft", "Was läuft", "stand"}}
-	case "/box/journal":
-		slots := []boxSlot{{"box-journal", "Journal · 24h", "journal"}}
+		slots := []boxSlot{{"box-stand", "", "stand"}, {"box-inbox", "Inbox", "inbox"}, {"box-bericht", "Morgenbericht", "bericht"}}
 		if cfg.Tickets != nil {
 			slots = append(slots, boxSlot{"box-werkstatt", "Werkstatt", "werkstatt"})
 		}
 		return slots
+	case AufgabenPath:
+		return []boxSlot{{"box-aufgaben", "Box-Aufgaben", "aufgaben"}}
+	case "/box/dienste":
+		return []boxSlot{{"box-dienste", "Nicht grün", "stand"}}
 	case "/box/personen":
 		return []boxSlot{{"box-einladen", "Person einladen", "einladen"}}
 	case "/box/nutzung":
@@ -213,7 +211,7 @@ func boxPart(ctx context.Context, r *http.Request, cfg BoxConfig, part string, i
 	case "stand":
 		ready, rows, err := c.Status(ctx)
 		if err != nil {
-			return map[string]string{"box-stand": "<h1>Box</h1><p class=rot>Laib antwortet nicht: " + html.EscapeString(err.Error()) + "</p>", "box-laeuft": ""}
+			return map[string]string{"box-stand": "<h1>Box</h1><p class=rot>Laib antwortet nicht: " + html.EscapeString(err.Error()) + "</p>", "box-dienste": ""}
 		}
 		var b strings.Builder
 		// the three guarantees, for everyone in the family (haus#2)
@@ -231,100 +229,46 @@ func boxPart(ctx context.Context, r *http.Request, cfg BoxConfig, part string, i
 		if ready.Lock != "" {
 			fmt.Fprintf(&b, "<p class=gelb>gesperrt: %s</p>", html.EscapeString(ready.Lock))
 		}
-		// what is not green, on the overview too; all of it under Dienste
-		var notGreen []laib.Service
-		for _, s := range rows {
-			if c := cls(s.State); c == "rot" || c == "gelb" {
-				notGreen = append(notGreen, s)
-			}
+		// what is not green, on the overview and under Dienste; the full
+		// list is Laib's page's (haus#157)
+		notGreen := notGreenList(rows)
+		if notGreen != "" {
+			b.WriteString(notGreen + "<p>" + laibLink(cfg, "/", "Alle Dienste auf der Laib-Seite") + "</p>")
 		}
-		if len(notGreen) > 0 {
-			b.WriteString("<ul class=zeilen>")
-			for _, s := range notGreen {
-				fmt.Fprintf(&b, "<li>%s<span class=was>%s", dot(cls(s.State), s.State), serviceLabel(s))
-				if d := oneLine(s.Detail); d != "" {
-					b.WriteString("<span class=text>" + linkAufgaben(html.EscapeString(trim(d, 160))) + "</span>")
-				}
-				b.WriteString("</span></li>")
-			}
-			b.WriteString("</ul><p><a href=/box/dienste>Alle Dienste</a></p>")
+		d := "<h2>Nicht grün</h2>" + notGreen
+		if notGreen == "" {
+			d = "<p class=gruen>Alle Dienste laufen.</p>"
 		}
-		// one line per service, its state a dot (the word for a screen
-		// reader); what is not green first
-		var l strings.Builder
-		l.WriteString("<h2>Was läuft</h2><ul class=zeilen>")
-		order := map[string]int{"rot": 0, "gelb": 1, "gruen": 2}
-		sorted := append([]laib.Service(nil), rows...)
-		sort.SliceStable(sorted, func(i, j int) bool { return order[cls(sorted[i].State)] < order[cls(sorted[j].State)] })
-		for _, s := range sorted {
-			fmt.Fprintf(&l, "<li>%s<span class=was>%s", dot(cls(s.State), s.State), serviceLabel(s))
-			if d := oneLine(s.Detail); d != "" {
-				l.WriteString("<span class=text>" + linkAufgaben(html.EscapeString(d)) + "</span>")
-			}
-			l.WriteString("</span></li>")
-		}
-		l.WriteString("</ul>")
-		return map[string]string{"box-stand": b.String(), "box-laeuft": l.String()}
+		d += "<p>" + laibLink(cfg, "/", "Alle Dienste auf der Laib-Seite") + "</p>"
+		return map[string]string{"box-stand": b.String(), "box-dienste": d}
 	case "inbox":
+		// a count and the way to Laib's inbox: the cards and deciding are
+		// Laib's page's (ADR 0012, haus#157)
 		var b strings.Builder
 		b.WriteString("<h2>Inbox</h2>")
 		if ps, err := c.Inbox(ctx); err != nil {
-			fmt.Fprintf(&b, "<p class=rot>%s</p>", html.EscapeString(err.Error()))
-		} else if len(ps) == 0 {
-			b.WriteString("<p class=k>leer</p>")
+			b.WriteString("<p class=gelb>Laib antwortet gerade nicht.</p>")
 		} else {
-			b.WriteString("<table>")
-			for _, p := range ps {
-				fmt.Fprintf(&b, "<tr><td class=k>#%d</td><td>%s<br><span class=k>%s · %s · %s · %s</span>", p.ID, html.EscapeString(p.Reason), html.EscapeString(p.Actor), p.Tier, p.Class, p.Created.Format("02.01. 15:04"))
-				for _, why := range p.Reasons {
-					fmt.Fprintf(&b, "<br><span class=gelb>%s</span>", html.EscapeString(why))
-				}
-				b.WriteString("</td></tr>")
+			switch len(ps) {
+			case 0:
+				b.WriteString("<p class=k>Keine Karte wartet auf eine Entscheidung.</p>")
+			case 1:
+				b.WriteString("<p>1 Karte wartet auf eine Entscheidung.</p>")
+			default:
+				fmt.Fprintf(&b, "<p>%d Karten warten auf eine Entscheidung.</p>", len(ps))
 			}
-			b.WriteString("</table>")
-			fmt.Fprintf(&b, "<p><a href=\"%s/inbox\">Entscheiden auf der Laib-Seite</a> <span class=k>— die eine Stelle, an der freigegeben wird</span></p>", html.EscapeString(strings.TrimRight(cfg.LaibURL, "/")))
 		}
+		b.WriteString("<p>" + laibLink(cfg, "/inbox", "Entscheiden auf der Laib-Seite") + "</p>")
 		return map[string]string{"box-inbox": b.String()}
 	case "einladen":
 		return map[string]string{"box-einladen": inviteCard(ctx, c, inv)}
 	case "aufgaben":
 		return map[string]string{"box-aufgaben": aufgabenCard(ctx, c, time.Now(), "", "")}
-	case "journal":
-		// what the page shows, not 36 hours of it (laib#593): the newest 25
-		// and the newest morning report, at the same time
-		var es, reports []laib.Entry
-		var jerr, rerr error
-		var wg sync.WaitGroup
-		wg.Add(2)
-		go func() { defer wg.Done(); es, jerr = c.JournalLatest(ctx, 25, "") }()
-		go func() { defer wg.Done(); reports, rerr = c.JournalLatest(ctx, 1, "report") }()
-		wg.Wait()
-		var b strings.Builder
-		// one entry a line: when and who small above, what and why below,
-		// the result a dot
-		b.WriteString("<h2>Journal · 24h</h2><ul class=zeilen>")
-		if jerr == nil {
-			shown := 0
-			for i := len(es) - 1; i >= 0 && shown < 25; i-- {
-				e := es[i]
-				if time.Since(e.T) > 24*time.Hour {
-					break
-				}
-				shown++
-				what := e.Verb
-				if e.Service != "" && e.Service != e.Verb {
-					what += " " + e.Service
-				}
-				fmt.Fprintf(&b, "<li>%s<span class=was><span class=wann>%s · %s</span><b>%s</b>", dot(result(e.Result), e.Result),
-					e.T.Local().Format("02.01. 15:04"), html.EscapeString(strings.TrimPrefix(e.Actor, "human:")), html.EscapeString(what))
-				if why := trim(oneLine(e.Reason+" "+e.Detail), 140); why != "" {
-					b.WriteString("<span class=text>" + html.EscapeString(why) + "</span>")
-				}
-				b.WriteString("</span></li>")
-			}
-		}
-		b.WriteString("</ul>")
-		return map[string]string{"box-bericht": morningReport(reports, rerr), "box-journal": b.String()}
+	case "bericht":
+		// the newest morning report only; the journal is Laib's page's
+		// (haus#157)
+		reports, err := c.JournalLatest(ctx, 1, "report")
+		return map[string]string{"box-bericht": morningReport(reports, err) + "<p>" + laibLink(cfg, "/journal", "Das Journal auf der Laib-Seite") + "</p>"}
 	case "genutzt":
 		return map[string]string{"box-genutzt": usageCard(ctx, cfg.Family, cfg.Voice)}
 	case "werkstatt":
@@ -485,15 +429,6 @@ func dot(class, word string) string {
 	return `<span class="punkt ` + class + `" role=img aria-label="` + html.EscapeString(word) + `"></span>`
 }
 
-func result(s string) string {
-	switch s {
-	case "green":
-		return "gruen"
-	case "red":
-		return "rot"
-	}
-	return "k"
-}
 func trim(s string, n int) string {
 	s = strings.TrimSpace(s)
 	if len(s) > n {
@@ -538,6 +473,37 @@ func werkstattCard(ctx context.Context, t *werkstatt.Tickets) string {
 	}
 	b.WriteString("</table>")
 	return b.String()
+}
+
+// notGreenList is the services that are not green as lines, red first,
+// each by Laib's name with its detail; "" when all are green.
+func notGreenList(rows []laib.Service) string {
+	var bad []laib.Service
+	for _, s := range rows {
+		if cls(s.State) != "gruen" {
+			bad = append(bad, s)
+		}
+	}
+	if len(bad) == 0 {
+		return ""
+	}
+	sort.SliceStable(bad, func(i, j int) bool { return cls(bad[i].State) == "rot" && cls(bad[j].State) != "rot" })
+	var b strings.Builder
+	b.WriteString("<ul class=zeilen>")
+	for _, s := range bad {
+		fmt.Fprintf(&b, "<li>%s<span class=was>%s", dot(cls(s.State), s.State), serviceLabel(s))
+		if d := oneLine(s.Detail); d != "" {
+			b.WriteString("<span class=text>" + linkAufgaben(html.EscapeString(trim(d, 160))) + "</span>")
+		}
+		b.WriteString("</span></li>")
+	}
+	b.WriteString("</ul>")
+	return b.String()
+}
+
+// laibLink is a link to a place on Laib's own page.
+func laibLink(cfg BoxConfig, path, text string) string {
+	return "<a href=\"" + html.EscapeString(strings.TrimRight(cfg.LaibURL, "/")+path) + "\">" + text + "</a>"
 }
 
 // serviceLabel is a service as Laib's page shows it: its title, what it

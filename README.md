@@ -329,12 +329,19 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   `admins` from `/box` and everything under it (Geräte included) to
   `/start` with 303, since Authelia here only restricts per host. That
   says who sees the admin page; it is not a verdict on anything, and
-  `/napi` and `/pair-device` are untouched. The page: readiness, the inbox read-only
-  with its reasons and a link to Laib's own inbox (the one approval
-  surface, laib ADR 0012), what runs, the journal. It comes at once
+  `/napi` and `/pair-device` are untouched. The page is the family view of the box and
+  does not repeat Laib's own page (haus#157, owner 2026-10-27): the three
+  guarantees, readiness, the Inbox as a count (*3 Karten warten auf eine
+  Entscheidung.*) with *Entscheiden auf der Laib-Seite* (`<laib>/inbox`,
+  the one approval surface, laib ADR 0012), the newest morning report
+  with a link to Laib's journal (`<laib>/journal`; no journal copy), the
+  Werkstatt's tickets when set. *Dienste* (`/box/dienste`) lists only
+  what is not green, red first, by Laib's names (haus#156), or *Alle
+  Dienste laufen.*, and links *Alle Dienste auf der Laib-Seite*
+  (`<laib>/`). It comes at once
   (haus#81): the frame and each part's place with „lädt …“; its script
   fetches every part at the same time from `GET /box/teil?was=<part>`
-  (`stand`, `inbox`, `einladen`, `journal`, `genutzt`, `werkstatt`: JSON,
+  (`stand`, `inbox`, `einladen`, `bericht`, `aufgaben`, `genutzt`, `werkstatt`: JSON,
   slot id → HTML), each within 10 s, a failed one said in its place.
   `?ganz=1`, where `<noscript>` sends, reads all parts at the same time
   and comes whole. *Person einladen* (`POST /box/einladen`, haus#56) takes
