@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/mdopp/haus/internal/einkauf"
 	"html"
 	"io"
 	"io/fs"
@@ -87,7 +88,7 @@ func Musik(cfg StartConfig) http.HandlerFunc {
 			musikNochmal(w, r, cfg)
 			return
 		}
-		if !showOnly(w, r, "Musik hinzufügen") {
+		if !showOnly(w, r, "Musik") {
 			return
 		}
 		writeMusik(w, r, cfg, "", "")
@@ -99,8 +100,10 @@ func Musik(cfg StartConfig) http.HandlerFunc {
 // again is an upload put back just now: the script follows its import.
 func writeMusik(w http.ResponseWriter, r *http.Request, cfg StartConfig, said, again string) {
 	{
-		b := familyHead(r, cfg, "Musik hinzufügen", "Musik hinzufügen")
-		b.WriteString(musikStyle + "<h1>Musik hinzufügen</h1><p class=k>" + html.EscapeString(saysMusikHow) + "</p>")
+		b := familyHead(r, cfg, "Musik", "Musik")
+		b.WriteString(musikStyle + keyHintStyle + "<h1>Musik</h1>")
+		b.WriteString(musikPlatten(r, cfg))
+		b.WriteString(`<h2 class=musik-teil>Musik hinzufügen</h2><p class=k>` + html.EscapeString(saysMusikHow) + "</p>")
 		accept := ".mp3,.flac,.m4a,.ogg,.opus,.wav,.zip,audio/*,application/zip"
 		b.WriteString(`<section class=karte aria-labelledby=m-w><h2 id=m-w>Was hochladen?</h2><div class=musik-wahl>` +
 			`<label class=knopf>Dateien wählen<input type=file id=musik-dateien multiple accept="` + accept + `"></label>` +
@@ -568,4 +571,28 @@ func tidyRun(root *os.Root, run string) {
 		root.Remove(keptBack + "/" + run + "/GRUND.txt")
 		root.Remove(keptBack + "/" + run)
 	}
+}
+
+// musikPlatten is Musik's part for records (owner 2026-10-26: Platte
+// erfassen and Discogs belong under Musik): the music wish list, Platte
+// erfassen and one's Discogs account; without the household's Discogs app,
+// what is missing and, for an admin, the way to its keys.
+func musikPlatten(r *http.Request, cfg StartConfig) string {
+	if cfg.Wuensche == nil && cfg.Discogs == nil {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString(`<section class="karte musik-platten" aria-labelledby=m-p><h2 id=m-p>Platten und Wünsche</h2><p class=wege>`)
+	if cfg.Wuensche != nil {
+		b.WriteString(`<a class=knopf href="` + EinkaufPath + `?liste=` + einkauf.MusikListe.ID() + `">Musik-Wunschliste</a> `)
+	}
+	if cfg.Discogs != nil {
+		b.WriteString(`<a class=knopf href=` + PlattePath + `>Platte erfassen</a> <a class=knopf href=` + DiscogsPath + `>Dein Discogs-Konto</a>`)
+	}
+	b.WriteString(`</p>`)
+	if cfg.Discogs == nil {
+		b.WriteString(keyHint(r, cfg, "Discogs", saysDiscogsEnables, publicBase(r, cfg)+MusikPath, discogsKeys))
+	}
+	b.WriteString(`</section>`)
+	return b.String()
 }

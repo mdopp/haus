@@ -54,4 +54,4 @@ func keyHint(r *http.Request, cfg StartConfig, what, enables, back string, keys 
 	return b.String()
 }
 
-const keyHintStyle = `<style>.schluessel-fehlt{padding:12px 14px;border-radius:14px;background:var(--accent-soft);margin:12px 0}.schluessel-fehlt p{margin:0 0 8px}.schluessel-fehlt .wege{display:flex;flex-wrap:wrap;gap:8px;margin:0}.schluessel-fehlt .knopf{display:inline-flex;align-items:center;min-height:44px;padding:0 18px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-weight:600;text-decoration:none}</style>`
+const keyHintStyle = `<style>.schluessel-fehlt{padding:12px 14px;border-radius:14px;background:var(--accent-soft);margin:12px 0}.schluessel-fehlt p{margin:0 0 8px}.schluessel-fehlt .wege,.musik-platten .wege{display:flex;flex-wrap:wrap;gap:8px;margin:0}.schluessel-fehlt .knopf,.musik-platten .knopf{display:inline-flex;align-items:center;min-height:44px;padding:0 18px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-weight:600;text-decoration:none}</style>`
