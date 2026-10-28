@@ -312,7 +312,16 @@ func (c *Client) configured(k kind) (Collection, error) {
 // readable is every collection of the kind holding comp ("" for an
 // address book): the account's own, and the configured one.
 func (c *Client) readable(ctx context.Context, k kind, comp string) ([]Collection, error) {
+	// haus#184: the own home and the others' mirrors are asked at once
+	var mirrors []Collection
+	var merr error
+	var wg sync.WaitGroup
+	if !k.book && comp == "VEVENT" {
+		wg.Add(1)
+		go func() { defer wg.Done(); mirrors, merr = c.mirrors(ctx) }()
+	}
 	cols, err := c.list(ctx, k.book)
+	wg.Wait()
 	if err != nil {
 		return nil, err
 	}
@@ -326,9 +335,8 @@ func (c *Client) readable(ctx context.Context, k kind, comp string) ([]Collectio
 		out, seen[col.URL] = append(out, col), true
 	}
 	if !k.book && comp == "VEVENT" { // the family's calendars from outside, in each person's home (laib#495)
-		mirrors, err := c.mirrors(ctx)
-		if err != nil {
-			return nil, err
+		if merr != nil {
+			return nil, merr
 		}
 		cols = append(cols, mirrors...)
 	}
@@ -482,19 +490,38 @@ func (c *Client) report(ctx context.Context, col Collection, body string) ([]*Co
 // reportAll runs one query against each calendar; a calendar gone since
 // the PROPFIND (404) is skipped.
 func (c *Client) reportAll(ctx context.Context, cols []Collection, body string) ([]*Component, error) {
+	per := make([][]*Component, len(cols))
+	errs := make([]error, len(cols))
+	parallel(len(cols), func(i int) { per[i], errs[i] = c.report(ctx, cols[i], body) })
 	var out []*Component
-	for _, col := range cols {
-		roots, err := c.report(ctx, col, body)
+	for i := range cols {
 		var st *ErrStatus
-		if errors.As(err, &st) && st.Code == http.StatusNotFound {
+		if errors.As(errs[i], &st) && st.Code == http.StatusNotFound {
 			continue
 		}
-		if err != nil {
-			return nil, err
+		if errs[i] != nil {
+			return nil, errs[i]
 		}
-		out = append(out, roots...)
+		out = append(out, per[i]...)
 	}
 	return out, nil
+}
+
+// parallel runs fn(0..n-1) at most six at a time (haus#184: Radicale takes
+// 0.13-0.3 s a request, mostly its login; one after another a page took
+// seconds) and waits for all.
+func parallel(n int, fn func(i int)) {
+	var wg sync.WaitGroup
+	slots := make(chan struct{}, 6)
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		slots <- struct{}{}
+		go func(i int) {
+			defer func() { <-slots; wg.Done() }()
+			fn(i)
+		}(i)
+	}
+	wg.Wait()
 }
 
 // Events lists the appointments overlapping [from, to) in every calendar
@@ -514,13 +541,15 @@ func (c *Client) events(ctx context.Context, cols []Collection, from, to time.Ti
   <D:prop><D:getetag/><C:calendar-data><C:expand start="` + s + `" end="` + e + `"/></C:calendar-data></D:prop>
   <C:filter><C:comp-filter name="VCALENDAR"><C:comp-filter name="VEVENT"><C:time-range start="` + s + `" end="` + e + `"/></C:comp-filter></C:comp-filter></C:filter>
 </C:calendar-query>`
+	per := make([][]*Component, len(cols))
+	errs := make([]error, len(cols))
+	parallel(len(cols), func(i int) { per[i], errs[i] = c.reportAll(ctx, []Collection{cols[i]}, body) })
 	var out []Event
-	for _, col := range cols {
-		roots, err := c.reportAll(ctx, []Collection{col}, body)
-		if err != nil {
-			return nil, err
+	for i, col := range cols {
+		if errs[i] != nil {
+			return nil, errs[i]
 		}
-		for _, r := range roots {
+		for _, r := range per[i] {
 			for _, ev := range Events(r, c.loc()) {
 				// the server filters already; this keeps a lax one honest
 				if ev.Start.Before(to) && (ev.End.After(from) || (ev.End.Equal(ev.Start) && !ev.Start.Before(from))) {

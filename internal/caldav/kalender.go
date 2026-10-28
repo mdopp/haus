@@ -10,6 +10,7 @@ import (
 	"path"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -113,13 +114,15 @@ func (c *Client) mirrors(ctx context.Context) ([]Collection, error) {
 	if err != nil {
 		return nil, err
 	}
+	per := make([][]Collection, len(homes))
+	errs := make([]error, len(homes))
+	parallel(len(homes), func(i int) { per[i], errs[i] = c.listAt(ctx, homes[i], false) }) // haus#184
 	var out []Collection
-	for _, h := range homes {
-		cols, err := c.listAt(ctx, h, false)
-		if err != nil {
-			return nil, err
+	for i := range homes {
+		if errs[i] != nil {
+			return nil, errs[i]
 		}
-		for _, col := range cols {
+		for _, col := range per[i] {
 			if isMirror(col.URL) {
 				out = append(out, col)
 			}
@@ -167,14 +170,22 @@ func (c *Client) PersonCalendars(ctx context.Context, person string) ([]Calendar
 
 // PersonEvents is Events plus the person's calendars "nur für mich".
 func (c *Client) PersonEvents(ctx context.Context, person string, from, to time.Time) ([]Event, error) {
+	var own []Collection
+	var oerr error
+	var wg sync.WaitGroup
+	h, herr := c.personHome(person)
+	if herr == nil { // haus#184: the person's home beside the rest
+		wg.Add(1)
+		go func() { defer wg.Done(); own, oerr = c.listAt(ctx, h, false) }()
+	}
 	cols, err := c.readable(ctx, c.calendars(), "VEVENT")
+	wg.Wait()
 	if err != nil {
 		return nil, err
 	}
-	if h, err := c.personHome(person); err == nil {
-		own, err := c.listAt(ctx, h, false)
-		if err != nil {
-			return nil, err
+	if herr == nil {
+		if oerr != nil {
+			return nil, oerr
 		}
 		for _, col := range own {
 			if kindOf(path.Base(strings.TrimRight(col.URL, "/"))) == "privat" && col.Takes("VEVENT") {
