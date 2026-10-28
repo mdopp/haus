@@ -13,7 +13,7 @@ const mehrPath = "/mehr"
 var mehrSays = map[string]string{
 	"Dokumente":       "Briefe, Rechnungen und Verträge ablegen und wiederfinden",
 	"Apps einrichten": "So kommen die Apps der Box auf Handy und Computer",
-	"Stimme":          "Das Weckwort einsprechen, damit es deine Stimme erkennt",
+	"Aufgaben":        "Was du einmal einrichtest, offen und erledigt",
 	"Podcasts":        "Podcasts per Link abonnieren; Bescheid bei jeder neuen Folge",
 	"Platte erfassen": "Eine Schallplatte fotografieren und in deine Discogs-Sammlung eintragen",
 	"Discogs":         "Dein Discogs-Konto verbinden: Sammlung, Wantlist, Platte erfassen",
@@ -40,6 +40,7 @@ func Mehr(cfg StartConfig) http.HandlerFunc {
 		show := shows(r, cfg)
 		b := familyHead(r, cfg, "Mehr", "Mehr")
 		b.WriteString("<h1>Mehr</h1>")
+		b.WriteString(einrichtungKarte(r, cfg)) // haus#188: the open setup first; gone once done
 		pages := cards.Card{Title: "Seiten"}
 		for _, t := range mehr {
 			if show[t.name] {

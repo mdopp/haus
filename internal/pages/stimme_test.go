@@ -76,8 +76,8 @@ func TestStimmeKeepsATake(t *testing.T) {
 		t.Fatalf("→ %d", code)
 	}
 	mustContain(t, body, "Sag 5-mal „Hey Joshua“", "Noch keine Aufnahme von dir.", `data-phrase="Hey Joshua">Aufnahme 1 von 5</button>`, "getUserMedia", "16000")
-	_, body, _ = familyPage(t, Mehr, cfg, "GET", mehrPath, "family")
-	mustContain(t, body, "Das Weckwort einsprechen")
+	_, body, _ = familyPage(t, Mehr, cfg, "GET", mehrPath, "family") // haus#188: a task under Einrichtung, not a page of Mehr
+	mustContain(t, body, "<h2 id=karte-einrichtung>Einrichtung</h2>", `<a href="/stimme">Joshua deine Stimme beibringen</a>`)
 
 	rec := stimmePost(t, cfg, take(16000, 1, 1.5, 0.3), "Anna", nil)
 	if rec.Code != http.StatusOK {
