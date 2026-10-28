@@ -46,8 +46,13 @@ type Readiness struct {
 	LastBackup struct {
 		At    string `json:"at"`
 		Repos int    `json:"repos"`
-		OK    bool   `json:"ok"`
+		OK    bool   `json:"ok"` // green and not older than 36 h (laib#856)
+		// OnlyOnDataDisk: saved, but only on the disk it protects; the copy off the box is missing (laib#856)
+		OnlyOnDataDisk bool   `json:"onlyOnDataDisk"`
+		Problem        string `json:"problem"` // why ok is false
 	} `json:"lastBackup"`
+	// Problems are what is red beyond one service: disk, backup, firewall, slow probes (laib#856)
+	Problems []json.RawMessage `json:"problems"`
 	LastChange struct {
 		Proposal   int    `json:"proposal"`
 		Summary    string `json:"summary"`
@@ -57,7 +62,8 @@ type Readiness struct {
 	// OperatorWork is what the Operator is at; Skills each skill's last
 	// run by its name (laib#839)
 	OperatorWork struct {
-		Skills map[string]SkillRun `json:"skills"`
+		Incident string              `json:"incident"` // the incident the Operator works now (laib#856): „… kümmert sich“
+		Skills   map[string]SkillRun `json:"skills"`
 	} `json:"operatorWork"`
 }
 
