@@ -39,7 +39,9 @@ func TestPostFormsGoSomewhere(t *testing.T) {
 		h    func() string
 	}{
 		{"pair", func() string { return getAt(PairDevice(store, StartConfig{}), "/pair-device", "family") }},
-		{"geraete", func() string { return getAt(Geraete(store, "https://haus.box.test", StartConfig{}), "/box/geraete", "admins") }},
+		{"geraete", func() string {
+			return getAt(Geraete(store, "https://haus.box.test", StartConfig{}), "/box/geraete", "admins")
+		}},
 	} {
 		body := c.h()
 		if n := len(postFormRE.FindAllString(body, -1)); n == 0 {
