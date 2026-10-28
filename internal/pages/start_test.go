@@ -754,3 +754,48 @@ func must[T any](v T, err error) T {
 	}
 	return v
 }
+
+// haus#173 (laib#856): one place is not „gesichert“ — the owner's amber line;
+// red lists only what the family uses; a problem beyond one service is no
+// „Alles in Ordnung“; an incident being worked is „kümmert sich“
+func TestStartTellsTheTruthAboutTheBackup(t *testing.T) {
+	line := func(ready map[string]any, rows []map[string]any) string {
+		fake, hc := house(t)
+		fake.Set("light.flur", "on", map[string]any{"friendly_name": "Flur"})
+		_, body := startPage(t, StartConfig{Laib: fakeLaib(t, ready, rows), HA: hc}, "family")
+		return body
+	}
+	ok := []map[string]any{{"name": "immich", "title": "Immich", "beschreibung": "Fotos", "state": "grün"}}
+
+	two := allGreen(t)
+	mustContain(t, line(two, ok), "Alles in Ordnung · eure Daten sind von gestern Abend gesichert")
+
+	one := allGreen(t)
+	one["lastBackup"].(map[string]any)["repos"] = 1
+	body := line(one, ok)
+	mustContain(t, body, `<span class="punkt gelb"></span>Gesichert, aber nur hier im Haus. Die Kopie außer Haus fehlt noch.`)
+	mustNotContain(t, body, "Alles in Ordnung", "gesichert</p>")
+
+	flag := allGreen(t)
+	flag["lastBackup"].(map[string]any)["onlyOnDataDisk"] = true
+	mustContain(t, line(flag, ok), saysNurImHaus)
+
+	// only the admins' services red: Start stays calm
+	adminRed := []map[string]any{{"name": "llama", "title": "Sprachmodell", "state": "rot"}, {"name": "werkstatt", "state": "rot"}}
+	body = line(allGreen(t), adminRed)
+	mustContain(t, body, "Alles in Ordnung")
+	mustNotContain(t, body, "Sprachmodell", "Gerade nicht erreichbar")
+
+	// a problem beyond one service: no „Alles in Ordnung“
+	prob := allGreen(t)
+	prob["problems"] = []any{map[string]any{"detail": "Datenträger fast voll"}}
+	body = line(prob, ok)
+	mustContain(t, body, "An der Box stimmt gerade etwas nicht.")
+	mustNotContain(t, body, "Alles in Ordnung", "Datenträger")
+
+	// the Operator works an incident: it is on it
+	inc := allGreen(t)
+	inc["operatorWork"] = map[string]any{"incident": "immich rot"}
+	body = line(inc, []map[string]any{{"name": "immich", "title": "Immich", "beschreibung": "Fotos", "state": "rot"}})
+	mustContain(t, body, "Gerade nicht erreichbar: Immich (Fotos).", "Die Box kümmert sich gerade darum.")
+}

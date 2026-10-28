@@ -10,6 +10,13 @@ import (
 	"github.com/mdopp/haus/internal/laib"
 )
 
+// saysNurImHaus is the owner's sentence (2026-10-28) for a backup with one place only.
+const saysNurImHaus = "Gesichert, aber nur hier im Haus. Die Kopie außer Haus fehlt noch."
+
+// adminOnlyService are the services the family does not use itself: one of
+// them red is the admins' (Box), not a line on the family's Start (haus#173).
+var adminOnlyService = map[string]bool{"llama": true, "werkstatt": true, "usage-metrics": true, "whoami": true, "esphome": true, "beets": true}
+
 // familyLabel is a service in the family's lines: Laib's name for it and
 // what it is, „Immich (Fotos)“ (owner 2026-10-27: the same names as Laib's page).
 func familyLabel(s laib.Service) string {
@@ -110,12 +117,15 @@ func familyBox(ready laib.Readiness, rows []laib.Service, err error, quiet bool,
 	var wrong []string
 	var down []string
 	for _, s := range rows {
-		if s.State == "rot" {
+		if s.State == "rot" && !adminOnlyService[s.Name] { // haus#173: what the family uses
 			down = append(down, familyLabel(s))
 		}
 	}
 	if len(down) > 0 {
 		wrong = append(wrong, "Gerade nicht erreichbar: "+andList(down)+".")
+	}
+	if len(ready.Problems) > 0 && len(down) == 0 { // red beyond one service: disk, firewall … (laib#856)
+		wrong = append(wrong, "An der Box stimmt gerade etwas nicht.")
 	}
 	at, _ := time.Parse(time.RFC3339, ready.LastBackup.At)
 	saved, unsaved := "", false
@@ -124,17 +134,29 @@ func familyBox(ready laib.Readiness, rows []laib.Service, err error, quiet bool,
 		wrong, unsaved = append(wrong, "Eure Daten sind noch nicht gesichert."), true
 	case now.Sub(at) > 72*time.Hour:
 		wrong, unsaved = append(wrong, "Eure Daten sind seit "+strconv.Itoa(int(now.Sub(at)/(24*time.Hour)))+" Tagen nicht gesichert."), true
+	case ready.LastBackup.OnlyOnDataDisk || ready.LastBackup.Repos < 2:
+		// haus#173, the owner 2026-10-28: one place is not „gesichert“ — the copy off the box is missing
+		saved = saysNurImHaus
 	default:
 		saved = "eure Daten sind " + backupWords(at, now, loc) + " gesichert"
 	}
+	nurHier := saved == saysNurImHaus
 	switch {
+	case len(wrong) == 0 && nurHier:
+		return "", "<p class=ruhig><span class=\"punkt gelb\"></span>" + saysNurImHaus + "</p>"
 	case len(wrong) == 0 && quiet:
 		return "", "<p class=ruhig><span class=punkt></span>Alles in Ordnung · " + saved + "</p>"
 	case len(wrong) == 0:
 		return "", "<p class=ruhig><span class=punkt></span>E" + saved[1:] + "</p>"
 	}
 	who, kind := "Wer die Box betreut, weiß Bescheid.", "hilfe"
-	if ready.Operator == "läuft" || ready.Operator == "startet" {
+	switch {
+	case ready.OperatorWork.Incident != "": // the Operator is on it now (laib#856)
+		who = "Die Box kümmert sich gerade darum."
+		if !unsaved {
+			kind = "selbst"
+		}
+	case ready.Operator == "läuft" || ready.Operator == "startet":
 		who = "Die Box versucht, das selbst zu beheben."
 		if !unsaved {
 			kind = "selbst"
@@ -142,7 +164,10 @@ func familyBox(ready laib.Readiness, rows []laib.Service, err error, quiet bool,
 	}
 	var b strings.Builder
 	b.WriteString("<section class=\"achtung " + kind + "\" role=status aria-label=\"Die Box\"><p>" + html.EscapeString(strings.Join(wrong, " ")) + "</p><p>" + who + "</p>")
-	if saved != "" {
+	switch {
+	case nurHier:
+		b.WriteString("<p>" + saysNurImHaus + "</p>")
+	case saved != "":
 		b.WriteString("<p>E" + saved[1:] + ".</p>")
 	}
 	b.WriteString("</section>")
