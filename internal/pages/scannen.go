@@ -114,7 +114,11 @@ func Scannen(cfg StartConfig) http.HandlerFunc {
 		if !scanPerson.MatchString(person) {
 			person = ""
 		}
-		if _, err := cfg.Laib.ScanOrder(r.Context(), do, person); err != nil {
+		fuer := ""
+		if do == "start" && r.PostForm.Get("fuer") == "mich" && person != "" {
+			fuer = person // only for them; the household's is the default and not sent
+		}
+		if _, err := cfg.Laib.ScanOrder(r.Context(), do, person, fuer); err != nil {
 			log.Printf("haus: scannen: %s: %v", do, err)
 			writeDokumente(w, r, cfg, http.StatusBadGateway, "", "", saysScanNotDone)
 			return
@@ -326,7 +330,7 @@ func scanSection(r *http.Request, cfg StartConfig, s scanning) string {
 	case st.Zustand == "wartet-auf-rest":
 		b.WriteString(`<div class=knoepfe>` + order("Weiter", "weiter") + order("Abschließen", "abschliessen") + order("Verwerfen", "verwerfen") + `</div>`)
 	case st.Scanner && (st.Zustand == "bereit" || st.Zustand == "fertig" || st.Zustand == "fehler"):
-		b.WriteString(`<div class=knoepfe>` + order("Stapel scannen", "start") + `</div>`)
+		b.WriteString(scanStart(r))
 	case st.Scanner && busy(st.Zustand): // owner 2026-10-27: where is the button? say when it comes back
 		b.WriteString(`<p class=k>` + html.EscapeString(saysScanBusy) + `</p>`)
 	}
@@ -357,6 +361,22 @@ func einzelheiten(raw string) string {
 	}
 	return `<details class=k><summary>Einzelheiten</summary><p class=adresse>` + html.EscapeString(raw) + `</p></details>`
 }
+
+// scanStart is „Stapel scannen“ with whom the stack is for (owner
+// 2026-10-28): the household's by default, or only the person's. The line
+// says honestly what „nur für mich“ keeps: admins see every document.
+func scanStart(r *http.Request) string {
+	if !scanPerson.MatchString(r.Header.Get("Remote-User")) { // no person to keep it for
+		return `<div class=knoepfe>` + scanButton("Stapel scannen", "start") + `</div>`
+	}
+	return `<form method=post action=` + ScannenPath + ` class=scan-start><input type=hidden name=tun value=start>` +
+		`<fieldset class=tagwahl><legend>Für wen?</legend><label class=tag><input type=radio name=fuer value=haushalt checked> Für den Haushalt</label>` +
+		`<label class=tag><input type=radio name=fuer value=mich> Nur für mich</label></fieldset>` +
+		`<p class=k>` + html.EscapeString(saysScanFuer) + `</p><button data-laeuft="Startet …">Stapel scannen</button></form>`
+}
+
+// saysScanFuer is what „nur für mich“ keeps a document from, and what not.
+const saysScanFuer = "„Nur für mich“ sehen die anderen in der Familie nicht. Wer die Box verwaltet (Admin), sieht trotzdem jedes Dokument."
 
 // scanButton is one order's button, a POST to /scannen; hausScript turns
 // a setup order's into „Sucht …“ the moment it is pressed.
@@ -616,6 +636,7 @@ func stackDetail(s laib.Stack, now time.Time, loc *time.Location) string {
 }
 
 const scanStyle = `<style>.scannen .zustand{margin:10px 0 0}.scannen .knoepfe{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 0}.scannen .knoepfe button{margin:0;width:auto}
+.scan-start .tagwahl{margin:8px 0 0}.scan-start .tagwahl legend{font-size:.85rem;color:var(--muted);margin-bottom:6px}.scan-start .tag{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 14px;border:1px solid var(--edge);border-radius:999px;margin:0}.scan-start .tagwahl{border:0;padding:0;display:flex;flex-wrap:wrap;gap:8px}
 .trennblatt{display:flex;flex-wrap:wrap;align-items:end;gap:8px;margin:8px 0 0}.trennblatt label{width:100%}.trennblatt input{width:6em;margin:0}.trennblatt button{margin:0;width:auto}
 .scannen h3{font-size:.85rem;margin:18px 0 0;color:var(--muted);font-weight:600}.stapel{margin:6px 0 0;padding:0;list-style:none}.stapel>li{padding:8px 0;border-top:1px solid var(--line)}
 .stapel ul{margin:4px 0 0;padding-left:18px}.stapel li li{font-size:.9rem;overflow-wrap:anywhere}

@@ -2,6 +2,7 @@ package pages
 
 import (
 	"encoding/json"
+	"html"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -106,7 +107,7 @@ func TestScannenAfterAJamSaysWhereToGoOn(t *testing.T) {
 func TestScannenOffersAStackOnlyWithAScanner(t *testing.T) {
 	for _, z := range []string{"bereit", "fertig", "fehler"} {
 		body := scanPage(t, &scanLaib{status: map[string]any{"zustand": z, "scanner": true}}, "family")
-		mustContain(t, body, `value=start><button>Stapel scannen</button>`)
+		mustContain(t, body, `data-laeuft="Startet …">Stapel scannen</button>`)
 		before(t, body, "Dokument ablegen", "<h2>Scannen</h2>")
 		body = scanPage(t, &scanLaib{status: map[string]any{"zustand": z, "scanner": false}}, "family")
 		mustNotContain(t, body, "Stapel scannen", "action=/scannen>")
@@ -446,7 +447,7 @@ func TestScannenSaysAStackIsDoneAgain(t *testing.T) {
 		"stapel": "2026-10-27T19-32-41", "ende": "nachholen", "quelle": "scanner", "seiten": 36,
 		"meldung": "Scan wartet: Das Trennen wird nachgeholt, sobald das Hausmodell wieder antwortet. Bis dahin liegt nichts davon in Paperless."}}}
 	body := scanPage(t, &scanLaib{status: st}, "family")
-	mustContain(t, body, "<b>Wird nachgeholt</b>", "Das Trennen wird nachgeholt, sobald das Hausmodell wieder antwortet.", `value=start><button>Stapel scannen</button>`)
+	mustContain(t, body, "<b>Wird nachgeholt</b>", "Das Trennen wird nachgeholt, sobald das Hausmodell wieder antwortet.", `data-laeuft="Startet …">Stapel scannen</button>`)
 	mustNotContain(t, body, "Kein Dokument", "Scan wartet:")
 }
 
@@ -465,4 +466,30 @@ func TestScannenSaysWhatTheEvaluationDid(t *testing.T) {
 	mustContain(t, scanPage(t, &scanLaib{status: st}, "admins"), "vertraege: Traceback")
 	delete(st, "auswertung") // an older Laib, or no run yet
 	mustNotContain(t, scanPage(t, &scanLaib{status: st}, "family"), "Verträge und Rechnungen")
+}
+
+// owner 2026-10-28: a stack is the household's by default, or only the
+// person's; the page says honestly that admins still see it; the order
+// carries the choice only for „nur für mich“, and only on start.
+func TestScannenFuerWen(t *testing.T) {
+	body := scanPage(t, &scanLaib{status: map[string]any{"zustand": "bereit", "scanner": true}}, "family")
+	mustContain(t, body, `<input type=radio name=fuer value=haushalt checked> Für den Haushalt`,
+		`<input type=radio name=fuer value=mich> Nur für mich`, html.EscapeString(saysScanFuer), `data-laeuft="Startet …">Stapel scannen</button>`)
+	f := &scanLaib{status: map[string]any{"zustand": "bereit", "scanner": true}}
+	_, cfg := dokumente(t)
+	cfg.Laib = f.client(t)
+	h := Scannen(cfg)
+	post(t, h, "/scannen", url.Values{"tun": {"start"}, "fuer": {"haushalt"}}, "anna", nil)
+	post(t, h, "/scannen", url.Values{"tun": {"start"}, "fuer": {"mich"}}, "anna", nil)
+	post(t, h, "/scannen", url.Values{"tun": {"weiter"}, "fuer": {"mich"}}, "anna", nil)
+	post(t, h, "/scannen", url.Values{"tun": {"start"}, "fuer": {"mich"}}, "Anna.M", nil)
+	want := []any{nil, "person", nil, nil}
+	for i, o := range f.orders {
+		if o["fuer"] != want[i] {
+			t.Errorf("order %d: %v", i, o)
+		}
+	}
+	if len(f.orders) != 4 || f.orders[1]["person"] != "anna" {
+		t.Fatalf("orders %v", f.orders)
+	}
 }
