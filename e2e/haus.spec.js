@@ -232,6 +232,19 @@ test('a phone access is made and removed on Box → Geräte', async ({ page }) =
   expect(await stays(page)).toBe(true);
 });
 
+// haus#176: the connection drops while a form is sent: the page says so and sends nothing twice
+test('a dropped connection is said, not sent again', async ({ page }) => {
+  await page.goto('/einkauf');
+  let posts = 0;
+  await page.route('**/einkauf', (r) => { if (r.request().method() === 'POST') { posts++; return r.abort('internetdisconnected'); } return r.continue(); });
+  await page.fill('input[name=was]', 'Milch');
+  await page.locator('input[name=was]').press('Enter');
+  await expect(page.locator('#haus-hinweis')).toContainText('Haus ist gerade nicht erreichbar');
+  expect(posts).toBe(1);
+  await page.locator('#haus-hinweis .zu').click();
+  await expect(page.locator('#haus-hinweis')).not.toHaveClass(/zeigt/);
+});
+
 test('a form in a card stacks its fields on a phone', async ({ page }) => {
   await page.goto('/kalender/verwalten');
   await page.locator('summary', { hasText: 'Neuen Kalender anlegen' }).click();
@@ -245,7 +258,7 @@ test('a form in a card stacks its fields on a phone', async ({ page }) => {
 // screen, a field to type in has room, a button is big enough for a
 // finger, and no text runs out of its box.
 const PAGES = ['/start', '/raeume', '/raeume/light.kueche', '/medien', '/energie', '/kalender', '/kalender/verwalten',
-  '/notizen', '/notizen?tag=kochen', '/notizen/einkaufsliste.md', '/notizen/einkaufsliste.md?bearbeiten=1', '/mehr', '/musik', '/platte', '/discogs', '/stimme', '/podcasts',
+  '/notizen', '/notizen?tag=kochen', '/notizen/einkaufsliste.md', '/notizen/einkaufsliste.md?bearbeiten=1', '/mehr', '/musik', '/platte', '/discogs', '/stimme', '/dokumente', '/willkommen', '/box/geraete', '/pair-device', '/podcasts',
   '/einkauf', '/einkauf?liste=liste-baumarkt', '/einkauf?liste=liste-musik', '/einkauf/rezepte', '/einkauf/rezepte?n=rezepte%2Flasagne.md', '/notizen/rezepte/lasagne.md'];
 for (const path of PAGES) {
   test(`layout of ${path}`, async ({ page }) => {
@@ -277,6 +290,11 @@ for (const path of PAGES) {
       return out;
     });
     expect(problems, `${path} on a phone`).toEqual([]);
+    // haus#176: every POST form names where it goes and says it runs (or is a switch)
+    const forms = await page.evaluate(() => [...document.querySelectorAll('form')].filter((f) => (f.getAttribute('method') || '').toLowerCase() === 'post')
+      .map((f) => { const b = f.querySelector('button'); return { a: f.getAttribute('action'), ok: !b || b.hasAttribute('data-laeuft') || b.getAttribute('role') === 'switch' || f.hasAttribute('data-ganz'), html: f.outerHTML.slice(0, 120) }; })
+      .filter((f) => !f.a || !f.ok));
+    expect(forms, `${path}: POST forms without an action or a running label`).toEqual([]);
   });
 }
 

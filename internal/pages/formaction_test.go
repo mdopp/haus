@@ -1,6 +1,7 @@
 package pages
 
 import (
+	"errors"
 	"regexp"
 	"strings"
 	"testing"
@@ -52,4 +53,22 @@ func TestPostFormsGoSomewhere(t *testing.T) {
 		}
 	}
 	mustContain(t, getAt(PairDevice(store, StartConfig{}), "/pair-device", "family"), "action=/pair-device data-ganz>")
+}
+
+// haus#176: an error a person reads is a sentence; anything technical goes to the log
+func TestFamilySentence(t *testing.T) {
+	for in, want := range map[string]string{
+		"Den Benutzer anna gibt es schon.":                                     "Den Benutzer anna gibt es schon.",
+		`laib: Post "http://127.0.0.1:5900/mcp": dial tcp: connection refused`: "F",
+		"store: write devices.json: no space left on device":                   "F",
+		"open /data/x: permission denied":                                      "F",
+		"Discogs kennt „Amore“ von Wanda nicht als Platte.":                    "Discogs kennt „Amore“ von Wanda nicht als Platte.",
+	} {
+		if got := familySentence("test", errors.New(in), "F"); got != want {
+			t.Errorf("%q → %q", in, got)
+		}
+	}
+	if s := hausScript; strings.Contains(s, "HTMLFormElement.prototype.submit") || strings.Contains(s, "7*sec") || !strings.Contains(s, "AbortController") {
+		t.Error("the script resubmits natively, hides its sentence by itself, or has no limit")
+	}
 }

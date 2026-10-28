@@ -111,7 +111,7 @@ func TestBoxComesAtOnceAndFillsItsParts(t *testing.T) {
 	boxPartWait = 100 * time.Millisecond
 	defer func() { boxPartWait = old }()
 	got = parts("stand")
-	mustContain(t, got["box-stand"], "<h1>Box</h1><p class=rot>Laib antwortet nicht")
+	mustContain(t, got["box-stand"], "<h1>Box</h1><p class=rot>"+saysLaibSilent)
 
 	// no such part; the family gets no part
 	if rec := boxAt(h, "/box/teil?was=geheim", "admins"); rec.Code != http.StatusNotFound {

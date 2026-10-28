@@ -47,7 +47,7 @@ var kalenderSaid = map[string]string{
 	"keine-google":   "Das ist nicht Googles „Geheime Adresse im iCal-Format“. Sie beginnt mit https://calendar.google.com/ und endet auf .ics.",
 	"kein-name":      "Bitte einen Namen eintragen.",
 	"gibt-es-schon":  "Einen Kalender mit diesem Namen gibt es schon.",
-	"nicht-moeglich": "Das ging gerade nicht. Später noch einmal versuchen; sonst weiß ein Admin in laib diag mehr.",
+	"nicht-moeglich": "Das ging gerade nicht. Später noch einmal versuchen; geht es dann wieder nicht, Bescheid sagen, wer die Box betreut.",
 	"kein-laib":      saysNoLaibCal,
 }
 

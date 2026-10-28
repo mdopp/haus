@@ -92,7 +92,7 @@ func operatorCard(ctx context.Context, c *laib.Client, now time.Time, loc *time.
 	skills, err := c.Skills(ctx)
 	if err != nil {
 		if !errors.Is(err, laib.ErrNoTool) && serr != nil {
-			return b.String() + "<p class=rot>Laib antwortet nicht: " + html.EscapeString(err.Error()) + "</p>"
+			return b.String() + "<p class=rot>" + saysLaibSilent + "</p>" + einzelheiten(err.Error())
 		}
 		b.WriteString("<p class=k>" + html.EscapeString(saysSkillsNoList) + "</p>")
 		skills = nil

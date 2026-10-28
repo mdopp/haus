@@ -175,7 +175,7 @@ func Einkauf(cfg StartConfig) http.HandlerFunc {
 					if errors.As(err, &de) {
 						http.Error(w, discogsSays(err), http.StatusBadGateway)
 					} else {
-						http.Error(w, err.Error(), http.StatusConflict)
+						http.Error(w, familySentence("einkauf: wantlist", err, "Das ging gerade nicht. Versuch es gleich noch einmal."), http.StatusConflict)
 					}
 					return
 				}

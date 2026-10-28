@@ -31,7 +31,7 @@ func PairDevice(store *devices.Store, family StartConfig) http.HandlerFunc {
 		r.ParseForm()
 		d, tok, err := store.Mint(r.Form.Get("name"), user)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			http.Error(w, familySentence("pair", err, "Die Kopplung ließ sich gerade nicht anlegen. Versuch es noch einmal."), http.StatusInternalServerError)
 			return
 		}
 		// Location set by hand: the app's intent filter matches …://pair exactly.

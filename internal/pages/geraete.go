@@ -39,7 +39,7 @@ func Geraete(store *devices.Store, publicURL string, family StartConfig) http.Ha
 			}
 			d, tok, err := store.Mint(r.Form.Get("name"), user)
 			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+				http.Error(w, familySentence("geraete", err, "Der Zugang ließ sich gerade nicht anlegen. Versuch es noch einmal."), http.StatusInternalServerError)
 				return
 			}
 			qr := app.Scheme + "://setup?server=" + url.QueryEscape(origin) + "&token=" + url.QueryEscape(tok)

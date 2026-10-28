@@ -16,6 +16,7 @@ import (
 	"flag"
 	"github.com/mdopp/haus/internal/devices"
 	"github.com/mdopp/haus/internal/discogs"
+	"github.com/mdopp/haus/internal/napi"
 	"log"
 	"net/http"
 	"os"
@@ -131,6 +132,14 @@ func main() {
 	mux.HandleFunc(pages.MusikPath, pages.Musik(cfg))
 	mux.HandleFunc(pages.PlattePath, pages.Platte(cfg))
 	mux.HandleFunc(pages.StimmePath, pages.Stimme(cfg))
+	// haus#176: the phone layout gate covers these too
+	upload := filepath.Join(dir, "upload")
+	os.MkdirAll(upload, 0o755)
+	doku := cfg
+	doku.Ablage, doku.DocumentsMail = napi.NewUploads(upload), "dokumente@example.org"
+	mux.HandleFunc("/dokumente", pages.Dokumente(doku))
+	mux.HandleFunc("/willkommen", pages.Willkommen(cfg))
+	mux.HandleFunc("/sprechen", pages.Sprechen(cfg))
 	if store, err := devices.Open(dir); err == nil { // haus#172: pairing and removing a phone, end to end
 		mux.HandleFunc("/box/geraete", pages.Geraete(store, "https://haus.example", cfg))
 		mux.HandleFunc("/pair-device", pages.PairDevice(store, cfg))

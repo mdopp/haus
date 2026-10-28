@@ -214,7 +214,7 @@ func inviteProblem(err error) string {
 	for _, p := range []string{"laib person_invite: ", "laib: "} {
 		msg = strings.TrimPrefix(msg, p)
 	}
-	return "Nicht eingeladen: " + msg
+	return "Nicht eingeladen: " + familySentence("einladen", errors.New(msg), "Laib hat gerade nicht geantwortet. Versuch es gleich noch einmal.")
 }
 
 const inviteStyle = `<style>.einladen label{display:block;margin:.6rem 0 .15rem}.einladen input,.einladen select{font:inherit;width:100%;max-width:26rem;padding:.35rem .5rem;border:1px solid #c9c3b6;border-radius:.4rem;background:#fff;box-sizing:border-box}
