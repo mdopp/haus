@@ -210,8 +210,8 @@ func aufgabenCard(ctx context.Context, c *laib.Client, now time.Time, said, prob
 		case 2:
 			meta += " · erinnert am " + day(a.Erinnern)
 		}
-		if a.Befund != "" {
-			meta += " · Laib hakt sie selbst ab, wenn der Befund (" + html.EscapeString(a.Befund) + ") weg ist"
+		if a.Wann() != "" {
+			meta += " · Laib hakt sie selbst ab, wenn der Befund (" + html.EscapeString(a.Wann()) + ") weg ist"
 		}
 		b.WriteString("<span class=wann>" + meta + "</span><div class=aufgabe-tun>")
 		b.WriteString(`<form method=post action=` + AufgabenPath + `><input type=hidden name=tun value=erledigt><input type=hidden name=id value=` + id +

@@ -115,7 +115,7 @@ func tabOf(page string) string {
 func shows(r *http.Request, cfg StartConfig) map[string]bool {
 	return map[string]bool{"Start": true, "Geräte": cfg.HA != nil, "Haushalt": cfg.Calendar != nil || cfg.Einkauf != nil || cfg.Notes != nil, "Mehr": true, "Einkauf": cfg.Einkauf != nil,
 		"Energie": cfg.HA != nil, "Kalender": cfg.Calendar != nil, "Notizen": cfg.Notes != nil, "Dokumente": cfg.hasDocs(),
-		"Apps einrichten": cfg.Laib != nil || cfg.Samba != nil, "Musik": cfg.MusicInbox != "", "Podcasts": cfg.Podcasts != nil, "Aufgaben": r.Header.Get("Remote-User") != "" && len(einrichtung(r, cfg)) > 0,
+		"Apps einrichten": cfg.Laib != nil || cfg.Samba != nil, "Musik": cfg.MusicInbox != "", "Podcasts": cfg.Podcasts != nil, "Aufgaben": r.Header.Get("Remote-User") != "" && (cfg.Laib != nil || len(einrichtung(r, cfg)) > 0),
 		// Platte erfassen and Discogs live on Musik (owner 2026-10-26); on their own only on a box without it
 		"Platte erfassen": cfg.Discogs != nil && cfg.MusicInbox == "", "Discogs": (cfg.Discogs != nil || cfg.Wuensche != nil) && cfg.MusicInbox == "" && r.Header.Get("Remote-User") != "",
 		"Netzlaufwerk": cfg.Samba != nil && r.Header.Get("Remote-User") != "", "Box": isAdmin(r)}

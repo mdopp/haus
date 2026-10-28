@@ -732,12 +732,29 @@ type Aufgabe struct {
 	Seit     string `json:"seit"`
 	Von      string `json:"von"`
 	Erinnern string `json:"erinnern,omitempty"`
-	Befund   string `json:"befund,omitempty"` // "<probe> [<topic>]": Laib closes it itself when the finding is gone
+	Befund   string `json:"befund,omitempty"` // an older Laib's name of FertigWenn
+	// laib#878: for whom (admins, alle, person:<login>), the way through it
+	// (a Haus page, or a conversation with the Bote), and the finding whose
+	// going closes it ("<probe> [<topic>]")
+	Fuer string `json:"fuer,omitempty"`
+	Weg  *struct {
+		Seite     string `json:"seite,omitempty"`
+		Gespraech bool   `json:"gespraech,omitempty"`
+	} `json:"weg,omitempty"`
+	FertigWenn string `json:"fertig_wenn,omitempty"`
 	Erledigt *struct {
 		Am  string `json:"am"`
 		Von string `json:"von"`
 		Wie string `json:"wie,omitempty"`
 	} `json:"erledigt,omitempty"`
+}
+
+// Wann is the finding whose going closes it, from either Laib.
+func (a Aufgabe) Wann() string {
+	if a.FertigWenn != "" {
+		return a.FertigWenn
+	}
+	return a.Befund
 }
 
 // Aufgaben is the box's to-do list: how many are open, how many due.
@@ -748,6 +765,17 @@ type Aufgaben struct {
 }
 
 // BoxAufgaben lists the Box-Aufgaben, the done ones too (haus#115).
+// MeineAufgaben are the tasks a person sees (laib#878): the admins', the
+// household's and their own, open and done; Haus decides who sees the admins'.
+func (c *Client) MeineAufgaben(ctx context.Context, von string) (Aufgaben, error) {
+	var out Aufgaben
+	text, err := c.CallTyped(ctx, "aufgabe", map[string]any{"action": "list", "alle": true, "von": von})
+	if err != nil {
+		return out, err
+	}
+	return out, decodeJSON("aufgabe", text, &out)
+}
+
 func (c *Client) BoxAufgaben(ctx context.Context) (Aufgaben, error) {
 	var out Aufgaben
 	text, err := c.CallTyped(ctx, "aufgabe", map[string]any{"action": "list", "alle": true})

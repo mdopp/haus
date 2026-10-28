@@ -1,6 +1,11 @@
 package pages
 
 import (
+	"encoding/json"
+	"github.com/mdopp/haus/internal/bote"
+	"github.com/mdopp/haus/internal/laib"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -55,4 +60,46 @@ func TestEinrichtungKommtUndGeht(t *testing.T) {
 
 	_, body, _ = familyPage(t, DeineAufgaben, cfg, "GET", aufgabenPath, "family")
 	mustContain(t, body, "<h1>Deine Aufgaben</h1>", "Alles eingerichtet.", "<h2 id=karte-erledigt>Erledigt</h2>", "Noch einmal: Fünfmal „Hey Joshua“", `<a href="/discogs">Discogs verbinden</a>`)
+}
+
+// laib#878: Laib's tasks for the person and the household join Einrichtung
+// (the admins' stay on Box); one with a Haus page leads there, one done
+// together with the Bote has „Gemeinsam mit Joshua“
+func TestEinrichtungMitLaibsAufgaben(t *testing.T) {
+	old := House
+	House = persona.Persona{Display: "Joshua"}
+	t.Cleanup(func() { House = old })
+	var asked map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Params struct {
+				Name string         `json:"name"`
+				Args map[string]any `json:"arguments"`
+			} `json:"params"`
+		}
+		json.NewDecoder(r.Body).Decode(&req)
+		text := "[]"
+		if req.Params.Name == "laib_aufgabe" {
+			asked = req.Params.Args
+			text = `{"offen":4,"faellig":0,"aufgaben":[
+ {"id":7,"titel":"Strato-Eintrag für fotos setzen","warum":"Ohne ihn ist Immich von außen nicht erreichbar.","fuer":"person:anna","weg":{"gespraech":true},"fertig_wenn":"route photos"},
+ {"id":8,"titel":"Haus-App koppeln","fuer":"alle","weg":{"seite":"/willkommen"}},
+ {"id":9,"titel":"RAID prüfen","fuer":"admins"},
+ {"id":10,"titel":"Bens Sache","fuer":"person:ben"},
+ {"id":11,"titel":"Alte Aufgabe","fuer":"person:anna","erledigt":{"am":"2026-10-27","von":"laib","wie":"Befund weg"}}]}`
+		}
+		json.NewEncoder(w).Encode(map[string]any{"result": map[string]any{"content": []map[string]string{{"text": text}}}})
+	}))
+	t.Cleanup(srv.Close)
+	cfg := StartConfig{Laib: &laib.Client{URL: srv.URL, Token: "t"}, Bote: &bote.Client{}}
+	_, body, _ := familyPage(t, Mehr, cfg, "GET", mehrPath, "family")
+	if asked["von"] != "anna" || asked["action"] != "list" {
+		t.Errorf("laib asked %v", asked)
+	}
+	mustContain(t, body, `<a href="/aufgaben#aufgabe-7">Strato-Eintrag für fotos setzen</a>`, `<a href="/willkommen">Haus-App koppeln</a>`)
+	mustNotContain(t, body, "RAID prüfen", "Bens Sache", "Alte Aufgabe")
+	_, body, _ = familyPage(t, DeineAufgaben, cfg, "GET", aufgabenPath, "family")
+	mustContain(t, body, `<section class=karte id=aufgabe-7><h2>Strato-Eintrag für fotos setzen</h2>`,
+		`<input type=hidden name=nachricht value="Aufgabe #7 mit dir erledigen"><button data-laeuft="Fragt Joshua …">Gemeinsam mit Joshua</button>`,
+		"<h2 id=karte-erledigt>Erledigt</h2>", "Alte Aufgabe")
 }

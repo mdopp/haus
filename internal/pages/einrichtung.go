@@ -1,12 +1,16 @@
 package pages
 
 import (
+	"context"
+	"errors"
 	"html"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
 
 	"github.com/mdopp/haus/internal/cards"
+	"github.com/mdopp/haus/internal/laib"
 )
 
 // Einrichtung (haus#188; owner 2026-10-28: „es gibt häufige/regelmäßige und
@@ -22,8 +26,63 @@ type aufgabe struct {
 	titel, warum string
 	stand        string // how far, „2 von 5 Aufnahmen“; "" for none
 	href         string // the page that leads through it
+	gespraech    int    // a Box-Aufgabe done together with the Bote: its id (laib#878)
 	wichtig      bool   // security and access before the optional
 	erledigt     bool
+}
+
+// mitLaib are the person's tasks with Laib's own for them (laib#878): the
+// household's and theirs; the admins' stay on Box. Laib away: Haus's own.
+func mitLaib(r *http.Request, cfg StartConfig) []aufgabe {
+	as := einrichtung(r, cfg)
+	user := r.Header.Get("Remote-User")
+	if cfg.Laib == nil || user == "" {
+		return as
+	}
+	var la laib.Aufgaben
+	var err error
+	fetch(r, func(ctx context.Context) { la, err = cfg.Laib.MeineAufgaben(ctx, user) })
+	if err != nil {
+		if !errors.Is(err, laib.ErrNoTool) {
+			log.Printf("haus: einrichtung: laib: %v", err)
+		}
+		return as
+	}
+	var mine []aufgabe
+	for _, t := range la.Aufgaben {
+		own := t.Fuer == "person:"+user
+		if !own && t.Fuer != "alle" {
+			continue
+		}
+		a := aufgabe{titel: t.Titel, warum: t.Warum, wichtig: own, erledigt: t.Erledigt != nil}
+		if t.Weg != nil && strings.HasPrefix(t.Weg.Seite, "/") && !strings.HasPrefix(t.Weg.Seite, "//") {
+			a.href = t.Weg.Seite
+		}
+		if t.Weg != nil && t.Weg.Gespraech && cfg.Bote != nil {
+			a.gespraech = t.ID
+		}
+		if a.href == "" {
+			a.href = aufgabenPath + "#aufgabe-" + strconv.Itoa(t.ID)
+		}
+		mine = append(mine, a)
+	}
+	all := append(mine, as...)
+	var wichtig, rest []aufgabe
+	for _, a := range all {
+		if a.wichtig {
+			wichtig = append(wichtig, a)
+		} else {
+			rest = append(rest, a)
+		}
+	}
+	return append(wichtig, rest...)
+}
+
+// mitJoshua is a task's „Gemeinsam mit <persona>“: the Sprechen field's
+// post, the Bote reads the task and leads through it (laib#878).
+func mitJoshua(id int) string {
+	return `<form method=post action=/sprechen><input type=hidden name=nachricht value="Aufgabe #` + strconv.Itoa(id) + ` mit dir erledigen">` +
+		`<button data-laeuft="Fragt ` + html.EscapeString(House.Display) + ` …">Gemeinsam mit ` + html.EscapeString(House.Display) + `</button></form>`
 }
 
 // einrichtung are the person's tasks this box has, the important first.
@@ -79,7 +138,7 @@ func offen(as []aufgabe) []aufgabe {
 
 // einrichtungKarte is Mehr's „Einrichtung“: the open tasks only; none, no card.
 func einrichtungKarte(r *http.Request, cfg StartConfig) string {
-	open := offen(einrichtung(r, cfg))
+	open := offen(mitLaib(r, cfg))
 	if len(open) == 0 {
 		return ""
 	}
@@ -100,7 +159,7 @@ func einrichtungKarte(r *http.Request, cfg StartConfig) string {
 // einrichtungZeile is Start's quiet line while an important task is open.
 func einrichtungZeile(r *http.Request, cfg StartConfig) string {
 	var wichtig []string
-	for _, a := range offen(einrichtung(r, cfg)) {
+	for _, a := range offen(einrichtung(r, cfg)) { // Haus's own only: Start never waits for Laib (haus#67)
 		if a.wichtig {
 			wichtig = append(wichtig, a.titel)
 		}
@@ -122,7 +181,7 @@ func DeineAufgaben(cfg StartConfig) http.HandlerFunc {
 		if !showOnly(w, r, "Deine Aufgaben") {
 			return
 		}
-		as := einrichtung(r, cfg)
+		as := mitLaib(r, cfg)
 		b := familyHead(r, cfg, "Deine Aufgaben", "Aufgaben")
 		b.WriteString("<h1>Deine Aufgaben</h1><p class=k>Was du einmal einrichtest. Ist es erledigt, verschwindet es aus Mehr; hier kannst du es noch einmal machen.</p>")
 		if len(as) == 0 {
@@ -143,6 +202,15 @@ func DeineAufgaben(cfg StartConfig) http.HandlerFunc {
 		}
 		if len(open.Rows) > 0 {
 			b.WriteString(open.HTML())
+			for _, a := range as { // a task done together with the Bote: its button (laib#878)
+				if !a.erledigt && a.gespraech > 0 {
+					b.WriteString(`<section class=karte id=aufgabe-` + strconv.Itoa(a.gespraech) + `><h2>` + html.EscapeString(a.titel) + `</h2>`)
+					if a.warum != "" {
+						b.WriteString(`<p class=k>` + html.EscapeString(a.warum) + `</p>`)
+					}
+					b.WriteString(`<p>` + html.EscapeString(House.Display) + ` führt dich Schritt für Schritt hindurch und prüft am Ende, ob es geklappt hat.</p>` + mitJoshua(a.gespraech) + `</section>`)
+				}
+			}
 		} else if len(as) > 0 {
 			b.WriteString("<p class=k>Alles eingerichtet.</p>")
 		}
