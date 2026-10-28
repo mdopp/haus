@@ -47,7 +47,7 @@ var kalenderSaid = map[string]string{
 	"keine-google":   "Das ist nicht Googles „Geheime Adresse im iCal-Format“. Sie beginnt mit https://calendar.google.com/ und endet auf .ics.",
 	"kein-name":      "Bitte einen Namen eintragen.",
 	"gibt-es-schon":  "Einen Kalender mit diesem Namen gibt es schon.",
-	"nicht-moeglich": "Das ging gerade nicht. Später noch einmal versuchen; sonst weiß ein Admin in laib diag mehr.",
+	"nicht-moeglich": "Das ging gerade nicht. Später noch einmal versuchen; geht es dann wieder nicht, Bescheid sagen, wer die Box betreut.",
 	"kein-laib":      saysNoLaibCal,
 }
 
@@ -185,7 +185,7 @@ func KalenderVerwalten(cfg StartConfig) http.HandlerFunc {
 			p := aboPath(a)
 			if !seen[p] && (a.Person == me || a.Person == cfg.Calendar.User) {
 				b.WriteString("<li><div><strong>" + html.EscapeString(cmpOr(a.Title, a.Name)) + "</strong> <span class=k>verbunden " + sinceWords(a.Since, now, loc) + ", wird gerade zum ersten Mal abgeglichen</span></div>" +
-					changeForm(p, "", "<button name=tu value=trennen>Trennen</button>") + "</li>")
+					changeForm(p, "", "<button name=tu value=trennen data-laeuft=\"Trennt …\">Trennen</button>") + "</li>")
 			}
 		}
 		b.WriteString("</ul></section>")
@@ -299,18 +299,18 @@ func calendarRow(cfg StartConfig, k caldav.Calendar, view ansicht.One, abo *laib
 		}
 		actions.WriteString(`<option value="` + c.Hex + `"` + sel + ">" + c.Name + "</option>")
 	}
-	actions.WriteString("</select></label><button name=tu value=farbe>Farbe setzen</button>")
+	actions.WriteString("</select></label><button name=tu value=farbe data-laeuft=\"Setzt …\">Farbe setzen</button>")
 	if view.Shows(k.Path) {
-		actions.WriteString("<button name=tu value=aus>Ausblenden</button>")
+		actions.WriteString("<button name=tu value=aus data-laeuft=\"Blendet aus …\">Ausblenden</button>")
 	} else {
-		actions.WriteString("<button name=tu value=ein>Einblenden</button>")
+		actions.WriteString("<button name=tu value=ein data-laeuft=\"Blendet ein …\">Einblenden</button>")
 	}
 	switch {
 	case k.ReadOnly() && abo != nil:
 		actions.WriteString("<label>Abgleichen " + everySelect(everyOf(*abo)) + "</label><button name=tu value=abstand data-laeuft=\"Speichert …\">Abstand ändern</button>")
-		actions.WriteString("<details><summary>Trennen…</summary><button name=tu value=trennen>Ja, „" + html.EscapeString(k.Name) + "“ trennen</button></details>")
+		actions.WriteString("<details><summary>Trennen…</summary><button name=tu value=trennen data-laeuft=\"Trennt …\">Ja, „" + html.EscapeString(k.Name) + "“ trennen</button></details>")
 	case k.Kind == "familie" || k.Kind == "privat":
-		actions.WriteString("<details><summary>Löschen…</summary><button name=tu value=loeschen>Ja, „" + html.EscapeString(k.Name) + "“ mit allen Terminen löschen</button></details>")
+		actions.WriteString("<details><summary>Löschen…</summary><button name=tu value=loeschen data-laeuft=\"Löscht …\">Ja, „" + html.EscapeString(k.Name) + "“ mit allen Terminen löschen</button></details>")
 	}
 	b.WriteString(changeForm(k.Path, k.Name, actions.String()))
 	if app := (App{"Radicale", cfg.RadicalePublicURL}); app.Set() {
@@ -349,7 +349,7 @@ func addCard(canSubscribe bool) string {
 		b.WriteString("<p class=k>" + saysNoLaibCal + "</p>")
 	}
 	b.WriteString("<details><summary>Neuen Kalender anlegen</summary><form method=post action=" + kalenderAdd + " class=eingabe><input type=hidden name=weg value=neu>" +
-		"<label>Name <input name=name maxlength=60 required></label>" + forWhom() + "<button>Anlegen</button></form></details></section>")
+		"<label>Name <input name=name maxlength=60 required></label>" + forWhom() + "<button data-laeuft=\"Legt an …\">Anlegen</button></form></details></section>")
 	return b.String()
 }
 

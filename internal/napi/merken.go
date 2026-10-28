@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -125,7 +126,7 @@ func (c Config) merken(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, merken.ErrNoAnswer): // with its reason (merken.NoAnswer)
 			code = http.StatusBadGateway
 		case errors.Is(err, context.DeadlineExceeded):
-			code, err = http.StatusGatewayTimeout, errors.New("Haus hat länger als "+merkenWait.String()+" gebraucht und aufgegeben. Später noch einmal teilen.")
+			code, err = http.StatusGatewayTimeout, errors.New("Haus hat länger als "+waitWords(merkenWait)+" gebraucht und aufgegeben. Später noch einmal teilen.")
 		case errors.Is(err, merken.ErrNoAddress), errors.Is(err, merken.ErrPrivate):
 		default:
 			log.Printf("haus: napi merken: %v", err)
@@ -140,4 +141,16 @@ func (c Config) merken(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("haus: napi merken: %s (%s)", got.Name, got.Art)
 	answer(http.StatusOK, map[string]any{"titel": got.Titel, "art": got.Art, "kurz": got.Kurz, "schon": got.Schon, "aktualisiert": got.Aktualisiert, "teilweise": got.Teilweise, "notiz": note})
+}
+
+// waitWords is a wait as a person says it: „30 Sekunden“, „einer Minute“, „2 Minuten“ (haus#176: no Go duration).
+func waitWords(d time.Duration) string {
+	switch s := int(d.Round(time.Second) / time.Second); {
+	case s < 60:
+		return strconv.Itoa(s) + " Sekunden"
+	case s < 120:
+		return "einer Minute"
+	default:
+		return strconv.Itoa((s+30)/60) + " Minuten"
+	}
 }

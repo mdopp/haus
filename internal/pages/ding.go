@@ -141,7 +141,7 @@ func star(id string, favs []string, err error) string {
 		}
 	}
 	return `<section class=stern><form method=post action="` + html.EscapeString(cards.ThingPage(id)) + `"><input type=hidden name=stern value=` + value +
-		"><button>" + label + "</button></form><p class=k>" + says + "</p></section>"
+		"><button data-laeuft=\"Merkt …\">" + label + "</button></form><p class=k>" + says + "</p></section>"
 }
 
 // pin is the ☆'s POST: the person's own list only, only from Haus's own

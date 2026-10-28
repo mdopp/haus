@@ -214,7 +214,7 @@ func boxPart(ctx context.Context, r *http.Request, cfg BoxConfig, part string, i
 	case "stand":
 		ready, rows, err := c.Status(ctx)
 		if err != nil {
-			return map[string]string{"box-stand": "<h1>Box</h1><p class=rot>Laib antwortet nicht: " + html.EscapeString(err.Error()) + "</p>", "box-dienste": ""}
+			return map[string]string{"box-stand": "<h1>Box</h1><p class=rot>" + saysLaibSilent + "</p>" + einzelheiten(err.Error()), "box-dienste": ""}
 		}
 		var b strings.Builder
 		// the three guarantees, for everyone in the family (haus#2)
@@ -447,7 +447,7 @@ func trim(s string, n int) string {
 // journal note of kind report. No report is said plainly.
 func morningReport(es []laib.Entry, err error) string {
 	if err != nil {
-		return "<h2>Morgenbericht</h2><p class=rot>Laib antwortet nicht: " + html.EscapeString(err.Error()) + "</p>"
+		return "<h2>Morgenbericht</h2><p class=rot>" + saysLaibSilent + "</p>" + einzelheiten(err.Error())
 	}
 	for i := len(es) - 1; i >= 0; i-- {
 		if e := es[i]; e.Verb == "note" && e.Reason == "report" {

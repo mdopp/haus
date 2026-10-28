@@ -299,7 +299,7 @@ func (a *Action) form() string {
 	if a.Switch {
 		b.WriteString(`<button class=schalter role=switch aria-checked=` + strconv.FormatBool(a.On) + ` aria-label="` + html.EscapeString(a.Label) + `"></button>`)
 	} else {
-		b.WriteString("<button>" + html.EscapeString(a.Label) + "</button>")
+		b.WriteString(`<button data-laeuft="Schaltet …">` + html.EscapeString(a.Label) + "</button>")
 	}
 	b.WriteString("</form>")
 	return b.String()
@@ -328,7 +328,7 @@ func (p *Pin) form() string {
 	}
 	return `<form method=post action="` + html.EscapeString(ThingPage(p.Entity)) + `"><input type=hidden name=stern value=` + value +
 		`><input type=hidden name=zurueck value="` + html.EscapeString(p.Back) + `"><button class="anheften` + map[bool]string{true: " an"}[p.On] +
-		`" aria-label="` + html.EscapeString(p.Name+says) + `">` + star + "</button></form>"
+		`" data-laeuft="…" aria-label="` + html.EscapeString(p.Name+says) + `">` + star + "</button></form>"
 }
 
 // Style is the cards' CSS, for a page's head: the house palette's
