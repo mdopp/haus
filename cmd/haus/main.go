@@ -70,6 +70,7 @@ type site struct {
 	welcome     bool            // haus#56: Start sends a device's first visit to /willkommen
 	stt         pages.STT       // haus#63: the Sprechen field's microphone through HA's speech-to-text; no provider, no microphone
 	haPublic    string          // haus#64: Home Assistant's public address, Geräte's "In Home Assistant öffnen"; empty, no link
+	gesundheit  string          // haus#192: the Gesundheit program's address, a card on Mehr; empty, no card
 	inverted    map[string]bool // haus#64: covers wired the wrong way round, shown and set turned over
 	radicale    string          // haus#66: Radicale's public address, its web page and the phones' CalDAV addresses; empty, none
 	views       *ansicht.Store  // haus#66: each person's calendar colours and hidden calendars
@@ -96,7 +97,7 @@ func routes(s site) http.Handler {
 	family := pages.StartConfig{Podcasts: s.podcasts, Laib: s.ops, Witness: s.napi.Witness, LaibURL: s.laibURL, HA: s.napi.HA, Energy: s.napi.Energy, Calendar: s.hh.Calendar, Contacts: s.hh.Contacts,
 		Notes: s.hh.Notes, Library: s.hh.Library, Judge: s.hh.Judge, Docs: s.hh.Documents, Loc: s.hh.Loc, Favorites: s.favorites, Bote: s.bote,
 		Samba: s.samba, SambaHost: s.sambaHost, Usage: s.usage, PublicURL: s.publicURL, Welcome: s.welcome, STT: s.stt,
-		HAPublicURL: s.haPublic, Inverted: s.inverted, RadicalePublicURL: s.radicale, Views: s.views,
+		HAPublicURL: s.haPublic, Inverted: s.inverted, RadicalePublicURL: s.radicale, Views: s.views, GesundheitURL: s.gesundheit,
 		DocumentsMail: s.docsMail, PaperlessPublicURL: s.paperlessPublic, PaperlessLANOnly: s.paperlessLAN}
 	// the lists, the music wish list and the shelf, before any page takes its copy of family
 	family.Einkauf, family.Wuensche = s.hh.Einkauf, s.hh.Wuensche
@@ -356,6 +357,10 @@ func main() {
 			log.Printf("haus: HAUS_UPLOAD_DIR: sweeping staged parts: %v", err)
 		}
 	}
+	gesundheit := pages.AppURL(pages.OnDomain(os.Getenv("HAUS_GESUNDHEIT_URL"), os.Getenv("HAUS_PUBLIC_URL"))) // haus#192
+	if gesundheit == "" && os.Getenv("HAUS_GESUNDHEIT_URL") != "" {
+		log.Printf("haus: HAUS_GESUNDHEIT_URL %q is no address on the house's domain: no Gesundheit card", os.Getenv("HAUS_GESUNDHEIT_URL"))
+	}
 	haPublic := pages.AppURL(pages.OnDomain(os.Getenv("HAUS_HA_PUBLIC_URL"), os.Getenv("HAUS_PUBLIC_URL"))) // haus#64
 	if haPublic == "" && os.Getenv("HAUS_HA_PUBLIC_URL") != "" {
 		log.Printf("haus: HAUS_HA_PUBLIC_URL %q is not an http(s) address: no link to Home Assistant", os.Getenv("HAUS_HA_PUBLIC_URL"))
@@ -399,8 +404,8 @@ func main() {
 		publicURL: os.Getenv("HAUS_PUBLIC_URL"), tickets: werkstatt.FromEnv(), favorites: favoriten.Open(dataDir), bote: b, podcasts: pods,
 		samba: samba.FromEnv(), sambaHost: os.Getenv("HAUS_SAMBA_HOST"),
 		usage: counter, voice: voice, welcome: true,
-		stt:      pages.STT{Provider: os.Getenv("HAUS_STT_PROVIDER"), Language: env("HAUS_STT_LANGUAGE", "de")},
-		haPublic: haPublic, inverted: pages.InvertedFromList(os.Getenv("HAUS_COVER_INVERTED")),
+		stt:        pages.STT{Provider: os.Getenv("HAUS_STT_PROVIDER"), Language: env("HAUS_STT_LANGUAGE", "de")},
+		gesundheit: gesundheit, haPublic: haPublic, inverted: pages.InvertedFromList(os.Getenv("HAUS_COVER_INVERTED")),
 		radicale: radicalePublic, views: ansicht.Open(dataDir), dataDir: dataDir,
 		docsMail: docsMail, paperlessPublic: paperlessPublic, paperlessLAN: paperlessLAN})
 	addr := env("HAUS_LISTEN", "127.0.0.1:8650")
