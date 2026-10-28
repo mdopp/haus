@@ -84,7 +84,7 @@ type StartConfig struct {
 	DocumentsMail      string
 	Ablage             *napi.Uploads
 	Papierkorb         *papierkorb.Korb // what the family deleted, for 30 days (haus#174); nil: deletes go at once
-	BoteSignal         string // the house's Signal number (HAUS_BOTE_SIGNAL, +49…): Willkommen's „… auf Signal“ (haus#175); "": no card
+	BoteSignal         string           // the house's Signal number (HAUS_BOTE_SIGNAL, +49…): Willkommen's „… auf Signal“ (haus#175); "": no card
 	WakeRecordings     string           // where the family's takes of the wake phrase go (laib#828); "": no Stimme page
 	MusicInbox         string           // laib's music inbox, which beets sorts in (haus#107); "": no Musik hinzufügen
 	PaperlessPublicURL string

@@ -2,10 +2,12 @@ package pages
 
 import (
 	"fmt"
+	"github.com/mdopp/haus/internal/papierkorb"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -491,5 +493,45 @@ func TestNotizenSaysWhenDocumentsDoNotAnswer(t *testing.T) {
 		mustContain(t, body, `<a href="/notizen/rezepte/apfelkuchen.md">Apfelkuchen</a>`)
 		mustNotContain(t, body, "Stromvertrag", "Dokumente zu", saysNoNotes)
 		mustNotLeak(t, body, p.URL, "Paperless", "qmd", "refused")
+	}
+}
+
+// haus#183: a note is deleted on its page, asked first; it waits 30 days in the
+// Papierkorb, with Rückgängig on Notizen; a note changed meanwhile stays
+func TestNotizLoeschenUndZurueck(t *testing.T) {
+	root, nd := shelf(t)
+	now := time.Date(2026, 10, 28, 9, 0, 0, 0, time.UTC)
+	cfg := StartConfig{Notes: nd, Papierkorb: &papierkorb.Korb{Dir: t.TempDir(), Now: func() time.Time { return now }}}
+	_, body, _ := familyPage(t, Notizen, cfg, "GET", "/notizen/packliste.md", "family")
+	mustContain(t, body, `data-frage="Die Notiz „Packliste“ löschen? Sie bleibt 30 Tage im Papierkorb."><input type=hidden name=tun value=loeschen>`, `data-laeuft="Löscht …">Notiz löschen</button>`)
+	stand := regexp.MustCompile(`name=stand value=(\d+)>`).FindStringSubmatch(body)[1]
+
+	if rec := post(t, Notizen(cfg), "/notizen/packliste.md", url.Values{"tun": {"loeschen"}, "stand": {"1"}}, "anna", nil); rec.Code != http.StatusConflict {
+		t.Errorf("an old stand → %d", rec.Code)
+	}
+	rec := post(t, Notizen(cfg), "/notizen/packliste.md", url.Values{"tun": {"loeschen"}, "stand": {stand}}, "anna", nil)
+	loc := rec.Header().Get("Location")
+	if rec.Code != http.StatusSeeOther || !strings.HasPrefix(loc, "/notizen?gesagt=geloescht&korb=") {
+		t.Fatalf("loeschen → %d %q %s", rec.Code, loc, rec.Body)
+	}
+	if _, err := os.Stat(filepath.Join(root, "packliste.md")); err == nil {
+		t.Fatal("still there")
+	}
+	_, body, _ = familyPage(t, Notizen, cfg, "GET", loc, "family")
+	mustContain(t, body, "Die Notiz ist gelöscht.", "„Packliste“ <small class=k>bis 27.11.", "name=tun value=zurueckholen>", "Gelöscht, noch 30 Tage zurückzuholen")
+	id := loc[strings.Index(loc, "korb=")+5:]
+	if e, err := cfg.Papierkorb.Holen("notiz", id); err != nil || !strings.Contains(string(e.Daten), "Zahnbürste") {
+		t.Fatalf("in the Papierkorb: %s %v", e.Daten, err)
+	}
+
+	rec = post(t, Notizen(cfg), "/notizen", url.Values{"tun": {"zurueckholen"}, "id": {id}}, "anna", nil)
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/notizen/packliste.md?gesagt=zurueck" {
+		t.Fatalf("zurueckholen → %d %q %s", rec.Code, rec.Header().Get("Location"), rec.Body)
+	}
+	if b, err := os.ReadFile(filepath.Join(root, "packliste.md")); string(b) != "# Packliste\n\nZahnbürste\n" {
+		t.Fatalf("back as it was? %q %v", b, err)
+	}
+	if rec := post(t, Notizen(cfg), "/notizen", url.Values{"tun": {"zurueckholen"}, "id": {id}}, "anna", nil); rec.Code != http.StatusConflict {
+		t.Errorf("twice → %d", rec.Code)
 	}
 }
