@@ -1,9 +1,11 @@
 package pages
 
 import (
-	"github.com/mdopp/haus/internal/markdown"
 	"context"
+	"encoding/json"
 	"errors"
+	"github.com/mdopp/haus/internal/markdown"
+	"github.com/mdopp/haus/internal/papierkorb"
 	"html"
 	"log"
 	"net/http"
@@ -65,6 +67,12 @@ func Notizen(cfg StartConfig) http.HandlerFunc {
 		}
 		b := familyHead(r, cfg, "Notizen", "Notizen")
 		b.WriteString(noteStyle + "<h1>Notizen</h1><p class=k>" + html.EscapeString(saysNotesHow()) + "</p>")
+		if said := noteSaid[r.URL.Query().Get("gesagt")]; said != "" { // haus#183: after a delete, Rückgängig right here
+			b.WriteString("<div class=gut role=status><span class=punkt></span><p>" + html.EscapeString(said) + "</p></div>")
+			if id := r.URL.Query().Get("korb"); id != "" {
+				b.WriteString(notizenKorb(cfg, id))
+			}
+		}
 		if q == "" {
 			b.WriteString(merkenForm("", "", ""))
 			b.WriteString(newNoteForm("", "", "", notes.Tags(r.URL.Query()["tag"]), r.URL.Query().Get("neu") == "1")) // a filter's tags ticked
@@ -157,6 +165,7 @@ func Notizen(cfg StartConfig) http.HandlerFunc {
 			}
 			b.WriteString(c.HTML())
 		}
+		b.WriteString(notizenKorb(cfg, ""))
 		writePage(w, http.StatusOK, b)
 	}
 }
@@ -244,9 +253,13 @@ func notePage(w http.ResponseWriter, r *http.Request, cfg StartConfig, ref strin
 		b.WriteString(`<a class=knopf href="` + html.EscapeString(cards.NotePage(n.Name)) + `?bearbeiten=1">Bearbeiten</a> `)
 	}
 	b.WriteString("<a href=/notizen>Alle Notizen</a></p>")
+	if !n.Truncated && cfg.Papierkorb != nil { // haus#183: asked first, 30 days to undo
+		b.WriteString(`<form class=notiz-weg method=post action="` + html.EscapeString(cards.NotePage(n.Name)) + `" data-frage="Die Notiz „` + html.EscapeString(title) +
+			`“ löschen? Sie bleibt 30 Tage im Papierkorb."><input type=hidden name=tun value=loeschen><input type=hidden name=stand value=` +
+			strconv.FormatInt(n.Changed.UnixNano(), 10) + `><button class=weg data-laeuft="Löscht …">Notiz löschen</button></form>`)
+	}
 	writePage(w, http.StatusOK, b)
 }
-
 
 // What writing a note says (owner, 2026-10-24): where notes come from, and
 // each outcome in a sentence. The persona by name, as the one to tell it.
@@ -264,12 +277,14 @@ const (
 
 // noteSaid is the sentence after a write, by ?gesagt=.
 var noteSaid = map[string]string{"angelegt": "Notiz angelegt.", "gespeichert": "Gespeichert.",
+	"geloescht": "Die Notiz ist gelöscht.", "zurueck": "Die Notiz ist wieder da.",
 	"gemerkt":   "Gemerkt. Oben das Wichtigste, unten der Link und was auf der Seite stand.",
 	"schon":     "Diesen Link hattest du schon gemerkt; hier ist die Notiz.",
 	"teilweise": "Gemerkt sind nur Link und Titel: Die Seite ließ sich nicht lesen. Den Text kannst du unter „Bearbeiten“ ergänzen."}
 
 // noteStyle is the note forms' look: a roomy field, phone first.
-const noteStyle = `<style>.notizform label{display:block;font-size:.85rem;color:var(--muted);margin:12px 0 6px}
+const noteStyle = `<style>.notiz-weg{margin:18px 0 0}.notiz-weg .weg{background:var(--danger-soft);color:var(--danger)}.notiz-korb{list-style:none;padding:0;margin:8px 0}.notiz-korb li{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:6px 0}
+.notizform label{display:block;font-size:.85rem;color:var(--muted);margin:12px 0 6px}
 .notizform input[type=text],.notizform textarea{width:100%;font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--edge);border-radius:12px;padding:10px 14px}
 .notizform input[type=text],.notizform select{min-height:44px}.notizform select{width:100%;font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--edge);border-radius:12px;padding:0 10px}
 .tagwahl{border:0;padding:0;margin:12px 0 0;display:flex;flex-wrap:wrap;gap:8px}.tagwahl legend{font-size:.85rem;color:var(--muted);margin-bottom:6px}.tagwahl .tag{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 14px;border:1px solid var(--edge);border-radius:999px;margin:0;color:var(--ink)}
@@ -312,6 +327,14 @@ func noteWrite(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
 	ref := strings.TrimLeft(strings.TrimPrefix(r.URL.Path, "/notizen"), "/")
 	if ref == merkenRef {
 		merkenPost(w, r, cfg)
+		return
+	}
+	switch r.PostForm.Get("tun") { // haus#183
+	case "loeschen":
+		noteDelete(w, r, cfg, ref, who)
+		return
+	case "zurueckholen":
+		noteBack(w, r, cfg, who)
 		return
 	}
 	if ref == "" {
@@ -620,4 +643,107 @@ func merkenPost(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
 	}
 	log.Printf("haus: merken: %s by %s (%s)", got.Name, r.Header.Get("Remote-User"), said)
 	http.Redirect(w, r, cards.NotePage(got.Name)+"?gesagt="+said, http.StatusSeeOther)
+}
+
+// notizImKorb is a deleted note in the Papierkorb (haus#183): its name and
+// its file as it was.
+type notizImKorb struct {
+	Name string `json:"name"`
+	Text string `json:"text"`
+}
+
+// noteDelete puts the note into the Papierkorb and removes it, when it is
+// still as the person saw it; then Notizen, with Rückgängig.
+func noteDelete(w http.ResponseWriter, r *http.Request, cfg StartConfig, ref, who string) {
+	if cfg.Papierkorb == nil {
+		http.Error(w, "Notizen löschen geht auf dieser Box nicht.", http.StatusBadRequest)
+		return
+	}
+	ns, err := strconv.ParseInt(r.PostForm.Get("stand"), 10, 64)
+	if err != nil {
+		http.Error(w, "Das Formular ist nicht vollständig.", http.StatusBadRequest)
+		return
+	}
+	var n notes.Note
+	fetch(r, func(ctx context.Context) { n, err = cfg.Notes.Read(ctx, ref) })
+	if err != nil || n.Truncated {
+		http.Error(w, "Diese Notiz gibt es nicht mehr.", http.StatusConflict)
+		return
+	}
+	content, err := cfg.Notes.Delete(n.Name, time.Unix(0, ns))
+	switch {
+	case errors.Is(err, notes.ErrChanged):
+		http.Error(w, "Inzwischen hat jemand diese Notiz geändert; sie bleibt. Lade die Seite neu und sieh sie dir an, bevor du sie löschst.", http.StatusConflict)
+		return
+	case errors.Is(err, notes.ErrNotFound):
+		http.Error(w, "Diese Notiz gibt es nicht mehr.", http.StatusConflict)
+		return
+	case err != nil:
+		log.Printf("haus: notizen: delete %s by %s: %v", n.Name, who, err)
+		http.Error(w, "Die Notiz ließ sich gerade nicht löschen; sie bleibt. Versuch es gleich noch einmal.", http.StatusServiceUnavailable)
+		return
+	}
+	e, kerr := cfg.Papierkorb.Rein("notiz", summary(n.Title), who, notizImKorb{Name: n.Name, Text: string(content)})
+	if kerr != nil { // the file is gone already: put it back rather than lose it
+		cfg.Notes.PutNew(n.Name, content)
+		log.Printf("haus: notizen: papierkorb: %v", kerr)
+		http.Error(w, "Die Notiz ließ sich gerade nicht in den Papierkorb legen; sie bleibt. Versuch es gleich noch einmal.", http.StatusServiceUnavailable)
+		return
+	}
+	log.Printf("haus: notizen: %s deleted by %s", n.Name, who)
+	http.Redirect(w, r, "/notizen?gesagt=geloescht&korb="+e.ID, http.StatusSeeOther)
+}
+
+// noteBack writes a deleted note back under its name (never over one made since).
+func noteBack(w http.ResponseWriter, r *http.Request, cfg StartConfig, who string) {
+	var d notizImKorb
+	err := papierkorb.ErrWeg
+	var e papierkorb.Eintrag
+	if cfg.Papierkorb != nil {
+		if e, err = cfg.Papierkorb.Holen("notiz", r.PostForm.Get("id")); err == nil {
+			err = json.Unmarshal(e.Daten, &d)
+		}
+	}
+	if err != nil {
+		http.Error(w, papierkorb.ErrWeg.Error(), http.StatusConflict)
+		return
+	}
+	made, err := cfg.Notes.PutNew(d.Name, []byte(d.Text))
+	switch {
+	case err != nil:
+		log.Printf("haus: notizen: back %s by %s: %v", d.Name, who, err)
+		http.Error(w, "Die Notiz ließ sich gerade nicht zurückholen. Versuch es gleich noch einmal; sie bleibt im Papierkorb.", http.StatusServiceUnavailable)
+		return
+	case !made:
+		http.Error(w, "Unter diesem Namen gibt es inzwischen eine neue Notiz; die alte bleibt im Papierkorb.", http.StatusConflict)
+		return
+	}
+	cfg.Papierkorb.Raus(e.ID)
+	log.Printf("haus: notizen: %s back by %s", d.Name, who)
+	http.Redirect(w, r, cards.NotePage(d.Name)+"?gesagt=zurueck", http.StatusSeeOther)
+}
+
+// notizenKorb is Notizen's „Gelöscht“: the notes deleted in the last 30
+// days, each with Rückgängig; only = one, right after its delete.
+func notizenKorb(cfg StartConfig, only string) string {
+	if cfg.Papierkorb == nil {
+		return ""
+	}
+	_, loc := cfg.clock()
+	var b strings.Builder
+	for _, e := range cfg.Papierkorb.Liste("notiz") {
+		if only != "" && e.ID != only {
+			continue
+		}
+		b.WriteString(`<li><span>„` + html.EscapeString(e.Name) + `“ <small class=k>bis ` + e.Bis().In(loc).Format("02.01.") + `</small></span>` +
+			`<form method=post action=/notizen><input type=hidden name=tun value=zurueckholen><input type=hidden name=id value=` + e.ID +
+			`><button data-laeuft="Holt zurück …">Rückgängig</button></form></li>`)
+	}
+	if b.Len() == 0 {
+		return ""
+	}
+	if only != "" {
+		return `<ul class=notiz-korb>` + b.String() + `</ul>`
+	}
+	return `<details class=notiz-korb-liste><summary>Gelöscht, noch 30 Tage zurückzuholen</summary><ul class=notiz-korb>` + b.String() + `</ul></details>`
 }

@@ -504,3 +504,31 @@ func TestPutNew(t *testing.T) {
 		t.Fatalf("left behind: %v", entries)
 	}
 }
+
+// haus#183: Delete removes a note only as it was read; its content comes back
+func TestDelete(t *testing.T) {
+	dir := t.TempDir()
+	d, _ := Open(dir)
+	os.WriteFile(filepath.Join(dir, "a.md"), []byte("# A\n\neins\n"), 0o644)
+	os.Symlink(filepath.Join(dir, "a.md"), filepath.Join(dir, "link.md"))
+	st, _ := os.Stat(filepath.Join(dir, "a.md"))
+	if _, err := d.Delete("a.md", st.ModTime().Add(-time.Second)); err != ErrChanged {
+		t.Errorf("an old read: %v", err)
+	}
+	if _, err := d.Delete("link.md", st.ModTime()); err != ErrNotFound {
+		t.Errorf("a symlink: %v", err)
+	}
+	if _, err := d.Delete("../x.md", st.ModTime()); err == nil {
+		t.Error("outside")
+	}
+	b, err := d.Delete("a.md", st.ModTime())
+	if err != nil || string(b) != "# A\n\neins\n" {
+		t.Fatalf("%q %v", b, err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "a.md")); err == nil {
+		t.Error("still there")
+	}
+	if _, err := d.Delete("a.md", st.ModTime()); err != ErrNotFound {
+		t.Errorf("twice: %v", err)
+	}
+}

@@ -52,7 +52,7 @@ type Readiness struct {
 		Problem        string `json:"problem"` // why ok is false
 	} `json:"lastBackup"`
 	// Problems are what is red beyond one service: disk, backup, firewall, slow probes (laib#856)
-	Problems []json.RawMessage `json:"problems"`
+	Problems   []json.RawMessage `json:"problems"`
 	LastChange struct {
 		Proposal   int    `json:"proposal"`
 		Summary    string `json:"summary"`

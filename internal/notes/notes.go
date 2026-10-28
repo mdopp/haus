@@ -218,6 +218,39 @@ func (d *Dir) PutNew(name string, content []byte) (bool, error) {
 	return true, nil
 }
 
+// Delete removes the note name when it is still as it was read (was, its
+// Changed): else ErrChanged and nothing goes. Its content, for the
+// Papierkorb (haus#183). A symlink or a folder is not deleted through.
+func (d *Dir) Delete(name string, was time.Time) ([]byte, error) {
+	clean, err := checkName(name)
+	if err != nil {
+		return nil, err
+	}
+	if !isNote(clean) {
+		return nil, ErrNotFound
+	}
+	root, err := os.OpenRoot(d.path)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+	st, err := root.Lstat(clean)
+	if errors.Is(err, fs.ErrNotExist) || (err == nil && !st.Mode().IsRegular()) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	if !st.ModTime().Equal(was) {
+		return nil, ErrChanged
+	}
+	b, err := fs.ReadFile(root.FS(), clean)
+	if err != nil {
+		return nil, err
+	}
+	return b, root.Remove(clean)
+}
+
 // ErrChanged is a note changed by someone else since it was read.
 var ErrChanged = errors.New("Notizen: die Notiz hat sich inzwischen geändert")
 
