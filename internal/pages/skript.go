@@ -56,7 +56,7 @@ if(b){if(sw)flip(b);if(b.hasAttribute('data-laeuft')){was=b.textContent;b.textCo
 var body=new FormData(f);if(e.submitter&&e.submitter.name)body.append(e.submitter.name,e.submitter.value);
 if(f.enctype!=='multipart/form-data')body=new URLSearchParams(body);
 function back(){if(!b)return;b.disabled=false;b.removeAttribute('aria-busy');if(was!==null)b.textContent=was;if(sw)flip(b)}
-fetch(f.getAttribute('action'),{method:'POST',body:body,credentials:'same-origin',headers:{'X-Haus-Skript':'1'}}).then(function(r){var ct=or(r.headers.get('Content-Type'),'');
+fetch(or(f.getAttribute('action'),location.pathname+location.search),{method:'POST',body:body,credentials:'same-origin',headers:{'X-Haus-Skript':'1'}}).then(function(r){var ct=or(r.headers.get('Content-Type'),'');
 return r.text().then(function(t){busy--;if(ct.indexOf('text/html')===0){swap(t,r.url);return}back();say(or(t.trim(),'Das hat nicht geklappt.'))})})
 .catch(function(){busy--;back();HTMLFormElement.prototype.submit.call(f)})},false);
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',plan);else plan()})()</script>`

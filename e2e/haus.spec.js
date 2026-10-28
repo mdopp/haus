@@ -217,6 +217,21 @@ test('on a wide screen the content is centred beside the menu', async ({ page })
   expect(Math.abs(m.links - m.rechts), JSON.stringify(m)).toBeLessThan(60);
 });
 
+// haus#172: the forms on Geräte had no action, so the script posted to /null; a phone is added and removed
+test('a phone access is made and removed on Box → Geräte', async ({ page }) => {
+  page.on('dialog', (d) => d.accept());
+  await page.goto('/box/geraete');
+  await mark(page);
+  await page.fill('input[name=name]', 'Pixel von Test');
+  await page.getByRole('button', { name: 'Anlegen' }).click();
+  await expect(page.locator('h2', { hasText: 'Pixel von Test angelegt' })).toBeVisible();
+  const row = page.locator('tr', { hasText: 'Pixel von Test' });
+  await expect(row).toBeVisible();
+  await row.getByRole('button', { name: 'Entfernen' }).click();
+  await expect(page.locator('tr', { hasText: 'Pixel von Test' })).toHaveCount(0);
+  expect(await stays(page)).toBe(true);
+});
+
 test('a form in a card stacks its fields on a phone', async ({ page }) => {
   await page.goto('/kalender/verwalten');
   await page.locator('summary', { hasText: 'Neuen Kalender anlegen' }).click();

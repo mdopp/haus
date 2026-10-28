@@ -14,6 +14,7 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
+	"github.com/mdopp/haus/internal/devices"
 	"github.com/mdopp/haus/internal/discogs"
 	"log"
 	"net/http"
@@ -130,6 +131,10 @@ func main() {
 	mux.HandleFunc(pages.MusikPath, pages.Musik(cfg))
 	mux.HandleFunc(pages.PlattePath, pages.Platte(cfg))
 	mux.HandleFunc(pages.StimmePath, pages.Stimme(cfg))
+	if store, err := devices.Open(dir); err == nil { // haus#172: pairing and removing a phone, end to end
+		mux.HandleFunc("/box/geraete", pages.Geraete(store, "https://haus.example", cfg))
+		mux.HandleFunc("/pair-device", pages.PairDevice(store, cfg))
+	}
 	mux.HandleFunc(pages.DiscogsPath, pages.Discogs(cfg))
 	mux.HandleFunc(pages.MusikTeilPath, pages.Musik(cfg))
 	mux.HandleFunc(pages.MusikStandPath, pages.Musik(cfg))                       // haus#113: the import's line

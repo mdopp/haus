@@ -47,14 +47,14 @@ func Geraete(store *devices.Store, publicURL string, family StartConfig) http.Ha
 				html.EscapeString(d.Name), html.EscapeString(qr))
 		}
 		fmt.Fprintf(b, "<h2>Neues Telefon</h2><p>In der App die Adresse <b>%s</b> eingeben. Die App öffnet die Anmeldung und koppelt sich selbst.</p>", html.EscapeString(origin))
-		b.WriteString("<p class=k>Oder hier einen Zugang für einen QR-Code anlegen:</p><form method=post><input name=name placeholder='Name, z.B. Pixel von Martin'> <button data-laeuft='Legt an …'>Anlegen</button></form>")
+		b.WriteString("<p class=k>Oder hier einen Zugang für einen QR-Code anlegen:</p><form method=post action=/box/geraete><input name=name placeholder='Name, z.B. Pixel von Martin'> <button data-laeuft='Legt an …'>Anlegen</button></form>")
 		b.WriteString("<h2>Verbunden</h2><table>")
 		for _, d := range store.List() {
 			last := "nie"
 			if !d.LastSeen.IsZero() {
 				last = d.LastSeen.Local().Format("02.01. 15:04")
 			}
-			fmt.Fprintf(b, "<tr><td>%s</td><td class=k>%s · seit %s · zuletzt %s</td><td><form method=post data-frage='Diese Kopplung entfernen? Die App auf dem Handy kommt dann nicht mehr ins Haus.'><input type=hidden name=entfernen value=%s><button>Entfernen</button></form></td></tr>",
+			fmt.Fprintf(b, "<tr><td>%s</td><td class=k>%s · seit %s · zuletzt %s</td><td><form method=post action=/box/geraete data-frage='Diese Kopplung entfernen? Die App auf dem Handy kommt dann nicht mehr ins Haus.'><input type=hidden name=entfernen value=%s><button data-laeuft='Entfernt …'>Entfernen</button></form></td></tr>",
 				html.EscapeString(d.Name), html.EscapeString(d.UID), d.Created.Local().Format("02.01.2006"), last, d.ID)
 		}
 		b.WriteString("</table>")
