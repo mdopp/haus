@@ -2,7 +2,12 @@ package caldav
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
+	"net/http/httputil"
+	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -134,5 +139,45 @@ func TestMakeAndDeleteOnlyWhatHausMakes(t *testing.T) {
 		if strings.HasPrefix(m, "DELETE") && m != "DELETE /lea/privat-schule/" {
 			t.Fatalf("sent %s", m)
 		}
+	}
+}
+
+// haus#184: on the box every request took 0.13-0.3 s (Radicale's login) and
+// Kalender asked about twelve one after another; the homes, the calendars and
+// their reports now go at once, so a page waits for a few requests, not all
+func TestPersonEventsAsksRadicaleAtOnce(t *testing.T) {
+	fake, c := mirrorBox(t)
+	for _, p := range []string{"ben", "cara", "dora", "emil"} {
+		fake.AddPrincipal(p)
+		fake.AddCalendar("/"+p+"/google-familie/", "Familie "+p)
+	}
+	var mu sync.Mutex
+	inFlight, most, total := 0, 0, 0
+	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		inFlight++
+		total++
+		most = max(most, inFlight)
+		mu.Unlock()
+		time.Sleep(40 * time.Millisecond)
+		mu.Lock()
+		inFlight--
+		mu.Unlock()
+		u, _ := url.Parse(fake.URL)
+		httputil.NewSingleHostReverseProxy(u).ServeHTTP(w, r)
+	}))
+	t.Cleanup(slow.Close)
+	c.URL = slow.URL
+	from, to := time.Date(2026, 10, 14, 0, 0, 0, 0, time.UTC), time.Date(2026, 10, 15, 0, 0, 0, 0, time.UTC)
+	start := time.Now()
+	if _, err := c.PersonEvents(context.Background(), "lea", from, to); err != nil {
+		t.Fatal(err)
+	}
+	took := time.Since(start)
+	if most < 3 {
+		t.Errorf("at most %d requests at once of %d", most, total)
+	}
+	if took > time.Duration(total)*40*time.Millisecond/2 {
+		t.Errorf("%d requests took %v, about one after another", total, took)
 	}
 }
