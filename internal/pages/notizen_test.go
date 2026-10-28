@@ -116,8 +116,8 @@ func TestNotizenSearchIsCapped(t *testing.T) {
 	mustContain(t, body, "und 5 weitere")
 }
 
-// A note's own page: its Markdown as text — paragraphs and line breaks,
-// never markup from the file.
+// A note's own page: its Markdown rendered (haus#182) — paragraphs and line
+// breaks, never markup from the file.
 func TestNotizShowsItsTextEscaped(t *testing.T) {
 	_, nd := shelf(t)
 	for _, path := range []string{"/notizen/einkaufsliste.md", "/notizen/einkaufsliste", "/notizen/Einkaufsliste"} {
@@ -126,11 +126,11 @@ func TestNotizShowsItsTextEscaped(t *testing.T) {
 			t.Fatalf("%s → %d", path, code)
 		}
 		mustContain(t, body, "<title>Einkaufsliste · Zuhause</title>", ">Einkaufsliste</h1>",
-			"Milch\nBrot", "Käse &lt;b&gt;fett&lt;/b&gt;", "&lt;script&gt;alert(1)&lt;/script&gt;",
+			"Milch<br>Brot", "Käse &lt;b&gt;fett&lt;/b&gt;", "&lt;script&gt;alert(1)&lt;/script&gt;",
 			`href=/notizen`, "href=/notizen aria-current=page>")
 		mustNotContain(t, body, "<b>fett", "<script>alert", "# Einkaufsliste")
 		// two paragraphs, the line break inside the first kept
-		if strings.Count(body, "<p class=notiz>") != 2 {
+		if md := body[strings.Index(body, "<div class=notiz-md>"):]; strings.Count(md[:strings.Index(md, "</div>")], "<p>") != 2 {
 			t.Fatalf("%s: want two paragraphs:\n%s", path, body)
 		}
 	}

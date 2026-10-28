@@ -1,6 +1,7 @@
 package pages
 
 import (
+	"github.com/mdopp/haus/internal/markdown"
 	"context"
 	"errors"
 	"html"
@@ -10,7 +11,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode"
 
 	"github.com/mdopp/haus/internal/cards"
 	"github.com/mdopp/haus/internal/einkauf"
@@ -231,9 +231,8 @@ func notePage(w http.ResponseWriter, r *http.Request, cfg StartConfig, ref strin
 	}
 	b.WriteString(kopfLine(n.Kopf))
 	_, body := notes.SplitKopf(n.Text)
-	for _, p := range paragraphs(body) {
-		b.WriteString("<p class=notiz>" + html.EscapeString(p) + "</p>")
-	}
+	// haus#182: a note is Markdown, and shows as such (escaped first; no HTML of its own)
+	b.WriteString(`<div class=notiz-md>` + markdown.Render(body, n.Title) + `</div>`)
 	if n.Truncated {
 		b.WriteString("<p class=k>Die Notiz ist länger; hier steht ihr Anfang. Bearbeiten geht bei ihr nur über das Netzlaufwerk.</p>")
 	}
@@ -248,45 +247,6 @@ func notePage(w http.ResponseWriter, r *http.Request, cfg StartConfig, ref strin
 	writePage(w, http.StatusOK, b)
 }
 
-// paragraphs splits a note's text at blank lines, its "# Titel" line left
-// out (the page's heading says it), the line breaks inside kept. Control
-// characters other than tab go; invalid UTF-8 becomes U+FFFD.
-func paragraphs(text string) []string {
-	text = strings.ToValidUTF8(strings.ReplaceAll(text, "\r\n", "\n"), "�")
-	text = strings.Map(func(r rune) rune {
-		if r != '\n' && r != '\t' && unicode.IsControl(r) {
-			return -1
-		}
-		return r
-	}, text)
-	lines := strings.Split(text, "\n")
-	for i, l := range lines {
-		if strings.TrimSpace(l) == "" {
-			continue
-		}
-		if strings.HasPrefix(strings.TrimSpace(l), "# ") {
-			lines = lines[i+1:]
-		}
-		break
-	}
-	var out []string
-	var cur []string
-	flush := func() {
-		if len(cur) > 0 {
-			out = append(out, strings.Join(cur, "\n"))
-			cur = nil
-		}
-	}
-	for _, l := range lines {
-		if strings.TrimSpace(l) == "" {
-			flush()
-			continue
-		}
-		cur = append(cur, strings.TrimRight(l, " \t"))
-	}
-	flush()
-	return out
-}
 
 // What writing a note says (owner, 2026-10-24): where notes come from, and
 // each outcome in a sentence. The persona by name, as the one to tell it.
