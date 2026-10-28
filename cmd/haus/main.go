@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 	_ "time/tzdata" // the image is scratch: TZ needs the zone database inside the binary
@@ -102,8 +103,9 @@ func routes(s site) http.Handler {
 	if s.hh.Wuensche != nil {
 		family.Discogs = s.hh.Wuensche.Regale
 	}
-	family.WakeRecordings = os.Getenv("HAUS_WAKE_RECORDINGS") // laib#828; before any page takes its copy of family
-	family.Papierkorb = &papierkorb.Korb{Dir: s.dataDir}      // haus#174: family deletes, for 30 days
+	family.BoteSignal = strings.TrimSpace(os.Getenv("HAUS_BOTE_SIGNAL")) // haus#175: Willkommen's chat card
+	family.WakeRecordings = os.Getenv("HAUS_WAKE_RECORDINGS")            // laib#828; before any page takes its copy of family
+	family.Papierkorb = &papierkorb.Korb{Dir: s.dataDir}                 // haus#174: family deletes, for 30 days
 	family.MusicInbox = os.Getenv("HAUS_MUSIC_INBOX")
 	if fi, err := os.Stat(musicInboxMount); family.MusicInbox == "" && err == nil && fi.IsDir() {
 		family.MusicInbox = musicInboxMount // where laib's haus template mounts it (laib#639)
