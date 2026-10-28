@@ -185,7 +185,7 @@ func KalenderVerwalten(cfg StartConfig) http.HandlerFunc {
 			p := aboPath(a)
 			if !seen[p] && (a.Person == me || a.Person == cfg.Calendar.User) {
 				b.WriteString("<li><div><strong>" + html.EscapeString(cmpOr(a.Title, a.Name)) + "</strong> <span class=k>verbunden " + sinceWords(a.Since, now, loc) + ", wird gerade zum ersten Mal abgeglichen</span></div>" +
-					changeForm(p, "", "<button name=tu value=trennen>Trennen</button>") + "</li>")
+					changeForm(p, "", "<button name=tu value=trennen data-laeuft=\"Trennt …\">Trennen</button>") + "</li>")
 			}
 		}
 		b.WriteString("</ul></section>")
@@ -349,7 +349,7 @@ func addCard(canSubscribe bool) string {
 		b.WriteString("<p class=k>" + saysNoLaibCal + "</p>")
 	}
 	b.WriteString("<details><summary>Neuen Kalender anlegen</summary><form method=post action=" + kalenderAdd + " class=eingabe><input type=hidden name=weg value=neu>" +
-		"<label>Name <input name=name maxlength=60 required></label>" + forWhom() + "<button>Anlegen</button></form></details></section>")
+		"<label>Name <input name=name maxlength=60 required></label>" + forWhom() + "<button data-laeuft=\"Legt an …\">Anlegen</button></form></details></section>")
 	return b.String()
 }
 

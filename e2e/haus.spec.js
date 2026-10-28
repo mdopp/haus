@@ -292,7 +292,7 @@ for (const path of PAGES) {
     expect(problems, `${path} on a phone`).toEqual([]);
     // haus#176: every POST form names where it goes and says it runs (or is a switch)
     const forms = await page.evaluate(() => [...document.querySelectorAll('form')].filter((f) => (f.getAttribute('method') || '').toLowerCase() === 'post')
-      .map((f) => ({ a: f.getAttribute('action'), ok: f.hasAttribute('data-ganz') || [...f.querySelectorAll('button')].every((b) => b.hasAttribute('data-laeuft') || b.getAttribute('role') === 'switch'), html: f.outerHTML.slice(0, 120) }))
+      .map((f) => ({ a: f.getAttribute('action'), ok: f.hasAttribute('data-ganz') || [...f.querySelectorAll('button:not([type=button])')].every((b) => b.hasAttribute('data-laeuft') || b.getAttribute('role') === 'switch'), html: f.outerHTML.slice(0, 120) }))
       .filter((f) => !f.a || !f.ok));
     expect(forms, `${path}: POST forms without an action or a running label`).toEqual([]);
   });
