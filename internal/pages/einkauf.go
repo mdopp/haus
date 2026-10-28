@@ -4,8 +4,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/mdopp/haus/internal/papierkorb"
 	"html"
 	"log"
 	"net/http"
@@ -50,6 +52,7 @@ const (
 	saysNoList       = "Diese Liste gibt es nicht."
 	saysListMade     = "Die Liste ist angelegt."
 	saysListGone     = "Die Liste ist gelöscht."
+	saysListBack     = "Die Liste ist wieder da, mit allen Zeilen."
 )
 
 // einkaufWait is how long a change may take before the page says so.
@@ -105,8 +108,10 @@ func Einkauf(cfg StartConfig) http.HandlerFunc {
 			switch {
 			case r.URL.Query().Get("neu") == "1":
 				said = saysListMade
-			case r.URL.Query().Get("geloescht") == "1":
+			case r.URL.Query().Get("geloescht") != "":
 				said = saysListGone
+			case r.URL.Query().Get("zurueck") == "1":
+				said = saysListBack
 			}
 			writeEinkauf(w, r, cfg, l, said)
 			return
@@ -208,11 +213,39 @@ func Einkauf(cfg StartConfig) http.HandlerFunc {
 				http.Error(w, "Die Einkaufsliste des Haushalts bleibt.", http.StatusBadRequest)
 				return
 			}
+			ziel := EinkaufPath + "?geloescht=1"
+			if cfg.Papierkorb != nil { // haus#174: what it held, for 30 days
+				var lists []caldav.List
+				var a caldav.Abzug
+				if lists, err = l.DAV.Lists(ctx, person); err == nil {
+					a, err = l.DAV.ListAbzug(ctx, l.Ref)
+				}
+				if err != nil {
+					break
+				}
+				name, _ := listName(lists, l.Ref)
+				e, kerr := cfg.Papierkorb.Rein("liste", name, person, listeImKorb{Ref: l.Ref.ID(), Name: name, Abzug: a})
+				if kerr != nil {
+					log.Printf("haus: einkauf: papierkorb: %v", kerr)
+					http.Error(w, "Die Liste ließ sich gerade nicht in den Papierkorb legen; sie bleibt. Versuch es gleich noch einmal.", http.StatusServiceUnavailable)
+					return
+				}
+				ziel = EinkaufPath + "?geloescht=" + e.ID
+			}
 			if err = l.DAV.DeleteList(ctx, l.Ref); err == nil {
 				log.Printf("haus: einkauf: %s deleted the list %s", person, l.Ref.ID())
-				http.Redirect(w, r, EinkaufPath+"?geloescht=1", http.StatusSeeOther)
+				http.Redirect(w, r, ziel, http.StatusSeeOther)
 				return
 			}
+		case "zurueckholen":
+			ref, said, zerr := listeZurueck(ctx, cfg, l, person, r.PostForm.Get("id"))
+			if zerr != nil {
+				http.Error(w, said, http.StatusConflict)
+				return
+			}
+			log.Printf("haus: einkauf: %s put the list %s back", person, ref.ID())
+			http.Redirect(w, r, listPath(ref)+map[bool]string{true: "?", false: "&"}[ref == caldav.Einkauf]+"zurueck=1", http.StatusSeeOther)
+			return
 		default:
 			http.Error(w, "Das geht hier nicht.", http.StatusBadRequest)
 			return
@@ -275,7 +308,7 @@ func count(n int, one, many string) string {
 	return strconv.Itoa(n) + " " + many
 }
 
-const einkaufStyle = `<style>.einkauf{list-style:none;margin:16px 0 0;padding:0;display:grid;gap:8px}
+const einkaufStyle = `<style>.einkauf-korb{list-style:none;padding:0;margin:8px 0}.einkauf-korb li{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:6px 0}.einkauf-korb .was{flex:1;min-width:0}.einkauf{list-style:none;margin:16px 0 0;padding:0;display:grid;gap:8px}
 .einkauf form{margin:0}.einkauf button.posten{width:100%;display:flex;align-items:center;gap:14px;min-height:56px;padding:10px 16px;text-align:left;font:inherit;font-size:1.1rem;color:var(--ink);background:var(--card);border:1px solid var(--edge);border-radius:14px;cursor:pointer}
 .einkauf .haken{flex:none;width:26px;height:26px;border-radius:8px;border:2px solid var(--edge);display:grid;place-items:center}
 .einkauf button[aria-checked=true] .haken{background:var(--ok);border-color:var(--ok)}.einkauf button[aria-checked=true] .haken::after{content:"";width:7px;height:13px;border:solid var(--card);border-width:0 3px 3px 0;transform:translateY(-2px) rotate(45deg)}
@@ -355,6 +388,11 @@ func writeEinkauf(w http.ResponseWriter, r *http.Request, cfg StartConfig, l *ei
 		`<h1>` + html.EscapeString(name) + `</h1><p class=k>` + html.EscapeString(how) + `</p>`)
 	if said != "" {
 		b.WriteString("<div class=gut role=status><span class=punkt></span><p>" + html.EscapeString(said) + "</p></div>")
+		if id := r.URL.Query().Get("geloescht"); id != "" && id != "1" { // haus#174: „gelöscht – Rückgängig“ where it was done
+			if undo := papierkorbListen(cfg, person, id); undo != "" {
+				b.WriteString(`<ul class="einkauf-korb">` + undo + `</ul>`)
+			}
+		}
 	}
 	b.WriteString(`<form class=einkauf-dazu method=post action="` + act + `"><input type=hidden name=tun value=dazu>` +
 		`<input name=was aria-label="Was fehlt?" placeholder="Was fehlt? z. B. Milch, 500 g Mehl" autocomplete=off enterkeyhint=done required>` +
@@ -423,6 +461,9 @@ func writeEinkauf(w http.ResponseWriter, r *http.Request, cfg StartConfig, l *ei
 	if l.Ref != caldav.Einkauf {
 		b.WriteString(`<form class=einkauf-weg method=post action="` + act + `" data-frage="Liste „` + html.EscapeString(name) + `“ mit allen Zeilen löschen?">` +
 			`<input type=hidden name=tun value=loeschen><button data-laeuft="Löscht …">Diese Liste löschen</button></form>`)
+	}
+	if korb := papierkorbListen(cfg, person, ""); korb != "" {
+		b.WriteString(`<h3>Gelöscht, noch 30 Tage zurückzuholen</h3><ul class="einkauf-korb">` + korb + `</ul>`)
 	}
 	b.WriteString("</details>")
 	writePage(w, http.StatusOK, b)
@@ -669,3 +710,65 @@ func germanDate(d string) string {
 
 // einkaufTitle is a wish's title half ("Wanda – Salbei" is Salbei).
 func einkaufTitle(s string) string { _, t := einkauf.Teile(s); return t }
+
+// listeImKorb is a deleted list in the Papierkorb (haus#174): which, its
+// name, and what it held.
+type listeImKorb struct {
+	Ref   string       `json:"ref"`
+	Name  string       `json:"name"`
+	Abzug caldav.Abzug `json:"abzug"`
+}
+
+// listeZurueck makes a deleted list again with all its lines; only its
+// person may for a personal list. The list, or a sentence why not.
+func listeZurueck(ctx context.Context, cfg StartConfig, l *einkauf.Liste, person, id string) (caldav.ListRef, string, error) {
+	if cfg.Papierkorb == nil {
+		return caldav.ListRef{}, papierkorb.ErrWeg.Error(), papierkorb.ErrWeg
+	}
+	e, err := cfg.Papierkorb.Holen("liste", id)
+	var d listeImKorb
+	if err == nil {
+		err = json.Unmarshal(e.Daten, &d)
+	}
+	ref, ok := caldav.ParseListRef(d.Ref)
+	if err != nil || !ok || (ref.Personal() && ref.Person != person) {
+		return ref, papierkorb.ErrWeg.Error(), papierkorb.ErrWeg
+	}
+	if _, err := l.DAV.MakeList(ctx, ref.Person, strings.TrimPrefix(ref.Slug, "liste-"), d.Name); err != nil && !errors.Is(err, caldav.ErrListExists) {
+		log.Printf("haus: einkauf: zurueck %s: %v", d.Ref, err)
+		return ref, "Die Liste ließ sich gerade nicht zurückholen. Versuch es gleich noch einmal; sie bleibt im Papierkorb.", err
+	}
+	if err := l.DAV.ListZurueck(ctx, ref, d.Abzug); err != nil {
+		log.Printf("haus: einkauf: zurueck %s: %v", d.Ref, err)
+		return ref, "Die Liste ist wieder da, aber nicht alle Zeilen kamen zurück. Versuch es gleich noch einmal.", err
+	}
+	cfg.Papierkorb.Raus(e.ID)
+	return ref, "", nil
+}
+
+// papierkorbListen is Listen verwalten's „Gelöscht“: the lists this person
+// may put back, each with Zurückholen and how long it still can.
+func papierkorbListen(cfg StartConfig, person string, nur string) string {
+	if cfg.Papierkorb == nil {
+		return ""
+	}
+	var b strings.Builder
+	_, loc := cfg.clock()
+	for _, e := range cfg.Papierkorb.Liste("liste") {
+		var d listeImKorb
+		if json.Unmarshal(e.Daten, &d) != nil {
+			continue
+		}
+		ref, ok := caldav.ParseListRef(d.Ref)
+		if !ok || (ref.Personal() && ref.Person != person) || (nur != "" && e.ID != nur) {
+			continue
+		}
+		b.WriteString(`<li><span class=was>„` + html.EscapeString(d.Name) + `“ <small>` + html.EscapeString(count(len(d.Abzug.Objekte), "Zeile", "Zeilen")) +
+			` · bis ` + e.Bis().In(loc).Format("02.01.") + `</small></span><form method=post action=` + EinkaufPath +
+			`><input type=hidden name=tun value=zurueckholen><input type=hidden name=id value=` + e.ID + `><button data-laeuft="Holt zurück …">Rückgängig</button></form></li>`)
+	}
+	if b.Len() == 0 {
+		return ""
+	}
+	return b.String()
+}

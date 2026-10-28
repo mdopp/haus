@@ -3,6 +3,7 @@ package pages
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/mdopp/haus/internal/papierkorb"
 	"log"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/mdopp/haus/internal/ansicht"
 	"github.com/mdopp/haus/internal/caldav"
@@ -280,5 +282,45 @@ func TestKalenderAbstandIsChosenAndChanged(t *testing.T) {
 	}
 	if len(l.calls) != n {
 		t.Fatalf("refused changes reached laib: %v", l.calls[n:])
+	}
+}
+
+// haus#174: a deleted calendar with its appointments waits 30 days; „Rückgängig“
+// makes it again with all of them; another person's own is not theirs to take back
+func TestKalenderRueckgaengig(t *testing.T) {
+	fake, cfg, _ := kalenderBox(t)
+	now := time.Date(2026, 10, 28, 9, 0, 0, 0, time.UTC)
+	cfg.Papierkorb = &papierkorb.Korb{Dir: t.TempDir(), Now: func() time.Time { return now }}
+	fake.AddCalendar("/haus/familie-urlaub/", "Urlaub")
+	fake.Put("/haus/familie-urlaub/a.ics", event("a", "20261101T090000Z", "20261101T100000Z", "Flug"))
+	fake.Put("/haus/familie-urlaub/b.ics", event("b", "20261108T090000Z", "20261108T100000Z", "Rückflug"))
+
+	rec := post(t, KalenderAendern(cfg), kalenderChange, url.Values{"kalender": {"/haus/familie-urlaub/"}, "name": {"Urlaub"}, "tu": {"loeschen"}}, "anna", nil)
+	loc := rec.Header().Get("Location")
+	if !strings.HasPrefix(loc, kalenderVerwalten+"?gesagt=geloescht&korb=") || fake.DisplayName("/haus/familie-urlaub/") != "" {
+		t.Fatalf("loeschen → %q", loc)
+	}
+	_, body, _ := familyPage(t, KalenderVerwalten, cfg, "GET", loc, "family")
+	mustContain(t, body, "Der Kalender ist gelöscht.", "„Urlaub“ <small class=k>2 Termine · bis 27.11.", `value=zurueckholen data-laeuft="Holt zurück …">Rückgängig</button>`,
+		"Gelöscht, noch 30 Tage zurückzuholen")
+	id := loc[strings.Index(loc, "korb=")+5:]
+
+	if rec := post(t, KalenderAendern(cfg), kalenderChange, url.Values{"kalender": {"/haus/familie-urlaub/"}, "name": {"Urlaub"}, "tu": {"zurueckholen"}, "id": {id}}, "ben", nil); rec.Header().Get("Location") != kalenderVerwalten+"?gesagt=zurueck" {
+		t.Fatalf("zurueckholen → %d %v %s", rec.Code, rec.Header(), rec.Body)
+	}
+	if fake.DisplayName("/haus/familie-urlaub/") != "Urlaub" {
+		t.Fatal("not made again")
+	}
+	back := 0
+	for p := range fake.Objects() {
+		if strings.HasPrefix(p, "/haus/familie-urlaub/") {
+			back++
+		}
+	}
+	if back != 2 {
+		t.Fatalf("appointments back: %d of 2", back)
+	}
+	if rec := post(t, KalenderAendern(cfg), kalenderChange, url.Values{"kalender": {"/haus/familie-urlaub/"}, "name": {"Urlaub"}, "tu": {"zurueckholen"}, "id": {id}}, "anna", nil); rec.Code != http.StatusConflict {
+		t.Errorf("twice → %d", rec.Code)
 	}
 }
