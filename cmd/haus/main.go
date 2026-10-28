@@ -7,6 +7,7 @@ package main
 import (
 	"context"
 	"errors"
+	"github.com/mdopp/haus/internal/papierkorb"
 	"log"
 	"net/http"
 	"os"
@@ -71,6 +72,7 @@ type site struct {
 	inverted    map[string]bool // haus#64: covers wired the wrong way round, shown and set turned over
 	radicale    string          // haus#66: Radicale's public address, its web page and the phones' CalDAV addresses; empty, none
 	views       *ansicht.Store  // haus#66: each person's calendar colours and hidden calendars
+	dataDir     string          // Haus's data folder (HAUS_DATA): the Papierkorb (haus#174)
 	// haus#68: the Dokumente page's mail address, Paperless's public address and whether it is LAN-only
 	docsMail, paperlessPublic string
 	paperlessLAN              bool
@@ -101,6 +103,7 @@ func routes(s site) http.Handler {
 		family.Discogs = s.hh.Wuensche.Regale
 	}
 	family.WakeRecordings = os.Getenv("HAUS_WAKE_RECORDINGS") // laib#828; before any page takes its copy of family
+	family.Papierkorb = &papierkorb.Korb{Dir: s.dataDir}      // haus#174: family deletes, for 30 days
 	family.MusicInbox = os.Getenv("HAUS_MUSIC_INBOX")
 	if fi, err := os.Stat(musicInboxMount); family.MusicInbox == "" && err == nil && fi.IsDir() {
 		family.MusicInbox = musicInboxMount // where laib's haus template mounts it (laib#639)
@@ -395,7 +398,7 @@ func main() {
 		usage: counter, voice: voice, welcome: true,
 		stt:      pages.STT{Provider: os.Getenv("HAUS_STT_PROVIDER"), Language: env("HAUS_STT_LANGUAGE", "de")},
 		haPublic: haPublic, inverted: pages.InvertedFromList(os.Getenv("HAUS_COVER_INVERTED")),
-		radicale: radicalePublic, views: ansicht.Open(dataDir),
+		radicale: radicalePublic, views: ansicht.Open(dataDir), dataDir: dataDir,
 		docsMail: docsMail, paperlessPublic: paperlessPublic, paperlessLAN: paperlessLAN})
 	addr := env("HAUS_LISTEN", "127.0.0.1:8650")
 	log.Printf("haus %s: listening on %s as %s, laib %s, home assistant %v, haushalt %d tools, memory library %v (tidy-up %v), uploads %q, the Bote %v, counting %v (voice %v), pages only behind the proxy secret", Version, addr, pages.House.Display, ops.URL, cfg.HA != nil, len(haushalt.Tools(hh)), hh.Library != nil, hh.Judge != nil, cfg.UploadDir, b != nil, counter != nil, voice != nil)

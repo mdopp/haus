@@ -2,7 +2,9 @@ package pages
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"github.com/mdopp/haus/internal/papierkorb"
 	"html"
 	"log"
 	"net/http"
@@ -42,6 +44,7 @@ var kalenderSaid = map[string]string{
 	"getrennt":       "Getrennt. Beim nächsten Abgleich verschwindet die Kopie.",
 	"angelegt":       "Der Kalender ist angelegt.",
 	"geloescht":      "Der Kalender ist gelöscht.",
+	"zurueck":        "Der Kalender ist wieder da, mit allen Terminen.",
 	"gespeichert":    "Gespeichert.",
 	"keine-adresse":  "Das ist keine Kalender-Adresse. Sie beginnt mit https:// oder webcal://.",
 	"keine-google":   "Das ist nicht Googles „Geheime Adresse im iCal-Format“. Sie beginnt mit https://calendar.google.com/ und endet auf .ics.",
@@ -171,6 +174,9 @@ func KalenderVerwalten(cfg StartConfig) http.HandlerFunc {
 		b.WriteString(kalenderStyle + "<h1>Deine Kalender</h1><p><a href=/kalender>Zurück zum Kalender</a></p>")
 		if said := kalenderSaid[r.URL.Query().Get("gesagt")]; said != "" {
 			b.WriteString("<p class=gesagt role=status>" + html.EscapeString(said) + "</p>")
+			if id := r.URL.Query().Get("korb"); id != "" { // haus#174: „gelöscht – Rückgängig“ where it was done
+				b.WriteString(kalenderKorb(cfg, me, id))
+			}
 		}
 		if calErr != nil {
 			b.WriteString("<p class=k>" + saysNoCalendar + "</p>")
@@ -194,6 +200,7 @@ func KalenderVerwalten(cfg StartConfig) http.HandlerFunc {
 		if radicale.Set() {
 			b.WriteString("<details class=adresse><summary>Adressbuch fürs Telefon</summary>" + copyField(radicale.href("/"+cfg.Calendar.User+"/haushalt-kontakte/")) + "<p class=k>" + saysBookHow + "</p></details>")
 		}
+		b.WriteString(kalenderKorb(cfg, me, ""))
 		b.WriteString(addCard(cfg.Laib != nil && !errors.Is(aboErr, laib.ErrNoTool)))
 		writePage(w, http.StatusOK, b)
 	}
@@ -545,13 +552,35 @@ func KalenderAendern(cfg StartConfig) http.HandlerFunc {
 			log.Printf("haus: kalender: %s trennt %s", me, path)
 			said(w, r, "getrennt")
 		case "loeschen":
+			korb := ""
+			if cfg.Papierkorb != nil { // haus#174: the appointments, for 30 days
+				a, err := cfg.Calendar.CalendarAbzug(r.Context(), path)
+				var e papierkorb.Eintrag
+				if err == nil {
+					e, err = cfg.Papierkorb.Rein("kalender", r.PostForm.Get("name"), me, kalenderImKorb{Path: path, Name: r.PostForm.Get("name"), Abzug: a})
+				}
+				if err != nil {
+					log.Printf("haus: kalender: %s löscht %s: papierkorb: %v", me, path, err)
+					said(w, r, "nicht-moeglich")
+					return
+				}
+				korb = e.ID
+			}
 			if err := cfg.Calendar.DeleteCalendar(r.Context(), path); err != nil {
 				log.Printf("haus: kalender: %s löscht %s: %v", me, path, err)
 				said(w, r, "nicht-moeglich")
 				return
 			}
 			log.Printf("haus: kalender: %s löscht %s", me, path)
-			said(w, r, "geloescht")
+			http.Redirect(w, r, kalenderVerwalten+"?gesagt=geloescht&korb="+url.QueryEscape(korb), http.StatusSeeOther)
+		case "zurueckholen":
+			if err := kalenderZurueck(r.Context(), cfg, path, r.PostForm.Get("id")); err != nil {
+				log.Printf("haus: kalender: %s holt %s zurück: %v", me, path, err)
+				http.Error(w, familySentence("kalender zurück", err, "Der Kalender ließ sich gerade nicht zurückholen. Versuch es gleich noch einmal; er bleibt im Papierkorb."), http.StatusConflict)
+				return
+			}
+			log.Printf("haus: kalender: %s holt %s zurück", me, path)
+			said(w, r, "zurueck")
 		default:
 			http.Error(w, "Unbekannte Änderung.", http.StatusBadRequest)
 		}
@@ -563,3 +592,66 @@ const kalenderStyle = `<style>.karte form.eingabe{display:block}.kalender select
 .eingabe label{display:block;margin:.6rem 0 .15rem}.eingabe input:not([type=radio]),.eingabe select{font:inherit;width:100%;max-width:30rem;padding:.35rem .5rem;border:1px solid var(--line);border-radius:.4rem;background:transparent;color:inherit;box-sizing:border-box}
 .eingabe .wahl{display:inline-block;margin-right:1rem}.eingabe fieldset{border:0;padding:0;margin:.6rem 0}.eingabe button{margin-top:.8rem}.problem{border-left:3px solid #b3261e;padding:.1rem .6rem;margin:.4rem 0}.gesagt{border-left:3px solid #2b7a3d;padding:.2rem .7rem}
 .farbe{display:inline-block;width:.65em;height:.65em;border-radius:50%;margin-right:.45em}</style>`
+
+// kalenderImKorb is a deleted calendar in the Papierkorb (haus#174).
+type kalenderImKorb struct {
+	Path  string       `json:"path"`
+	Name  string       `json:"name"`
+	Abzug caldav.Abzug `json:"abzug"`
+}
+
+// kalenderZurueck makes a deleted calendar again (family's or the person's
+// own, as it was) with all its appointments.
+func kalenderZurueck(ctx context.Context, cfg StartConfig, path, id string) error {
+	if cfg.Papierkorb == nil {
+		return papierkorb.ErrWeg
+	}
+	e, err := cfg.Papierkorb.Holen("kalender", id)
+	var d kalenderImKorb
+	if err == nil {
+		err = json.Unmarshal(e.Daten, &d)
+	}
+	if err != nil || d.Path != path {
+		return papierkorb.ErrWeg
+	}
+	owner, slug := strings.Trim(path, "/"), ""
+	owner, slug, _ = strings.Cut(owner, "/")
+	family := strings.HasPrefix(slug, "familie-")
+	if _, err := cfg.Calendar.MakeCalendar(ctx, owner, strings.TrimPrefix(strings.TrimPrefix(slug, "familie-"), "privat-"), d.Name, family); err != nil && !errors.Is(err, caldav.ErrCalendarExists) {
+		return err
+	}
+	if err := cfg.Calendar.CalendarZurueck(ctx, path, d.Abzug); err != nil {
+		return err
+	}
+	cfg.Papierkorb.Raus(e.ID)
+	return nil
+}
+
+// kalenderKorb is the calendars this person may take back (the family's
+// and their own), each with Rückgängig; only = one entry, after its delete.
+func kalenderKorb(cfg StartConfig, me, only string) string {
+	if cfg.Papierkorb == nil || cfg.Calendar == nil {
+		return ""
+	}
+	_, loc := cfg.clock()
+	var b strings.Builder
+	for _, e := range cfg.Papierkorb.Liste("kalender") {
+		var d kalenderImKorb
+		if json.Unmarshal(e.Daten, &d) != nil || (only != "" && e.ID != only) {
+			continue
+		}
+		if !strings.HasPrefix(d.Path, "/"+me+"/") && !strings.HasPrefix(d.Path, "/"+cfg.Calendar.User+"/") {
+			continue
+		}
+		b.WriteString(`<li><span>„` + html.EscapeString(d.Name) + `“ <small class=k>` + html.EscapeString(count(len(d.Abzug.Objekte), "Termin", "Termine")) +
+			` · bis ` + e.Bis().In(loc).Format("02.01.") + `</small></span>` +
+			changeForm(d.Path, d.Name, `<input type=hidden name=id value=`+e.ID+`><button name=tu value=zurueckholen data-laeuft="Holt zurück …">Rückgängig</button>`) + `</li>`)
+	}
+	if b.Len() == 0 {
+		return ""
+	}
+	if only != "" {
+		return `<ul class=kalender>` + b.String() + `</ul>`
+	}
+	return `<section class=karte aria-labelledby=k-korb><h2 id=k-korb>Gelöscht, noch 30 Tage zurückzuholen</h2><ul class=kalender>` + b.String() + `</ul></section>`
+}

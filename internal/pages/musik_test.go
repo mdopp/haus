@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"github.com/mdopp/haus/internal/laib"
+	"github.com/mdopp/haus/internal/papierkorb"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -13,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 // musikPiece sends one piece as the page's script does.
@@ -272,4 +274,47 @@ func TestMusikReasonOfAFolder(t *testing.T) {
 	os.WriteFile(filepath.Join(run, "GRUND.txt"), []byte("Musik-Eingang\n\nKREIS/folder.jpg: keine Musikdatei\nKREIS/info.nfo: keine Musikdatei\n"), 0o644)
 	_, body, _ := familyPage(t, Musik, StartConfig{MusicInbox: inbox}, "GET", MusikPath, "family")
 	mustContain(t, body, "<span class=name>KREIS</span><span class=k>folder.jpg: keine Musikdatei; info.nfo: keine Musikdatei</span>")
+}
+
+// haus#174: a deleted kept-back upload waits 30 days in the inbox's hidden
+// Papierkorb (the importer never touches a dot folder); Rückgängig puts it back
+func TestMusikLoeschenRueckgaengig(t *testing.T) {
+	inbox := t.TempDir()
+	run := filepath.Join(inbox, "_nicht-importiert", "2026-10-25_09-00-00")
+	os.MkdirAll(filepath.Join(run, "Album"), 0o755)
+	os.WriteFile(filepath.Join(run, "Album", "01.mp3"), []byte("x"), 0o644)
+	os.WriteFile(filepath.Join(run, "GRUND.txt"), []byte("Album: beschädigt\n"), 0o644)
+	now := time.Date(2026, 10, 28, 9, 0, 0, 0, time.UTC)
+	cfg := StartConfig{MusicInbox: inbox, Papierkorb: &papierkorb.Korb{Dir: t.TempDir(), Now: func() time.Time { return now }}}
+	h := Musik(cfg)
+	rec := post(t, h, MusikPath, url.Values{"tun": {"loeschen"}, "lauf": {"2026-10-25_09-00-00"}, "name": {"Album"}}, "anna", nil)
+	body := rec.Body.String()
+	mustContain(t, body, "„Album“ ist gelöscht.", `name=tun value=zurueckholen>`, ">Rückgängig</button>", "<h2 id=m-g>Gelöscht</h2>", "bis 27.11.")
+	if _, err := os.Stat(filepath.Join(run, "Album")); err == nil {
+		t.Fatal("still under Nicht übernommen")
+	}
+	es := cfg.Papierkorb.Liste("musik")
+	if len(es) != 1 {
+		t.Fatalf("papierkorb: %v", es)
+	}
+	if b, _ := os.ReadFile(filepath.Join(inbox, ".papierkorb", es[0].ID, "Album", "01.mp3")); string(b) != "x" {
+		t.Fatal("not kept in the hidden Papierkorb")
+	}
+	rec = post(t, h, MusikPath, url.Values{"tun": {"zurueckholen"}, "id": {es[0].ID}}, "anna", nil)
+	mustContain(t, rec.Body.String(), "„Album“ ist wieder da, unter „Nicht übernommen“.", "<span class=name>Album</span>")
+	if b, _ := os.ReadFile(filepath.Join(run, "Album", "01.mp3")); string(b) != "x" {
+		t.Fatal("not back")
+	}
+	if rec := post(t, h, MusikPath, url.Values{"tun": {"zurueckholen"}, "id": {es[0].ID}}, "anna", nil); rec.Code != http.StatusConflict {
+		t.Errorf("twice → %d", rec.Code)
+	}
+
+	// after 30 days it is gone, files too
+	post(t, h, MusikPath, url.Values{"tun": {"loeschen"}, "lauf": {"2026-10-25_09-00-00"}, "name": {"Album"}}, "anna", nil)
+	now = now.Add(31 * 24 * time.Hour)
+	_, body, _ = familyPage(t, Musik, cfg, "GET", MusikPath, "family")
+	mustNotContain(t, body, "<h2 id=m-g>Gelöscht</h2>")
+	if ds, _ := os.ReadDir(filepath.Join(inbox, ".papierkorb")); len(ds) != 0 {
+		t.Errorf("old files stay: %v", ds)
+	}
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/mdopp/haus/internal/einkauf"
+	"github.com/mdopp/haus/internal/papierkorb"
 	"html"
 	"io"
 	"io/fs"
@@ -99,6 +100,11 @@ func Musik(cfg StartConfig) http.HandlerFunc {
 // the uploads' progress, and what beets did not take, each to try again.
 // again is an upload put back just now: the script follows its import.
 func writeMusik(w http.ResponseWriter, r *http.Request, cfg StartConfig, said, again string) {
+	writeMusikUndo(w, r, cfg, said, "", again)
+}
+
+// writeMusikUndo is the page with a Rückgängig beside what was just said (haus#174).
+func writeMusikUndo(w http.ResponseWriter, r *http.Request, cfg StartConfig, said, undo string, again ...string) {
 	{
 		b := familyHead(r, cfg, "Musik", "Musik")
 		b.WriteString(musikStyle + keyHintStyle + "<h1>Musik</h1>")
@@ -110,13 +116,18 @@ func writeMusik(w http.ResponseWriter, r *http.Request, cfg StartConfig, said, a
 			`<label class="knopf ordner">Ordner wählen<input type=file id=musik-ordner webkitdirectory multiple></label></div>` +
 			`<p class=k>` + html.EscapeString(saysMusikFolder) + `</p></section>`)
 		if said != "" {
-			b.WriteString("<div class=gut role=status><span class=punkt></span><p>" + html.EscapeString(said) + "</p></div>")
+			b.WriteString("<div class=gut role=status><span class=punkt></span><p>" + html.EscapeString(said) + "</p>")
+			if undo != "" {
+				b.WriteString(musikUndoForm(undo))
+			}
+			b.WriteString("</div>")
 		}
 		b.WriteString(`<section class=karte aria-labelledby=m-l hidden id=musik-lauf><h2 id=m-l>Hochladen</h2><p id=musik-stand role=status aria-live=polite></p><ul id=musik-liste class=musik-liste></ul></section>`)
-		if again != "" {
-			b.WriteString(`<div hidden id=musik-nochmal data-name="` + html.EscapeString(again) + `" data-seit="` + time.Now().UTC().Format(time.RFC3339) + `"></div>`)
+		if len(again) > 0 && again[0] != "" {
+			b.WriteString(`<div hidden id=musik-nochmal data-name="` + html.EscapeString(again[0]) + `" data-seit="` + time.Now().UTC().Format(time.RFC3339) + `"></div>`)
 		}
 		b.WriteString(nichtUebernommen(cfg))
+		b.WriteString(musikGeloescht(cfg))
 		b.WriteString(musikScript)
 		writePage(w, http.StatusOK, b)
 	}
@@ -216,6 +227,10 @@ func musikNochmal(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
 	}
 	r.ParseForm()
 	run, name, tun := r.PostForm.Get("lauf"), r.PostForm.Get("name"), r.PostForm.Get("tun")
+	if tun == "zurueckholen" { // haus#174
+		musikZurueck(w, r, cfg, r.PostForm.Get("id"))
+		return
+	}
 	if (tun != "nochmal" && tun != "loeschen") || !plainName(run) || !plainName(name) || name == "GRUND.txt" {
 		http.Error(w, "Diese Datei gibt es hier nicht.", http.StatusBadRequest)
 		return
@@ -232,14 +247,30 @@ func musikNochmal(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
 		return
 	}
 	if tun == "loeschen" { // the owner, 2026-10-26: what can be put back can be deleted
-		if err := root.RemoveAll(from); err != nil {
+		var undo string
+		if cfg.Papierkorb != nil { // haus#174: into the inbox's hidden Papierkorb for 30 days; the importer never touches a dot folder
+			e, err := cfg.Papierkorb.Rein("musik", name, r.Header.Get("Remote-User"), musikImKorb{Lauf: run, Name: name})
+			if err == nil {
+				root.MkdirAll(musikKorb+"/"+e.ID, 0o700)
+				err = root.Rename(from, musikKorb+"/"+e.ID+"/"+name)
+				if err != nil {
+					cfg.Papierkorb.Raus(e.ID)
+				}
+			}
+			if err != nil {
+				log.Printf("haus: musik: deleting %s: %v", from, err)
+				http.Error(w, "Die Datei ließ sich gerade nicht löschen; sie bleibt. Versuch es gleich noch einmal.", http.StatusInternalServerError)
+				return
+			}
+			undo = e.ID
+		} else if err := root.RemoveAll(from); err != nil {
 			log.Printf("haus: musik: deleting %s: %v", from, err)
 			http.Error(w, "Die Datei ließ sich nicht löschen.", http.StatusInternalServerError)
 			return
 		}
 		tidyRun(root, run)
 		log.Printf("haus: musik: %s deleted %s", r.Header.Get("Remote-User"), from)
-		writeMusik(w, r, cfg, "„"+name+"“ ist gelöscht.", "")
+		writeMusikUndo(w, r, cfg, "„"+name+"“ ist gelöscht.", undo)
 		return
 	}
 	to := name
@@ -594,5 +625,86 @@ func musikPlatten(r *http.Request, cfg StartConfig) string {
 		b.WriteString(keyHint(r, cfg, "Discogs", saysDiscogsEnables, publicBase(r, cfg)+MusikPath, discogsKeys))
 	}
 	b.WriteString(`</section>`)
+	return b.String()
+}
+
+// musikKorb is the inbox's hidden Papierkorb (haus#174): a dot folder, which
+// the importer never touches; each deleted upload in <id>/ for 30 days.
+const musikKorb = ".papierkorb"
+
+// musikImKorb is where a deleted kept-back upload came from.
+type musikImKorb struct {
+	Lauf string `json:"lauf"`
+	Name string `json:"name"`
+}
+
+func musikUndoForm(id string) string {
+	return `<form method=post action=` + MusikPath + `><input type=hidden name=tun value=zurueckholen><input type=hidden name=id value=` + id +
+		`><button data-laeuft="Holt zurück …">Rückgängig</button></form>`
+}
+
+// musikZurueck puts a deleted upload back under „Nicht übernommen“, where it was.
+func musikZurueck(w http.ResponseWriter, r *http.Request, cfg StartConfig, id string) {
+	var e papierkorb.Eintrag
+	var d musikImKorb
+	err := papierkorb.ErrWeg
+	if cfg.Papierkorb != nil {
+		if e, err = cfg.Papierkorb.Holen("musik", id); err == nil {
+			err = json.Unmarshal(e.Daten, &d)
+		}
+	}
+	if err != nil || !plainName(d.Lauf) || !plainName(d.Name) {
+		http.Error(w, papierkorb.ErrWeg.Error(), http.StatusConflict)
+		return
+	}
+	root, err := os.OpenRoot(cfg.MusicInbox)
+	if err != nil {
+		http.Error(w, "Der Musik-Eingang ist gerade nicht erreichbar.", http.StatusServiceUnavailable)
+		return
+	}
+	defer root.Close()
+	root.MkdirAll(keptBack+"/"+d.Lauf, 0o755)
+	if err := root.Rename(musikKorb+"/"+e.ID+"/"+d.Name, keptBack+"/"+d.Lauf+"/"+d.Name); err != nil {
+		log.Printf("haus: musik: zurück %s: %v", d.Name, err)
+		http.Error(w, "„"+d.Name+"“ ließ sich gerade nicht zurückholen. Versuch es gleich noch einmal.", http.StatusConflict)
+		return
+	}
+	root.Remove(musikKorb + "/" + e.ID)
+	cfg.Papierkorb.Raus(e.ID)
+	log.Printf("haus: musik: %s put %s back", r.Header.Get("Remote-User"), d.Name)
+	writeMusik(w, r, cfg, "„"+d.Name+"“ ist wieder da, unter „Nicht übernommen“.", "")
+}
+
+// musikGeloescht is the uploads deleted in the last 30 days, each with
+// Rückgängig; what is older leaves the inbox's Papierkorb.
+func musikGeloescht(cfg StartConfig) string {
+	if cfg.Papierkorb == nil {
+		return ""
+	}
+	es := cfg.Papierkorb.Liste("musik")
+	if root, err := os.OpenRoot(cfg.MusicInbox); err == nil { // what has no entry any more goes
+		keep := map[string]bool{}
+		for _, e := range es {
+			keep[e.ID] = true
+		}
+		if ds, err := fs.ReadDir(root.FS(), musikKorb); err == nil {
+			for _, d := range ds {
+				if !keep[d.Name()] {
+					root.RemoveAll(musikKorb + "/" + d.Name())
+				}
+			}
+		}
+		root.Close()
+	}
+	if len(es) == 0 {
+		return ""
+	}
+	_, loc := cfg.clock()
+	var b strings.Builder
+	b.WriteString(`<section class=karte aria-labelledby=m-g><h2 id=m-g>Gelöscht</h2><p class=k>Noch 30 Tage zurückzuholen.</p><ul class=musik-liste>`)
+	for _, e := range es {
+		b.WriteString(`<li><span class=name>` + html.EscapeString(e.Name) + `</span><span class=k>bis ` + e.Bis().In(loc).Format("02.01.") + `</span><div class=musik-tun>` + musikUndoForm(e.ID) + `</div></li>`)
+	}
+	b.WriteString(`</ul></section>`)
 	return b.String()
 }

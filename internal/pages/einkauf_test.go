@@ -2,6 +2,7 @@ package pages
 
 import (
 	"context"
+	"github.com/mdopp/haus/internal/papierkorb"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -315,5 +316,59 @@ func TestMusikWunschliste(t *testing.T) {
 	mustContain(t, rec.Body.String(), "Die Platte von „Wanda – Salbei“ ist da; abgehakt.", "aria-checked=true><span class=haken></span><span class=was>Wanda – Salbei")
 	if rec := post(t, Einkauf(cfg), "/einkauf", url.Values{"tun": {"stufe"}, "uid": {uid}, "schritt": {"platte"}}, "anna", nil); rec.Code != http.StatusBadRequest {
 		t.Errorf("a stage on the shopping list → %d", rec.Code)
+	}
+}
+
+// haus#174: a deleted list with its lines waits 30 days in the Papierkorb;
+// „Rückgängig“ where it was deleted, and under Listen verwalten, puts it back
+// whole; another person's own list is not theirs to take back
+func TestEinkaufListeRueckgaengig(t *testing.T) {
+	dav := davfake.New("haus", "pw")
+	t.Cleanup(dav.Close)
+	dav.AddPrincipal("anna")
+	dav.AddPrincipal("ben")
+	l := einkauf.Open(&caldav.Client{URL: dav.URL, User: "haus", Password: "pw"})
+	l.Ensure(context.Background())
+	now := time.Date(2026, 10, 28, 9, 0, 0, 0, time.UTC)
+	korb := &papierkorb.Korb{Dir: t.TempDir(), Now: func() time.Time { return now }}
+	cfg := StartConfig{Einkauf: l, Papierkorb: korb}
+	h := Einkauf(cfg)
+	post(t, h, EinkaufPath, url.Values{"tun": {"neu"}, "name": {"Baumarkt"}, "fuer": {"haushalt"}}, "anna", nil)
+	post(t, h, "/einkauf?liste=liste-baumarkt", url.Values{"tun": {"dazu"}, "was": {"Schrauben, 2 Dübel"}}, "anna", nil)
+
+	rec := post(t, h, "/einkauf?liste=liste-baumarkt", url.Values{"tun": {"loeschen"}}, "anna", nil)
+	loc := rec.Header().Get("Location")
+	if rec.Code != http.StatusSeeOther || !strings.HasPrefix(loc, "/einkauf?geloescht=") || loc == "/einkauf?geloescht=1" {
+		t.Fatalf("loeschen → %d %q", rec.Code, loc)
+	}
+	id := strings.TrimPrefix(loc, "/einkauf?geloescht=")
+	if got := dav.Calendars(); strings.Contains(strings.Join(got, " "), "liste-baumarkt") {
+		t.Fatalf("the list is still there: %v", got)
+	}
+	_, body, _ := familyPage(t, Einkauf, cfg, "GET", loc, "family")
+	mustContain(t, body, saysListGone, "„Baumarkt“ <small>2 Zeilen · bis 27.11.", `<input type=hidden name=id value=`+id+`><button data-laeuft="Holt zurück …">Rückgängig</button>`)
+	_, body, _ = familyPage(t, Einkauf, cfg, "GET", EinkaufPath, "family")
+	mustContain(t, body, "<h3>Gelöscht, noch 30 Tage zurückzuholen</h3>")
+
+	rec = post(t, h, EinkaufPath, url.Values{"tun": {"zurueckholen"}, "id": {id}}, "anna", nil)
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/einkauf?liste=liste-baumarkt&zurueck=1" {
+		t.Fatalf("zurueckholen → %d %q %s", rec.Code, rec.Header().Get("Location"), rec.Body)
+	}
+	_, body, _ = familyPage(t, Einkauf, cfg, "GET", "/einkauf?liste=liste-baumarkt&zurueck=1", "family")
+	mustContain(t, body, saysListBack, "<h1>Baumarkt</h1>", "Schrauben", "Dübel")
+	if rec := post(t, h, EinkaufPath, url.Values{"tun": {"zurueckholen"}, "id": {id}}, "anna", nil); rec.Code != http.StatusConflict {
+		t.Errorf("twice → %d", rec.Code)
+	}
+
+	// Ben's own list: Anna cannot take it back; after 30 days it is gone
+	post(t, h, EinkaufPath, url.Values{"tun": {"neu"}, "name": {"Geheim"}, "fuer": {"mich"}}, "ben", nil)
+	rec = post(t, h, "/einkauf?liste=ben/liste-geheim", url.Values{"tun": {"loeschen"}}, "ben", nil)
+	benID := strings.TrimPrefix(rec.Header().Get("Location"), "/einkauf?geloescht=")
+	if rec := post(t, h, EinkaufPath, url.Values{"tun": {"zurueckholen"}, "id": {benID}}, "anna", nil); rec.Code != http.StatusConflict {
+		t.Errorf("Anna takes Ben's back → %d", rec.Code)
+	}
+	now = now.Add(31 * 24 * time.Hour)
+	if rec := post(t, h, EinkaufPath, url.Values{"tun": {"zurueckholen"}, "id": {benID}}, "ben", nil); rec.Code != http.StatusConflict {
+		t.Errorf("after 31 days → %d", rec.Code)
 	}
 }
