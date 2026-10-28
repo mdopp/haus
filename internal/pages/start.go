@@ -210,6 +210,7 @@ func Start(cfg StartConfig) http.HandlerFunc {
 			}
 		}
 		b.WriteString(bottom)
+		b.WriteString(einrichtungZeile(r, cfg)) // haus#188: an important setup still open, quietly
 		b.WriteString(toNetzlaufwerk(cfg.Samba, person))
 		b.WriteString(toWillkommen(cfg))
 		writePage(w, http.StatusOK, b)

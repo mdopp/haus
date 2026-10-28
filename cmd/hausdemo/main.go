@@ -135,6 +135,7 @@ func main() {
 	mux.HandleFunc(pages.MusikPath, pages.Musik(cfg))
 	mux.HandleFunc(pages.PlattePath, pages.Platte(cfg))
 	mux.HandleFunc(pages.StimmePath, pages.Stimme(cfg))
+	mux.HandleFunc("/aufgaben", pages.DeineAufgaben(cfg))
 	// haus#176: the phone layout gate covers these too
 	upload := filepath.Join(dir, "upload")
 	os.MkdirAll(upload, 0o755)
