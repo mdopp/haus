@@ -648,12 +648,17 @@ func (c *Client) ScanStatus(ctx context.Context) (Scan, error) {
 }
 
 // ScanOrder passes one order on (start, weiter, abschliessen, verwerfen);
-// person is whom the closing message is for, "" for the box's default.
-// Laib only writes the order; the service decides whether it fits.
-func (c *Client) ScanOrder(ctx context.Context, action, person string) (string, error) {
+// person is whom the closing message is for, "" for the box's default;
+// nurFuer is the login a started stack belongs to alone, "" for the
+// household's (the default, not sent). Laib only writes the order; the
+// service decides whether it fits.
+func (c *Client) ScanOrder(ctx context.Context, action, person, nurFuer string) (string, error) {
 	args := map[string]any{"action": action}
 	if person != "" {
 		args["person"] = person
+	}
+	if nurFuer != "" {
+		args[ScanFuerFeld] = "person"
 	}
 	text, err := c.CallTyped(ctx, "scan", args)
 	if err != nil {
@@ -667,6 +672,11 @@ func (c *Client) ScanOrder(ctx context.Context, action, person string) (string, 
 	}
 	return strings.TrimSpace(text), nil
 }
+
+// ScanFuerFeld is the order's field for whom a stack is (owner 2026-10-28,
+// with laib and dokumente): "person" with the order's person; absent, the
+// household's.
+const ScanFuerFeld = "fuer"
 
 // scanErr is Laib's refusal for a box without the service ("Der Dienst
 // scan ist nicht eingerichtet.", "… hat noch keinen Zustand geschrieben.")
@@ -742,7 +752,7 @@ type Aufgabe struct {
 		Gespraech bool   `json:"gespraech,omitempty"`
 	} `json:"weg,omitempty"`
 	FertigWenn string `json:"fertig_wenn,omitempty"`
-	Erledigt *struct {
+	Erledigt   *struct {
 		Am  string `json:"am"`
 		Von string `json:"von"`
 		Wie string `json:"wie,omitempty"`
