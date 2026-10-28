@@ -80,6 +80,9 @@ func main() {
 	notesDir := filepath.Join(dir, "notes")
 	os.MkdirAll(notesDir, 0o755)
 	os.WriteFile(filepath.Join(notesDir, "einkaufsliste.md"), []byte("# Einkaufsliste\n\nMilch\nBrot\n"), 0o644)
+	// haus#182: a note with every element the renderer knows, for the phone layout gate
+	os.WriteFile(filepath.Join(notesDir, "markdown.md"), []byte("# Markdown\n\nEin Absatz mit **fett**, *kursiv*, `code` und einem [Link](https://example.org/eine/sehr/lange/adresse/die/umbrechen/muss).\n\n"+
+		"## Liste\n\n- eins\n  - eins a\n- zwei\n\n1. erst\n2. dann\n\n- [ ] offen\n- [x] erledigt\n\n> ein Zitat\n\n---\n\n```\nein Codeblock mit einer langen Zeile, die auf dem Handy nicht über den Rand darf\n```\n"), 0o644)
 	os.MkdirAll(filepath.Join(notesDir, "rezepte"), 0o755)
 	os.WriteFile(filepath.Join(notesDir, "rezepte", "lasagne.md"), []byte("---\nart: rezept\ntags: [kochen]\n---\n# Lasagne\n\n*Für 4 Portionen · 1 Std.*\n\n"+
 		"## Zutaten\n\n- 500 g Hackfleisch\n- 2 Zwiebeln\n- 1 Dose Tomaten\n- 250 g Lasagneplatten\n\n## Zubereitung\n\n1. Soße kochen.\n2. Schichten und backen.\n"), 0o644)

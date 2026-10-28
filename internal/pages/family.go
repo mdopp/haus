@@ -197,6 +197,12 @@ form[role=search]{display:flex;gap:8px;margin:16px 0 0}
 .gespraech .wer{display:block;font-size:.72rem;font-weight:600;letter-spacing:.04em;color:var(--muted);margin:0 0 2px}.gespraech .frage{margin:0;white-space:pre-wrap}
 .antwort,.gespraech .keine{margin:12px 0 0;padding:12px 0 0;border-top:1px solid var(--line)}.gespraech .keine{color:var(--muted)}.antwort p{margin:6px 0 0;white-space:pre-wrap}.antwort .wer+p{margin-top:0}
 .antwort pre{margin:8px 0 0;padding:10px 12px;overflow-x:auto;background:var(--panel);border:1px solid var(--line);border-radius:10px;font:.8rem/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;overflow-wrap:normal}.notiz{white-space:pre-wrap;overflow-wrap:anywhere}
+.notiz-md{overflow-wrap:anywhere}.notiz-md h2{font-size:1.2rem;margin:20px 0 6px}.notiz-md h3{font-size:1.05rem;margin:16px 0 4px}.notiz-md h4,.notiz-md h5,.notiz-md h6{font-size:.95rem;margin:12px 0 4px}
+.notiz-md ul,.notiz-md ol{margin:8px 0;padding-left:1.4em}.notiz-md li{margin:3px 0}.notiz-md li.aufgabe{list-style:none;margin-left:-1.2em}
+.notiz-md .kasten{display:inline-block;width:1em;height:1em;margin:0 .45em -.12em 0;border:2px solid var(--muted);border-radius:4px}.notiz-md .kasten.an{background:var(--ok);border-color:var(--ok)}
+.notiz-md code{font:.85em ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:0 4px}
+.notiz-md pre{margin:10px 0;padding:10px 12px;overflow-x:auto;background:var(--panel);border:1px solid var(--line);border-radius:10px}.notiz-md pre code{border:0;padding:0;background:none}
+.notiz-md blockquote{margin:10px 0;padding:2px 12px;border-left:3px solid var(--edge);color:var(--muted)}.notiz-md hr{border:0;border-top:1px solid var(--line);margin:16px 0}
 .achtung{margin:16px 0 0;padding:12px 14px;background:var(--danger-soft);border:1px solid var(--danger);border-radius:14px}.achtung p{margin:0}.achtung p+p{margin-top:4px;color:var(--muted)}
 .achtung p:first-child::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--danger);margin-right:8px;vertical-align:1px}
 div.gut{display:flex;gap:8px;align-items:flex-start;margin:16px 0 0;padding:12px 14px;border:1px solid var(--ok);border-radius:14px}div.gut p{margin:0}.achtung.selbst{background:var(--warn-soft);border-color:var(--warn)}.achtung.selbst p:first-child::before{background:var(--warn)}
