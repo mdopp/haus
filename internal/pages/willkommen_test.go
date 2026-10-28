@@ -70,9 +70,36 @@ func TestWillkommenSaysWhenItCannotLook(t *testing.T) {
 	if !strings.Contains(page, saysAppsUnknown) || strings.Contains(page, "500") || strings.Contains(page, saysNoAppsYet) {
 		t.Fatalf("%s", page)
 	}
-	page = welcomePage(t, StartConfig{Laib: fakeLaib(t, allGreen(t), nil)}).Body.String()
-	if !strings.Contains(page, saysNoAppsYet) {
-		t.Fatalf("nothing installed:\n%s", page)
+	// nothing else installed: the Haus app is there all the same (haus#175)
+	page = welcomePage(t, StartConfig{Laib: fakeLaib(t, allGreen(t), nil), PublicURL: "https://haus.dopp.example"}).Body.String()
+	if !strings.Contains(page, "<h2>Die Haus-App</h2>") || strings.Contains(page, saysNoAppsYet) {
+		t.Fatalf("nothing else installed:\n%s", page)
+	}
+}
+
+// haus#175: the Haus app (Android installs it, an iPhone puts the page on its
+// home screen), the house on Signal when the box has a number, one printable page
+func TestWillkommenHausAppSignalAndPaper(t *testing.T) {
+	cfg := StartConfig{Laib: fakeLaib(t, allGreen(t), nil), PublicURL: "https://haus.dopp.example"}
+	page := welcomePage(t, cfg).Body.String()
+	for _, w := range []string{"<h2>Die Haus-App</h2>", `href="` + hausAppAPK + `">Haus-App laden</a>`, "https://haus.dopp.example", "Zum Home-Bildschirm",
+		`<button type=button onclick="print()">Diese Seite drucken</button>`, "@media print{"} {
+		if !strings.Contains(page, w) {
+			t.Errorf("the page lacks %q", w)
+		}
+	}
+	if strings.Contains(page, "auf Signal</h2>") {
+		t.Error("a Signal card without a number")
+	}
+	old := House
+	House.Display = "Joshua"
+	t.Cleanup(func() { House = old })
+	cfg.BoteSignal = "+4915112345678"
+	page = welcomePage(t, cfg).Body.String()
+	for _, w := range []string{"<h2>Joshua auf Signal</h2>", "+4915112345678", `href="https://signal.me/#p/+4915112345678">Joshua in Signal öffnen</a>`, "als „Joshua“"} {
+		if !strings.Contains(page, w) {
+			t.Errorf("the page lacks %q", w)
+		}
 	}
 }
 
