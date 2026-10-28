@@ -53,9 +53,9 @@ func TestRaeumeDimsAndMovesCovers(t *testing.T) {
 		`type=range name=wert min=0 max=100 step=1 value=60 aria-label="Bambi Helligkeit"`, `<output>60 %</output>`,
 		`name=geraet value="light.dimmer"><input type=hidden name=tun value="light.turn_on"><input type=hidden name=zurueck value="/raeume#karte-esszimmer"><span class=k>Helligkeit</span><input type=range name=wert min=0 max=100 step=1 value=0`,
 		`name=geraet value="cover.rollo"><input type=hidden name=tun value="cover.set_cover_position">`, `value=40 aria-label="Rollo Position"`,
-		`name=geraet value="cover.rollo"><input type=hidden name=tun value="cover.open_cover">`, "<button>Hoch</button>",
-		`name=geraet value="cover.rollo"><input type=hidden name=tun value="cover.stop_cover">`, "<button>Stopp</button>",
-		`name=geraet value="cover.rollo"><input type=hidden name=tun value="cover.close_cover">`, "<button>Runter</button>",
+		`name=geraet value="cover.rollo"><input type=hidden name=tun value="cover.open_cover">`, "<button data-laeuft=\"Schaltet …\">Hoch</button>",
+		`name=geraet value="cover.rollo"><input type=hidden name=tun value="cover.stop_cover">`, "<button data-laeuft=\"Schaltet …\">Stopp</button>",
+		`name=geraet value="cover.rollo"><input type=hidden name=tun value="cover.close_cover">`, "<button data-laeuft=\"Schaltet …\">Runter</button>",
 		"<noscript><button>Setzen</button></noscript>", `onchange="this.form.requestSubmit`)
 	mustNotContain(t, ess, `value="light.schalter"><input type=hidden name=tun value="light.turn_on"><input type=hidden name=zurueck value="/raeume#karte-esszimmer"><span`,
 		`value="cover.ohne"`, `value="cover.garage"`, "<script>alert")
@@ -169,15 +169,15 @@ func TestGeraeteGoOnInHomeAssistant(t *testing.T) {
 	before(t, body, "<p class=weiter-in>", "<h2 id=karte-esszimmer")
 	_, body, _ = familyPage(t, Ding, cfg, "GET", "/raeume/light.bambi", "family")
 	mustContain(t, body, `<a href="https://home.box.test/config/devices/device/dev-bambi">In Home Assistant öffnen</a>`,
-		`value=60 aria-label="Bambi Helligkeit"`, "<button>Ausschalten</button>")
+		`value=60 aria-label="Bambi Helligkeit"`, "<button data-laeuft=\"Schaltet …\">Ausschalten</button>")
 	_, body, _ = familyPage(t, Ding, cfg, "GET", "/raeume/cover.rollo", "family")
-	mustContain(t, body, `<a href="https://home.box.test/history?entity_id=cover.rollo">In Home Assistant öffnen</a>`, "<button>Hoch</button>")
+	mustContain(t, body, `<a href="https://home.box.test/history?entity_id=cover.rollo">In Home Assistant öffnen</a>`, "<button data-laeuft=\"Schaltet …\">Hoch</button>")
 	_, body, _ = familyPage(t, Ding, cfg, "GET", "/raeume/cover.ohne", "family")
 	mustContain(t, body, "Home Assistant sagt nicht, ob das ein Rollladen oder ein Tor ist")
-	mustNotContain(t, body, "<button>Hoch</button>", "class=regler")
+	mustNotContain(t, body, "<button data-laeuft=\"Schaltet …\">Hoch</button>", "class=regler")
 	_, body, _ = familyPage(t, Ding, cfg, "GET", "/raeume/cover.garage", "family")
 	mustContain(t, body, "Tore und Türen öffnet Haus nicht; das geht in Home Assistant.")
-	mustNotContain(t, body, "<button>Hoch</button>", "<button>Runter</button>")
+	mustNotContain(t, body, "<button data-laeuft=\"Schaltet …\">Hoch</button>", "<button data-laeuft=\"Schaltet …\">Runter</button>")
 
 	// no address, no link; HA not answering, no word of it
 	_, body, _ = familyPage(t, Raeume, StartConfig{HA: hc}, "GET", "/raeume", "family")

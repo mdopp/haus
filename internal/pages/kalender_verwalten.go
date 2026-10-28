@@ -299,18 +299,18 @@ func calendarRow(cfg StartConfig, k caldav.Calendar, view ansicht.One, abo *laib
 		}
 		actions.WriteString(`<option value="` + c.Hex + `"` + sel + ">" + c.Name + "</option>")
 	}
-	actions.WriteString("</select></label><button name=tu value=farbe>Farbe setzen</button>")
+	actions.WriteString("</select></label><button name=tu value=farbe data-laeuft=\"Setzt …\">Farbe setzen</button>")
 	if view.Shows(k.Path) {
-		actions.WriteString("<button name=tu value=aus>Ausblenden</button>")
+		actions.WriteString("<button name=tu value=aus data-laeuft=\"Blendet aus …\">Ausblenden</button>")
 	} else {
-		actions.WriteString("<button name=tu value=ein>Einblenden</button>")
+		actions.WriteString("<button name=tu value=ein data-laeuft=\"Blendet ein …\">Einblenden</button>")
 	}
 	switch {
 	case k.ReadOnly() && abo != nil:
 		actions.WriteString("<label>Abgleichen " + everySelect(everyOf(*abo)) + "</label><button name=tu value=abstand data-laeuft=\"Speichert …\">Abstand ändern</button>")
-		actions.WriteString("<details><summary>Trennen…</summary><button name=tu value=trennen>Ja, „" + html.EscapeString(k.Name) + "“ trennen</button></details>")
+		actions.WriteString("<details><summary>Trennen…</summary><button name=tu value=trennen data-laeuft=\"Trennt …\">Ja, „" + html.EscapeString(k.Name) + "“ trennen</button></details>")
 	case k.Kind == "familie" || k.Kind == "privat":
-		actions.WriteString("<details><summary>Löschen…</summary><button name=tu value=loeschen>Ja, „" + html.EscapeString(k.Name) + "“ mit allen Terminen löschen</button></details>")
+		actions.WriteString("<details><summary>Löschen…</summary><button name=tu value=loeschen data-laeuft=\"Löscht …\">Ja, „" + html.EscapeString(k.Name) + "“ mit allen Terminen löschen</button></details>")
 	}
 	b.WriteString(changeForm(k.Path, k.Name, actions.String()))
 	if app := (App{"Radicale", cfg.RadicalePublicURL}); app.Set() {

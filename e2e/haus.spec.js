@@ -281,7 +281,7 @@ for (const path of PAGES) {
         if (!seen(el)) continue;
         const r = el.getBoundingClientRect();
         if (r.height < 40) out.push(`"${what(el)}" only ${Math.round(r.height)}px high`);
-        if (r.right > vw + 1) out.push(`"${what(el)}" runs off the screen`);
+        if (r.right > vw + 1 && !el.closest('nav.unter')) out.push(`"${what(el)}" runs off the screen`); // Box's pills scroll sideways
       }
       for (const el of document.querySelectorAll('p, li, h1, h2, label, td, th, .k')) {
         if (!seen(el)) continue;
@@ -292,7 +292,7 @@ for (const path of PAGES) {
     expect(problems, `${path} on a phone`).toEqual([]);
     // haus#176: every POST form names where it goes and says it runs (or is a switch)
     const forms = await page.evaluate(() => [...document.querySelectorAll('form')].filter((f) => (f.getAttribute('method') || '').toLowerCase() === 'post')
-      .map((f) => { const b = f.querySelector('button'); return { a: f.getAttribute('action'), ok: !b || b.hasAttribute('data-laeuft') || b.getAttribute('role') === 'switch' || f.hasAttribute('data-ganz'), html: f.outerHTML.slice(0, 120) }; })
+      .map((f) => ({ a: f.getAttribute('action'), ok: f.hasAttribute('data-ganz') || [...f.querySelectorAll('button')].every((b) => b.hasAttribute('data-laeuft') || b.getAttribute('role') === 'switch'), html: f.outerHTML.slice(0, 120) }))
       .filter((f) => !f.a || !f.ok));
     expect(forms, `${path}: POST forms without an action or a running label`).toEqual([]);
   });
