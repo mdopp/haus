@@ -353,6 +353,10 @@ func (s Seite) Notiz(g judge.Gist, hint string) (string, string, notes.Kopf) {
 				words = append(words, w)
 			}
 		}
+		// a phone's share sheet sends the page's own title as the text: that is no hint
+		if said := strings.Join(words, " "); strings.EqualFold(said, strings.TrimSpace(s.Titel)) || strings.EqualFold(said, strings.TrimSpace(title)) {
+			words = nil
+		}
 		if len(words) > 0 {
 			b.WriteString("\nDazu: " + strings.Join(words, " ") + "\n")
 		}

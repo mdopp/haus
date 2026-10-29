@@ -24,6 +24,14 @@ const rezeptSeite = `<!doctype html><html><head><title>Lasagne | Chefkoch</title
 "recipeInstructions":[{"@type":"HowToStep","text":"Hackfleisch anbraten."},{"@type":"HowToStep","text":"Schichten &amp; backen."}]}</script>
 </head><body><nav>Menü Menü Menü Menü Menü Menü Menü Menü Menü Menü</nav><article><p>Ein langer Text über Lasagne, der hier nicht in die Notiz muss, weil das Rezept alles sagt.</p></article></body></html>`
 
+// einfachkochen.de: a step's text is a list of pieces cut at the commas,
+// the <title> is what a phone shares as the text
+const teileSeite = `<!doctype html><html><head><title>Kürbissuppe – nach Omas Rezept | Einfach Kochen</title>
+<script type="application/ld+json">{"@type":"Recipe","name":"Kürbissuppe – nach Omas Rezept","recipeYield":"4 Portion",
+"recipeIngredient":["1 Hokkaidokürbis","Salz"],
+"recipeInstructions":[{"@type":"HowToStep","text":["Kürbis waschen","entstielen und halbieren. Kartoffeln schälen","Knoblauch hacken."]},
+{"@type":"HowToStep","text":["Suppe aufkochen.","Pürieren."]}]}</script></head><body><main><p>Text.</p></main></body></html>`
+
 const albumSeite = `<html><head><meta property="og:title" content="Kettcar - Gute Laune ungerecht verteilt | VISIONS.de">
 <meta property="og:site_name" content="VISIONS.de">
 <script type="application/ld+json">[{"@type":"WebSite","name":"VISIONS"},{"@type":"Review","reviewRating":{"ratingValue":"9","bestRating":"12"},
@@ -42,7 +50,7 @@ const artikelSeite = `<html><head><title>Warum Brot altbacken wird</title><meta 
 // a site with the pages above, and a page that is not there
 func site(t *testing.T) *httptest.Server {
 	t.Helper()
-	pages := map[string]string{"/rezept": rezeptSeite, "/album": albumSeite, "/hotel": hotelSeite, "/artikel": artikelSeite}
+	pages := map[string]string{"/rezept": rezeptSeite, "/teile": teileSeite, "/album": albumSeite, "/hotel": hotelSeite, "/artikel": artikelSeite}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/weiter" {
 			http.Redirect(w, r, "/artikel", http.StatusFound)
@@ -107,6 +115,26 @@ func TestMerkenEinRezept(t *testing.T) {
 	again, err := Merken(context.Background(), f, nil, d, srv.URL+"/rezept", "")
 	if err != nil || !again.Schon || again.Name != got.Name {
 		t.Fatalf("twice: %+v %v", again, err)
+	}
+}
+
+// A step handed over in pieces is one step again; the page's title sent
+// as the text (a phone's share sheet) is no "Dazu:" line.
+func TestMerkenSchrittInTeilen(t *testing.T) {
+	srv := site(t)
+	d, dir := noteDir(t)
+	got, err := Merken(context.Background(), Fetcher{AllowPrivate: true}, nil, d, srv.URL+"/teile", "Kürbissuppe – nach Omas Rezept | Einfach Kochen")
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := read(t, dir, got.Name)
+	for _, want := range []string{"1. Kürbis waschen, entstielen und halbieren. Kartoffeln schälen, Knoblauch hacken.\n", "2. Suppe aufkochen. Pürieren.\n"} {
+		if !strings.Contains(n, want) {
+			t.Errorf("lacks %q:\n%s", want, n)
+		}
+	}
+	if strings.Contains(n, "Dazu:") {
+		t.Errorf("the page's own title as a hint:\n%s", n)
 	}
 }
 
