@@ -240,12 +240,40 @@ func steps(v any) []string {
 		case map[string]any:
 			if types(x)["HowToSection"] {
 				out = append(out, steps(x["itemListElement"])...)
-			} else if t := first(text(x["text"]), text(x["name"])); t != "" {
+			} else if t := first(parts(x["text"]), text(x["name"])); t != "" {
 				out = append(out, t)
 			}
 		}
 	}
 	return out
+}
+
+// parts is a step's text, which some sites (einfachkochen.de) hand over as
+// a list of pieces cut at the commas: "Kürbis waschen", "entstielen und
+// halbieren. …". The pieces are one step again, a comma put back where
+// the piece before did not end a sentence; text() alone kept the first
+// piece and the owner's pumpkin soup lost most of its preparation.
+func parts(v any) string {
+	l, ok := v.([]any)
+	if !ok {
+		return text(v)
+	}
+	var b strings.Builder
+	for _, e := range l {
+		t := text(e)
+		if t == "" {
+			continue
+		}
+		if prev := strings.TrimSpace(b.String()); prev != "" {
+			if strings.LastIndexAny(prev, ".!?:;") == len(prev)-1 {
+				b.WriteString(" ")
+			} else {
+				b.WriteString(", ")
+			}
+		}
+		b.WriteString(t)
+	}
+	return b.String()
 }
 
 func yield(v any) string {
