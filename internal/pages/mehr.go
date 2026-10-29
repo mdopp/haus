@@ -48,6 +48,7 @@ func Mehr(cfg StartConfig) http.HandlerFunc {
 			}
 		}
 		b.WriteString(pages.HTML())
+		b.WriteString(gesundheitKarte(cfg))
 		konto := cards.Card{Title: "Konto"}
 		if u := r.Header.Get("Remote-User"); u != "" {
 			konto.Add("Angemeldet als "+u, "")
@@ -56,4 +57,25 @@ func Mehr(cfg StartConfig) http.HandlerFunc {
 		b.WriteString(konto.HTML())
 		writePage(w, http.StatusOK, b)
 	}
+}
+
+// What the Gesundheit card says (haus#192): what it is, and honestly who
+// sees what — Haus links and holds nothing of it.
+const (
+	saysGesundheit     = "Deine Blutwerte, Befunde und wie es dir ging, als Verlauf."
+	saysGesundheitWer  = "Nur du siehst deinen Verlauf. Wer die Box verwaltet (Admin), sieht die Dokumente in Paperless trotzdem."
+	saysGesundheitLink = "Weiter in Gesundheit"
+)
+
+// gesundheitKarte is Mehr's card for the Gesundheit program (haus#192,
+// laib#893), only on a box that has it (HAUS_GESUNDHEIT_URL): an internal
+// route, so the link opens at home only, as Paperless does.
+func gesundheitKarte(cfg StartConfig) string {
+	if cfg.GesundheitURL == "" {
+		return ""
+	}
+	c := cards.Card{Title: "Gesundheit"}
+	c.Add(saysGesundheit, saysGesundheitWer)
+	c.AddLink(saysGesundheitLink, saysOnlyAtHome, cfg.GesundheitURL)
+	return c.HTML()
 }

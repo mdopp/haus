@@ -76,6 +76,10 @@ type StartConfig struct {
 	// address for the phone; empty: neither
 	RadicalePublicURL string
 	Views             *ansicht.Store // each person's colours and hidden calendars on Kalender (haus#66); nil: none
+	// GesundheitURL is the Gesundheit program's address (HAUS_GESUNDHEIT_URL,
+	// https://gesundheit.<domain>, haus#192, laib#893): one card on Mehr with
+	// „Weiter in Gesundheit“; empty: no card. No health data passes through Haus.
+	GesundheitURL string
 	// The Dokumente page (haus#68): the address mail is filed from
 	// (HAUS_DOCUMENTS_MAIL; empty: no mail button), the way into
 	// Paperless's inbox (HAUS_UPLOAD_DIR; nil: no upload), Paperless's
