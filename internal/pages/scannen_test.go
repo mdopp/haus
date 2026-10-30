@@ -611,3 +611,152 @@ func TestScannenFollowsAStackOrder(t *testing.T) {
 	body = scanPage(t, f, "family")
 	mustContain(t, body, `data-laeuft="Scannt weiter …">Weiter</button>`)
 }
+
+// mdopp/dokumente#14: the scanner is free while earlier stacks are split.
+// „Stapel scannen“ comes with einzug frei, whatever the worker does; below
+// it what is split now, at which page, and how many wait. The scanner busy
+// says when the button comes back; a jam offers Weiter as before.
+func TestScannenOffersAStackWhileTheQueueRuns(t *testing.T) {
+	queue := []map[string]any{
+		{"stapel": "2026-10-14T09-55-10", "person": "ben", "fuer": "haushalt", "quelle": "scanner", "seiten": 4, "seit": "2026-10-14T07:55:40Z"},
+		{"stapel": "2026-10-14T09-58-00", "person": "anna", "fuer": "person", "quelle": "scanner", "seit": "2026-10-14T07:58:30Z"},
+	}
+	// idle: nothing in work, no queue lines
+	body := scanPage(t, &scanLaib{status: map[string]any{"zustand": "fertig", "einzug": "frei", "scanner": true, "warten": []any{}}}, "family")
+	mustContain(t, body, "<b>Fertig</b>", `data-laeuft="Startet …">Stapel scannen</button>`)
+	mustNotContain(t, body, "Wird getrennt", "Danach:", `class="laeuft reihe"`)
+
+	// running: the worker splits 09:52 at page 12 of 40, two wait; the scanner is free
+	f := &scanLaib{status: map[string]any{"zustand": "trennt", "einzug": "frei", "scanner": true, "stapel": "2026-10-14T09-52-00", "detail": "liest Seite 12 von 40",
+		"trennt": map[string]any{"stapel": "2026-10-14T09-52-00", "person": "anna", "fuer": "haushalt", "schritt": "trennt", "detail": "liest Seite 12 von 40", "seite": 12, "seiten": 40},
+		"warten": queue}}
+	body = scanPage(t, f, "family")
+	mustContain(t, body, "<b>Bereit</b>", "Der Scanner ist frei für den nächsten Stapel.", `data-laeuft="Startet …">Stapel scannen</button>`,
+		`<p class="laeuft reihe">Wird getrennt: Stapel von 09:52, Seite 12 von 40 <span class=k>Anna</span></p>`,
+		`<p class="k reihe">Danach: 2 Stapel</p>`, "data-auffrischen=5>")
+	mustNotContain(t, body, saysScanBusy, "Trennt die Dokumente")
+	before(t, body, "Stapel scannen</button>", "Wird getrennt")
+
+	// the model is held, then filing; a stack from yesterday says its day
+	f.status["trennt"] = map[string]any{"stapel": "2026-10-13T21-00-00", "person": "anna", "fuer": "person", "schritt": "trennt", "detail": "wartet auf das Modell: Joshua spricht bis 10:05"}
+	mustContain(t, scanPage(t, f, "family"), "Wird getrennt: Stapel vom 13. Oktober 2026, 21:00, wartet auf das Hausmodell <span class=k>nur für Anna</span>")
+	f.status["trennt"] = map[string]any{"stapel": "2026-10-14T09-52-00", "schritt": "legt-ab", "detail": "legt 3 Dokumente ab"}
+	body = scanPage(t, f, "family")
+	mustContain(t, body, `<p class="laeuft reihe">Wird abgelegt: Stapel von 09:52</p>`, "Danach: 2 Stapel")
+	mustNotContain(t, body, "Joshua")
+
+	// a queue nobody picked up yet: the first is next, one after it
+	delete(f.status, "trennt")
+	body = scanPage(t, f, "family")
+	mustContain(t, body, `Wird gleich getrennt: Stapel von 09:55 <span class=k>Ben</span></p>`, "Danach: 1 Stapel", "Stapel scannen</button>")
+
+	// the scanner runs: no button, when it comes back, the queue below
+	f.status["zustand"], f.status["einzug"], f.status["seite"] = "scannt", "scannt", 3
+	body = scanPage(t, f, "family")
+	mustContain(t, body, "<b>Scannt</b>", "Seite 3", saysScanScanning, "Wird gleich getrennt: Stapel von 09:55")
+	mustNotContain(t, body, "value=start>", saysScanBusy)
+
+	// a jam at the scanner while the worker splits: Weiter, no new stack
+	f.status["zustand"], f.status["einzug"], f.status["blatt"] = "wartet-auf-rest", "wartet-auf-rest", 6
+	body = scanPage(t, f, "family")
+	mustContain(t, body, "Nach Blatt 6 abgebrochen", "value=weiter>", "Wird gleich getrennt")
+	mustNotContain(t, body, "value=start>")
+}
+
+// haus#195 with the queue (mdopp/dokumente#14): the worker writes while
+// the scanner rests, so a newer `at` is no start; the start is taken when
+// a stack newer than the order is at the scanner, queued or ended.
+func TestScannenFollowsAStartWhileTheQueueRuns(t *testing.T) {
+	now := startNow(t)
+	at := func(d time.Duration) string { return now.Add(d).UTC().Format(time.RFC3339) }
+	after := "/dokumente?tut=start&seit=" + strconv.FormatInt(now.Add(-2*time.Second).Unix(), 10)
+	late := "/dokumente?tut=start&seit=" + strconv.FormatInt(now.Add(-31*time.Second).Unix(), 10)
+	working := func() map[string]any {
+		return map[string]any{"zustand": "trennt", "einzug": "frei", "scanner": true, "at": at(0),
+			"trennt": map[string]any{"stapel": "2026-10-14T09-52-00", "schritt": "trennt", "seite": 13, "seiten": 40},
+			"letzte": []any{map[string]any{"stapel": "2026-10-14T09-40-00", "ende": "fertig", "at": at(0)}}}
+	}
+
+	// running: the worker wrote just now, the scanner has not begun: Startet …
+	f := &scanLaib{status: working()}
+	body := scanPageAt(t, f, "family", after)
+	mustContain(t, body, `<p class="zustand laeuft" role=status>Startet …</p>`, "data-auffrischen=2>", "Wird getrennt: Stapel von 09:52, Seite 13 von 40")
+	mustNotContain(t, body, "Stapel scannen</button>")
+
+	// done: the scanner scans a stack begun after the order
+	f.status["zustand"], f.status["einzug"], f.status["stapel"], f.status["seite"] = "scannt", "scannt", "2026-10-14T09-59-59", 1
+	body = scanPageAt(t, f, "family", after)
+	mustContain(t, body, "<b>Scannt</b>", saysScanScanning)
+	mustNotContain(t, body, "Startet …</p>", "value=start>")
+	// … but not one begun before it
+	f.status["stapel"] = "2026-10-14T09-50-00"
+	mustContain(t, scanPageAt(t, f, "family", after), "Startet …</p>")
+
+	// done: a short stack already scanned and queued
+	f.status = working()
+	f.status["warten"] = []any{map[string]any{"stapel": "2026-10-14T09-59-59", "person": "anna", "seit": at(0)}}
+	body = scanPageAt(t, f, "family", after)
+	mustContain(t, body, "Stapel scannen</button>", "Danach: 1 Stapel")
+	mustNotContain(t, body, "Startet …</p>")
+
+	// failed: the new stack ended at once, the button back
+	f.status = working()
+	f.status["letzte"] = []any{map[string]any{"stapel": "2026-10-14T09-59-59", "ende": "fehler", "at": at(0), "meldung": "Scan fehlgeschlagen."},
+		map[string]any{"stapel": "2026-10-14T09-40-00", "ende": "fertig", "at": at(0)}}
+	body = scanPageAt(t, f, "family", after)
+	mustContain(t, body, "<b>Ging schief</b>", "Stapel scannen</button>")
+	mustNotContain(t, body, "Startet …</p>", "nach 30 Sekunden")
+
+	// timed out: 30 seconds and only the worker wrote: said, the button back
+	f.status = working()
+	body = scanPageAt(t, f, "family", late)
+	mustContain(t, body, "Der Scanner hat nach 30 Sekunden nicht angefangen.", "Stapel scannen</button>", "Wird getrennt")
+	mustNotContain(t, body, "Startet …</p>")
+
+	// Weiter: taken once the scanner no longer waits for the rest, not by the worker's writing
+	f.status = working()
+	f.status["zustand"], f.status["einzug"], f.status["blatt"] = "wartet-auf-rest", "wartet-auf-rest", 6
+	weiter := strings.Replace(after, "tut=start", "tut=weiter", 1)
+	mustContain(t, scanPageAt(t, f, "family", weiter), "Scannt weiter …</p>")
+	f.status["zustand"], f.status["einzug"] = "scannt", "scannt"
+	body = scanPageAt(t, f, "family", weiter)
+	mustContain(t, body, "<b>Scannt</b>")
+	mustNotContain(t, body, "Scannt weiter …</p>")
+}
+
+// mdopp/dokumente#12: a document whose split is doubtful carries its
+// reason; the page says it beside the document and on the folded line,
+// from Dokumente's list and onto Paperless's documents by id.
+func TestScannenSaysWhatToCheck(t *testing.T) {
+	why := "das Modell hat für 2 Seiten nicht geantwortet"
+	st := map[string]any{"zustand": "fertig", "einzug": "frei", "scanner": true, "letzte": []any{
+		map[string]any{"stapel": "2026-10-14T09-07-00", "ende": "fertig", "quelle": "scanner", "seiten": 9, "dokumente": []any{
+			map[string]any{"titel": "Arztbrief", "datei": "Arztbrief.pdf"},
+			map[string]any{"titel": "Befund", "datei": "Befund.pdf", "pruefen": why}}},
+		map[string]any{"stapel": "2026-10-13T09-07-00", "ende": "fertig", "dokumente": []any{map[string]any{"titel": "Brief", "datei": "Brief.pdf"}}}}}
+	body := scanPage(t, &scanLaib{status: st}, "family")
+	mustContain(t, body, `<b>2 Dokumente</b>`, `<span class=zweifel>1 bitte prüfen</span></summary>`,
+		`">Befund</a> <span class=zweifel>Bitte prüfen: `+why+`</span></li>`, `">Arztbrief</a></li>`)
+	if strings.Count(body, "bitte prüfen") != 1 {
+		t.Errorf("only the stack with a doubt is marked:\n%s", body)
+	}
+
+	// from Paperless by the field „Stapel“: the doubt follows the id
+	fake := paperlessfake.New("pl")
+	defer fake.Close()
+	fake.Field(7, "Stapel", "string")
+	fake.Add(paperlessfake.Doc{ID: 31, Title: "Arztbrief Dr. B", Fields: map[int]any{7: "2026-10-14T09-07-00"}},
+		paperlessfake.Doc{ID: 32, Title: "Befund (umbenannt)", Fields: map[int]any{7: "2026-10-14T09-07-00"}})
+	all := []laib.Stack{{Stapel: "2026-10-14T09-07-00", Ende: "fertig", Dokumente: []laib.StackDoc{
+		{Titel: "Arztbrief", Datei: "a.pdf", ID: 31}, {Titel: "Befund", Datei: "b.pdf", ID: 32, Pruefen: why}}}}
+	cfg := StartConfig{Docs: &paperless.Client{URL: fake.URL, Token: "pl"}}
+	got := shownStacks(httptest.NewRequest("GET", "/dokumente", nil), cfg, all)
+	if len(got) != 1 || len(got[0].docs) != 2 || got[0].doubtful() != 1 {
+		t.Fatalf("shown: %+v", got)
+	}
+	for _, d := range got[0].docs {
+		if (d.pruefen != "") != (d.title == "Befund (umbenannt)") {
+			t.Errorf("%+v", d)
+		}
+	}
+}

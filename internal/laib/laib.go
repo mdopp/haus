@@ -583,6 +583,35 @@ type Scan struct {
 	// Auftrag is the last order as the scan took it (mdopp/dokumente#16):
 	// a refused start or weiter carries its reason at once
 	Auftrag ScanAuftrag `json:"auftrag"`
+	// the scan queue (mdopp/dokumente#14): Zustand is then the busiest
+	// part; Einzug is the scanner alone (frei | scannt | wartet-auf-rest,
+	// "": a Dokumente before the queue), Trennt the stack the worker has,
+	// Warten the stacks after it, first in line first
+	Einzug string        `json:"einzug"`
+	Trennt *ScanArbeit   `json:"trennt"`
+	Warten []ScanWartend `json:"warten"`
+}
+
+// ScanArbeit is the stack the worker splits or files now.
+type ScanArbeit struct {
+	Stapel  string `json:"stapel"`
+	Person  string `json:"person"`
+	Fuer    string `json:"fuer"`
+	Schritt string `json:"schritt"` // trennt | legt-ab
+	Detail  string `json:"detail"`
+	Seite   int    `json:"seite"`  // the page the model reads, 0: none
+	Seiten  int    `json:"seiten"` // of how many
+}
+
+// ScanWartend is a stack in the queue, scanned and not yet split.
+type ScanWartend struct {
+	Stapel string `json:"stapel"`
+	Person string `json:"person"`
+	Fuer   string `json:"fuer"`
+	Quelle string `json:"quelle"` // scanner | ordner
+	Seiten int    `json:"seiten"`
+	Datei  string `json:"datei"`
+	Seit   string `json:"seit"` // when it joined the queue, RFC 3339
 }
 
 // ScanAuftrag is the last order the scan read: taken, or refused and why.
@@ -649,6 +678,8 @@ type StackDoc struct {
 	Datei string `json:"datei"` // its original file name in Paperless
 	// ID is its Paperless id once Dokumente found it there (dokumente#15)
 	ID int `json:"id"`
+	// Pruefen is why its split is doubtful (mdopp/dokumente#12), "": none
+	Pruefen string `json:"pruefen"`
 }
 
 // ScanStatus reads what the scanner does now.

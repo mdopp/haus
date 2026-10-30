@@ -32,6 +32,7 @@ const (
 	saysFolderSetup  = "Ein Scanner, der in einen Netzwerkordner scannt, wird in seinem eigenen Menü eingerichtet:"
 	saysNoStacks     = "Noch kein Stapel. Was gescannt ist, steht hier mit seinen Dokumenten."
 	saysScanBusy     = "„Stapel scannen“ kommt wieder, sobald dieser Stapel in Paperless liegt."
+	saysScanScanning = "„Stapel scannen“ kommt wieder, sobald der Scanner mit diesem Stapel durch ist; getrennt wird danach im Hintergrund."
 	saysStackHow     = "Eine Datei ist ein Stapel; die Box trennt die Dokumente selbst, entfernt leere Seiten und legt alles in Paperless ab."
 	saysAsked        = "Im Heimnetz wurden %d Geräte direkt gefragt."
 	saysNotFound     = "Kein Scanner gefunden. Ist er an, am Server eingesteckt oder im selben Netz? Sonst unten den Gerätenamen von Hand eintragen, etwa epson2:net:192.168.178.87 für einen Scanner im Netz."
@@ -202,8 +203,8 @@ func readScan(r *http.Request, cfg StartConfig) scanning {
 	}
 	s := scanning{on: true}
 	fetch(r, func(ctx context.Context) { s.st, s.err = cfg.Laib.ScanStatus(ctx) })
-	now, _ := cfg.clock()
-	s.order = followOrder(r.URL.Query(), s.st, now)
+	now, loc := cfg.clock()
+	s.order = followOrder(r.URL.Query(), s.st, now, loc)
 	return s
 }
 
@@ -212,8 +213,12 @@ func readScan(r *http.Request, cfg StartConfig) scanning {
 // is not and scanWaits has passed. A link older than ten minutes is none.
 // A stack order is done once the scan writes a state of the stack after
 // it — running, waiting for the rest, or failed with its reason; a fertig
-// or bereit from before is the last stack's (haus#195).
-func followOrder(q url.Values, st laib.Scan, now time.Time) scanOrder {
+// or bereit from before is the last stack's (haus#195). With the scan
+// queue (mdopp/dokumente#14) the worker writes while the scanner rests, so
+// a start is taken once a stack newer than the order is anywhere — at the
+// scanner, in the queue, at the worker or already ended — and a weiter once
+// the scanner no longer waits for the rest.
+func followOrder(q url.Values, st laib.Scan, now time.Time, loc *time.Location) scanOrder {
 	do := q.Get("tut")
 	sec, err := strconv.ParseInt(q.Get("seit"), 10, 64)
 	if !scanSetup[do] && !stackOrder[do] || err != nil {
@@ -232,7 +237,14 @@ func followOrder(q url.Values, st laib.Scan, now time.Time) scanOrder {
 	case "suchen":
 		o.done = st.Suche.Zustand != "läuft" && newer(st.Suche.At)
 	case "start", "weiter":
-		o.done = newer(st.At) && (busy(st.Zustand) || st.Zustand == "wartet-auf-rest" || st.Zustand == "fehler")
+		switch {
+		case st.Einzug == "": // a Dokumente before the queue
+			o.done = newer(st.At) && (busy(st.Zustand) || st.Zustand == "wartet-auf-rest" || st.Zustand == "fehler")
+		case do == "start":
+			o.done = newStack(st, since, loc)
+		default:
+			o.done = newer(st.At) && st.Einzug != "wartet-auf-rest"
+		}
 		// the scan says it read the order (mdopp/dokumente#16): refused with its reason, or taken
 		if a := st.Auftrag; a.Aktion == do && newer(a.At) {
 			if !a.Angenommen {
@@ -247,6 +259,40 @@ func followOrder(q url.Values, st laib.Scan, now time.Time) scanOrder {
 	}
 	o.late = !o.done && now.Sub(since) > scanWaits[do]
 	return o
+}
+
+// stackLayout is a stack's id as Dokumente names it: when it began, in the
+// box's local time (2026-10-29T17-07-46).
+const stackLayout = "2006-01-02T15-04-05"
+
+// stackTime is when a stack began, from its id; false for an id that is no time.
+func stackTime(id string, loc *time.Location) (time.Time, bool) {
+	t, err := time.ParseInLocation(stackLayout, id, loc)
+	return t, err == nil
+}
+
+// newStack is a stack begun at since or later anywhere in the status: at
+// the scanner, at the worker, in the queue, or ended.
+func newStack(st laib.Scan, since time.Time, loc *time.Location) bool {
+	ids := []string{}
+	if st.Einzug != "frei" {
+		ids = append(ids, st.Stapel)
+	}
+	if st.Trennt != nil {
+		ids = append(ids, st.Trennt.Stapel)
+	}
+	for _, w := range st.Warten {
+		ids = append(ids, w.Stapel)
+	}
+	for _, l := range st.Letzte {
+		ids = append(ids, l.Stapel)
+	}
+	for _, id := range ids {
+		if t, ok := stackTime(id, loc); ok && !t.Before(since) {
+			return true
+		}
+	}
+	return false
 }
 
 // waitWords is scanWaits in the page's words.
@@ -301,6 +347,9 @@ func busy(zustand string) bool {
 
 // scanState is the state in the family's words: a line and its detail.
 func scanState(st laib.Scan) (string, string) {
+	if st.Einzug == "frei" && busy(st.Zustand) { // the scanner rests while the worker splits (mdopp/dokumente#14)
+		return "Bereit", "Der Scanner ist frei für den nächsten Stapel."
+	}
 	switch st.Zustand {
 	case "bereit":
 		return "Bereit", "Den Stapel in den Einzug legen."
@@ -379,13 +428,18 @@ func scanSection(r *http.Request, cfg StartConfig, s scanning) string {
 	order := scanButton
 	switch {
 	case s.order.stackWaits():
-	case st.Zustand == "wartet-auf-rest":
+	case st.Zustand == "wartet-auf-rest" || st.Einzug == "wartet-auf-rest":
 		b.WriteString(`<div class=knoepfe>` + order("Weiter", "weiter") + order("Abschließen", "abschliessen") + order("Verwerfen", "verwerfen") + `</div>`)
-	case st.Scanner && (st.Zustand == "bereit" || st.Zustand == "fertig" || st.Zustand == "fehler"):
+	case st.Scanner && st.Einzug == "frei": // the scanner is free while earlier stacks are split (mdopp/dokumente#14)
 		b.WriteString(scanStart(r))
+	case st.Scanner && st.Einzug == "" && (st.Zustand == "bereit" || st.Zustand == "fertig" || st.Zustand == "fehler"):
+		b.WriteString(scanStart(r))
+	case st.Scanner && st.Einzug == "scannt":
+		b.WriteString(`<p class=k>` + html.EscapeString(saysScanScanning) + `</p>`)
 	case st.Scanner && busy(st.Zustand): // owner 2026-10-27: where is the button? say when it comes back
 		b.WriteString(`<p class=k>` + html.EscapeString(saysScanBusy) + `</p>`)
 	}
+	b.WriteString(scanQueue(cfg, st))
 	eingang := st.Eingang
 	if eingang == "" {
 		eingang = "scan-eingang"
@@ -403,6 +457,59 @@ func scanSection(r *http.Request, cfg StartConfig, s scanning) string {
 	}
 	b.WriteString(`</section>`)
 	return b.String()
+}
+
+// scanQueue is what the worker does behind the scanner (mdopp/dokumente#14),
+// in the family's words: the stack being split or filed, with its page,
+// and how many wait after it. Nothing while no stack is in work.
+func scanQueue(cfg StartConfig, st laib.Scan) string {
+	now, loc := cfg.clock()
+	var b strings.Builder
+	rest := st.Warten
+	if a := st.Trennt; a != nil && a.Stapel != "" {
+		say := "Wird getrennt: " + stackName(a.Stapel, now, loc)
+		switch {
+		case a.Schritt == "legt-ab":
+			say = "Wird abgelegt: " + stackName(a.Stapel, now, loc)
+		case a.Seite > 0 && a.Seiten > 0:
+			say += ", Seite " + strconv.Itoa(a.Seite) + " von " + strconv.Itoa(a.Seiten)
+		case strings.HasPrefix(a.Detail, "wartet auf das Modell"):
+			say += ", wartet auf das Hausmodell"
+		}
+		b.WriteString(`<p class="laeuft reihe">` + html.EscapeString(say) + stackWho(a.Person, a.Fuer) + `</p>`)
+	} else if len(rest) > 0 { // in the queue, the worker not at it yet
+		b.WriteString(`<p class="laeuft reihe">` + html.EscapeString("Wird gleich getrennt: "+stackName(rest[0].Stapel, now, loc)) + stackWho(rest[0].Person, rest[0].Fuer) + `</p>`)
+		rest = rest[1:]
+	}
+	if len(rest) > 0 {
+		b.WriteString(`<p class="k reihe">` + html.EscapeString("Danach: "+strconv.Itoa(len(rest))+" Stapel") + `</p>`)
+	}
+	return b.String()
+}
+
+// stackName is a stack by when it began: „Stapel von 17:07“ today, with
+// its day before; „ein Stapel“ for an id that is no time.
+func stackName(id string, now time.Time, loc *time.Location) string {
+	t, ok := stackTime(id, loc)
+	if !ok {
+		return "ein Stapel"
+	}
+	if y, m, d := now.In(loc).Date(); t.Year() == y && t.Month() == m && t.Day() == d {
+		return "Stapel von " + t.Format("15:04")
+	}
+	return "Stapel vom " + dayWords(t, loc) + ", " + t.Format("15:04")
+}
+
+// stackWho is who started a stack and whether it is only theirs, as the
+// last stacks say it; "" for no one.
+func stackWho(person, fuer string) string {
+	switch {
+	case person == "":
+		return ""
+	case fuer == "person":
+		return ` <span class=k>` + html.EscapeString("nur für "+capital(person)) + `</span>`
+	}
+	return ` <span class=k>` + html.EscapeString(capital(person)) + `</span>`
 }
 
 // einzelheiten is the raw error behind a sentence (laib#589), folded away
@@ -607,7 +714,11 @@ func stacks(r *http.Request, cfg StartConfig, all []laib.Stack) string {
 			open = " open"
 		}
 		b.WriteString(`<li><details data-stapel="` + html.EscapeString(s.Stapel) + `"` + open + `><summary><b>` + html.EscapeString(s.line()) + `</b> <span class=k>` +
-			html.EscapeString(stackDetail(s.Stack, now, loc)) + `</span></summary>`)
+			html.EscapeString(stackDetail(s.Stack, now, loc)) + `</span>`)
+		if n := s.doubtful(); n > 0 { // seen folded too (mdopp/dokumente#12)
+			b.WriteString(` <span class=zweifel>` + html.EscapeString(strconv.Itoa(n)+" bitte prüfen") + `</span>`)
+		}
+		b.WriteString(`</summary>`)
 		if s.Ende == "nachholen" {
 			if m := oneLine(strings.TrimPrefix(strings.TrimSpace(s.Meldung), "Scan wartet:")); m != "" {
 				b.WriteString(`<p class=k>` + html.EscapeString(strings.TrimSpace(m)) + `</p>`)
@@ -623,10 +734,14 @@ func stacks(r *http.Request, cfg StartConfig, all []laib.Stack) string {
 			b.WriteString(`<ul>`)
 			for _, d := range s.docs {
 				if opens && d.link != "" {
-					b.WriteString(`<li><a href="` + html.EscapeString(cfg.paperless().href(d.link)) + `">` + html.EscapeString(d.title) + `</a></li>`)
+					b.WriteString(`<li><a href="` + html.EscapeString(cfg.paperless().href(d.link)) + `">` + html.EscapeString(d.title) + `</a>`)
 				} else {
-					b.WriteString(`<li>` + html.EscapeString(d.title) + `</li>`)
+					b.WriteString(`<li>` + html.EscapeString(d.title))
 				}
+				if d.pruefen != "" { // the split is doubtful: say why, beside it (mdopp/dokumente#12)
+					b.WriteString(` <span class=zweifel>` + html.EscapeString("Bitte prüfen: "+d.pruefen) + `</span>`)
+				}
+				b.WriteString(`</li>`)
 			}
 			b.WriteString(`</ul>`)
 		}
@@ -660,9 +775,20 @@ type shownStack struct {
 	gone bool
 }
 
-// stackEntry is one document of a stack: its title and where it opens in
-// Paperless (a path; "": nowhere).
-type stackEntry struct{ title, link string }
+// stackEntry is one document of a stack: its title, where it opens in
+// Paperless (a path; "": nowhere), and why its split is doubtful ("": not).
+type stackEntry struct{ title, link, pruefen string }
+
+// doubtful is how many of the stack's documents to check.
+func (s shownStack) doubtful() int {
+	n := 0
+	for _, d := range s.docs {
+		if d.pruefen != "" {
+			n++
+		}
+	}
+	return n
+}
 
 // line is the stack's result in a few words.
 func (s shownStack) line() string {
@@ -750,7 +876,8 @@ const scanStyle = `<style>.scannen .zustand{margin:10px 0 0}.scannen .knoepfe{di
 .funde{margin:10px 0 0;padding:0;list-style:none}.funde li{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-top:1px solid var(--line)}.funde button{margin:0;width:auto}
 .einrichten ul.k{margin:6px 0 0;padding-left:18px;font-size:.85rem}.scannen .gut,.scannen .achtung{margin:10px 0 0}
 .laeuft{margin:12px 0 0;font-weight:600}.laeuft::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--accent);margin-right:8px;vertical-align:1px;animation:puls 1.2s ease-in-out infinite}
-@keyframes puls{50%{opacity:.25}}@media (prefers-reduced-motion:reduce){.laeuft::before{animation:none}}.scannen button:disabled{opacity:.6}</style>`
+@keyframes puls{50%{opacity:.25}}@media (prefers-reduced-motion:reduce){.laeuft::before{animation:none}}.scannen button:disabled{opacity:.6}
+.scannen .reihe{margin:8px 0 0;overflow-wrap:anywhere}.scannen p.laeuft.reihe{font-weight:400}.stapel .zweifel{color:var(--warn);font-weight:600;overflow-wrap:anywhere}.stapel li li .zweifel{display:block;font-size:.85rem}</style>`
 
 var pagesRE = regexp.MustCompile(`(\d+) Seiten`)
 
@@ -812,9 +939,21 @@ func shownStacks(r *http.Request, cfg StartConfig, all []laib.Stack) []shownStac
 			rest = append(rest, i)
 			continue
 		}
+		byID, byTitle := map[int]string{}, map[string]string{} // Dokumente's doubts, onto Paperless's documents
+		for _, d := range s.Dokumente {
+			if p := oneLine(d.Pruefen); p != "" && d.ID > 0 {
+				byID[d.ID] = p
+			} else if p != "" {
+				byTitle[oneLine(d.Titel)] = p
+			}
+		}
 		s.docs = s.docs[:0:0]
 		for _, d := range docs {
-			s.docs = append(s.docs, stackEntry{title: oneLine(d.Title), link: "/documents/" + strconv.Itoa(d.ID) + "/details"})
+			p := byID[d.ID]
+			if p == "" {
+				p = byTitle[oneLine(d.Title)]
+			}
+			s.docs = append(s.docs, stackEntry{title: oneLine(d.Title), link: "/documents/" + strconv.Itoa(d.ID) + "/details", pruefen: p})
 		}
 		s.list = "/documents?" + paperless.FieldQuery(field, s.Stapel)
 	}
@@ -862,7 +1001,7 @@ func dokumenteList(s laib.Stack) []stackEntry {
 		if d.ID > 0 {
 			link = "/documents/" + strconv.Itoa(d.ID) + "/details"
 		}
-		out = append(out, stackEntry{title: title, link: link})
+		out = append(out, stackEntry{title: title, link: link, pruefen: oneLine(d.Pruefen)})
 	}
 	return out
 }
