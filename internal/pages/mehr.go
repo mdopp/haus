@@ -2,6 +2,7 @@ package pages
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/mdopp/haus/internal/cards"
 )
@@ -60,23 +61,31 @@ func Mehr(cfg StartConfig) http.HandlerFunc {
 	}
 }
 
-// What the Gesundheit card says (haus#192): what it is, and honestly who
-// sees what — Haus links and holds nothing of it.
-const (
-	saysGesundheit     = "Deine Blutwerte, Befunde und wie es dir ging, als Verlauf."
-	saysGesundheitWer  = "Nur du siehst deinen Verlauf. Wer die Box verwaltet (Admin), sieht die Dokumente in Paperless trotzdem."
-	saysGesundheitLink = "Weiter in Gesundheit"
-)
+// What the Gesundheit card says (haus#192): its pages, each a link, and
+// honestly who sees what in one quiet line — Haus links and holds nothing of it.
+// Owner, 2026-10-30: the first row was text that looked like a link, and one
+// „Weiter in Gesundheit“ hid that Gesundheit has several pages.
+const saysGesundheitWer = "Nur du siehst deine Werte; wer die Box verwaltet (Admin), sieht die Dokumente in Paperless. Nur zu Hause im WLAN."
+
+// gesundheitSeiten are Gesundheit's pages (mdopp/gesundheit#10), in the order a person uses them.
+var gesundheitSeiten = []struct{ text, detail, path string }{
+	{"Werte", "Blutwerte und Messungen: im Normalbereich?, was hat sich verändert", "/werte"},
+	{"Befunde", "Arztbriefe und Laborblätter, die neuesten zuerst", "/befunde"},
+	{"Wie es mir ging", "Deine Tagesnotizen im Verlauf", "/befinden"},
+	{"Für den Arzt", "Fragen zu deinen Werten, zum Ausdrucken", "/arzt"},
+}
 
 // gesundheitKarte is Mehr's card for the Gesundheit program (haus#192,
 // laib#893), only on a box that has it (HAUS_GESUNDHEIT_URL): an internal
-// route, so the link opens at home only, as Paperless does.
+// route, so the links open at home only, as Paperless does.
 func gesundheitKarte(cfg StartConfig) string {
 	if cfg.GesundheitURL == "" {
 		return ""
 	}
-	c := cards.Card{Title: "Gesundheit"}
-	c.Add(saysGesundheit, saysGesundheitWer)
-	c.AddLink(saysGesundheitLink, saysOnlyAtHome, cfg.GesundheitURL)
+	c := cards.Card{Title: "Gesundheit", Note: saysGesundheitWer}
+	base := strings.TrimSuffix(cfg.GesundheitURL, "/")
+	for _, s := range gesundheitSeiten {
+		c.AddLink(s.text, s.detail, base+s.path)
+	}
 	return c.HTML()
 }
