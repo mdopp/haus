@@ -504,14 +504,18 @@ func fetchCtx(ctx context.Context, reads ...func(context.Context)) {
 
 // usageStyle is the card's look: the house palette's light tokens (the
 // family frame, haus#35) on the Box page — amber for what did not answer.
-const usageStyle = `<style>.genutzt{--ink:#0f172a;--muted:#64748b;--edge:rgba(15,23,42,.12);--line:rgba(15,23,42,.08);--accent:#ea580c;--accent-soft:rgba(234,88,12,.12);--warn:#b45309;--warn-soft:rgba(180,83,9,.10);
-margin:1.4rem 0;padding:16px;background:#fff;color:var(--ink);border:1px solid var(--edge);border-radius:14px;font-family:Geist,system-ui,sans-serif}
+// A white section sets every token its content paints with, the
+// surfaces too (--card, --panel, --bg): Box's .zeilen inside it is white
+// with dark ink in either theme, not the page's dark card (haus#194).
+const usageStyle = `<style>.genutzt{--ink:#0f172a;--muted:#64748b;--faint:#94a3b8;--edge:rgba(15,23,42,.12);--line:rgba(15,23,42,.08);--accent:#ea580c;--accent-soft:rgba(234,88,12,.12);--warn:#b45309;--warn-soft:rgba(180,83,9,.10);
+--danger:#dc2626;--card:#fff;--panel:#fff;--bg:#f1f5f9;color-scheme:light;
+margin:1.4rem 0;padding:16px;background:var(--card);color:var(--ink);border:1px solid var(--edge);border-radius:14px;font-family:Geist,system-ui,sans-serif}
 .genutzt h2{margin:0 0 4px;color:var(--ink);text-transform:none;letter-spacing:0;font-size:1.1rem}
 .genutzt h3{margin:18px 0 6px;font-size:.72rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
 .genutzt p{margin:6px 0}.genutzt .leise{color:var(--muted);font-size:.85rem}
 .genutzt .achtung{padding:10px 12px;background:var(--warn-soft);border:1px solid var(--warn);border-radius:10px}
 .genutzt .zeilen{list-style:none;margin:0;padding:0}
-.genutzt .zeilen li{display:flex;gap:12px;justify-content:space-between;align-items:baseline;padding:7px 0;border-bottom:1px solid var(--line)}
+.genutzt .zeilen li{display:flex;gap:12px;justify-content:space-between;align-items:baseline;padding:8px 12px;border-bottom:1px solid var(--line)}
 .genutzt .zeilen li:last-child{border-bottom:0}
 .genutzt .was{overflow-wrap:anywhere}.genutzt .wo{color:var(--muted);font-size:.85rem;white-space:nowrap}
 .genutzt .wieoft{font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap}
