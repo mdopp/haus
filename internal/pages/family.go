@@ -345,9 +345,19 @@ func (cfg StartConfig) clock() (time.Time, *time.Location) {
 	return now.In(loc), loc
 }
 
+// slowFetch is how long a page may wait for its backends before Haus's
+// log says so (haus#184): the page's time, readable with laib logs haus.
+var slowFetch = time.Second
+
 // fetch runs each backend read at once, each within backendWait: a slow
-// one is left out, the page still comes.
+// one is left out, the page still comes. A wait over slowFetch is logged.
 func fetch(r *http.Request, reads ...func(context.Context)) {
+	began := time.Now()
+	defer func() {
+		if took := time.Since(began); took > slowFetch && r.URL != nil {
+			log.Printf("haus: %s waited %.2fs for its backends", r.URL.Path, took.Seconds())
+		}
+	}()
 	var wg sync.WaitGroup
 	for _, f := range reads {
 		wg.Add(1)
