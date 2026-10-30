@@ -11,15 +11,16 @@ const mehrPath = "/mehr"
 
 // What Mehr says of each of its pages, in a line.
 var mehrSays = map[string]string{
-	"Dokumente":       "Briefe, Rechnungen und Verträge ablegen und wiederfinden",
-	"Apps einrichten": "So kommen die Apps der Box auf Handy und Computer",
-	"Aufgaben":        "Was du einmal einrichtest, offen und erledigt",
-	"Podcasts":        "Podcasts per Link abonnieren; Bescheid bei jeder neuen Folge",
-	"Platte erfassen": "Eine Schallplatte fotografieren und in deine Discogs-Sammlung eintragen",
-	"Discogs":         "Dein Discogs-Konto verbinden: Sammlung, Wantlist, Platte erfassen",
-	"Musik":           "Hochladen, Platten erfassen, Discogs und die Musik-Wunschliste",
-	"Netzlaufwerk":    "Dein Passwort für das Netzlaufwerk",
-	"Box":             "Wie es der Box geht, für Admins",
+	"Dokumente":        "Briefe, Rechnungen und Verträge ablegen und wiederfinden",
+	"Apps einrichten":  "So kommen die Apps der Box auf Handy und Computer",
+	"Aufgaben":         "Was du einmal einrichtest, offen und erledigt",
+	"Podcasts":         "Podcasts per Link abonnieren; Bescheid bei jeder neuen Folge",
+	"Gesehen & Gehört": "Was du geschaut und gehört hast; was als Nächstes auf die Wunschliste kommt",
+	"Platte erfassen":  "Eine Schallplatte fotografieren und in deine Discogs-Sammlung eintragen",
+	"Discogs":          "Dein Discogs-Konto verbinden: Sammlung, Wantlist, Platte erfassen",
+	"Musik":            "Hochladen, Platten erfassen, Discogs und die Musik-Wunschliste",
+	"Netzlaufwerk":     "Dein Passwort für das Netzlaufwerk",
+	"Box":              "Wie es der Box geht, für Admins",
 }
 
 // Mehr is the bar's last entry on the phone (haus#67): the pages that

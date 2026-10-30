@@ -27,6 +27,7 @@ import (
 	"github.com/mdopp/haus/internal/discogs"
 	"github.com/mdopp/haus/internal/einkauf"
 	"github.com/mdopp/haus/internal/favoriten"
+	"github.com/mdopp/haus/internal/gesehen"
 	"github.com/mdopp/haus/internal/ha"
 	"github.com/mdopp/haus/internal/haushalt"
 	"github.com/mdopp/haus/internal/jellyfin"
@@ -79,6 +80,7 @@ type site struct {
 	docsMail, paperlessPublic string
 	paperlessLAN              bool
 	podcasts                  *podcasts.Service // haus#123: the family's podcasts in Audiobookshelf; nil, no page
+	gesehen                   *gesehen.Service  // haus#152: what each person watched and heard; nil, no page
 }
 
 // routes is Haus's whole surface: /napi for the app, /mcp/haushalt for the
@@ -94,7 +96,7 @@ func routes(s site) http.Handler {
 	pagesMux := http.NewServeMux()
 	// the family's pages (haus#12): each card only from a backend that is set; a
 	// page whose backend is not set says what is missing (laib#418)
-	family := pages.StartConfig{Podcasts: s.podcasts, Laib: s.ops, Witness: s.napi.Witness, LaibURL: s.laibURL, HA: s.napi.HA, Energy: s.napi.Energy, Calendar: s.hh.Calendar, Contacts: s.hh.Contacts,
+	family := pages.StartConfig{Podcasts: s.podcasts, Gesehen: s.gesehen, Laib: s.ops, Witness: s.napi.Witness, LaibURL: s.laibURL, HA: s.napi.HA, Energy: s.napi.Energy, Calendar: s.hh.Calendar, Contacts: s.hh.Contacts,
 		Notes: s.hh.Notes, Library: s.hh.Library, Judge: s.hh.Judge, Docs: s.hh.Documents, Loc: s.hh.Loc, Favorites: s.favorites, Bote: s.bote,
 		Samba: s.samba, SambaHost: s.sambaHost, Usage: s.usage, PublicURL: s.publicURL, Welcome: s.welcome, STT: s.stt,
 		HAPublicURL: s.haPublic, Inverted: s.inverted, RadicalePublicURL: s.radicale, Views: s.views, GesundheitURL: s.gesundheit,
@@ -133,6 +135,10 @@ func routes(s site) http.Handler {
 	}
 	live := &pages.Live{HA: family.HA} // the pages' push: Home Assistant's changes and Haus's own
 	pagesMux.Handle(pages.LivePath, live)
+	if s.gesehen != nil { // haus#152: the film and book wish list, told like the other lists
+		s.gesehen.Changed = func(r caldav.ListRef) { live.Tell(pages.ListeLive(r)) }
+		pagesMux.HandleFunc(pages.GesehenPath, pages.Gesehen(family))
+	}
 	if s.hh.Einkauf != nil { // haus#118: the list, ticked on one phone, fetched again on the others
 		s.hh.Einkauf.Changed = func(r caldav.ListRef) { live.Tell(pages.ListeLive(r)) }
 		pagesMux.HandleFunc(pages.DiscogsPath, pages.Discogs(family)) // connect one's own Discogs; without the app's keys, how to set them
@@ -337,6 +343,7 @@ func main() {
 		pods = podcasts.Open(c, dataDir)
 		hh.Podcasts = pods
 	}
+	gs := gesehenFromEnv(hh.Calendar)
 	if hh.Calendar != nil {
 		hh.Einkauf = einkauf.Open(hh.Calendar) // haus#118: the household's shopping list, haus/einkauf
 		// a shared song goes on haus/liste-musik, with its stages and where it is (MusicBrainz)
@@ -401,7 +408,7 @@ func main() {
 	go func() { counter.Run(counting, 5*time.Minute); close(flushed) }()
 	go voice.Run(ctx, time.Minute)
 	mux := routes(site{napi: cfg, hh: hh, store: store, ops: ops, proxySecret: proxySecret, laibURL: laibURL,
-		publicURL: os.Getenv("HAUS_PUBLIC_URL"), tickets: werkstatt.FromEnv(), favorites: favoriten.Open(dataDir), bote: b, podcasts: pods,
+		publicURL: os.Getenv("HAUS_PUBLIC_URL"), tickets: werkstatt.FromEnv(), favorites: favoriten.Open(dataDir), bote: b, podcasts: pods, gesehen: gs,
 		samba: samba.FromEnv(), sambaHost: os.Getenv("HAUS_SAMBA_HOST"),
 		usage: counter, voice: voice, welcome: true,
 		stt:        pages.STT{Provider: os.Getenv("HAUS_STT_PROVIDER"), Language: env("HAUS_STT_LANGUAGE", "de")},
@@ -426,4 +433,21 @@ func main() {
 	stop()
 	stopCounting()
 	<-flushed // the last counts go out before Haus does
+}
+
+// gesehenFromEnv is Gesehen & Gehört's backends (haus#152): Jellyfin with
+// its API key (HAUS_JELLYFIN_KEY, laib's media template mints it), ABS with
+// Haus's key, the wish list on dav; nil when neither app is there.
+func gesehenFromEnv(dav *caldav.Client) *gesehen.Service {
+	g := &gesehen.Service{DAV: dav}
+	if jf := jellyfin.KeyFromEnv(); jf != nil {
+		g.Filme = jf
+	}
+	if a := abs.FromEnv(); a != nil {
+		g.Buecher = a
+	}
+	if g.Filme == nil && g.Buecher == nil {
+		return nil
+	}
+	return g
 }

@@ -45,28 +45,8 @@ type Treffer struct {
 // both compared plain (case, accents, punctuation aside). An empty artist
 // matches any.
 func (c *Client) Find(ctx context.Context, artist, title string) (Treffer, bool, error) {
-	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	defer cancel()
 	q := url.Values{"searchTerm": {title}, "IncludeItemTypes": {"Audio,MusicAlbum"}, "Recursive": {"true"},
 		"Fields": {"AlbumArtist,Artists,Album"}, "Limit": {"50"}}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.URL+"/Items?"+q.Encode(), nil)
-	if err != nil {
-		return Treffer{}, false, err
-	}
-	req.Header.Set("Authorization", `MediaBrowser Token="`+c.Token+`", Client="Haus"`)
-	h := c.HTTP
-	if h == nil {
-		h = http.DefaultClient
-	}
-	res, err := h.Do(req)
-	if err != nil {
-		return Treffer{}, false, err
-	}
-	defer res.Body.Close()
-	raw, _ := io.ReadAll(io.LimitReader(res.Body, 4<<20))
-	if res.StatusCode != http.StatusOK {
-		return Treffer{}, false, fmt.Errorf("jellyfin %d: %s", res.StatusCode, strings.TrimSpace(string(raw[:min(len(raw), 200)])))
-	}
 	var out struct {
 		Items []struct {
 			Name        string   `json:"Name"`
@@ -76,8 +56,8 @@ func (c *Client) Find(ctx context.Context, artist, title string) (Treffer, bool,
 			Artists     []string `json:"Artists"`
 		} `json:"Items"`
 	}
-	if err := json.Unmarshal(raw, &out); err != nil {
-		return Treffer{}, false, fmt.Errorf("jellyfin: %w", err)
+	if err := c.get(ctx, "/Items", q, &out); err != nil {
+		return Treffer{}, false, err
 	}
 	want, by := Plain(title), Plain(artist)
 	for _, it := range out.Items {
@@ -98,6 +78,34 @@ func (c *Client) Find(ctx context.Context, artist, title string) (Treffer, bool,
 		return Treffer{Album: it.Album, Titel: it.Name}, true, nil
 	}
 	return Treffer{}, false, nil
+}
+
+// get asks Jellyfin, with the client's token, and reads its JSON answer.
+func (c *Client) get(ctx context.Context, path string, q url.Values, out any) error {
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.URL+path+"?"+q.Encode(), nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", `MediaBrowser Token="`+c.Token+`", Client="Haus"`)
+	h := c.HTTP
+	if h == nil {
+		h = http.DefaultClient
+	}
+	res, err := h.Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	raw, _ := io.ReadAll(io.LimitReader(res.Body, 4<<20))
+	if res.StatusCode != http.StatusOK {
+		return fmt.Errorf("jellyfin %d: %s", res.StatusCode, strings.TrimSpace(string(raw[:min(len(raw), 200)])))
+	}
+	if err := json.Unmarshal(raw, out); err != nil {
+		return fmt.Errorf("jellyfin: %w", err)
+	}
+	return nil
 }
 
 // Plain is a name compared: lower case, letters and digits only, umlauts

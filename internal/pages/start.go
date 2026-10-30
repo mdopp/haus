@@ -21,6 +21,7 @@ import (
 	"github.com/mdopp/haus/internal/einkauf"
 	"github.com/mdopp/haus/internal/energie"
 	"github.com/mdopp/haus/internal/favoriten"
+	"github.com/mdopp/haus/internal/gesehen"
 	"github.com/mdopp/haus/internal/ha"
 	"github.com/mdopp/haus/internal/judge"
 	"github.com/mdopp/haus/internal/laib"
@@ -43,6 +44,7 @@ type StartConfig struct {
 	Witness   *schalter.Witness // who switched what, into the log and Laib's journal (haus#89); nil: the log only
 	Fetcher   merken.Fetcher    // how Notizen fetches a page to keep (haus#117); the tests' allows their 127.0.0.1
 	Podcasts  *podcasts.Service // the family's podcasts in Audiobookshelf (haus#123); nil: no page
+	Gesehen   *gesehen.Service  // what each person watched and heard, and the film and book wish list (haus#152); nil: no page
 	Einkauf   *einkauf.Liste    // the household's shopping list in Radicale (haus#118); nil: no page
 	Wuensche  *einkauf.Wuensche // the music wish list (owner 2026-10-25); nil: a song link is a note
 	Discogs   *discogs.Regale   // each person's records on Discogs, connected through the app (laib#696); nil: no Discogs

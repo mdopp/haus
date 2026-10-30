@@ -32,8 +32,10 @@ import (
 	"github.com/mdopp/haus/internal/cards"
 	"github.com/mdopp/haus/internal/einkauf"
 	"github.com/mdopp/haus/internal/favoriten"
+	"github.com/mdopp/haus/internal/gesehen"
 	"github.com/mdopp/haus/internal/ha"
 	"github.com/mdopp/haus/internal/ha/hafake"
+	"github.com/mdopp/haus/internal/jellyfin"
 	"github.com/mdopp/haus/internal/merken"
 	"github.com/mdopp/haus/internal/notes"
 	"github.com/mdopp/haus/internal/pages"
@@ -119,8 +121,12 @@ func main() {
 	wake := filepath.Join(dir, "stimme")
 	os.MkdirAll(wake, 0o700)
 	pages.House.Phrase, pages.House.Wakeword = "Hey Joshua", "hey_joshua" // the Stimme page needs a wake phrase
+	// haus#152: what Anna watched and heard, and the film and book wish list
+	absFake.Hoert("anna", "Krabat", 0.4, false, time.Now().Add(-time.Hour))
+	absFake.Hoert("anna", "Momo", 1, true, time.Now().Add(-50*time.Hour))
+	seen := &gesehen.Service{Filme: demoFilme{}, Buecher: &abs.Client{URL: absFake.URL, Token: "demo"}, DAV: cal}
 	live := &pages.Live{}
-	cfg := pages.StartConfig{WakeRecordings: wake, Einkauf: list, Wuensche: wishes, Discogs: shelves, Podcasts: pods, HA: &ha.Client{URL: fake.URL, Token: "demo"}, Notes: nd, Favorites: favoriten.Open(dir), MusicInbox: inbox,
+	cfg := pages.StartConfig{Gesehen: seen, WakeRecordings: wake, Einkauf: list, Wuensche: wishes, Discogs: shelves, Podcasts: pods, HA: &ha.Client{URL: fake.URL, Token: "demo"}, Notes: nd, Favorites: favoriten.Open(dir), MusicInbox: inbox,
 		Calendar: cal, Views: ansicht.Open(dir),
 		RadicalePublicURL: "https://caldav.example", Fetcher: merken.Fetcher{AllowPrivate: true}}
 	mux := http.NewServeMux()
@@ -168,6 +174,7 @@ func main() {
 	mux.HandleFunc(cards.NotePages, pages.Notizen(cfg))
 	mux.HandleFunc("/mehr", pages.Mehr(cfg))
 	mux.HandleFunc(pages.PodcastsPath, pages.Podcasts(cfg))
+	mux.HandleFunc(pages.GesehenPath, pages.Gesehen(cfg))
 	mux.HandleFunc("/demo/feed.xml", func(w http.ResponseWriter, r *http.Request) { // a podcast's feed; the fake ABS knows it by this address
 		w.Header().Set("Content-Type", "application/rss+xml")
 		w.Write([]byte(`<?xml version="1.0"?><rss version="2.0"><channel><title>Demo-Podcast</title></channel></rss>`))
@@ -200,4 +207,17 @@ func main() {
 	srv := &http.Server{Addr: *addr, Handler: anna, ReadHeaderTimeout: 5 * time.Second}
 	log.Printf("hausdemo: http://%s/start (fakes only, not for a box)", *addr)
 	log.Fatal(srv.ListenAndServe())
+}
+
+// demoFilme is Jellyfin's watch history for the demo: a series and a film,
+// and Dune in the library.
+type demoFilme struct{}
+
+func (demoFilme) Geschaut(context.Context, string, int) ([]jellyfin.Gesehen, error) {
+	return []jellyfin.Gesehen{{Name: "Dark", Serie: true, Folge: "S2E3 · Der Plan", Fertig: true, Zuletzt: time.Now().Add(-26 * time.Hour)},
+		{Name: "Dune", Jahr: 2021, Fertig: true, Zuletzt: time.Now().Add(-75 * time.Hour)}}, nil
+}
+
+func (demoFilme) HatFilm(_ context.Context, name string) (string, bool, error) {
+	return "Dune", jellyfin.Plain(name) == "dune", nil
 }
