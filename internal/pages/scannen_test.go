@@ -95,7 +95,7 @@ func scanPageAt(t *testing.T, f *scanLaib, groups, target string) string {
 func TestScannenAfterAJamSaysWhereToGoOn(t *testing.T) {
 	body := scanPage(t, &scanLaib{status: map[string]any{"zustand": "wartet-auf-rest", "blatt": 6, "grund": "sane_start: Error during device I/O", "scanner": true}}, "family")
 	mustContain(t, body, "Nach Blatt 6 abgebrochen", "Den Rest ab Blatt 6 einlegen",
-		`<form method=post action=/scannen><input type=hidden name=tun value=weiter><button>Weiter</button></form>`,
+		`<form method=post action=/scannen><input type=hidden name=tun value=weiter><button data-laeuft="Scannt weiter …">Weiter</button></form>`,
 		`value=abschliessen><button>Abschließen</button>`, `value=verwerfen><button>Verwerfen</button>`)
 	mustNotContain(t, body, "Stapel scannen", "sane_start", "device I/O", "<div hidden data-auffrischen")
 	before(t, body, "<h2>Scannen</h2>", "Per E-Mail ablegen")
@@ -169,7 +169,7 @@ func TestScannenPassesTheOrderOn(t *testing.T) {
 	cfg.Laib = f.client(t)
 	h := Scannen(cfg)
 	rec := post(t, h, "/scannen", url.Values{"tun": {"weiter"}}, "anna", nil)
-	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/dokumente" {
+	if rec.Code != http.StatusSeeOther || !strings.HasPrefix(rec.Header().Get("Location"), "/dokumente?tut=weiter&seit=") { // haus#195
 		t.Fatalf("%d %q", rec.Code, rec.Header().Get("Location"))
 	}
 	if len(f.orders) != 1 || f.orders[0]["action"] != "weiter" || f.orders[0]["person"] != "anna" {
@@ -370,7 +370,7 @@ func TestScannerEinrichtenFollowsTheOrder(t *testing.T) {
 	mustNotContain(t, body, "<div hidden data-auffrischen", "Sucht nach Scannern …</p>")
 
 	// a link too old, or made up: no following
-	for _, target := range []string{after("suchen", time.Hour), "/dokumente?tut=suchen&seit=x", "/dokumente?tut=start&seit=" + strconv.FormatInt(now.Unix(), 10)} {
+	for _, target := range []string{after("suchen", time.Hour), "/dokumente?tut=suchen&seit=x", "/dokumente?tut=redo&seit=" + strconv.FormatInt(now.Unix(), 10)} {
 		mustNotContain(t, scanPageAt(t, f, admins, target), "<div hidden data-auffrischen", "Laib hat den Auftrag", "Sucht nach Scannern …</p>")
 	}
 
@@ -492,4 +492,61 @@ func TestScannenFuerWen(t *testing.T) {
 	if len(f.orders) != 4 || f.orders[1]["person"] != "anna" {
 		t.Fatalf("orders %v", f.orders)
 	}
+}
+
+// haus#195: after „Stapel scannen“ the page follows the order until the
+// service writes that the stack runs: Startet …, no free button and no
+// second order, looking again soon; then the stack's own state; a reason
+// written by the service (fehler) where the button was; no start in 30 s
+// said honestly, with the button back. Weiter the same.
+func TestScannenFollowsAStackOrder(t *testing.T) {
+	now := startNow(t)
+	at := func(d time.Duration) string { return now.Add(d).UTC().Format(time.RFC3339) }
+	after := func(do string, ago time.Duration) string {
+		return "/dokumente?tut=" + do + "&seit=" + strconv.FormatInt(now.Add(-ago).Unix(), 10)
+	}
+
+	// the order goes on, the page is told when
+	f := &scanLaib{status: map[string]any{"zustand": "fertig", "at": at(-time.Hour), "scanner": true}}
+	_, cfg := dokumente(t)
+	cfg.Laib, cfg.Loc, cfg.Now = f.client(t), berlin(t), func() time.Time { return now }
+	for _, do := range []string{"start", "weiter"} {
+		rec := post(t, Scannen(cfg), "/scannen", url.Values{"tun": {do}}, "anna", nil)
+		if want := "/dokumente?tut=" + do + "&seit=" + strconv.FormatInt(now.Unix(), 10); rec.Header().Get("Location") != want {
+			t.Errorf("%s → %q, want %q", do, rec.Header().Get("Location"), want)
+		}
+	}
+
+	// a second after the order, the status still the last stack's: Startet …, nothing to press
+	for _, groups := range []string{"family", "family,admins"} {
+		body := scanPageAt(t, f, groups, after("start", time.Second))
+		mustContain(t, body, `<p class="zustand laeuft" role=status>Startet …</p>`, "data-auffrischen=2>")
+		mustNotContain(t, body, "value=start>", "Stapel scannen</button>", "<b>Fertig</b>", "Erneut prüfen</button>", "Probeseite</button>")
+	}
+
+	// the service writes the stack's state: the page shows it
+	f.status = map[string]any{"zustand": "scannt", "seite": 1, "at": at(0), "scanner": true}
+	body := scanPageAt(t, f, "family", after("start", 2*time.Second))
+	mustContain(t, body, "<b>Scannt</b>", saysScanBusy)
+	mustNotContain(t, body, "Startet …</p>", "value=start>")
+
+	// the service writes why it did not start: the reason where the button was, the button back
+	f.status = map[string]any{"zustand": "fehler", "detail": "Scan fehlgeschlagen: der Scanner lässt sich nicht starten.", "at": at(0), "scanner": true}
+	body = scanPageAt(t, f, "family", after("start", 2*time.Second))
+	mustContain(t, body, "Der letzte Stapel ging schief", "der Scanner lässt sich nicht starten", `data-laeuft="Startet …">Stapel scannen</button>`)
+	mustNotContain(t, body, "Startet …</p>", "<div hidden data-auffrischen")
+
+	// nothing in 30 seconds: said, the button back, no endless looking
+	f.status = map[string]any{"zustand": "fertig", "at": at(-time.Hour), "scanner": true}
+	body = scanPageAt(t, f, "family", after("start", 31*time.Second))
+	mustContain(t, body, `<div class=achtung role=alert><p>Der Scanner hat nach 30 Sekunden nicht angefangen.`, `data-laeuft="Startet …">Stapel scannen</button>`)
+	mustNotContain(t, body, "Startet …</p>", "<div hidden data-auffrischen")
+
+	// Weiter after a jam: Scannt weiter … until the service scans again
+	f.status = map[string]any{"zustand": "wartet-auf-rest", "blatt": 6, "at": at(-time.Minute), "scanner": true}
+	body = scanPageAt(t, f, "family", after("weiter", time.Second))
+	mustContain(t, body, `<p class="zustand laeuft" role=status>Scannt weiter …</p>`, "data-auffrischen=2>")
+	mustNotContain(t, body, "Weiter</button>", "Abschließen</button>", "Verwerfen</button>", "Nach Blatt 6 abgebrochen")
+	body = scanPage(t, f, "family")
+	mustContain(t, body, `data-laeuft="Scannt weiter …">Weiter</button>`)
 }

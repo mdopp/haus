@@ -35,6 +35,7 @@ const (
 	saysAsked       = "Im Heimnetz wurden %d Geräte direkt gefragt."
 	saysNotFound    = "Kein Scanner gefunden. Ist er an, am Server eingesteckt oder im selben Netz? Sonst unten den Gerätenamen von Hand eintragen, etwa epson2:net:192.168.178.87 für einen Scanner im Netz."
 	saysOrderLate   = "Laib hat den Auftrag angenommen, aber nach %s kein Ergebnis gemeldet. Noch einmal versuchen; sonst weiß laib diag mehr."
+	saysStackLate   = "Der Scanner hat nach 30 Sekunden nicht angefangen. Liegt der Stapel im Einzug und ist der Scanner an? Konnte die Box den Stapel nicht annehmen, schickt sie dir den Grund als Nachricht. Dann noch einmal „Stapel scannen“."
 	maxStacks       = 5
 )
 
@@ -47,11 +48,19 @@ var scanSetup = map[string]bool{"suchen": true, "pruefen": true, "probe": true}
 // scanWaits is how long the page waits for a setup order's result before
 // it says none came (haus#80): Laib only takes the order, the service
 // writes the result into its status file.
-var scanWaits = map[string]time.Duration{"suchen": time.Minute, "pruefen": 30 * time.Second, "probe": 2 * time.Minute}
+// A stack order (haus#195) waits for the stack's own state: the scan
+// writes scannt once the scanner has started, a second or two later.
+var scanWaits = map[string]time.Duration{"suchen": time.Minute, "pruefen": 30 * time.Second, "probe": 2 * time.Minute,
+	"start": 30 * time.Second, "weiter": 30 * time.Second}
 
 // scanRuns is what the page says while a setup order runs, and what its
 // button says the moment it is pressed.
-var scanRuns = map[string]string{"suchen": "Sucht nach Scannern …", "pruefen": "Prüft den Scanner …", "probe": "Liest eine Probeseite …"}
+var scanRuns = map[string]string{"suchen": "Sucht nach Scannern …", "pruefen": "Prüft den Scanner …", "probe": "Liest eine Probeseite …",
+	"start": "Startet …", "weiter": "Scannt weiter …"}
+
+// stackOrder is an order the page follows until the stack's own state is
+// written (haus#195): the scan writes nothing before the scanner runs.
+var stackOrder = map[string]bool{"start": true, "weiter": true}
 
 // scanGeraet is a SANE device as laib#571 takes it (scanimage -L's name,
 // nothing that could break the unit's line).
@@ -124,7 +133,10 @@ func Scannen(cfg StartConfig) http.HandlerFunc {
 			return
 		}
 		to := DokumentePath
-		if scanSetup[do] { // the page waits for the result there (haus#80)
+		if stackOrder[do] { // the page shows Startet … until the scan writes the stack's state (haus#195)
+			now, _ := cfg.clock()
+			to += "?tut=" + do + "&seit=" + strconv.FormatInt(now.Unix(), 10)
+		} else if scanSetup[do] { // the page waits for the result there (haus#80)
 			now, _ := cfg.clock()
 			to += "?tut=" + do + "&seit=" + strconv.FormatInt(now.Unix(), 10) + "#scanner"
 		}
@@ -171,8 +183,9 @@ type scanning struct {
 	order scanOrder
 }
 
-// scanOrder is a setup order the page follows until its result is in the
-// status file or scanWaits has passed (haus#80); do is "" for none.
+// scanOrder is an order the page follows until its result is in the
+// status file or scanWaits has passed: a setup order (haus#80) or a stack's
+// start or weiter (haus#195); do is "" for none.
 type scanOrder struct {
 	do   string
 	done bool
@@ -191,13 +204,16 @@ func readScan(r *http.Request, cfg StartConfig) scanning {
 	return s
 }
 
-// followOrder reads ?tut=…&seit=… (the redirect after a setup order): done
+// followOrder reads ?tut=…&seit=… (the redirect after an order): done
 // when the result the order writes is as new as the order, late when it
 // is not and scanWaits has passed. A link older than ten minutes is none.
+// A stack order is done once the scan writes a state of the stack after
+// it — running, waiting for the rest, or failed with its reason; a fertig
+// or bereit from before is the last stack's (haus#195).
 func followOrder(q url.Values, st laib.Scan, now time.Time) scanOrder {
 	do := q.Get("tut")
 	sec, err := strconv.ParseInt(q.Get("seit"), 10, 64)
-	if !scanSetup[do] || err != nil {
+	if !scanSetup[do] && !stackOrder[do] || err != nil {
 		return scanOrder{}
 	}
 	since := time.Unix(sec, 0)
@@ -212,6 +228,8 @@ func followOrder(q url.Values, st laib.Scan, now time.Time) scanOrder {
 	switch do {
 	case "suchen":
 		o.done = st.Suche.Zustand != "läuft" && newer(st.Suche.At)
+	case "start", "weiter":
+		o.done = newer(st.At) && (busy(st.Zustand) || st.Zustand == "wartet-auf-rest" || st.Zustand == "fehler")
 	default:
 		o.done = newer(st.Pruefung.At)
 	}
@@ -230,8 +248,19 @@ func waitWords(d time.Duration) string {
 	return strconv.Itoa(int(d/time.Second)) + " Sekunden"
 }
 
-// waiting is a setup order whose result has not come yet.
+// waiting is an order whose result has not come yet.
 func (o scanOrder) waiting() bool { return o.do != "" && !o.done && !o.late }
+
+// stackWaits is a stack's start or weiter not yet taken up by the scan.
+func (o scanOrder) stackWaits() bool { return o.waiting() && stackOrder[o.do] }
+
+// setup is the order if it is a setup order, else none.
+func (o scanOrder) setup() scanOrder {
+	if scanSetup[o.do] {
+		return o
+	}
+	return scanOrder{}
+}
 
 // active is a stack running or waiting: the section goes to the top.
 func (s scanning) active() bool {
@@ -319,14 +348,22 @@ func scanSection(r *http.Request, cfg StartConfig, s scanning) string {
 		return b.String()
 	}
 	st := s.st
-	text, detail := scanState(st)
-	b.WriteString(`<p class=zustand><b>` + html.EscapeString(text) + `</b>`)
-	if detail != "" {
-		b.WriteString(` <span class=k>` + html.EscapeString(detail) + `</span>`)
+	if s.order.stackWaits() { // the button was pressed, the scan has not written yet: no second order (haus#195)
+		b.WriteString(`<p class="zustand laeuft" role=status>` + html.EscapeString(scanRuns[s.order.do]) + `</p>`)
+	} else {
+		text, detail := scanState(st)
+		b.WriteString(`<p class=zustand><b>` + html.EscapeString(text) + `</b>`)
+		if detail != "" {
+			b.WriteString(` <span class=k>` + html.EscapeString(detail) + `</span>`)
+		}
+		b.WriteString(`</p>`)
 	}
-	b.WriteString(`</p>`)
+	if s.order.late && stackOrder[s.order.do] {
+		b.WriteString(`<div class=achtung role=alert><p>` + html.EscapeString(saysStackLate) + `</p></div>`)
+	}
 	order := scanButton
 	switch {
+	case s.order.stackWaits():
 	case st.Zustand == "wartet-auf-rest":
 		b.WriteString(`<div class=knoepfe>` + order("Weiter", "weiter") + order("Abschließen", "abschliessen") + order("Verwerfen", "verwerfen") + `</div>`)
 	case st.Scanner && (st.Zustand == "bereit" || st.Zustand == "fertig" || st.Zustand == "fehler"):
@@ -419,6 +456,8 @@ func scanSaying(r *http.Request, cfg StartConfig) string {
 // what goes into its own menu. Open while no scanner is set, a search
 // runs, or just after an order.
 func scannerSetup(r *http.Request, cfg StartConfig, st laib.Scan, o scanOrder) string {
+	starting := o.stackWaits() // a stack about to run: no check or probe in between (haus#195)
+	o = o.setup()
 	var b strings.Builder
 	open := ""
 	if !st.Scanner || st.Suche.Zustand == "läuft" || r.URL.Query().Get("gesagt") != "" || o.do != "" {
@@ -455,7 +494,7 @@ func scannerSetup(r *http.Request, cfg StartConfig, st laib.Scan, o scanOrder) s
 	case o.late:
 		b.WriteString(`<div class=achtung role=alert><p>` + html.EscapeString(fmt.Sprintf(saysOrderLate, waitWords(scanWaits[o.do]))) + `</p></div>`)
 	}
-	free := !busy(st.Zustand) && st.Zustand != "wartet-auf-rest"
+	free := !busy(st.Zustand) && st.Zustand != "wartet-auf-rest" && !starting
 	b.WriteString(`<div class=knoepfe>`)
 	if st.Scanner && free && !o.waiting() {
 		b.WriteString(scanButton("Erneut prüfen", "pruefen") + scanButton("Probeseite", "probe"))
