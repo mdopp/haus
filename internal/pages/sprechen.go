@@ -137,6 +137,7 @@ func Sprechen(cfg StartConfig) http.HandlerFunc {
 			} else {
 				b.WriteString("<p class=\"k vorher\">Was du hier schreibst, liest " + html.EscapeString(House.Display) + ". Die Antwort erscheint hier; das kann einen Moment dauern.</p>")
 			}
+			b.WriteString(wakeLine(lookWake(r, cfg), cfg)) // and at the speaker: its wake word (owner 2026-10-30)
 			writePage(w, http.StatusOK, b)
 		case http.MethodPost:
 			if !fromHaus(r) {

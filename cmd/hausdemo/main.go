@@ -58,7 +58,10 @@ func main() {
 			{"entity_id": "switch.kaffee", "area_id": "kueche"},
 			{"entity_id": "cover.rollo", "area_id": "wohnzimmer"},
 			{"entity_id": "media_player.wz", "area_id": "wohnzimmer"},
+			// a Voice PE still on its factory word: the Stimme page says „Hey Joshua“ comes (owner 2026-10-30)
+			{"entity_id": "select.voice_pe_aktivierungswort", "area_id": "kueche", "translation_key": "wake_word", "entity_category": "config"},
 		})
+	fake.Set("select.voice_pe_aktivierungswort", "Okay Nabu", map[string]any{"friendly_name": "Voice PE Aktivierungswort", "options": []string{"Okay Nabu", "Hey Joshua"}})
 	fake.Set("light.flur", "off", map[string]any{"friendly_name": "Flurlicht"})
 	fake.Set("light.kueche", "on", map[string]any{"friendly_name": "Küchenlicht", "brightness": 153, "supported_color_modes": []string{"brightness"}, "color_mode": "brightness"})
 	fake.Set("switch.kaffee", "off", map[string]any{"friendly_name": "Kaffeemaschine"})

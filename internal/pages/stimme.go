@@ -39,15 +39,26 @@ func stimmeShown(cfg StartConfig) bool {
 	return cfg.WakeRecordings != "" && House.Wakeword != "" && House.Phrase != ""
 }
 
+// stimmePage is whether the page is there: for the recordings, or for the
+// wake word the speakers report (owner 2026-10-30) when Haus has Home
+// Assistant.
+func stimmePage(cfg StartConfig) bool {
+	return stimmeShown(cfg) || cfg.HA != nil
+}
+
 // Stimme is the page and its POST (one WAV).
 func Stimme(cfg StartConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != StimmePath || !stimmeShown(cfg) {
+		if r.URL.Path != StimmePath || !stimmePage(cfg) {
 			missing{http.StatusNotFound, "Diese Seite gibt es nicht.", "Mehr", mehrPath, "Mehr"}.write(w, r, cfg)
 			return
 		}
 		person := uploader(r.Header.Get("Remote-User"))
 		if r.Method == http.MethodPost {
+			if !stimmeShown(cfg) {
+				http.Error(w, "Diese Box nimmt keine Aufnahmen.", http.StatusNotFound)
+				return
+			}
 			stimmeAufnahme(w, r, cfg, person)
 			return
 		}
@@ -55,9 +66,17 @@ func Stimme(cfg StartConfig) http.HandlerFunc {
 			return
 		}
 		b := familyHead(r, cfg, "Stimme", "Stimme")
+		b.WriteString("<h1>Stimme</h1>")
+		if c := wakeCard(lookWake(r, cfg)); !c.Empty() { // the word the speakers listen for (owner 2026-10-30)
+			b.WriteString(c.HTML())
+		}
+		if !stimmeShown(cfg) {
+			writePage(w, http.StatusOK, b)
+			return
+		}
 		phrase := html.EscapeString(House.Phrase)
 		n := stimmeCount(cfg, person)
-		b.WriteString(stimmeStyle + `<h1>Stimme</h1><p class=k>Sag ` + strconv.Itoa(stimmeWanted) + `-mal „` + phrase + `“, so wie du es sonst sagst. Dann wacht ` +
+		b.WriteString(stimmeStyle + `<p class=k>Sag ` + strconv.Itoa(stimmeWanted) + `-mal „` + phrase + `“, so wie du es sonst sagst. Dann wacht ` +
 			html.EscapeString(House.Display) + ` bei deiner Stimme zuverlässiger auf und seltener ohne Grund. Die Aufnahmen bleiben auf der Box.</p>`)
 		b.WriteString(`<section class=karte aria-labelledby=st-a><h2 id=st-a>Einsprechen</h2>`)
 		b.WriteString(`<p id=stimme-stand role=status aria-live=polite data-n=` + strconv.Itoa(n) + `>` + html.EscapeString(stimmeSays(n)) + `</p>`)

@@ -277,8 +277,12 @@ type Registry struct {
 	// that are the same thing: devices with an identifier in common, its
 	// dashes and case aside — a Chromecast through Cast and through Music
 	// Assistant (haus#83). Absent for an entity whose device has no twin.
-	Twins    map[string]string
-	TempUnit string // the house's temperature unit (unit_system.temperature), "" when HA did not say
+	Twins map[string]string
+	// WakeWords are the voice satellites' wake-word selects (a Voice PE's
+	// „… Aktivierungswort“): HA's translation key wake_word on a select,
+	// not disabled — the same the laib stimme template reads (laib#759).
+	WakeWords map[string]bool
+	TempUnit  string // the house's temperature unit (unit_system.temperature), "" when HA did not say
 }
 
 // Areas maps every entity to its room's name: the entity's own area, else
@@ -314,6 +318,8 @@ func (c *Client) registries(ctx context.Context) (Registry, error) {
 		HiddenBy       string `json:"hidden_by"`
 		EntityCategory string `json:"entity_category"`
 		Platform       string `json:"platform"`
+		TranslationKey string `json:"translation_key"`
+		DisabledBy     string `json:"disabled_by"`
 	}
 	for _, q := range []struct {
 		cmd string
@@ -341,7 +347,7 @@ func (c *Client) registries(ctx context.Context) (Registry, error) {
 		devArea[d.ID] = d.AreaID
 	}
 	twin := twins(devices)
-	reg := Registry{Rooms: map[string]string{}, Hidden: map[string]bool{}, Devices: map[string]string{}, Platforms: map[string]string{}, Twins: map[string]string{}}
+	reg := Registry{Rooms: map[string]string{}, Hidden: map[string]bool{}, Devices: map[string]string{}, Platforms: map[string]string{}, Twins: map[string]string{}, WakeWords: map[string]bool{}}
 	for _, e := range entities {
 		if e.EntityID == "" {
 			continue
@@ -361,6 +367,9 @@ func (c *Client) registries(ctx context.Context) (Registry, error) {
 		}
 		if e.Platform != "" {
 			reg.Platforms[e.EntityID] = e.Platform
+		}
+		if e.TranslationKey == "wake_word" && e.DisabledBy == "" && strings.HasPrefix(e.EntityID, "select.") {
+			reg.WakeWords[e.EntityID] = true
 		}
 		if e.HiddenBy != "" || e.EntityCategory == "config" || e.EntityCategory == "diagnostic" {
 			reg.Hidden[e.EntityID] = true

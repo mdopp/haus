@@ -267,6 +267,15 @@ test('a form in a card stacks its fields on a phone', async ({ page }) => {
   expect(box.width, 'the name field has room').toBeGreaterThan(250);
 });
 
+// owner 2026-10-30: the wake word the speaker reports, and the phrase still to come
+test('Stimme shows the wake word the speaker listens for', async ({ page }) => {
+  await page.goto('/stimme');
+  const card = page.locator('section[aria-labelledby=karte-aktivierungswort]');
+  await expect(card).toContainText('„Okay Nabu“');
+  await expect(card).toContainText('Lautsprecher „Voice PE“ · Küche');
+  await expect(card).toContainText('„Hey Joshua“ ist eingestellt, aber noch nicht auf dem Lautsprecher. Bis dahin hört er auf „Okay Nabu“.');
+});
+
 // Every page, every field, on a phone (owner 2026-10-24: "werden alle
 // Felder geprüft?"): with every fold open, the page is no wider than the
 // screen, a field to type in has room, a button is big enough for a

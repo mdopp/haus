@@ -87,7 +87,12 @@ func TestCachedRegistry(t *testing.T) {
 			{"entity_id": "light.versteckt", "area_id": "kueche", "hidden_by": "user"},
 			{"entity_id": "switch.identify", "entity_category": "config"},
 			{"entity_id": "sensor.rssi", "entity_category": "diagnostic"},
-			{"entity_id": "light.offen", "hidden_by": nil, "entity_category": nil}})
+			{"entity_id": "light.offen", "hidden_by": nil, "entity_category": nil},
+			// the Voice PE's wake word (its „Aktivierungswort“), and what is not one
+			{"entity_id": "select.voice_pe_aktivierungswort", "translation_key": "wake_word", "entity_category": "config", "disabled_by": nil},
+			{"entity_id": "select.alt_aktivierungswort", "translation_key": "wake_word", "disabled_by": "user"},
+			{"entity_id": "select.voice_pe_assistent", "translation_key": "pipeline"},
+			{"entity_id": "sensor.wake_word", "translation_key": "wake_word"}})
 	fake.SetTemperatureUnit("°F")
 	fake.RegistriesDown(true)
 	c := &Client{URL: fake.URL, Token: "tok"}
@@ -105,6 +110,9 @@ func TestCachedRegistry(t *testing.T) {
 		if reg.Hidden[id] != want {
 			t.Errorf("hidden %s = %v, want %v", id, reg.Hidden[id], want)
 		}
+	}
+	if len(reg.WakeWords) != 1 || !reg.WakeWords["select.voice_pe_aktivierungswort"] {
+		t.Errorf("wake words: %v, want the Voice PE's select alone", reg.WakeWords)
 	}
 	// a room renamed in HA is seen after the cache's minutes, not on every page
 	fake.SetRegistries([]map[string]any{{"area_id": "kueche", "name": "Wohnküche"}}, nil,
