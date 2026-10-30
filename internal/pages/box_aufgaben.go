@@ -149,6 +149,9 @@ func aufgabenCard(ctx context.Context, c *laib.Client, now time.Time, said, prob
 	today := now.Format("2006-01-02")
 	var open, done []laib.Aufgabe
 	for _, a := range all.Aufgaben {
+		if a.Fuer != "" && a.Fuer != "admins" { // the household's and a person's are under Einrichtung (laib#878, haus#188)
+			continue
+		}
 		if a.Erledigt == nil {
 			open = append(open, a)
 		} else if t, err := time.Parse("2006-01-02", a.Erledigt.Am); err == nil && now.Sub(t) < aufgabenDone*24*time.Hour {
