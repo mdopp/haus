@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/mdopp/haus/internal/laib"
+	"github.com/mdopp/haus/internal/paperless"
 )
 
 // ScannenPath is where the Dokumente page's Scannen buttons post (haus#76).
@@ -22,21 +23,22 @@ const ScannenPath = "/scannen"
 // What Scannen says (haus#76, laib#568): the scan service's state in the
 // family's words, never its error.
 const (
-	saysScanOld     = "Scannen geht auf dieser Box noch nicht: Laib kann es hier noch nicht."
-	saysScanOldAd   = "Für Admins: Haus braucht Laib ab v0.20.0 und in policy.yml beim haus-Hand das Verb scan."
-	saysScanSilent  = "Der Scanner antwortet gerade nicht."
-	saysScanNotDone = "Das hat nicht geklappt: Der Scanner antwortet gerade nicht."
-	saysScanUnset   = "Scannen ist auf dieser Box noch nicht eingerichtet. „Scannen einrichten“ legt einen Vorschlag in die Inbox; die Box richtet den Dienst ein, sobald du ihn freigibst."
-	saysSetupHow    = "Ein Scanner am Server (USB) oder im Netz scannt Stapel direkt von hier. „Suchen“ findet ihn; sonst den Gerätenamen von Hand."
-	saysFolderSetup = "Ein Scanner, der in einen Netzwerkordner scannt, wird in seinem eigenen Menü eingerichtet:"
-	saysNoStacks    = "Noch kein Stapel. Was gescannt ist, steht hier mit seinen Dokumenten."
-	saysScanBusy    = "„Stapel scannen“ kommt wieder, sobald dieser Stapel in Paperless liegt."
-	saysStackHow    = "Eine Datei ist ein Stapel; die Box trennt die Dokumente selbst, entfernt leere Seiten und legt alles in Paperless ab."
-	saysAsked       = "Im Heimnetz wurden %d Geräte direkt gefragt."
-	saysNotFound    = "Kein Scanner gefunden. Ist er an, am Server eingesteckt oder im selben Netz? Sonst unten den Gerätenamen von Hand eintragen, etwa epson2:net:192.168.178.87 für einen Scanner im Netz."
-	saysOrderLate   = "Laib hat den Auftrag angenommen, aber nach %s kein Ergebnis gemeldet. Noch einmal versuchen; sonst weiß laib diag mehr."
-	saysStackLate   = "Der Scanner hat nach 30 Sekunden nicht angefangen. Liegt der Stapel im Einzug und ist der Scanner an? Konnte die Box den Stapel nicht annehmen, schickt sie dir den Grund als Nachricht. Dann noch einmal „Stapel scannen“."
-	maxStacks       = 5
+	saysScanOld      = "Scannen geht auf dieser Box noch nicht: Laib kann es hier noch nicht."
+	saysScanOldAd    = "Für Admins: Haus braucht Laib ab v0.20.0 und in policy.yml beim haus-Hand das Verb scan."
+	saysScanSilent   = "Der Scanner antwortet gerade nicht."
+	saysScanNotDone  = "Das hat nicht geklappt: Der Scanner antwortet gerade nicht."
+	saysScanUnset    = "Scannen ist auf dieser Box noch nicht eingerichtet. „Scannen einrichten“ legt einen Vorschlag in die Inbox; die Box richtet den Dienst ein, sobald du ihn freigibst."
+	saysSetupHow     = "Ein Scanner am Server (USB) oder im Netz scannt Stapel direkt von hier. „Suchen“ findet ihn; sonst den Gerätenamen von Hand."
+	saysFolderSetup  = "Ein Scanner, der in einen Netzwerkordner scannt, wird in seinem eigenen Menü eingerichtet:"
+	saysNoStacks     = "Noch kein Stapel. Was gescannt ist, steht hier mit seinen Dokumenten."
+	saysScanBusy     = "„Stapel scannen“ kommt wieder, sobald dieser Stapel in Paperless liegt."
+	saysStackHow     = "Eine Datei ist ein Stapel; die Box trennt die Dokumente selbst, entfernt leere Seiten und legt alles in Paperless ab."
+	saysAsked        = "Im Heimnetz wurden %d Geräte direkt gefragt."
+	saysNotFound     = "Kein Scanner gefunden. Ist er an, am Server eingesteckt oder im selben Netz? Sonst unten den Gerätenamen von Hand eintragen, etwa epson2:net:192.168.178.87 für einen Scanner im Netz."
+	saysOrderLate    = "Laib hat den Auftrag angenommen, aber nach %s kein Ergebnis gemeldet. Noch einmal versuchen; sonst weiß laib diag mehr."
+	saysStackRefused = "Die Box hat den Stapel nicht angenommen; den Grund schickt sie dir als Nachricht."
+	saysStackLate    = "Der Scanner hat nach 30 Sekunden nicht angefangen. Liegt der Stapel im Einzug und ist der Scanner an? Konnte die Box den Stapel nicht annehmen, schickt sie dir den Grund als Nachricht. Dann noch einmal „Stapel scannen“."
+	maxStacks        = 5
 )
 
 // scanDoes is what the page may order: a new stack, and after a jam on,
@@ -187,9 +189,10 @@ type scanning struct {
 // status file or scanWaits has passed: a setup order (haus#80) or a stack's
 // start or weiter (haus#195); do is "" for none.
 type scanOrder struct {
-	do   string
-	done bool
-	late bool
+	do      string
+	done    bool
+	late    bool
+	refused string // the scan's reason for not taking a stack order (mdopp/dokumente#16)
 }
 
 // readScan asks Laib for the scan service's state; without a Laib, off.
@@ -230,6 +233,15 @@ func followOrder(q url.Values, st laib.Scan, now time.Time) scanOrder {
 		o.done = st.Suche.Zustand != "läuft" && newer(st.Suche.At)
 	case "start", "weiter":
 		o.done = newer(st.At) && (busy(st.Zustand) || st.Zustand == "wartet-auf-rest" || st.Zustand == "fehler")
+		// the scan says it read the order (mdopp/dokumente#16): refused with its reason, or taken
+		if a := st.Auftrag; a.Aktion == do && newer(a.At) {
+			if !a.Angenommen {
+				o.done, o.refused = true, oneLine(a.Grund)
+				if o.refused == "" {
+					o.refused = saysStackRefused
+				}
+			}
+		}
 	default:
 		o.done = newer(st.Pruefung.At)
 	}
@@ -357,6 +369,9 @@ func scanSection(r *http.Request, cfg StartConfig, s scanning) string {
 			b.WriteString(` <span class=k>` + html.EscapeString(detail) + `</span>`)
 		}
 		b.WriteString(`</p>`)
+	}
+	if s.order.refused != "" { // where „Startet …“ was, at once (mdopp/dokumente#16)
+		b.WriteString(`<div class=achtung role=alert><p>` + html.EscapeString(s.order.refused) + `</p></div>`)
 	}
 	if s.order.late && stackOrder[s.order.do] {
 		b.WriteString(`<div class=achtung role=alert><p>` + html.EscapeString(saysStackLate) + `</p></div>`)
@@ -571,27 +586,28 @@ func scannerSetup(r *http.Request, cfg StartConfig, st laib.Scan, o scanOrder) s
 	return b.String()
 }
 
-// stacks is the last stacks, newest first: when, how many documents from
-// how many pages, and each document by its title.
+// stacks is the last stacks, newest first, each one line folded (haus#197):
+// when, who, for whom, how many pages and documents, what came of it;
+// opened, its documents, each a link to it in Paperless, and the whole
+// stack as Paperless's own list. The newest is open; what a viewer opened
+// or closed stays so for them (localStorage).
 func stacks(r *http.Request, cfg StartConfig, all []laib.Stack) string {
 	var b strings.Builder
 	b.WriteString(`<h3>Letzte Stapel</h3>`)
-	if len(all) == 0 {
-		return b.String() + `<p class=k>` + html.EscapeString(saysNoStacks) + `</p>`
-	}
-	all = shownStacks(r, cfg, all)
-	if len(all) == 0 {
+	shown := shownStacks(r, cfg, all)
+	if len(shown) == 0 {
 		return b.String() + `<p class=k>` + html.EscapeString(saysNoStacks) + `</p>`
 	}
 	now, loc := cfg.clock()
 	opens := cfg.paperlessOpens(r)
 	b.WriteString(`<ul class=stapel>`)
-	for i, s := range all {
-		if i == maxStacks {
-			b.WriteString(`<li class=k>und ` + strconv.Itoa(len(all)-maxStacks) + ` weitere</li>`)
-			break
+	for i, s := range shown {
+		open := ""
+		if i == 0 && !s.gone {
+			open = " open"
 		}
-		b.WriteString(`<li><b>` + html.EscapeString(stackLine(s)) + `</b> <span class=k>` + html.EscapeString(stackDetail(s, now, loc)) + `</span>`)
+		b.WriteString(`<li><details data-stapel="` + html.EscapeString(s.Stapel) + `"` + open + `><summary><b>` + html.EscapeString(s.line()) + `</b> <span class=k>` +
+			html.EscapeString(stackDetail(s.Stack, now, loc)) + `</span></summary>`)
 		if s.Ende == "nachholen" {
 			if m := oneLine(strings.TrimPrefix(strings.TrimSpace(s.Meldung), "Scan wartet:")); m != "" {
 				b.WriteString(`<p class=k>` + html.EscapeString(strings.TrimSpace(m)) + `</p>`)
@@ -600,25 +616,70 @@ func stacks(r *http.Request, cfg StartConfig, all []laib.Stack) string {
 		if isAdmin(r) {
 			b.WriteString(einzelheiten(s.Einzelheiten))
 		}
-		if len(s.Dokumente) > 0 {
+		if s.gone {
+			b.WriteString(`<p class=k>` + html.EscapeString(saysStackGone) + `</p>`)
+		}
+		if len(s.docs) > 0 {
 			b.WriteString(`<ul>`)
-			for _, d := range s.Dokumente {
-				title := oneLine(d.Titel)
-				if title == "" {
-					title = oneLine(d.Datei)
-				}
-				if opens {
-					b.WriteString(`<li><a href="` + html.EscapeString(cfg.paperless().href("/documents?title_content="+url.QueryEscape(title))) + `">` + html.EscapeString(title) + `</a></li>`)
+			for _, d := range s.docs {
+				if opens && d.link != "" {
+					b.WriteString(`<li><a href="` + html.EscapeString(cfg.paperless().href(d.link)) + `">` + html.EscapeString(d.title) + `</a></li>`)
 				} else {
-					b.WriteString(`<li>` + html.EscapeString(title) + `</li>`)
+					b.WriteString(`<li>` + html.EscapeString(d.title) + `</li>`)
 				}
 			}
 			b.WriteString(`</ul>`)
 		}
-		b.WriteString(`</li>`)
+		if opens && s.list != "" {
+			b.WriteString(`<p class=k><a href="` + html.EscapeString(cfg.paperless().href(s.list)) + `">Den ganzen Stapel in Paperless öffnen</a></p>`)
+		}
+		b.WriteString(`</details></li>`)
 	}
-	b.WriteString(`</ul>`)
+	b.WriteString(`</ul>` + stackFoldScript)
 	return b.String()
+}
+
+// saysStackGone is a stack whose documents Paperless no longer has.
+const saysStackGone = "Davon ist nichts mehr in Paperless."
+
+// stackFoldScript keeps what a viewer opened or closed, per stack, in
+// their browser; it runs again after the page is fetched in place.
+const stackFoldScript = `<script>(function(){var k='haus.stapel.';function get(n){try{return localStorage.getItem(k+n)}catch(e){return null}}
+document.querySelectorAll('details[data-stapel]').forEach(function(d){var v=get(d.getAttribute('data-stapel'));if(v!==null)d.open=v==='1'});
+if(window.hausStapel)return;window.hausStapel=1;document.addEventListener('toggle',function(e){var d=e.target;if(!d.getAttribute||!d.hasAttribute('data-stapel'))return;
+try{localStorage.setItem(k+d.getAttribute('data-stapel'),d.open?'1':'0')}catch(x){}},true)})()</script>`
+
+// shownStack is a stack as the page shows it: its documents, from
+// Paperless by the field „Stapel“ when it has any (haus#197), else
+// Dokumente's own list; list is Paperless's own list of the stack ("":
+// none); gone, Paperless no longer has any of its documents.
+type shownStack struct {
+	laib.Stack
+	docs []stackEntry
+	list string
+	gone bool
+}
+
+// stackEntry is one document of a stack: its title and where it opens in
+// Paperless (a path; "": nowhere).
+type stackEntry struct{ title, link string }
+
+// line is the stack's result in a few words.
+func (s shownStack) line() string {
+	if s.gone {
+		return "Nichts mehr in Paperless"
+	}
+	if s.Ende == "fertig" || s.Ende == "wartet" || s.Ende == "" {
+		switch n := len(s.docs); n {
+		case 0:
+			return "Kein Dokument"
+		case 1:
+			return "1 Dokument"
+		default:
+			return strconv.Itoa(n) + " Dokumente"
+		}
+	}
+	return stackLine(s.Stack)
 }
 
 // stackLine is a stack's result in a few words.
@@ -658,6 +719,12 @@ func stackDetail(s laib.Stack, now time.Time, loc *time.Location) string {
 	case "ordner":
 		parts = append(parts, "aus dem Ordner")
 	}
+	switch { // who started it, and „nur für“ them (haus#197)
+	case s.Fuer == "person" && s.Person != "":
+		parts = append(parts, "nur für "+capital(s.Person))
+	case s.Person != "":
+		parts = append(parts, capital(s.Person))
+	}
 	if s.Seiten > 0 {
 		p := strconv.Itoa(s.Seiten) + " Seiten"
 		if s.Seiten == 1 {
@@ -678,7 +745,7 @@ const scanStyle = `<style>.scannen .zustand{margin:10px 0 0}.scannen .knoepfe{di
 .scan-start .tagwahl{margin:8px 0 0}.scan-start .tagwahl legend{font-size:.85rem;color:var(--muted);margin-bottom:6px}.scan-start .tag{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 14px;border:1px solid var(--edge);border-radius:999px;margin:0}.scan-start .tagwahl{border:0;padding:0;display:flex;flex-wrap:wrap;gap:8px}
 .trennblatt{display:flex;flex-wrap:wrap;align-items:end;gap:8px;margin:8px 0 0}.trennblatt label{width:100%}.trennblatt input{width:6em;margin:0}.trennblatt button{margin:0;width:auto}
 .scannen h3{font-size:.85rem;margin:18px 0 0;color:var(--muted);font-weight:600}.stapel{margin:6px 0 0;padding:0;list-style:none}.stapel>li{padding:8px 0;border-top:1px solid var(--line)}
-.stapel ul{margin:4px 0 0;padding-left:18px}.stapel li li{font-size:.9rem;overflow-wrap:anywhere}
+.stapel summary{cursor:pointer;min-height:44px;padding:6px 0}.stapel details>p{margin:4px 0 0}.stapel ul{margin:4px 0 0;padding-left:18px}.stapel li li{font-size:.9rem;overflow-wrap:anywhere}
 .einrichten{margin:18px 0 0;padding:12px 0 0;border-top:1px solid var(--line)}.einrichten summary{cursor:pointer;font-weight:600;min-height:44px;display:flex;align-items:center}
 .funde{margin:10px 0 0;padding:0;list-style:none}.funde li{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-top:1px solid var(--line)}.funde button{margin:0;width:auto}
 .einrichten ul.k{margin:6px 0 0;padding-left:18px;font-size:.85rem}.scannen .gut,.scannen .achtung{margin:10px 0 0}
@@ -696,20 +763,25 @@ func pagesOf(detail string) int {
 	return 0
 }
 
-// shownStacks are the stacks as they stand now (owner 2026-10-27: „es
-// stehen da noch Scans die es gar nicht mehr in paperless gibt“): a stack
-// filed again (redo) only once, its newest run; a document deleted in
-// Paperless left out, and a stack whose documents are all gone with it.
-// Paperless not answering: the list as the service says.
-func shownStacks(r *http.Request, cfg StartConfig, all []laib.Stack) []laib.Stack {
+// shownStacks are the stacks as they stand now (owner 2026-10-27, haus#197:
+// „nur noch Dokumente, die auch in Paperless existieren“): a stack filed
+// again (redo) only once, its newest run; its documents as Paperless has
+// them by the field „Stapel“ (Dokumente writes the stack's id there,
+// mdopp/dokumente#15), so a document renamed, split or merged there is
+// listed as it is now and one deleted is not. A stack Paperless has
+// nothing for yet (filing, failed, waiting, filed before the field) keeps
+// Dokumente's list, less what Paperless no longer holds by file name; one
+// whose documents are all gone says so. Paperless not answering: the list
+// as the service says.
+func shownStacks(r *http.Request, cfg StartConfig, all []laib.Stack) []shownStack {
 	seen := map[string]bool{}
-	var out []laib.Stack
+	var out []shownStack
 	for _, s := range all { // newest first
 		if s.Stapel != "" && seen[s.Stapel] {
 			continue
 		}
 		seen[s.Stapel] = true
-		out = append(out, s)
+		out = append(out, shownStack{Stack: s, docs: dokumenteList(s)})
 		if len(out) == maxStacks {
 			break
 		}
@@ -717,41 +789,82 @@ func shownStacks(r *http.Request, cfg StartConfig, all []laib.Stack) []laib.Stac
 	if cfg.Docs == nil {
 		return out
 	}
+	ctx, cancel := context.WithTimeout(r.Context(), backendWait)
+	defer cancel()
+	field, err := cfg.Docs.FieldID(ctx, "Stapel")
+	if err != nil {
+		log.Printf("haus: dokumente page: Paperless' field Stapel: %v", err)
+		return out
+	}
+	var rest []int // stacks Paperless lists nothing for by the field
+	for i := range out {
+		s := &out[i]
+		if field == 0 || s.Stapel == "" || len(s.Dokumente) == 0 {
+			rest = append(rest, i)
+			continue
+		}
+		docs, err := cfg.Docs.ByField(ctx, field, s.Stapel, 100)
+		if err != nil {
+			log.Printf("haus: dokumente page: stack %s in Paperless: %v", s.Stapel, err)
+			return out
+		}
+		if len(docs) == 0 {
+			rest = append(rest, i)
+			continue
+		}
+		s.docs = s.docs[:0:0]
+		for _, d := range docs {
+			s.docs = append(s.docs, stackEntry{title: oneLine(d.Title), link: "/documents/" + strconv.Itoa(d.ID) + "/details"})
+		}
+		s.list = "/documents?" + paperless.FieldQuery(field, s.Stapel)
+	}
 	var names []string
-	for _, s := range out {
-		for _, d := range s.Dokumente {
+	for _, i := range rest {
+		for _, d := range out[i].Dokumente {
 			names = append(names, d.Datei)
 		}
 	}
 	if len(names) == 0 {
 		return out
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), backendWait)
-	defer cancel()
 	have, err := cfg.Docs.Have(ctx, names)
 	if err != nil {
 		log.Printf("haus: dokumente page: which scans Paperless still has: %v", err)
 		return out
 	}
-	kept := out[:0]
-	for _, s := range out {
+	for _, i := range rest {
+		s := &out[i]
 		if len(s.Dokumente) == 0 {
-			kept = append(kept, s)
 			continue
 		}
-		docs := s.Dokumente[:0:0]
-		for _, d := range s.Dokumente {
+		var docs []stackEntry
+		for j, d := range s.Dokumente {
 			if d.Datei == "" || have[d.Datei] {
-				docs = append(docs, d)
+				docs = append(docs, s.docs[j])
 			}
 		}
-		if len(docs) == 0 {
-			continue
-		}
-		s.Dokumente = docs
-		kept = append(kept, s)
+		s.docs, s.gone = docs, len(docs) == 0
 	}
-	return kept
+	return out
+}
+
+// dokumenteList is a stack's documents as Dokumente filed them, each
+// leading to it in Paperless: by its id once Dokumente knows it, else a
+// search for its title.
+func dokumenteList(s laib.Stack) []stackEntry {
+	var out []stackEntry
+	for _, d := range s.Dokumente {
+		title := oneLine(d.Titel)
+		if title == "" {
+			title = oneLine(d.Datei)
+		}
+		link := "/documents?title_content=" + url.QueryEscape(title)
+		if d.ID > 0 {
+			link = "/documents/" + strconv.Itoa(d.ID) + "/details"
+		}
+		out = append(out, stackEntry{title: title, link: link})
+	}
+	return out
 }
 
 // auswertung is what Dokumente last read from contracts and invoices

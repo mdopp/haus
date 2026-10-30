@@ -580,6 +580,17 @@ type Scan struct {
 	// (laib ADR 0028, mdopp/dokumente): when Paperless took new documents,
 	// and hourly
 	Auswertung ScanAuswertung `json:"auswertung"`
+	// Auftrag is the last order as the scan took it (mdopp/dokumente#16):
+	// a refused start or weiter carries its reason at once
+	Auftrag ScanAuftrag `json:"auftrag"`
+}
+
+// ScanAuftrag is the last order the scan read: taken, or refused and why.
+type ScanAuftrag struct {
+	Aktion     string `json:"aktion"`
+	At         string `json:"at"`
+	Angenommen bool   `json:"angenommen"`
+	Grund      string `json:"grund"` // a refusal's reason, a sentence for the person
 }
 
 // ScanAuswertung is what the evaluation of contracts and invoices did.
@@ -625,6 +636,8 @@ type Stack struct {
 	Seiten  int    `json:"seiten"`
 	Leer    int    `json:"leer"`
 	Meldung string `json:"meldung"` // the closing message as the person got it
+	Fuer    string `json:"fuer"`    // haushalt | person („nur für mich“)
+	Person  string `json:"person"`  // who started it
 	// Einzelheiten is the raw error of a stack gone wrong (laib#589)
 	Einzelheiten string     `json:"einzelheiten"`
 	Dokumente    []StackDoc `json:"dokumente"`
@@ -634,6 +647,8 @@ type Stack struct {
 type StackDoc struct {
 	Titel string `json:"titel"`
 	Datei string `json:"datei"` // its original file name in Paperless
+	// ID is its Paperless id once Dokumente found it there (dokumente#15)
+	ID int `json:"id"`
 }
 
 // ScanStatus reads what the scanner does now.

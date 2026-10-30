@@ -382,3 +382,39 @@ func (c *Client) Have(ctx context.Context, names []string) (map[string]bool, err
 	}
 	return out, nil
 }
+
+// FieldID is the id of the custom field with this name (case does not
+// matter); 0 when Paperless has none.
+func (c *Client) FieldID(ctx context.Context, name string) (int, error) {
+	fields, err := c.all(ctx, "/api/custom_fields/")
+	if err != nil {
+		return 0, err
+	}
+	for _, f := range fields {
+		if strings.EqualFold(f.Name, name) {
+			return f.ID, nil
+		}
+	}
+	return 0, nil
+}
+
+// fieldIs is Paperless's custom_field_query for a field holding exactly
+// value, as its own document list writes it into its address.
+func fieldIs(field int, value string) string {
+	b, _ := json.Marshal([]any{"AND", []any{[]any{field, "exact", value}}})
+	return string(b)
+}
+
+// ByField lists the documents whose custom field holds exactly value, in
+// the order Paperless filed them, at most max: those Paperless still has
+// and lets this user see (a scan's stack by „Stapel“, haus#197).
+func (c *Client) ByField(ctx context.Context, field int, value string, max int) ([]Doc, error) {
+	docs, _, err := c.list(ctx, url.Values{"custom_field_query": {fieldIs(field, value)}, "ordering": {"id"}}, max, "id,title")
+	return docs, err
+}
+
+// FieldQuery is the address query of Paperless's own document list
+// filtered to a field holding exactly value ("custom_field_query=…").
+func FieldQuery(field int, value string) string {
+	return url.Values{"custom_field_query": {fieldIs(field, value)}}.Encode()
+}
