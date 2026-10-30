@@ -26,11 +26,14 @@ type Server struct {
 	Removed  []string
 	Loaded   []string // the episodes asked to download, by title
 	n        int
+	users    []string                    // the users by name (haus#152)
+	progress map[string][]map[string]any // a user's progress, as findOne answers it
+	books    []string                    // the book library's titles
 }
 
 // New starts the fake with a podcast library at /podcasts.
 func New(token string) *Server {
-	s := &Server{Token: token, feeds: map[string]map[string]any{}}
+	s := &Server{Token: token, feeds: map[string]map[string]any{}, progress: map[string][]map[string]any{}}
 	s.Server = httptest.NewServer(http.HandlerFunc(s.serve))
 	return s
 }
@@ -77,6 +80,30 @@ func (s *Server) Episode(podcast, title, description string) {
 	}
 }
 
+// Hoert is the user name listening to the book title: progress 0–1,
+// finished or not, last at at; the user is made the first time.
+func (s *Server) Hoert(user, title string, progress float64, finished bool, at time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	known := false
+	for _, u := range s.users {
+		known = known || u == user
+	}
+	if !known {
+		s.users = append(s.users, user)
+	}
+	s.n++
+	s.progress[user] = append(s.progress[user], map[string]any{"libraryItemId": "book" + itoa(s.n), "episodeId": nil, "mediaItemType": "book",
+		"displayTitle": title, "progress": progress, "isFinished": finished, "lastUpdate": at.UnixMilli(), "finishedAt": nil})
+}
+
+// Buch puts a book in the book library.
+func (s *Server) Buch(title string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.books = append(s.books, title)
+}
+
 func itoa(n int) string { b, _ := json.Marshal(n); return string(b) }
 
 func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
@@ -98,6 +125,30 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		answer(map[string]any{"libraries": []any{
 			map[string]any{"id": "lib-books", "mediaType": "book", "folders": []any{map[string]any{"id": "f-books", "fullPath": "/audiobooks"}}},
 			map[string]any{"id": "lib-pod", "mediaType": "podcast", "folders": []any{map[string]any{"id": "f-pod", "fullPath": "/podcasts"}}}}})
+	case r.Method == "GET" && r.URL.Path == "/api/users":
+		var us []any
+		for i, u := range s.users {
+			us = append(us, map[string]any{"id": "u" + itoa(i), "username": u, "type": "user"})
+		}
+		answer(map[string]any{"users": us})
+	case r.Method == "GET" && strings.HasPrefix(r.URL.Path, "/api/users/"):
+		id := strings.TrimPrefix(r.URL.Path, "/api/users/")
+		for i, u := range s.users {
+			if "u"+itoa(i) == id {
+				answer(map[string]any{"id": id, "username": u, "mediaProgress": s.progress[u]})
+				return
+			}
+		}
+		http.NotFound(w, r)
+	case r.Method == "GET" && r.URL.Path == "/api/libraries/lib-books/search":
+		q := strings.ToLower(r.URL.Query().Get("q"))
+		var hits []any
+		for _, b := range s.books {
+			if strings.Contains(strings.ToLower(b), q) {
+				hits = append(hits, map[string]any{"libraryItem": map[string]any{"media": map[string]any{"metadata": map[string]any{"title": b}}}})
+			}
+		}
+		answer(map[string]any{"book": hits, "authors": []any{}, "series": []any{}})
 	case r.Method == "POST" && r.URL.Path == "/api/podcasts/feed":
 		feed, _ := in["rssFeed"].(string)
 		md, ok := s.feeds[feed]
