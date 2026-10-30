@@ -410,7 +410,7 @@ func scanSection(r *http.Request, cfg StartConfig, s scanning) string {
 	}
 	st := s.st
 	if s.order.stackWaits() { // the button was pressed, the scan has not written yet: no second order (haus#195)
-		b.WriteString(`<p class="zustand laeuft" role=status>` + html.EscapeString(scanRuns[s.order.do]) + `</p>`)
+		b.WriteString(`<p class="zustand arbeitet" role=status>` + html.EscapeString(scanRuns[s.order.do]) + `</p>`)
 	} else {
 		text, detail := scanState(st)
 		b.WriteString(`<p class=zustand><b>` + html.EscapeString(text) + `</b>`)
@@ -476,9 +476,9 @@ func scanQueue(cfg StartConfig, st laib.Scan) string {
 		case strings.HasPrefix(a.Detail, "wartet auf das Modell"):
 			say += ", wartet auf das Hausmodell"
 		}
-		b.WriteString(`<p class="laeuft reihe">` + html.EscapeString(say) + stackWho(a.Person, a.Fuer) + `</p>`)
+		b.WriteString(`<p class="arbeitet reihe">` + html.EscapeString(say) + stackWho(a.Person, a.Fuer) + `</p>`)
 	} else if len(rest) > 0 { // in the queue, the worker not at it yet
-		b.WriteString(`<p class="laeuft reihe">` + html.EscapeString("Wird gleich getrennt: "+stackName(rest[0].Stapel, now, loc)) + stackWho(rest[0].Person, rest[0].Fuer) + `</p>`)
+		b.WriteString(`<p class="arbeitet reihe">` + html.EscapeString("Wird gleich getrennt: "+stackName(rest[0].Stapel, now, loc)) + stackWho(rest[0].Person, rest[0].Fuer) + `</p>`)
 		rest = rest[1:]
 	}
 	if len(rest) > 0 {
@@ -612,7 +612,7 @@ func scannerSetup(r *http.Request, cfg StartConfig, st laib.Scan, o scanOrder) s
 	}
 	switch {
 	case o.waiting():
-		b.WriteString(`<p class=laeuft role=status>` + html.EscapeString(scanRuns[o.do]) + `</p>`)
+		b.WriteString(`<p class=arbeitet role=status>` + html.EscapeString(scanRuns[o.do]) + `</p>`)
 	case o.late:
 		b.WriteString(`<div class=achtung role=alert><p>` + html.EscapeString(fmt.Sprintf(saysOrderLate, waitWords(scanWaits[o.do]))) + `</p></div>`)
 	}
@@ -630,7 +630,7 @@ func scannerSetup(r *http.Request, cfg StartConfig, st laib.Scan, o scanOrder) s
 	switch su := st.Suche; su.Zustand {
 	case "läuft":
 		if o.do != "suchen" {
-			b.WriteString(`<p class=laeuft role=status>` + html.EscapeString(scanRuns["suchen"]) + `</p>`)
+			b.WriteString(`<p class=arbeitet role=status>` + html.EscapeString(scanRuns["suchen"]) + `</p>`)
 		}
 	case "fertig", "fehler":
 		if o.waiting() && o.do == "suchen" {
@@ -875,9 +875,9 @@ const scanStyle = `<style>.scannen .zustand{margin:10px 0 0}.scannen .knoepfe{di
 .einrichten{margin:18px 0 0;padding:12px 0 0;border-top:1px solid var(--line)}.einrichten summary{cursor:pointer;font-weight:600;min-height:44px;display:flex;align-items:center}
 .funde{margin:10px 0 0;padding:0;list-style:none}.funde li{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-top:1px solid var(--line)}.funde button{margin:0;width:auto}
 .einrichten ul.k{margin:6px 0 0;padding-left:18px;font-size:.85rem}.scannen .gut,.scannen .achtung{margin:10px 0 0}
-.laeuft{margin:12px 0 0;font-weight:600}.laeuft::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--accent);margin-right:8px;vertical-align:1px;animation:puls 1.2s ease-in-out infinite}
-@keyframes puls{50%{opacity:.25}}@media (prefers-reduced-motion:reduce){.laeuft::before{animation:none}}.scannen button:disabled{opacity:.6}
-.scannen .reihe{margin:8px 0 0;overflow-wrap:anywhere}.scannen p.laeuft.reihe{font-weight:400}.stapel .zweifel{color:var(--warn);font-weight:600;overflow-wrap:anywhere}.stapel li li .zweifel{display:block;font-size:.85rem}</style>`
+.arbeitet{margin:12px 0 0;font-weight:600}.arbeitet::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--accent);margin-right:8px;vertical-align:1px;animation:puls 1.2s ease-in-out infinite}
+@keyframes puls{50%{opacity:.25}}@media (prefers-reduced-motion:reduce){.arbeitet::before{animation:none}}.scannen button:disabled{opacity:.6}
+.scannen .reihe{margin:8px 0 0;overflow-wrap:anywhere}.scannen p.arbeitet.reihe{font-weight:400}.stapel .zweifel{color:var(--warn);font-weight:600;overflow-wrap:anywhere}.stapel li li .zweifel{display:block;font-size:.85rem}</style>`
 
 var pagesRE = regexp.MustCompile(`(\d+) Seiten`)
 

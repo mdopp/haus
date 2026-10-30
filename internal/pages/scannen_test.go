@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -334,7 +335,7 @@ func TestScannerEinrichtenFollowsTheOrder(t *testing.T) {
 
 	// pressed, the service has not written yet: Sucht …, no button, look again soon
 	body = scanPageAt(t, f, admins, after("suchen", 2*time.Second))
-	mustContain(t, body, `<details id=scanner class=einrichten open>`, `<p class=laeuft role=status>Sucht nach Scannern …</p>`, "data-auffrischen=2>")
+	mustContain(t, body, `<details id=scanner class=einrichten open>`, `<p class=arbeitet role=status>Sucht nach Scannern …</p>`, "data-auffrischen=2>")
 	mustNotContain(t, body, "Scanner suchen</button>", saysNotFound) // the old result is not this one's
 
 	// the service runs it
@@ -493,12 +494,12 @@ func TestScannenShowsARefusedStartInPlace(t *testing.T) {
 	// an older refusal is not this order's: still Startet …
 	f.status["auftrag"] = map[string]any{"aktion": "start", "at": now.Add(-time.Hour).UTC().Format(time.RFC3339), "angenommen": false, "grund": grund}
 	body = scanPageAt(t, f, "family", seit)
-	mustContain(t, body, `<p class="zustand laeuft" role=status>Startet …</p>`)
+	mustContain(t, body, `<p class="zustand arbeitet" role=status>Startet …</p>`)
 	mustNotContain(t, body, html.EscapeString(grund))
 
 	// taken: Startet … until the stack's own state
 	f.status["auftrag"] = map[string]any{"aktion": "start", "at": now.UTC().Format(time.RFC3339), "angenommen": true}
-	mustContain(t, scanPageAt(t, f, "family", seit), `<p class="zustand laeuft" role=status>Startet …</p>`)
+	mustContain(t, scanPageAt(t, f, "family", seit), `<p class="zustand arbeitet" role=status>Startet …</p>`)
 }
 
 // laib#831: a stack the model could not split waits and is done again by
@@ -581,7 +582,7 @@ func TestScannenFollowsAStackOrder(t *testing.T) {
 	// a second after the order, the status still the last stack's: Startet …, nothing to press
 	for _, groups := range []string{"family", "family,admins"} {
 		body := scanPageAt(t, f, groups, after("start", time.Second))
-		mustContain(t, body, `<p class="zustand laeuft" role=status>Startet …</p>`, "data-auffrischen=2>")
+		mustContain(t, body, `<p class="zustand arbeitet" role=status>Startet …</p>`, "data-auffrischen=2>")
 		mustNotContain(t, body, "value=start>", "Stapel scannen</button>", "<b>Fertig</b>", "Erneut prüfen</button>", "Probeseite</button>")
 	}
 
@@ -606,7 +607,7 @@ func TestScannenFollowsAStackOrder(t *testing.T) {
 	// Weiter after a jam: Scannt weiter … until the service scans again
 	f.status = map[string]any{"zustand": "wartet-auf-rest", "blatt": 6, "at": at(-time.Minute), "scanner": true}
 	body = scanPageAt(t, f, "family", after("weiter", time.Second))
-	mustContain(t, body, `<p class="zustand laeuft" role=status>Scannt weiter …</p>`, "data-auffrischen=2>")
+	mustContain(t, body, `<p class="zustand arbeitet" role=status>Scannt weiter …</p>`, "data-auffrischen=2>")
 	mustNotContain(t, body, "Weiter</button>", "Abschließen</button>", "Verwerfen</button>", "Nach Blatt 6 abgebrochen")
 	body = scanPage(t, f, "family")
 	mustContain(t, body, `data-laeuft="Scannt weiter …">Weiter</button>`)
@@ -624,7 +625,7 @@ func TestScannenOffersAStackWhileTheQueueRuns(t *testing.T) {
 	// idle: nothing in work, no queue lines
 	body := scanPage(t, &scanLaib{status: map[string]any{"zustand": "fertig", "einzug": "frei", "scanner": true, "warten": []any{}}}, "family")
 	mustContain(t, body, "<b>Fertig</b>", `data-laeuft="Startet …">Stapel scannen</button>`)
-	mustNotContain(t, body, "Wird getrennt", "Danach:", `class="laeuft reihe"`)
+	mustNotContain(t, body, "Wird getrennt", "Danach:", `class="arbeitet reihe"`)
 
 	// running: the worker splits 09:52 at page 12 of 40, two wait; the scanner is free
 	f := &scanLaib{status: map[string]any{"zustand": "trennt", "einzug": "frei", "scanner": true, "stapel": "2026-10-14T09-52-00", "detail": "liest Seite 12 von 40",
@@ -632,7 +633,7 @@ func TestScannenOffersAStackWhileTheQueueRuns(t *testing.T) {
 		"warten": queue}}
 	body = scanPage(t, f, "family")
 	mustContain(t, body, "<b>Bereit</b>", "Der Scanner ist frei für den nächsten Stapel.", `data-laeuft="Startet …">Stapel scannen</button>`,
-		`<p class="laeuft reihe">Wird getrennt: Stapel von 09:52, Seite 12 von 40 <span class=k>Anna</span></p>`,
+		`<p class="arbeitet reihe">Wird getrennt: Stapel von 09:52, Seite 12 von 40 <span class=k>Anna</span></p>`,
 		`<p class="k reihe">Danach: 2 Stapel</p>`, "data-auffrischen=5>")
 	mustNotContain(t, body, saysScanBusy, "Trennt die Dokumente")
 	before(t, body, "Stapel scannen</button>", "Wird getrennt")
@@ -642,7 +643,7 @@ func TestScannenOffersAStackWhileTheQueueRuns(t *testing.T) {
 	mustContain(t, scanPage(t, f, "family"), "Wird getrennt: Stapel vom 13. Oktober 2026, 21:00, wartet auf das Hausmodell <span class=k>nur für Anna</span>")
 	f.status["trennt"] = map[string]any{"stapel": "2026-10-14T09-52-00", "schritt": "legt-ab", "detail": "legt 3 Dokumente ab"}
 	body = scanPage(t, f, "family")
-	mustContain(t, body, `<p class="laeuft reihe">Wird abgelegt: Stapel von 09:52</p>`, "Danach: 2 Stapel")
+	mustContain(t, body, `<p class="arbeitet reihe">Wird abgelegt: Stapel von 09:52</p>`, "Danach: 2 Stapel")
 	mustNotContain(t, body, "Joshua")
 
 	// a queue nobody picked up yet: the first is next, one after it
@@ -680,7 +681,7 @@ func TestScannenFollowsAStartWhileTheQueueRuns(t *testing.T) {
 	// running: the worker wrote just now, the scanner has not begun: Startet …
 	f := &scanLaib{status: working()}
 	body := scanPageAt(t, f, "family", after)
-	mustContain(t, body, `<p class="zustand laeuft" role=status>Startet …</p>`, "data-auffrischen=2>", "Wird getrennt: Stapel von 09:52, Seite 13 von 40")
+	mustContain(t, body, `<p class="zustand arbeitet" role=status>Startet …</p>`, "data-auffrischen=2>", "Wird getrennt: Stapel von 09:52, Seite 13 von 40")
 	mustNotContain(t, body, "Stapel scannen</button>")
 
 	// done: the scanner scans a stack begun after the order
@@ -757,6 +758,23 @@ func TestScannenSaysWhatToCheck(t *testing.T) {
 	for _, d := range got[0].docs {
 		if (d.pruefen != "") != (d.title == "Befund (umbenannt)") {
 			t.Errorf("%+v", d)
+		}
+	}
+}
+
+// 2026-10-30, the owner's phone: „Wird getrennt …“ spun as a whole. The status line wore the class
+// laeuft, which the family pages' shared style (family.go) makes a 14 px rotating ring; the page's own
+// line has its own class, and no element of the page wears laeuft.
+func TestScannenNeverWearsTheSharedSpinnerClass(t *testing.T) {
+	shared := regexp.MustCompile(`class=("[^"]*\blaeuft\b[^"]*"|laeuft\b)`)
+	for _, st := range []map[string]any{
+		{"zustand": "trennt", "einzug": "frei", "scanner": true, "stapel": "2026-10-14T09-52-00",
+			"trennt": map[string]any{"stapel": "2026-10-14T09-52-00", "person": "anna", "fuer": "haushalt", "schritt": "trennt", "seite": 3, "seiten": 9},
+			"warten": []map[string]any{{"stapel": "2026-10-14T09-58-00", "person": "anna", "fuer": "haushalt", "quelle": "scanner", "seit": "2026-10-14T07:58:30Z"}}},
+		{"zustand": "scannt", "einzug": "scannt", "scanner": true, "stapel": "2026-10-14T09-52-00"},
+	} {
+		if m := shared.FindString(scanPage(t, &scanLaib{status: st}, "family")); m != "" {
+			t.Fatalf("an element wears the shared spinner class: %s", m)
 		}
 	}
 }
