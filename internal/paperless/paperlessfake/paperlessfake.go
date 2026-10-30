@@ -2,6 +2,7 @@
 // "Authorization: Token …", GET /api/documents/ with query, id__in,
 // page_size, page (and next), fields, original_filename__icontains and
 // ordering (-created, id),
+// custom_field_query (one exact field), GET /api/custom_fields/,
 // GET /api/correspondents/ and GET /api/tags/ with id__in. A query matches title and content, case-insensitively, the way
 // a full-text hit would look.
 package paperlessfake
@@ -217,6 +218,21 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 			return m
 		}
 		ofType, withTag := anyOf("document_type__id__in"), anyOf("tags__id__in")
+		// custom_field_query as Paperless's list writes it: ["AND",[[field,"exact",value]]]
+		var cfq []any
+		if v := q.Get("custom_field_query"); v != "" {
+			var top []any
+			json.Unmarshal([]byte(v), &top)
+			if len(top) == 2 {
+				if inner, ok := top[1].([]any); ok && len(inner) == 1 {
+					cfq, _ = inner[0].([]any)
+				}
+			}
+			if len(cfq) != 3 || cfq[1] != "exact" {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+		}
 		var hits []Doc
 		for _, d := range s.docs {
 			if only != nil && !only[d.ID] {
@@ -227,6 +243,12 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 			}
 			if ofType != nil && !ofType[d.DocumentType] {
 				continue
+			}
+			if cfq != nil {
+				id, _ := cfq[0].(float64)
+				if v, ok := d.Fields[int(id)]; !ok || v != cfq[2] {
+					continue
+				}
 			}
 			if withTag != nil {
 				hit := false

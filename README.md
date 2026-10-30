@@ -281,9 +281,21 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     Each button is `POST /scannen`, one `laib_scan` order for the person who
     pressed it (#35's rule), then back. Below, the inbox folder for a
     scanner that scans to the network drive
-    (`\\<HAUS_SAMBA_HOST>\data\scan-eingang`) and the last five stacks with
-    their documents, each a link to Paperless's search by its title where
-    Paperless opens. *Trennblätter* (haus#161): one line on what they do,
+    (`\\<HAUS_SAMBA_HOST>\data\scan-eingang`) and the last five stacks,
+    each one folded line (haus#197: when, who, „nur für“ whom, pages, how
+    many documents or what came of it; the newest open, what a viewer opens
+    or closes kept in their browser). Opened, its documents as Paperless has
+    them now by the custom field `Stapel` = the stack id (Dokumente writes
+    it, mdopp/dokumente#15; laib#909 makes the field): each a link to the
+    document, and *Den ganzen Stapel in Paperless öffnen* as Paperless's own
+    list filtered to it; a document deleted there is gone, a split one shows
+    its pieces. A stack Paperless lists nothing for by the field (filing,
+    failed, filed before the field) keeps Dokumente's own list, by id where
+    Dokumente knows it, less what Paperless no longer holds by file name;
+    one with nothing left says *Nichts mehr in Paperless*. A `start` or
+    `weiter` the scan refused (its status `auftrag.angenommen: false`,
+    mdopp/dokumente#16) shows the scan's reason where *Startet …* was, at
+    once, the button back. *Trennblätter* (haus#161): one line on what they do,
     a number field (5, 1–50) and *Trennblätter drucken*, which opens
     `GET /scannen/trennblatt?anzahl=n` — that many A4 sheets, one per page
     (`@page` A4, a page break after each), each with a Code 128 barcode

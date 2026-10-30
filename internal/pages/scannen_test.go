@@ -430,14 +430,75 @@ func TestScannenListsWhatPaperlessStillHas(t *testing.T) {
 	}
 	cfg := StartConfig{Docs: &paperless.Client{URL: fake.URL, Token: "pl"}}
 	got := shownStacks(httptest.NewRequest("GET", "/dokumente", nil), cfg, all)
-	if len(got) != 2 || got[0].Stapel != "A" || len(got[0].Dokumente) != 1 || got[0].Dokumente[0].Titel != "2023-06-15 Mosel - Rechnung 2023" || got[1].Stapel != "C" {
+	if len(got) != 3 || got[0].Stapel != "A" || len(got[0].docs) != 1 || got[0].docs[0].title != "2023-06-15 Mosel - Rechnung 2023" ||
+		!got[1].gone || got[1].line() != "Nichts mehr in Paperless" || got[2].Stapel != "C" || got[2].gone {
 		t.Fatalf("shown: %+v", got)
 	}
 	// Paperless not answering: as the service says, each stack once
 	cfg.Docs = &paperless.Client{URL: "http://127.0.0.1:1", Token: "pl"}
-	if got := shownStacks(httptest.NewRequest("GET", "/dokumente", nil), cfg, all); len(got) != 3 || len(got[0].Dokumente) != 2 {
+	if got := shownStacks(httptest.NewRequest("GET", "/dokumente", nil), cfg, all); len(got) != 3 || len(got[0].docs) != 2 || got[1].gone {
 		t.Fatalf("Paperless away: %+v", got)
 	}
+}
+
+// haus#197: a stack's documents come from Paperless by the field „Stapel“
+// (Dokumente writes the stack id, mdopp/dokumente#15): renamed, split or
+// merged there, they are listed as they are now, each a link to the
+// document, and the whole stack opens as Paperless's own list; a stack
+// Paperless lists nothing for yet keeps Dokumente's list, by id where
+// Dokumente knows it. Each stack is one folded line, the newest open.
+func TestScannenListsAStackFromPaperless(t *testing.T) {
+	fake := paperlessfake.New("pl")
+	defer fake.Close()
+	fake.Field(1, "Anbieter", "string")
+	fake.Field(7, "Stapel", "string")
+	fake.Add(paperlessfake.Doc{ID: 11, Title: "Stromrechnung Teil 1", Fields: map[int]any{7: "2026-10-29T17-07-46"}},
+		paperlessfake.Doc{ID: 12, Title: "Stromrechnung Teil 2", Fields: map[int]any{7: "2026-10-29T17-07-46", 1: "Strom AG"}},
+		paperlessfake.Doc{ID: 13, Title: "Anderer Stapel", Fields: map[int]any{7: "2026-10-28T09-00-00"}},
+		paperlessfake.Doc{ID: 20, Title: "Brief", OriginalFileName: "Brief.pdf"}) // filed before the field
+	f := &scanLaib{status: map[string]any{"zustand": "fertig", "scanner": true, "letzte": []map[string]any{
+		{"stapel": "2026-10-29T17-07-46", "ende": "fertig", "quelle": "scanner", "at": "2026-10-29T16:07:46Z", "seiten": 6, "fuer": "person", "person": "anna",
+			"dokumente": []map[string]any{{"titel": "2026-10-01 Strom AG - Rechnung", "datei": "2026-10-01 Strom AG - Rechnung.pdf", "id": 10}}},
+		{"stapel": "2026-10-29T10-00-00", "ende": "fertig", "quelle": "ordner", "at": "2026-10-29T08:00:00Z", "person": "ben",
+			"dokumente": []map[string]any{{"titel": "Brief", "datei": "Brief.pdf", "id": 20}}},
+	}}}
+	_, cfg := dokumente(t)
+	cfg.Laib, cfg.Loc, cfg.Now = f.client(t), berlin(t), func() time.Time { return startNow(t) }
+	cfg.Docs = &paperless.Client{URL: fake.URL, Token: "pl"}
+	rec := getDokumente(cfg, "/dokumente", map[string]string{"X-Forwarded-For": "192.168.1.23", "Remote-Groups": "family"})
+	body := rec.Body.String()
+	mustContain(t, body, `<details data-stapel="2026-10-29T17-07-46" open><summary><b>2 Dokumente</b>`, "nur für Anna", "6 Seiten",
+		`<a href="https://paperless.box.test/documents/11/details">Stromrechnung Teil 1</a>`,
+		`<a href="https://paperless.box.test/documents/12/details">Stromrechnung Teil 2</a>`,
+		`<a href="https://paperless.box.test/documents?custom_field_query=%5B%22AND%22%2C%5B%5B7%2C%22exact%22%2C%222026-10-29T17-07-46%22%5D%5D%5D">Den ganzen Stapel in Paperless öffnen</a>`,
+		`<details data-stapel="2026-10-29T10-00-00"><summary><b>1 Dokument</b>`, "aus dem Ordner · Ben",
+		`<a href="https://paperless.box.test/documents/20/details">Brief</a>`, "localStorage")
+	mustNotContain(t, body, "Anderer Stapel", "2026-10-01 Strom AG - Rechnung", "title_content=Brief", "nur für Ben")
+	before(t, body, "Stromrechnung Teil 1", "Stromrechnung Teil 2")
+}
+
+// mdopp/dokumente#16: the scan writes a refused order with its reason into
+// the status at once; the page shows it where „Startet …“ was, the button
+// free again, without waiting 30 seconds. A taken one goes on as before.
+func TestScannenShowsARefusedStartInPlace(t *testing.T) {
+	now := startNow(t)
+	seit := "/dokumente?tut=start&seit=" + strconv.FormatInt(now.Add(-time.Second).Unix(), 10)
+	grund := "„Nur für mich“ geht gerade nicht: Paperless antwortet nicht. Nichts gescannt; versuche es in ein paar Minuten noch einmal."
+	f := &scanLaib{status: map[string]any{"zustand": "fertig", "at": now.UTC().Format(time.RFC3339), "scanner": true,
+		"auftrag": map[string]any{"aktion": "start", "at": now.UTC().Format(time.RFC3339), "angenommen": false, "grund": grund}}}
+	body := scanPageAt(t, f, "family", seit)
+	mustContain(t, body, `<div class=achtung role=alert><p>`+html.EscapeString(grund)+`</p></div>`, `data-laeuft="Startet …">Stapel scannen</button>`)
+	mustNotContain(t, body, "Startet …</p>", "nach 30 Sekunden", "<div hidden data-auffrischen")
+
+	// an older refusal is not this order's: still Startet …
+	f.status["auftrag"] = map[string]any{"aktion": "start", "at": now.Add(-time.Hour).UTC().Format(time.RFC3339), "angenommen": false, "grund": grund}
+	body = scanPageAt(t, f, "family", seit)
+	mustContain(t, body, `<p class="zustand laeuft" role=status>Startet …</p>`)
+	mustNotContain(t, body, html.EscapeString(grund))
+
+	// taken: Startet … until the stack's own state
+	f.status["auftrag"] = map[string]any{"aktion": "start", "at": now.UTC().Format(time.RFC3339), "angenommen": true}
+	mustContain(t, scanPageAt(t, f, "family", seit), `<p class="zustand laeuft" role=status>Startet …</p>`)
 }
 
 // laib#831: a stack the model could not split waits and is done again by
