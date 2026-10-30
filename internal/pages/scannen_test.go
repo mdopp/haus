@@ -95,7 +95,7 @@ func scanPageAt(t *testing.T, f *scanLaib, groups, target string) string {
 func TestScannenAfterAJamSaysWhereToGoOn(t *testing.T) {
 	body := scanPage(t, &scanLaib{status: map[string]any{"zustand": "wartet-auf-rest", "blatt": 6, "grund": "sane_start: Error during device I/O", "scanner": true}}, "family")
 	mustContain(t, body, "Nach Blatt 6 abgebrochen", "Den Rest ab Blatt 6 einlegen",
-		`<form method=post action=/scannen><input type=hidden name=tun value=weiter><button>Weiter</button></form>`,
+		`<form method=post action=/scannen><input type=hidden name=tun value=weiter><button data-laeuft="Scannt weiter …">Weiter</button></form>`,
 		`value=abschliessen><button>Abschließen</button>`, `value=verwerfen><button>Verwerfen</button>`)
 	mustNotContain(t, body, "Stapel scannen", "sane_start", "device I/O", "<div hidden data-auffrischen")
 	before(t, body, "<h2>Scannen</h2>", "Per E-Mail ablegen")
@@ -169,7 +169,7 @@ func TestScannenPassesTheOrderOn(t *testing.T) {
 	cfg.Laib = f.client(t)
 	h := Scannen(cfg)
 	rec := post(t, h, "/scannen", url.Values{"tun": {"weiter"}}, "anna", nil)
-	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/dokumente" {
+	if rec.Code != http.StatusSeeOther || !strings.HasPrefix(rec.Header().Get("Location"), "/dokumente?tut=weiter&seit=") { // haus#195
 		t.Fatalf("%d %q", rec.Code, rec.Header().Get("Location"))
 	}
 	if len(f.orders) != 1 || f.orders[0]["action"] != "weiter" || f.orders[0]["person"] != "anna" {
@@ -546,7 +546,7 @@ func TestScannenFollowsAStackOrder(t *testing.T) {
 	f.status = map[string]any{"zustand": "wartet-auf-rest", "blatt": 6, "at": at(-time.Minute), "scanner": true}
 	body = scanPageAt(t, f, "family", after("weiter", time.Second))
 	mustContain(t, body, `<p class="zustand laeuft" role=status>Scannt weiter …</p>`, "data-auffrischen=2>")
-	mustNotContain(t, body, "<button", "Nach Blatt 6 abgebrochen")
+	mustNotContain(t, body, "Weiter</button>", "Abschließen</button>", "Verwerfen</button>", "Nach Blatt 6 abgebrochen")
 	body = scanPage(t, f, "family")
 	mustContain(t, body, `data-laeuft="Scannt weiter …">Weiter</button>`)
 }
