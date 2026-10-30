@@ -24,6 +24,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -44,7 +45,15 @@ type Client struct {
 	mu        sync.Mutex
 	write     *Collection // the Haushalt calendar, once found
 	writeBook *Collection // the Haushalt address book, once found
+
+	first  chan struct{} // held by the one request after a quiet spell (haus#184)
+	lastOK atomic.Int64  // when Radicale last took the login, Unix nanoseconds
 }
+
+// quietSpell is how long Haus trusts Radicale to keep its login cached:
+// the box caches one 900 s (laib#877); after longer the next login is an
+// LLDAP bind, 0.13 s alone, and binds made at once wait for each other.
+const quietSpell = 10 * time.Minute
 
 // Collection is one calendar or address book.
 type Collection struct {
@@ -108,8 +117,39 @@ func (c *Client) now() time.Time {
 	return time.Now()
 }
 
-// send makes one request; the caller closes the body.
+// send makes one request; the caller closes the body. After a quiet
+// spell the first request goes alone and the others wait for it, so
+// Radicale binds the login once and the rest find it cached (haus#184: on
+// the box three binds at once took 0.415 s each, one alone 0.13 s).
 func (c *Client) send(ctx context.Context, method, u, depth, body string, hdr map[string]string) (*http.Response, error) {
+	if c.quiet() {
+		c.mu.Lock()
+		if c.first == nil {
+			c.first = make(chan struct{}, 1)
+		}
+		first := c.first
+		c.mu.Unlock()
+		select {
+		case first <- struct{}{}:
+		case <-ctx.Done():
+			return nil, fmt.Errorf("Radicale nicht erreichbar: %w", ctx.Err())
+		}
+		if c.quiet() { // still: this one goes alone
+			defer func() { <-first }()
+		} else {
+			<-first
+		}
+	}
+	return c.sendNow(ctx, method, u, depth, body, hdr)
+}
+
+// quiet is no login Radicale took within quietSpell.
+func (c *Client) quiet() bool {
+	return time.Since(time.Unix(0, c.lastOK.Load())) > quietSpell
+}
+
+// sendNow is send without the wait; a login Radicale took is noted.
+func (c *Client) sendNow(ctx context.Context, method, u, depth, body string, hdr map[string]string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, method, u, strings.NewReader(body))
 	if err != nil {
 		return nil, err
@@ -133,6 +173,9 @@ func (c *Client) send(ctx context.Context, method, u, depth, body string, hdr ma
 	resp, err := h.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("Radicale nicht erreichbar: %w", err)
+	}
+	if resp.StatusCode != http.StatusUnauthorized {
+		c.lastOK.Store(time.Now().UnixNano())
 	}
 	return resp, nil
 }
