@@ -3,7 +3,8 @@
 // app.BoxPrefix served from Laib, operate and verdicts behind the right
 // token, the house paths, the event stream and the camera from Home
 // Assistant (home.go, live.go, camera.go), the tool widgets from the
-// Haushalt source (tools.go), the capture upload (upload.go), a link shared
+// Haushalt source (tools.go), the capture upload (upload.go), the phone's
+// message backups (sicherung.go), a link shared
 // to the app kept as a note (merken.go) and the house persona. Every other /napi path is a JSON 404 (noSuchPath).
 package napi
 
@@ -44,6 +45,9 @@ type Config struct {
 	// UploadDir: where /napi/upload stores (upload.go), the share's Paperless
 	// consume folder; "" = 404
 	UploadDir string
+	// Sicherung: the message archives' inbox (sicherung.go, HAUS_ARCHIV_DIR,
+	// haus#207); nil = every /napi/sicherung path answers 503 in words
+	Sicherung *Sicherung
 	// Usage counts each paired phone's request by path (haus#50): which
 	// widgets refresh how often, never which phone; nil counts nothing
 	Usage *usage.Counter
@@ -228,6 +232,7 @@ func Handler(c Config) http.Handler {
 	if c.UploadDir != "" { // the camera capture into the consume folder
 		newUploads(c.UploadDir).routes(mux, auth)
 	}
+	c.Sicherung.routes(mux, auth, c.Whoami) // the phone's message backups (haus#207)
 	// every other /napi path, passed on to nobody; a device first, so a
 	// stranger cannot tell which backends are set
 	mux.HandleFunc("POST /napi/merken", auth(c.merken)) // Share → Haus (haus#120)

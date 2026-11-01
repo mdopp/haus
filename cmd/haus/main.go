@@ -100,7 +100,7 @@ func routes(s site) http.Handler {
 		Notes: s.hh.Notes, Library: s.hh.Library, Judge: s.hh.Judge, Docs: s.hh.Documents, Loc: s.hh.Loc, Favorites: s.favorites, Bote: s.bote,
 		Samba: s.samba, SambaHost: s.sambaHost, Usage: s.usage, PublicURL: s.publicURL, Welcome: s.welcome, STT: s.stt,
 		HAPublicURL: s.haPublic, Inverted: s.inverted, RadicalePublicURL: s.radicale, Views: s.views, GesundheitURL: s.gesundheit,
-		DocumentsMail: s.docsMail, PaperlessPublicURL: s.paperlessPublic, PaperlessLANOnly: s.paperlessLAN}
+		DocumentsMail: s.docsMail, PaperlessPublicURL: s.paperlessPublic, PaperlessLANOnly: s.paperlessLAN, Sicherung: s.napi.Sicherung}
 	// the lists, the music wish list and the shelf, before any page takes its copy of family
 	family.Einkauf, family.Wuensche = s.hh.Einkauf, s.hh.Wuensche
 	if s.hh.Wuensche != nil {
@@ -175,6 +175,7 @@ func routes(s site) http.Handler {
 	pagesMux.HandleFunc(cards.SwitchPath, pages.Schalten(family))                 // a page's switch, the widgets' rule (haus#35)
 	pagesMux.HandleFunc("/sprechen", pages.Sprechen(family))                      // the Sprechen field to the Bote, and its reply (haus#12)
 	pagesMux.HandleFunc(pages.HoerenPath, pages.Hoeren(family))                   // the field's microphone, HA's speech-to-text (haus#63)
+	pagesMux.HandleFunc(pages.NachrichtenPath, pages.Nachrichten(family))         // the phone's message backups and how to switch them on (haus#207)
 	pagesMux.HandleFunc("/netzlaufwerk", pages.Netzlaufwerk(family))              // each person's network-drive password (haus#52)
 	pagesMux.HandleFunc("/willkommen", pages.Willkommen(family))                  // a new person's apps and how to set them up (haus#56)
 	pagesMux.HandleFunc("/adresse", pages.Adresse(family))                        // the household's address, admins only (laib#561)
@@ -363,6 +364,15 @@ func main() {
 		} else if err := napi.SweepUploads(cfg.UploadDir); err != nil { // parts a stopped Haus left staged
 			log.Printf("haus: HAUS_UPLOAD_DIR: sweeping staged parts: %v", err)
 		}
+	}
+	// haus#207, laib ADR 0029: the message archives' inbox, one folder per
+	// person, where the app's phone backups land; unset, /napi/sicherung is 503
+	if dir := os.Getenv("HAUS_ARCHIV_DIR"); dir != "" {
+		cfg.Sicherung = napi.NewSicherung(dir, dataDir)
+		if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
+			log.Printf("haus: HAUS_ARCHIV_DIR %s is not a folder (yet): backups answer 503 until it is", dir)
+		}
+		go cfg.Sicherung.Pflegen(nil) // parts untouched for a week go, now and daily
 	}
 	gesundheit := pages.AppURL(pages.OnDomain(os.Getenv("HAUS_GESUNDHEIT_URL"), os.Getenv("HAUS_PUBLIC_URL"))) // haus#192
 	if gesundheit == "" && os.Getenv("HAUS_GESUNDHEIT_URL") != "" {
