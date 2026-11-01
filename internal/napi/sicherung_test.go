@@ -552,4 +552,15 @@ func TestSicherungTodaysFileIsNotYesterdays(t *testing.T) {
 	if got, _ := os.ReadFile(filepath.Join(a.dir, "anna", "whatsapp", pfad)); string(got) != "heute!!!" {
 		t.Errorf("in the inbox: %q, want today's file", got)
 	}
+	// yesterday's, not imported yet, may hold a chat deleted since: kept beside, not replaced
+	beside, _ := filepath.Glob(filepath.Join(a.dir, "anna", "whatsapp", pfad+".*"))
+	if len(beside) != 1 {
+		t.Fatalf("beside today's file: %v, want yesterday's", beside)
+	}
+	if got, _ := os.ReadFile(beside[0]); string(got) != "gestern!" {
+		t.Errorf("%s holds %q, want yesterday's file", beside[0], got)
+	}
+	if st, err := os.Stat(filepath.Join(a.dir, "anna", "whatsapp", pfad)); err != nil || st.ModTime().UnixMilli() != 1_793_586_400_000 {
+		t.Errorf("today's file carries mtime %v (%v), want the phone's", st.ModTime(), err)
+	}
 }

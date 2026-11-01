@@ -752,8 +752,11 @@ func (s *Sicherung) write(root *os.Root, id string, have, limit, rest int64, bod
 	}
 }
 
-// place puts a whole part where the importer looks: <quelle>/<pfad>,
-// replacing a file of that name, then notes it in the ledger.
+// place puts a whole part where the importer looks: <quelle>/<pfad>, with
+// the phone's mtime. A file of that name still waiting there is kept beside
+// it as <pfad>.<its mtime>, never replaced: WhatsApp's msgstore.db.crypt15
+// keeps its name daily, and yesterday's may hold a chat deleted since, which
+// the person's Archiv has not imported yet (its Tresor was closed).
 func (s *Sicherung) place(root *os.Root, person, id string, a auftrag) error {
 	f, err := root.OpenFile(teil+"/"+id, os.O_WRONLY, 0)
 	if err != nil {
@@ -770,8 +773,19 @@ func (s *Sicherung) place(root *os.Root, person, id string, a auftrag) error {
 	if err := root.MkdirAll(path.Dir(to), 0o775); err != nil {
 		return err
 	}
+	if old, err := root.Lstat(to); err == nil && old.Mode().IsRegular() {
+		if err := keepBeside(root, to, old.ModTime()); err != nil {
+			return err
+		}
+	}
 	if err := root.Rename(teil+"/"+id, to); err != nil {
 		return err
+	}
+	if a.Geaendert > 0 {
+		t := time.UnixMilli(a.Geaendert)
+		if err := root.Chtimes(to, t, t); err != nil {
+			log.Printf("haus: sicherung: mtime of %s/%s: %v", person, to, err)
+		}
 	}
 	if d, err := root.Open(path.Dir(to)); err == nil { // the rename itself, durable
 		d.Sync()
@@ -786,6 +800,22 @@ func (s *Sicherung) place(root *os.Root, person, id string, a auftrag) error {
 	}
 	log.Printf("haus: sicherung: %s/%s/%s arrived, %d bytes", person, a.Quelle, a.Pfad, a.Groesse)
 	return nil
+}
+
+// keepBeside moves the waiting file at to aside as to.<mtime>, the first
+// free one of to.20261101-020000, to.20261101-020000-2, …
+func keepBeside(root *os.Root, to string, at time.Time) error {
+	base := to + "." + at.UTC().Format("20060102-150405")
+	for i := 1; i < 100; i++ {
+		name := base
+		if i > 1 {
+			name = base + "-" + strconv.Itoa(i)
+		}
+		if _, err := root.Lstat(name); errors.Is(err, fs.ErrNotExist) {
+			return root.Rename(to, name)
+		}
+	}
+	return fmt.Errorf("no free name beside %s", to)
 }
 
 func storeStatus(err error) int {
