@@ -344,13 +344,17 @@ type auftrag struct {
 	Quelle  string `json:"quelle"`
 	Pfad    string `json:"pfad"`
 	Groesse int64  `json:"groesse"`
-	Fertig  bool   `json:"fertig,omitempty"`
+	// Geaendert is the file's mtime on the phone (epoch ms), 0 when the app
+	// sends none: WhatsApp's msgstore.db.crypt15 keeps its name every day and
+	// can keep its size, and only this tells today's file from yesterday's part
+	Geaendert int64 `json:"geaendert,omitempty"`
+	Fertig    bool  `json:"fertig,omitempty"`
 }
 
 // uploadID is the same for the same file, so asking again resumes it; the
 // folder it lives in is the person's, so it says nothing to anyone else.
-func uploadID(quelle, pfad string, groesse int64) string {
-	h := sha256.Sum256([]byte(quelle + "\x00" + pfad + "\x00" + strconv.FormatInt(groesse, 10)))
+func uploadID(quelle, pfad string, groesse, geaendert int64) string {
+	h := sha256.Sum256([]byte(quelle + "\x00" + pfad + "\x00" + strconv.FormatInt(groesse, 10) + "\x00" + strconv.FormatInt(geaendert, 10)))
 	return hex.EncodeToString(h[:16])
 }
 
@@ -472,15 +476,16 @@ func (s *Sicherung) release(person, id string) {
 	s.mu.Unlock()
 }
 
-// POST /napi/sicherung/uploads {quelle, pfad, groesse} → 201 {id, offset}.
+// POST /napi/sicherung/uploads {quelle, pfad, groesse, geaendert?} → 201 {id, offset}.
 // The same file again, while its part is there, is that part: resume. A
 // part already whole (an empty file, a place that failed) is put in place
 // here, so a phone that stops at offset == groesse leaves nothing behind.
 func (s *Sicherung) create(w http.ResponseWriter, r *http.Request, person string) {
 	var in struct {
-		Quelle  string `json:"quelle"`
-		Pfad    string `json:"pfad"`
-		Groesse *int64 `json:"groesse"`
+		Quelle    string `json:"quelle"`
+		Pfad      string `json:"pfad"`
+		Groesse   *int64 `json:"groesse"`
+		Geaendert int64  `json:"geaendert"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&in); err != nil {
 		fehler(w, http.StatusBadRequest, saysUnreadable)
@@ -494,8 +499,8 @@ func (s *Sicherung) create(w http.ResponseWriter, r *http.Request, person string
 		fehler(w, http.StatusBadRequest, say)
 		return
 	}
-	a := auftrag{Quelle: in.Quelle, Pfad: in.Pfad, Groesse: *in.Groesse}
-	id := uploadID(a.Quelle, a.Pfad, a.Groesse)
+	a := auftrag{Quelle: in.Quelle, Pfad: in.Pfad, Groesse: *in.Groesse, Geaendert: in.Geaendert}
+	id := uploadID(a.Quelle, a.Pfad, a.Groesse, a.Geaendert)
 	if !s.claim(person, id, nil, 0) { // a piece is still arriving (or hanging): where the box is now
 		if root, old, have, ok := s.lookup(person, id); ok {
 			root.Close()

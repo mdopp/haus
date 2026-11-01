@@ -522,3 +522,34 @@ func TestSicherungResumesOverARealConnection(t *testing.T) {
 		t.Fatalf("in the inbox: %q", b)
 	}
 }
+
+// WhatsApp's msgstore.db.crypt15 keeps its name every day and can keep its
+// size: with its mtime, today's file is a new upload, not yesterday's part
+// resumed or yesterday's finished upload answered as whole.
+func TestSicherungTodaysFileIsNotYesterdays(t *testing.T) {
+	a := newArchiv(t)
+	const pfad = "Databases/msgstore.db.crypt15"
+	start := func(geaendert int64) (string, int64) {
+		b, _ := json.Marshal(map[string]any{"quelle": "whatsapp", "pfad": pfad, "groesse": 8, "geaendert": geaendert})
+		rec, out := a.do("POST", "/napi/sicherung/uploads", "anna1", nil, bytes.NewReader(b))
+		if rec.Code != 201 {
+			t.Fatalf("start → %d %s", rec.Code, rec.Body)
+		}
+		off, _ := out["offset"].(float64)
+		return out["id"].(string), int64(off)
+	}
+	gestern, _ := start(1_793_500_000_000)
+	if rec, out := a.piece("anna1", gestern, 0, bytes.NewReader([]byte("gestern!"))); rec.Code != 200 || out["fertig"] != true {
+		t.Fatalf("yesterday's file → %d %v", rec.Code, out)
+	}
+	heute, off := start(1_793_586_400_000)
+	if heute == gestern || off != 0 {
+		t.Fatalf("today's file got %q at %d, yesterday's was %q: want a new upload at 0", heute, off, gestern)
+	}
+	if rec, out := a.piece("anna1", heute, 0, bytes.NewReader([]byte("heute!!!"))); rec.Code != 200 || out["fertig"] != true {
+		t.Fatalf("today's file → %d %v", rec.Code, out)
+	}
+	if got, _ := os.ReadFile(filepath.Join(a.dir, "anna", "whatsapp", pfad)); string(got) != "heute!!!" {
+		t.Errorf("in the inbox: %q, want today's file", got)
+	}
+}
