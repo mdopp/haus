@@ -543,6 +543,36 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   share has less than 128 MB free or runs full, 429 while two uploads
   run, 408 when a body stalls past two minutes; a disk error is 500
   `store_failed`, not the phone's fault.
+- The phone's message backups (haus#207, laib ADR 0029; the app's side is
+  haus-android#194): WhatsApp, Signal and Discord files into
+  `HAUS_ARCHIV_DIR/<person>/<quelle>/<pfad>`, where that person's archive
+  imports them. The person is the device's (the uid it was paired with),
+  never the request's. `GET /napi/sicherung/stand` → `{quellen:{whatsapp|
+  signal|discord:{zuletzt, dateien, bytes, wartend}}, frei_bytes}`;
+  `POST /napi/sicherung/fehlend {quelle, dateien:[{pfad, groesse}]}` (≤ 5000)
+  → `{fehlend:[pfad]}`, against Haus's ledger
+  (`HAUS_DATA/sicherung/<person>/<quelle>.jsonl`: the size each pfad last
+  arrived with; the importer deletes what it took, so the folder cannot
+  say). The upload resumes: `POST /napi/sicherung/uploads {quelle, pfad,
+  groesse}` → 201 `{id, offset}` (the same file again is the same upload,
+  where it is), `HEAD …/uploads/{id}` → 204 `Upload-Offset`, `PATCH
+  …/uploads/{id}` with `Upload-Offset` and `application/offset+octet-stream`,
+  ≤ 16 MB → `{offset, fertig}`. A piece lands in `<person>/.teil/<id>`,
+  synced, and is kept when the connection breaks mid-piece; the last one
+  renames the file into place (replacing one of that name: WhatsApp's
+  `msgstore.db.crypt15` keeps its name) and notes it in the ledger. pfad:
+  relative, no `..`, nothing empty or hidden, ≤ 512 bytes, through
+  `os.Root`; ≤ 20 GB a file. Refusals are `{fehler: <a German sentence>}`:
+  400 a bad name or more bytes than declared, 404 an id that is not this
+  person's, 409 `{fehler, offset}` a piece at the wrong offset (or one
+  still arriving), 413 a piece over 16 MB, 429 while four pieces arrive,
+  507 when the disk lacks the rest of the file plus 1 GB, 503 without
+  `HAUS_ARCHIV_DIR` (*Das Nachrichten-Archiv ist auf dieser Box nicht
+  eingerichtet.*). A piece may stall 45 s; parts untouched for seven days
+  go (at start and daily). The page *Nachrichten sichern*
+  (`/nachrichten-sichern`, under Mehr when the box has the inbox) shows the
+  same state for the signed-in person and how to switch the backups on;
+  entering the keys comes with the archive (laib#986).
 
 - The Haushalt MCP source (laib ADR 0017, haus#11): `POST /mcp/haushalt`,
   laib's MCP shape (JSON-RPC over POST: `initialize`, `tools/list`,
@@ -859,6 +889,7 @@ HAUS_LLM_URL=http://host.containers.internal:11435/v1 HAUS_LLM_MODEL=gemma-4-e4b
 HAUS_BOTE_URL=http://host.containers.internal:8642/v1 HAUS_BOTE_KEY=<the Bote's API_SERVER_KEY> \
 HAUS_STT_PROVIDER=stt.faster_whisper HAUS_STT_LANGUAGE=de \
 HAUS_SAMBA_DIR=/samba-accounts HAUS_SAMBA_HOST=<the box's LAN address> \
+HAUS_ARCHIV_DIR=/archiv-eingang \
 
 HAUS_USAGE_URL=http://host.containers.internal:8094 HAUS_USAGE_TOKEN=<usage-metrics' USAGE_METRICS_TOKEN> ./haus
 ```
@@ -869,7 +900,9 @@ nothing else (no exec, no write). There are no static device tokens. Image: `ghc
 `bypass: [/napi/]`; the
 upload needs the share's consume folder mounted writable at
 `HAUS_UPLOAD_DIR`, on a file system with hard links, and Caddy letting a
-request of 64 MB through).
+request of 64 MB through; the message backups need
+`${DATA_DIR}/archiv-eingang` mounted writable at `HAUS_ARCHIV_DIR`,
+`/archiv-eingang`, and a 16 MB request body).
 
 `haus export-documents` runs once instead of the server and exits (the
 refresh timer runs it in Haus's container, `podman exec systemd-haus

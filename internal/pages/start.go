@@ -87,8 +87,12 @@ type StartConfig struct {
 	// Paperless's inbox (HAUS_UPLOAD_DIR; nil: no upload), Paperless's
 	// public address (HAUS_PAPERLESS_PUBLIC_URL; empty: no link) and
 	// whether it opens only at home (HAUS_PAPERLESS_LAN_ONLY)
-	DocumentsMail      string
-	Ablage             *napi.Uploads
+	DocumentsMail string
+	Ablage        *napi.Uploads
+	// Sicherung is the message archives' inbox (HAUS_ARCHIV_DIR, haus#207):
+	// the page „Nachrichten sichern“ reads the person's state from it; nil:
+	// the page says the box has no archive
+	Sicherung          *napi.Sicherung
 	Papierkorb         *papierkorb.Korb // what the family deleted, for 30 days (haus#174); nil: deletes go at once
 	BoteSignal         string           // the house's Signal number (HAUS_BOTE_SIGNAL, +49…): Willkommen's „… auf Signal“ (haus#175); "": no card
 	WakeRecordings     string           // where the family's takes of the wake phrase go (laib#828); "": no Stimme page

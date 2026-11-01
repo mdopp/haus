@@ -395,8 +395,8 @@ func TestEveryNapiRouteWantsADevice(t *testing.T) {
 	h := Handler(Config{Laib: &laib.Client{URL: lb.URL, Token: "ops"}, Validate: StaticValidator([]string{"dev1"}),
 		HA:        &ha.Client{URL: dead, Token: "ha"},
 		Haushalt:  haushalt.Config{Calendar: dav, Contacts: dav, Documents: &paperless.Client{URL: dead, Token: "pl"}, Notes: nd},
-		UploadDir: t.TempDir(),
-		House:     persona.Load(personaDir(t, map[string][]byte{"icon.svg": []byte("<svg/>"), "icon.png": tinyPNG(t)}), "joshua")})
+		UploadDir: t.TempDir(), Sicherung: NewSicherung(t.TempDir(), t.TempDir()),
+		House: persona.Load(personaDir(t, map[string][]byte{"icon.svg": []byte("<svg/>"), "icon.png": tinyPNG(t)}), "joshua")})
 	routes := map[string]bool{
 		"GET /napi/persona": true, "GET /napi/persona/icon.png": true, "GET /napi/whoami": true,
 		"GET /napi/box/home": true, "GET /napi/box/services": true, "GET /napi/box/approvals": true, "GET /napi/box/upgrades": true,
@@ -406,6 +406,8 @@ func TestEveryNapiRouteWantsADevice(t *testing.T) {
 		"POST /napi/portal/watch": true, "GET /napi/portal/events": true,
 		"GET /napi/defs/tool": true, "POST /napi/action-callback": true, "GET /napi/portal/tasks": true, "GET /napi/portal/contacts": true,
 		"GET /napi/portal/documents": true, "GET /napi/portal/notes": true, "POST /napi/upload": true, "POST /napi/merken": true,
+		"GET /napi/sicherung/stand": true, "POST /napi/sicherung/fehlend": true, "POST /napi/sicherung/uploads": true,
+		"HEAD /napi/sicherung/uploads/{id}": true, "PATCH /napi/sicherung/uploads/{id}": true,
 	}
 	// what the source registers: "METHOD /napi/…" and "METHOD "+prefix+"/…" (prefix is /napi/box)
 	re := regexp.MustCompile(`HandleFunc\("([A-Z]+) (?:(/napi/[^"]*)"|"\+prefix\+"([^"]*)")`)
