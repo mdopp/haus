@@ -56,6 +56,8 @@ var (
 	sicherungIdle = 45 * time.Second
 	// a part nobody wrote to for this long is given up
 	sicherungAlter = 7 * 24 * time.Hour
+	// how long a piece waits for the one before it to let go (see claim)
+	sicherungUebernahme = 5 * time.Second
 )
 
 // Quellen are the folders of a person's inbox, in the order the page shows them.
@@ -94,15 +96,15 @@ type Sicherung struct {
 	now    func() time.Time
 
 	mu      sync.Mutex
-	busy    map[string]bool     // person/id being written
-	ledgers map[string]*journal // person/quelle, loaded once
+	busy    map[string]*schreiber // person/id being written
+	ledgers map[string]*journal   // person/quelle, loaded once
 }
 
 // NewSicherung keeps the inbox in dir (HAUS_ARCHIV_DIR) and the ledger
 // under dataDir (HAUS_DATA).
 func NewSicherung(dir, dataDir string) *Sicherung {
 	return &Sicherung{dir: dir, ledger: filepath.Join(dataDir, "sicherung"), slots: make(chan struct{}, sicherungConcurrent),
-		now: time.Now, busy: map[string]bool{}, ledgers: map[string]*journal{}}
+		now: time.Now, busy: map[string]*schreiber{}, ledgers: map[string]*journal{}}
 }
 
 // routes are registered whether or not the box has the inbox: without
@@ -421,21 +423,52 @@ func partSize(root *os.Root, id string) (int64, error) {
 	return fi.Size(), nil
 }
 
-// claim marks person's upload id as being written; false while another
-// request writes it.
-func (s *Sicherung) claim(person, id string) bool {
+// schreiber is who holds an upload: stop (nil for a short hold) ends a
+// piece still arriving, done closes when it let go.
+type schreiber struct {
+	stop func()
+	done chan struct{}
+}
+
+// claim marks person's upload id as held by this request. A phone whose
+// connection broke is often still "sending" on the box's side until its
+// stall runs out; when it comes back, its new piece (wait > 0) stops the
+// old one, which keeps what came, and waits for it to let go — the tus
+// way, so a resume is not a 409 for 45 s. False when the id stays held.
+func (s *Sicherung) claim(person, id string, stop func(), wait time.Duration) bool {
+	key := person + "/" + id
+	until := time.Now().Add(wait)
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.busy[person+"/"+id] {
-		return false
+	for {
+		old := s.busy[key]
+		if old == nil {
+			s.busy[key] = &schreiber{stop: stop, done: make(chan struct{})}
+			s.mu.Unlock()
+			return true
+		}
+		left := time.Until(until)
+		if left <= 0 {
+			s.mu.Unlock()
+			return false
+		}
+		if old.stop != nil {
+			old.stop()
+		}
+		s.mu.Unlock()
+		select {
+		case <-old.done:
+		case <-time.After(left):
+		}
+		s.mu.Lock()
 	}
-	s.busy[person+"/"+id] = true
-	return true
 }
 
 func (s *Sicherung) release(person, id string) {
 	s.mu.Lock()
-	delete(s.busy, person+"/"+id)
+	if h := s.busy[person+"/"+id]; h != nil {
+		close(h.done)
+		delete(s.busy, person+"/"+id)
+	}
 	s.mu.Unlock()
 }
 
@@ -463,7 +496,7 @@ func (s *Sicherung) create(w http.ResponseWriter, r *http.Request, person string
 	}
 	a := auftrag{Quelle: in.Quelle, Pfad: in.Pfad, Groesse: *in.Groesse}
 	id := uploadID(a.Quelle, a.Pfad, a.Groesse)
-	if !s.claim(person, id) { // a piece is still arriving (or hanging): where the box is now
+	if !s.claim(person, id, nil, 0) { // a piece is still arriving (or hanging): where the box is now
 		if root, old, have, ok := s.lookup(person, id); ok {
 			root.Close()
 			if old.Fertig {
@@ -578,7 +611,8 @@ func (s *Sicherung) patch(w http.ResponseWriter, r *http.Request, person string)
 		fehler(w, http.StatusNotFound, saysNoUpload)
 		return
 	}
-	if !s.claim(person, id) {
+	body := &idleReader{r: r.Body, rc: http.NewResponseController(w)}
+	if !s.claim(person, id, body.stop, sicherungUebernahme) {
 		have := int64(0)
 		if root, a, h, ok := s.lookup(person, id); ok {
 			root.Close()
@@ -623,7 +657,6 @@ func (s *Sicherung) patch(w http.ResponseWriter, r *http.Request, person string)
 			return
 		}
 	}
-	body := idleReader{r.Body, http.NewResponseController(w)}
 	written, code, say := s.write(root, id, have, min(rest, sicherungMaxStueck), rest, body)
 	now := have + written
 	if code != 0 {
@@ -643,16 +676,33 @@ func (s *Sicherung) patch(w http.ResponseWriter, r *http.Request, person string)
 }
 
 // idleReader moves the read deadline on before each read: a stall, not
-// a slow phone, ends a piece. Not every ResponseWriter can (a test
-// recorder); the server's can.
+// a slow phone, ends a piece; stop ends it now (a newer piece took over).
+// Not every ResponseWriter has deadlines (a test recorder); the server's has.
 type idleReader struct {
-	r  io.Reader
-	rc *http.ResponseController
+	r       io.Reader
+	rc      *http.ResponseController
+	mu      sync.Mutex
+	stopped bool
 }
 
-func (i idleReader) Read(p []byte) (int, error) {
+var errTakenOver = errors.New("a newer piece took over")
+
+func (i *idleReader) Read(p []byte) (int, error) {
+	i.mu.Lock()
+	if i.stopped {
+		i.mu.Unlock()
+		return 0, errTakenOver
+	}
 	i.rc.SetReadDeadline(time.Now().Add(sicherungIdle))
+	i.mu.Unlock()
 	return i.r.Read(p)
+}
+
+func (i *idleReader) stop() {
+	i.mu.Lock()
+	i.stopped = true
+	i.rc.SetReadDeadline(time.Now())
+	i.mu.Unlock()
 }
 
 // write appends at most limit bytes of body to the part at have, synced.
@@ -871,7 +921,7 @@ func (s *Sicherung) aufraeumen(person string) {
 	}
 	cut := s.now().Add(-sicherungAlter)
 	for id := range ids {
-		if !s.claim(person, id) {
+		if !s.claim(person, id, nil, 0) {
 			continue // being written right now
 		}
 		touched := time.Time{}

@@ -564,8 +564,9 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   relative, no `..`, nothing empty or hidden, ≤ 512 bytes, through
   `os.Root`; ≤ 20 GB a file. Refusals are `{fehler: <a German sentence>}`:
   400 a bad name or more bytes than declared, 404 an id that is not this
-  person's, 409 `{fehler, offset}` a piece at the wrong offset (or one
-  still arriving), 413 a piece over 16 MB, 429 while four pieces arrive,
+  person's, 409 `{fehler, offset}` a piece at the wrong offset (or while
+  another holds the file past 5 s; a phone back from a dropped connection
+  stops its own piece still hanging on the box and goes on), 413 a piece over 16 MB, 429 while four pieces arrive,
   507 when the disk lacks the rest of the file plus 1 GB, 503 without
   `HAUS_ARCHIV_DIR` (*Das Nachrichten-Archiv ist auf dieser Box nicht
   eingerichtet.*). A piece may stall 45 s; parts untouched for seven days

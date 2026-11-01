@@ -186,14 +186,24 @@ func TestSicherungWrongOffsetIs409(t *testing.T) {
 	if _, at := a.head("anna1", id); at != "5" {
 		t.Fatalf("a refused piece changed the part: %s", at)
 	}
-	// a piece that is still arriving: the next one hears where the box is
-	if !a.s.claim("anna", id) {
+	// a piece still arriving that does not let go: the next one hears where the box is
+	defer func(w time.Duration) { sicherungUebernahme = w }(sicherungUebernahme)
+	sicherungUebernahme = 50 * time.Millisecond
+	if !a.s.claim("anna", id, nil, 0) {
 		t.Fatal("claim")
 	}
 	rec, out := a.piece("anna1", id, 5, strings.NewReader("abc"))
 	a.s.release("anna", id)
 	if rec.Code != 409 || out["offset"] != 5.0 {
 		t.Errorf("a piece while another is written → %d %v", rec.Code, out)
+	}
+	// one hanging on a dead connection is stopped, lets go, and the new piece goes on
+	stopped := false
+	if !a.s.claim("anna", id, func() { stopped = true; go a.s.release("anna", id) }, 0) {
+		t.Fatal("claim")
+	}
+	if rec, out := a.piece("anna1", id, 5, strings.NewReader("abc")); rec.Code != 200 || out["offset"] != 8.0 || !stopped {
+		t.Errorf("a piece after a hanging one → %d %v (stopped %v)", rec.Code, out, stopped)
 	}
 	if rec, out := a.do("PATCH", "/napi/sicherung/uploads/"+id, "anna1", map[string]string{"Content-Type": "application/offset+octet-stream"}, strings.NewReader("abc")); rec.Code != 400 || out["fehler"] == nil {
 		t.Errorf("without Upload-Offset → %d %v", rec.Code, out)
@@ -462,8 +472,9 @@ func TestSicherungGivesUpOldParts(t *testing.T) {
 	}
 }
 
-// Over a real connection (the idle deadline needs the server's writer): a
-// phone that drops mid-piece leaves what it sent, and goes on from there.
+// Over a real connection (deadlines need the server's writer): a phone
+// whose network went mid-piece leaves what it sent, and when it comes back
+// its next piece takes over from the one still hanging on the box.
 func TestSicherungResumesOverARealConnection(t *testing.T) {
 	a := newArchiv(t)
 	srv := httptest.NewServer(a.h)
@@ -474,14 +485,15 @@ func TestSicherungResumesOverARealConnection(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer anna1")
 	req.Header.Set("Upload-Offset", "0")
 	req.Header.Set("Content-Type", "application/offset+octet-stream")
+	// the phone's network goes after three bytes; to the box the
+	// connection still looks open, the piece still arriving
+	defer pw.CloseWithError(errors.New("das Netz ist weg"))
 	go func() {
-		pw.Write([]byte("abc"))
-		time.Sleep(100 * time.Millisecond)
-		pw.CloseWithError(errors.New("das Netz ist weg"))
+		if resp, err := srv.Client().Do(req); err == nil {
+			resp.Body.Close()
+		}
 	}()
-	if resp, err := srv.Client().Do(req); err == nil {
-		resp.Body.Close()
-	}
+	pw.Write([]byte("abc"))
 	at := ""
 	for range 50 {
 		if _, at = a.head("anna1", id); at == "3" {
