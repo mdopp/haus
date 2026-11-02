@@ -60,8 +60,11 @@ var (
 	sicherungUebernahme = 5 * time.Second
 )
 
-// Quellen are the folders of a person's inbox, in the order the page shows them.
-var Quellen = []string{"whatsapp", "signal", "discord"}
+// Quellen are the folders of a person's inbox, in the order the page shows
+// them. sms holds the phone's SMS and call log, which the app encrypts to
+// the person's archive (GET /napi/sicherung/schluessel) before it sends
+// them: sms-<zeit>.xml.age, anrufe-<zeit>.xml.age.
+var Quellen = []string{"whatsapp", "signal", "sms", "discord"}
 
 // teil is the hidden folder of the parts in a person's inbox.
 const teil = ".teil"
@@ -85,7 +88,14 @@ const (
 	saysNoRoom        = "Auf der Box ist nicht genug Platz für diese Datei. Sag dem Admin Bescheid, dann geht es weiter."
 	saysCut           = "Die Übertragung brach ab. Die Haus-App macht beim nächsten Mal dort weiter."
 	saysStoreFailed   = "Die Box konnte die Datei nicht speichern. Versuch es später noch einmal; hilft das nicht, sag dem Admin Bescheid."
+	saysNoKey         = "Dein Nachrichten-Archiv ist noch nicht eingerichtet. Richte es einmal auf der Archiv-Seite ein, dann sichert die Haus-App deine SMS und Anrufe verschlüsselt."
+	saysBadKey        = "Der Schlüssel deines Nachrichten-Archivs auf der Box ist unlesbar. Sag dem Admin Bescheid."
 )
+
+// briefkasten is the file in a person's inbox where their archive leaves
+// its public age key (one line, an X25519 recipient), so the phone can
+// encrypt to it what only the archive opens.
+const briefkasten = ".briefkasten.pub"
 
 // Sicherung is the inbox of the message archives and Haus's ledger of
 // what arrived. The pages read its Stand.
@@ -116,6 +126,7 @@ func (s *Sicherung) routes(mux *http.ServeMux, auth func(http.HandlerFunc) http.
 	mux.HandleFunc("POST /napi/sicherung/uploads", as(s.create))
 	mux.HandleFunc("HEAD /napi/sicherung/uploads/{id}", as(s.head))
 	mux.HandleFunc("PATCH /napi/sicherung/uploads/{id}", as(s.patch))
+	mux.HandleFunc("GET /napi/sicherung/schluessel", as(s.schluessel))
 }
 
 // fehler is a refusal of /napi/sicherung: {"fehler": a German sentence}.
@@ -193,7 +204,7 @@ func validPfad(p string) bool {
 func checkFile(quelle, pfad string, groesse int64) string {
 	switch {
 	case !validQuelle(quelle):
-		return "Unbekannte Quelle „" + quelle + "“: es gibt whatsapp, signal und discord. Aktualisiere die Haus-App."
+		return "Unbekannte Quelle „" + quelle + "“: es gibt whatsapp, signal, sms und discord. Aktualisiere die Haus-App."
 	case !validPfad(pfad):
 		return "Der Pfad „" + pfad + "“ geht nicht: nur Ordner und Dateien unterhalb der Sicherung, nichts Verstecktes (mit Punkt vorn), höchstens 512 Zeichen."
 	case groesse < 0:
@@ -288,6 +299,64 @@ func (s *Sicherung) stand(w http.ResponseWriter, r *http.Request, person string)
 		return
 	}
 	answer(w, http.StatusOK, st)
+}
+
+// GET /napi/sicherung/schluessel → {empfaenger: "age1…"}, the person's
+// archive's public key; 404 before the archive wrote it.
+func (s *Sicherung) schluessel(w http.ResponseWriter, r *http.Request, person string) {
+	key, err := s.Schluessel(person)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		fehler(w, http.StatusNotFound, saysNoKey)
+	case err != nil:
+		log.Printf("haus: sicherung: key of %s: %v", person, err)
+		fehler(w, http.StatusInternalServerError, saysBadKey)
+	default:
+		answer(w, http.StatusOK, map[string]any{"empfaenger": key})
+	}
+}
+
+// Schluessel is the age recipient in person's .briefkasten.pub, read
+// through os.Root; fs.ErrNotExist when there is none yet.
+func (s *Sicherung) Schluessel(person string) (string, error) {
+	if !validPerson(person) {
+		return "", errors.New("no person")
+	}
+	root, err := os.OpenRoot(filepath.Join(s.dir, person))
+	if err != nil {
+		return "", err
+	}
+	defer root.Close()
+	f, err := root.Open(briefkasten)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	if fi, err := f.Stat(); err != nil || !fi.Mode().IsRegular() {
+		return "", fmt.Errorf("%s is no file", briefkasten)
+	}
+	b, err := io.ReadAll(io.LimitReader(f, 1<<10))
+	if err != nil {
+		return "", err
+	}
+	key := strings.TrimSpace(string(b))
+	if !validRecipient(key) {
+		return "", fmt.Errorf("%s holds no age recipient", briefkasten)
+	}
+	return key, nil
+}
+
+// validRecipient is one age X25519 recipient: "age1" and bech32 letters.
+func validRecipient(k string) bool {
+	if !strings.HasPrefix(k, "age1") || len(k) < 10 || len(k) > 200 {
+		return false
+	}
+	for _, c := range k[4:] {
+		if !strings.ContainsRune("qpzry9x8gf2tvdw0s3jn54khce6mua7l", c) {
+			return false
+		}
+	}
+	return true
 }
 
 // a file the phone has, as /fehlend and /uploads name it

@@ -564,3 +564,68 @@ func TestSicherungTodaysFileIsNotYesterdays(t *testing.T) {
 		t.Errorf("today's file carries mtime %v (%v), want the phone's", st.ModTime(), err)
 	}
 }
+
+// The phone encrypts its SMS and call log to the person's archive: GET
+// /schluessel is the age recipient the archive left in the person's inbox,
+// 404 in words before it did, and never another person's.
+func TestSicherungSchluessel(t *testing.T) {
+	a := newArchiv(t)
+	rec, out := a.do("GET", "/napi/sicherung/schluessel", "anna1", nil, nil)
+	if rec.Code != 404 || out["fehler"] != saysNoKey {
+		t.Fatalf("no inbox yet → %d %v", rec.Code, out)
+	}
+	const key = "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"
+	os.MkdirAll(filepath.Join(a.dir, "anna"), 0o755)
+	rec, out = a.do("GET", "/napi/sicherung/schluessel", "anna1", nil, nil)
+	if rec.Code != 404 || out["fehler"] != saysNoKey {
+		t.Fatalf("no key yet → %d %v", rec.Code, out)
+	}
+	os.WriteFile(filepath.Join(a.dir, "anna", ".briefkasten.pub"), []byte(key+"\n"), 0o644)
+	rec, out = a.do("GET", "/napi/sicherung/schluessel", "anna1", nil, nil)
+	if rec.Code != 200 || out["empfaenger"] != key {
+		t.Fatalf("→ %d %v", rec.Code, out)
+	}
+	if rec, out = a.do("GET", "/napi/sicherung/schluessel", "ben1", nil, nil); rec.Code != 404 {
+		t.Fatalf("Ben got Anna's key: %d %v", rec.Code, out)
+	}
+	if rec, _ = a.do("GET", "/napi/sicherung/schluessel", "waise1", nil, nil); rec.Code != 403 {
+		t.Fatalf("a device of nobody → %d", rec.Code)
+	}
+	for _, bad := range []string{key + " " + key, "ssh-ed25519 AAAA", "AGE1QL3Z", ""} {
+		os.WriteFile(filepath.Join(a.dir, "anna", ".briefkasten.pub"), []byte(bad), 0o644)
+		if rec, out = a.do("GET", "/napi/sicherung/schluessel", "anna1", nil, nil); rec.Code != 500 || out["fehler"] != saysBadKey {
+			t.Errorf("%q → %d %v", bad, rec.Code, out)
+		}
+	}
+	// a link out of the inbox is not followed (os.Root)
+	outside := filepath.Join(t.TempDir(), "pub")
+	os.WriteFile(outside, []byte(key), 0o644)
+	os.Remove(filepath.Join(a.dir, "anna", ".briefkasten.pub"))
+	os.Symlink(outside, filepath.Join(a.dir, "anna", ".briefkasten.pub"))
+	if rec, _ = a.do("GET", "/napi/sicherung/schluessel", "anna1", nil, nil); rec.Code == 200 {
+		t.Fatalf("a key from outside the inbox was served")
+	}
+}
+
+// sms is a source like the others: the app's encrypted SMS and call log
+// land in <person>/sms/ as the bytes they are.
+func TestSicherungTakesSMS(t *testing.T) {
+	a := newArchiv(t)
+	content := []byte("age-encryption.org/v1\n-> X25519 …")
+	for _, pfad := range []string{"sms-20261102T120000Z.xml.age", "anrufe-20261102T120000Z.xml.age"} {
+		id, _ := a.start("anna1", "sms", pfad, int64(len(content)))
+		if rec, out := a.piece("anna1", id, 0, bytes.NewReader(content)); rec.Code != 200 || out["fertig"] != true {
+			t.Fatalf("%s → %d %v", pfad, rec.Code, out)
+		}
+		if b, err := os.ReadFile(filepath.Join(a.dir, "anna", "sms", pfad)); err != nil || !bytes.Equal(b, content) {
+			t.Fatalf("%s: %q %v", pfad, b, err)
+		}
+	}
+	st, _ := a.s.Stand("anna")
+	if st.Quellen["sms"].Dateien != 2 {
+		t.Fatalf("stand %+v", st.Quellen["sms"])
+	}
+	if say := checkFile("telegram", "x", 1); !strings.Contains(say, "whatsapp, signal, sms und discord") {
+		t.Fatalf("the sentence lists the sources wrong: %s", say)
+	}
+}
