@@ -1,11 +1,7 @@
 package napi
 
 import (
-	"bytes"
 	"encoding/json"
-	"image"
-	"image/color"
-	"image/png"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -15,13 +11,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mdopp/haus/internal/assistent"
 	"github.com/mdopp/haus/internal/caldav"
 	"github.com/mdopp/haus/internal/ha"
 	"github.com/mdopp/haus/internal/haushalt"
 	"github.com/mdopp/haus/internal/laib"
 	"github.com/mdopp/haus/internal/notes"
 	"github.com/mdopp/haus/internal/paperless"
-	"github.com/mdopp/haus/internal/persona"
 	"github.com/mdopp/haus/internal/reitti"
 )
 
@@ -182,92 +178,28 @@ func TestWhoamiFromHausDevices(t *testing.T) {
 	}
 }
 
-// laib#129, laib#130: the app takes the house persona's name, greeting,
-// colours and icon from Haus, behind a paired device's token.
-func TestTheAppReadsTheHousePersona(t *testing.T) {
+// The app takes the assistant's name from Haus, behind a paired device's
+// token; nothing else (its colours are fixed in the app, its icon is its
+// launcher icon). Laib sets the name once (HAUS_ASSISTANT), "Homes" without it.
+func TestTheAppReadsTheAssistantsName(t *testing.T) {
 	var calls []string
 	lb := fakeLaib(t, &calls)
 	defer lb.Close()
-	h := Handler(Config{Laib: &laib.Client{URL: lb.URL, Token: "ops"}, Validate: StaticValidator([]string{"dev1"}),
-		House: persona.Persona{Display: "Joshua", Languages: []string{"de"}, Greeting: map[string]string{"de": "Hallo."}, Colors: map[string]string{"accent": "#3ddc84"}}})
-	// haus#58: the greeting belongs to the chat (an easter egg for its games), not the start screen
-	code, p := get(t, h, "GET", "/napi/persona", "dev1", "")
-	if code != 200 || p["display"] != "Joshua" || p["greeting"] != "" || p["accent"] != "#3ddc84" {
-		t.Fatalf("persona: %d %v", code, p)
+	h := Handler(Config{Laib: &laib.Client{URL: lb.URL, Token: "ops"}, Validate: StaticValidator([]string{"dev1"})})
+	t.Cleanup(func() { assistent.Set("") })
+	for set, want := range map[string]string{"": "Homes", "Ada": "Ada"} {
+		assistent.Set(set)
+		code, p := get(t, h, "GET", "/napi/assistent", "dev1", "")
+		if code != 200 || p["name"] != want || len(p) != 1 {
+			t.Fatalf("set %q: %d %v, want {name: %s}", set, code, p, want)
+		}
 	}
-	if code, p := get(t, h, "GET", "/napi/persona?surface=chat", "dev1", ""); code != 200 || p["greeting"] != "Hallo." {
-		t.Fatalf("the chat's persona carries the greeting: %d %v", code, p)
-	}
-	if code, _ := get(t, h, "GET", "/napi/persona", "", ""); code != 401 {
+	if code, _ := get(t, h, "GET", "/napi/assistent", "", ""); code != 401 {
 		t.Fatalf("without a token: %d", code)
 	}
-}
-
-// a persona as Laib renders it to /persona/<name>, with the icon files given
-func personaDir(t *testing.T, icons map[string][]byte) string {
-	t.Helper()
-	dir := t.TempDir()
-	os.MkdirAll(filepath.Join(dir, "joshua"), 0o755)
-	os.WriteFile(filepath.Join(dir, "joshua", "persona.json"), []byte(`{"name":"joshua","display":"Joshua","greeting":{"de":"Hallo."},"languages":["de"],"colors":{"accent":"#3ddc84","ground":"#0c120e"}}`), 0o644)
-	for name, b := range icons {
-		os.WriteFile(filepath.Join(dir, "joshua", name), b, 0o644)
-	}
-	return dir
-}
-
-func tinyPNG(t *testing.T) []byte {
-	t.Helper()
-	img := image.NewNRGBA(image.Rect(0, 0, 4, 4))
-	img.Set(1, 1, color.NRGBA{0x3d, 0xdc, 0x84, 0xff})
-	var b bytes.Buffer
-	if err := png.Encode(&b, img); err != nil {
-		t.Fatal(err)
-	}
-	return b.Bytes()
-}
-
-// haus#28: a phone draws PNG without a library, so /napi hands it the
-// persona's icon as PNG (icon.png next to icon.svg; Laib renders it, laib#191)
-// and no SVG; the pages keep the SVG for browsers. A persona without a PNG,
-// or with a file that is not one, has no icon on the phone.
-func TestThePhoneGetsThePersonaIconAsPNG(t *testing.T) {
-	var calls []string
-	lb := fakeLaib(t, &calls)
-	defer lb.Close()
-	pic := tinyPNG(t)
-	handler := func(icons map[string][]byte) http.Handler {
-		return Handler(Config{Laib: &laib.Client{URL: lb.URL, Token: "ops"}, Validate: StaticValidator([]string{"dev1"}),
-			House: persona.Load(personaDir(t, icons), "joshua")})
-	}
-
-	h := handler(map[string][]byte{"icon.svg": []byte("<svg/>"), "icon.png": pic})
-	if code, p := get(t, h, "GET", "/napi/persona", "dev1", ""); code != 200 || p["display"] != "Joshua" || p["icon"] != "/napi/persona/icon.png" {
-		t.Fatalf("persona: %d %v", code, p)
-	}
-	req := httptest.NewRequest("GET", "/napi/persona/icon.png", nil)
-	req.Header.Set("Authorization", "Bearer dev1")
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-	if rec.Code != 200 || rec.Header().Get("Content-Type") != "image/png" || !bytes.Equal(rec.Body.Bytes(), pic) {
-		t.Fatalf("icon.png: %d %q %d bytes", rec.Code, rec.Header().Get("Content-Type"), rec.Body.Len())
-	}
-	if _, err := png.Decode(bytes.NewReader(rec.Body.Bytes())); err != nil {
-		t.Fatalf("icon.png does not decode: %v", err)
-	}
-	code, body := raw(t, h, "GET", "/napi/persona/icon.svg", "dev1", "")
-	notFound(t, "the SVG on /napi", code, body)
-
-	for what, icons := range map[string]map[string][]byte{
-		"an SVG only":       {"icon.svg": []byte("<svg/>")},
-		"no icon":           {},
-		"a PNG that is not": {"icon.png": []byte("<svg/>")},
-	} {
-		h := handler(icons)
-		if _, p := get(t, h, "GET", "/napi/persona", "dev1", ""); p["icon"] != "" {
-			t.Errorf("%s: icon %v, want none", what, p["icon"])
-		}
-		code, body := raw(t, h, "GET", "/napi/persona/icon.png", "dev1", "")
-		notFound(t, what+": icon.png", code, body)
+	for _, gone := range []string{"/napi/persona", "/napi/persona/icon.png"} {
+		code, body := raw(t, h, "GET", gone, "dev1", "")
+		notFound(t, gone, code, body)
 	}
 }
 
@@ -351,8 +283,6 @@ func TestUnknownNapiPathWantsADeviceFirst(t *testing.T) {
 		code, body := raw(t, h, "GET", p, "dev1", "")
 		notFound(t, "GET "+p, code, body)
 	}
-	code, body := raw(t, h, "GET", "/napi/persona/icon.png", "dev1", "")
-	notFound(t, "the persona icon without an icon", code, body)
 }
 
 // A device token counts only after the literal "Bearer ": a bare token, or
@@ -396,10 +326,9 @@ func TestEveryNapiRouteWantsADevice(t *testing.T) {
 	h := Handler(Config{Laib: &laib.Client{URL: lb.URL, Token: "ops"}, Validate: StaticValidator([]string{"dev1"}),
 		HA:        &ha.Client{URL: dead, Token: "ha"},
 		Haushalt:  haushalt.Config{Calendar: dav, Contacts: dav, Documents: &paperless.Client{URL: dead, Token: "pl"}, Notes: nd},
-		UploadDir: t.TempDir(), Sicherung: NewSicherung(t.TempDir(), t.TempDir()), Reitti: &reitti.Reitti{URL: dead, Dir: t.TempDir()},
-		House: persona.Load(personaDir(t, map[string][]byte{"icon.svg": []byte("<svg/>"), "icon.png": tinyPNG(t)}), "joshua")})
+		UploadDir: t.TempDir(), Sicherung: NewSicherung(t.TempDir(), t.TempDir()), Reitti: &reitti.Reitti{URL: dead, Dir: t.TempDir()}})
 	routes := map[string]bool{
-		"GET /napi/persona": true, "GET /napi/persona/icon.png": true, "GET /napi/whoami": true,
+		"GET /napi/assistent": true, "GET /napi/whoami": true,
 		"GET /napi/box/home": true, "GET /napi/box/services": true, "GET /napi/box/approvals": true, "GET /napi/box/upgrades": true,
 		"POST /napi/box/services/{name}/operate": true, "POST /napi/box/approvals/{id}/approve": true, "POST /napi/box/approvals/{id}/deny": true,
 		"POST /napi/ha/call": true, "GET /napi/portal/state": true, "GET /napi/portal/energy": true, "GET /napi/portal/entity-history": true,

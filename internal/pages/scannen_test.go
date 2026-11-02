@@ -639,12 +639,12 @@ func TestScannenOffersAStackWhileTheQueueRuns(t *testing.T) {
 	before(t, body, "Stapel scannen</button>", "Wird getrennt")
 
 	// the model is held, then filing; a stack from yesterday says its day
-	f.status["trennt"] = map[string]any{"stapel": "2026-10-13T21-00-00", "person": "anna", "fuer": "person", "schritt": "trennt", "detail": "wartet auf das Modell: Joshua spricht bis 10:05"}
+	f.status["trennt"] = map[string]any{"stapel": "2026-10-13T21-00-00", "person": "anna", "fuer": "person", "schritt": "trennt", "detail": "wartet auf das Modell: Homes spricht bis 10:05"}
 	mustContain(t, scanPage(t, f, "family"), "Wird getrennt: Stapel vom 13. Oktober 2026, 21:00, wartet auf das Hausmodell <span class=k>nur für Anna</span>")
 	f.status["trennt"] = map[string]any{"stapel": "2026-10-14T09-52-00", "schritt": "legt-ab", "detail": "legt 3 Dokumente ab"}
 	body = scanPage(t, f, "family")
 	mustContain(t, body, `<p class="arbeitet reihe">Wird abgelegt: Stapel von 09:52</p>`, "Danach: 2 Stapel")
-	mustNotContain(t, body, "Joshua")
+	mustNotContain(t, body, "Homes spricht")
 
 	// a queue nobody picked up yet: the first is next, one after it
 	delete(f.status, "trennt")

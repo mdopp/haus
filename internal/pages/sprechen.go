@@ -13,6 +13,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/mdopp/haus/internal/assistent"
 	"github.com/mdopp/haus/internal/bote"
 )
 
@@ -33,8 +34,8 @@ var beatEvery = 15 * time.Second
 // maxSay is how many characters one message may have, as the field takes them.
 const maxSay = 1000
 
-// What Sprechen says when there is no reply. The persona's name: it is the
-// one who does not answer (laib ADR 0021: the family sees the persona).
+// What Sprechen says when there is no reply. The assistant's name: it is
+// the one who does not answer.
 func saysDown(name string) string {
 	return name + " antwortet gerade nicht. Versuch es gleich noch einmal."
 }
@@ -61,14 +62,14 @@ var errSlow = errors.New("sprechen: no first word within boteWait")
 // script it is a plain form; with it, the post goes in the background and
 // the answer comes in pieces on /sprechen (sprechenScript). On Start it
 // carries its name and hands the sentence on to /sprechen; on its own page
-// the heading says it, and the answer shows right there under the persona's
+// the heading says it, and the answer shows right there under the assistant's
 // name — which only that page says (haus#35).
 func sprechenField(cfg StartConfig, here bool) string {
 	var b strings.Builder
 	b.WriteString("<form method=post action=/sprechen class=sprechen")
 	if here {
-		name := html.EscapeString(House.Display)
-		b.WriteString(` data-hier data-wer="` + name + `" data-denkt="` + html.EscapeString(saysThinking(House.Display)) + `"`)
+		name := html.EscapeString(assistent.Name())
+		b.WriteString(` data-hier data-wer="` + name + `" data-denkt="` + html.EscapeString(saysThinking(assistent.Name())) + `"`)
 	}
 	b.WriteString(">")
 	if !here {
@@ -113,7 +114,7 @@ func (t *talks) set(person string, e exchange) {
 
 // Sprechen is where the field posts, and the page its reply comes back on
 // (haus#12, laib ADR 0016): the sentence goes to the Bote as the person
-// Authelia names, the reply is shown as text under the persona's name.
+// Authelia names, the reply is shown as text under the assistant's name.
 // Only a person, only from Haus's own page (fromHaus). Haus relays and
 // decides nothing (haus#1): what needs a yes goes to Laib's inbox through
 // the Bote, never through Haus. A post that accepts text/event-stream (the
@@ -126,7 +127,7 @@ func Sprechen(cfg StartConfig) http.HandlerFunc {
 		switch r.Method {
 		case http.MethodGet, http.MethodHead:
 			if cfg.Bote == nil {
-				notSet{"Sprechen geht hier noch nicht: " + House.Display + " ist noch nicht eingerichtet.", "Für Admins: der Bote läuft nicht (laib add bote, mit einem Kanal; Haus bekommt BOTE_API_KEY)."}.write(w, r, cfg, "Sprechen")
+				notSet{"Sprechen geht hier noch nicht: " + assistent.Name() + " ist noch nicht eingerichtet.", "Für Admins: der Bote läuft nicht (laib add bote, mit einem Kanal; Haus bekommt BOTE_API_KEY)."}.write(w, r, cfg, "Sprechen")
 				return
 			}
 			e, ok := t.get(person)
@@ -135,9 +136,9 @@ func Sprechen(cfg StartConfig) http.HandlerFunc {
 			if ok {
 				b.WriteString(e.html())
 			} else {
-				b.WriteString("<p class=\"k vorher\">Was du hier schreibst, liest " + html.EscapeString(House.Display) + ". Die Antwort erscheint hier; das kann einen Moment dauern.</p>")
+				b.WriteString("<p class=\"k vorher\">Was du hier schreibst, liest " + html.EscapeString(assistent.Name()) + ". Die Antwort erscheint hier; das kann einen Moment dauern.</p>")
 			}
-			b.WriteString(wakeLine(lookWake(r, cfg), cfg)) // and at the speaker: its wake word (owner 2026-10-30)
+			b.WriteString(wakeLine(lookWake(r, cfg))) // and at the speaker: its wake word (owner 2026-10-30)
 			writePage(w, http.StatusOK, b)
 		case http.MethodPost:
 			if !fromHaus(r) {
@@ -158,7 +159,7 @@ func Sprechen(cfg StartConfig) http.HandlerFunc {
 				missing{http.StatusBadRequest, saysTooLong, "Sprechen", "/sprechen", "Zurück"}.write(w, r, cfg)
 				return
 			case cfg.Bote == nil: // a page still open from before the Bote went
-				missing{http.StatusOK, saysDown(House.Display), "Sprechen", "/start", "Zurück zu Start"}.write(w, r, cfg)
+				missing{http.StatusOK, saysDown(assistent.Name()), "Sprechen", "/start", "Zurück zu Start"}.write(w, r, cfg)
 				return
 			}
 			cfg.Usage.Count("sprechen.senden") // that one was sent, never what (haus#50)
@@ -197,11 +198,11 @@ func turn(r *http.Request, cfg StartConfig, person, text string, piece func(stri
 		log.Printf("haus: sprechen as %q: %v", person, err)
 		switch {
 		case reply != "":
-			e.line = saysCut(House.Display)
+			e.line = saysCut(assistent.Name())
 		case errors.Is(context.Cause(ctx), errSlow), errors.Is(err, context.DeadlineExceeded):
-			e.line = saysSlow(House.Display)
+			e.line = saysSlow(assistent.Name())
 		default:
-			e.line = saysDown(House.Display)
+			e.line = saysDown(assistent.Name())
 		}
 	}
 	return e
@@ -253,14 +254,14 @@ func streamTurn(w http.ResponseWriter, r *http.Request, cfg StartConfig, t *talk
 	send(map[string]string{"fertig": e.html()})
 }
 
-// html is the exchange: the person's words, then the persona's reply
+// html is the exchange: the person's words, then the assistant's reply
 // under its name, and Haus's line why there is none (or why it stops) —
-// not in the persona's name, it did not say it.
+// not in the assistant's name, it did not say it.
 func (e exchange) html() string {
 	var b strings.Builder
 	b.WriteString("<section class=gespraech aria-label=Gespräch><p class=frage><span class=wer>Du</span>" + html.EscapeString(e.said) + "</p>")
 	if e.reply != "" {
-		b.WriteString("<div class=antwort><span class=wer>" + html.EscapeString(House.Display) + "</span>" + replyHTML(e.reply) + "</div>")
+		b.WriteString("<div class=antwort><span class=wer>" + html.EscapeString(assistent.Name()) + "</span>" + replyHTML(e.reply) + "</div>")
 	}
 	if e.line != "" {
 		b.WriteString("<p class=keine>" + html.EscapeString(e.line) + "</p>")
@@ -272,7 +273,7 @@ func (e exchange) html() string {
 var bold = regexp.MustCompile(`\*\*([^*\n]+)\*\*`)
 
 // replyHTML shows the Bote's text as text: every character escaped, a
-// fenced code block (a persona's screen) as its own box with its lines
+// fenced code block (a screen of text) as its own box with its lines
 // kept, **bold** bold, the rest paragraphs with their line breaks. No
 // link, no image, nothing that runs.
 func replyHTML(s string) string {

@@ -78,7 +78,7 @@ func TestSIGTERMFlushes(t *testing.T) {
 	l.Close()
 	cmd := exec.Command(bin)
 	cmd.Env = append(os.Environ(), "LAIB_TOKEN=ops", "LAIB_URL=http://127.0.0.1:1", "HAUS_PROXY_SECRET=geheim", "HAUS_DATA="+t.TempDir(),
-		"HAUS_LISTEN="+addr, "HAUS_USAGE_URL="+fake.URL, "HAUS_USAGE_TOKEN=um", "HAUS_PERSONA_DIR="+t.TempDir())
+		"HAUS_LISTEN="+addr, "HAUS_USAGE_URL="+fake.URL, "HAUS_USAGE_TOKEN=um")
 	var logs strings.Builder
 	cmd.Stdout, cmd.Stderr = &logs, &logs
 	if err := cmd.Start(); err != nil {

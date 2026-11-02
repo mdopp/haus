@@ -58,10 +58,10 @@ func main() {
 			{"entity_id": "switch.kaffee", "area_id": "kueche"},
 			{"entity_id": "cover.rollo", "area_id": "wohnzimmer"},
 			{"entity_id": "media_player.wz", "area_id": "wohnzimmer"},
-			// a Voice PE still on its factory word: the Stimme page says „Hey Joshua“ comes (owner 2026-10-30)
+			// a Voice PE still on its factory word: the Aktivierungswort page says Laib selects „Hey Mycroft“ (owner 2026-10-30)
 			{"entity_id": "select.voice_pe_aktivierungswort", "area_id": "kueche", "translation_key": "wake_word", "entity_category": "config"},
 		})
-	fake.Set("select.voice_pe_aktivierungswort", "Okay Nabu", map[string]any{"friendly_name": "Voice PE Aktivierungswort", "options": []string{"Okay Nabu", "Hey Joshua"}})
+	fake.Set("select.voice_pe_aktivierungswort", "Okay Nabu", map[string]any{"friendly_name": "Voice PE Aktivierungswort", "options": []string{"Okay Nabu", "Hey Jarvis", "Hey Mycroft"}})
 	fake.Set("light.flur", "off", map[string]any{"friendly_name": "Flurlicht"})
 	fake.Set("light.kueche", "on", map[string]any{"friendly_name": "Küchenlicht", "brightness": 153, "supported_color_modes": []string{"brightness"}, "color_mode": "brightness"})
 	fake.Set("switch.kaffee", "off", map[string]any{"friendly_name": "Kaffeemaschine"})
@@ -121,15 +121,12 @@ func main() {
 	// Anna's Discogs is connected (owner 2026-10-26: Platte erfassen on a phone is checked too); the app reaches no Discogs
 	os.WriteFile(filepath.Join(dir, "discogs-konten.json"), []byte(`{"anna":{"name":"anna","token":"t","secret":"s"}}`), 0o600)
 	shelves := &discogs.Regale{App: &discogs.App{Key: "demo", Secret: "demo", Base: "http://127.0.0.1:1", Web: "https://www.discogs.test"}, Dir: dir}
-	wake := filepath.Join(dir, "stimme")
-	os.MkdirAll(wake, 0o700)
-	pages.House.Phrase, pages.House.Wakeword = "Hey Joshua", "hey_joshua" // the Stimme page needs a wake phrase
 	// haus#152: what Anna watched and heard, and the film and book wish list
 	absFake.Hoert("anna", "Krabat", 0.4, false, time.Now().Add(-time.Hour))
 	absFake.Hoert("anna", "Momo", 1, true, time.Now().Add(-50*time.Hour))
 	seen := &gesehen.Service{Filme: demoFilme{}, Buecher: &abs.Client{URL: absFake.URL, Token: "demo"}, DAV: cal}
 	live := &pages.Live{}
-	cfg := pages.StartConfig{Gesehen: seen, WakeRecordings: wake, Einkauf: list, Wuensche: wishes, Discogs: shelves, Podcasts: pods, HA: &ha.Client{URL: fake.URL, Token: "demo"}, Notes: nd, Favorites: favoriten.Open(dir), MusicInbox: inbox,
+	cfg := pages.StartConfig{Gesehen: seen, Einkauf: list, Wuensche: wishes, Discogs: shelves, Podcasts: pods, HA: &ha.Client{URL: fake.URL, Token: "demo"}, Notes: nd, Favorites: favoriten.Open(dir), MusicInbox: inbox,
 		Calendar: cal, Views: ansicht.Open(dir),
 		RadicalePublicURL: "https://caldav.example", Fetcher: merken.Fetcher{AllowPrivate: true}}
 	mux := http.NewServeMux()
@@ -143,7 +140,7 @@ func main() {
 	mux.HandleFunc("/kalender/verwalten", pages.KalenderVerwalten(cfg))
 	mux.HandleFunc(pages.MusikPath, pages.Musik(cfg))
 	mux.HandleFunc(pages.PlattePath, pages.Platte(cfg))
-	mux.HandleFunc(pages.StimmePath, pages.Stimme(cfg))
+	mux.HandleFunc(pages.AktivierungswortPath, pages.Aktivierungswort(cfg))
 	mux.HandleFunc("/aufgaben", pages.DeineAufgaben(cfg))
 	// haus#176: the phone layout gate covers these too
 	upload := filepath.Join(dir, "upload")

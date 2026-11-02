@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mdopp/haus/internal/assistent"
 	"github.com/mdopp/haus/internal/cards"
 	"github.com/mdopp/haus/internal/usage"
 )
@@ -68,9 +69,9 @@ var degradedLines = func() []struct{ key, says string } {
 func lineSays(key string) string {
 	switch key {
 	case "bote":
-		return strings.TrimSpace(saysDown(House.Display))
+		return strings.TrimSpace(saysDown(assistent.Name()))
 	case "bote-langsam":
-		return strings.TrimSpace(saysSlow(House.Display))
+		return strings.TrimSpace(saysSlow(assistent.Name()))
 	case "dienste":
 		return "Ein Dienst ist gerade nicht erreichbar."
 	}

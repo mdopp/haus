@@ -20,7 +20,7 @@ import (
 
 // Share → Haus (haus#120): the app is a target for a link or a text shared
 // from the phone's browser, and posts it here; Haus keeps it as a note the
-// way "Aus Link merken" and Joshua do (internal/merken). The body is JSON
+// way "Aus Link merken" and the assistant do (internal/merken). The body is JSON
 // {"text": what was shared}: the first http(s) address in it is the link,
 // the words around it are the hint ("#tags" become tags). The answer:
 // {"titel", "art", "kurz": the line to show, "schon": kept before,

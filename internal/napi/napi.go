@@ -6,7 +6,7 @@
 // Haushalt source (tools.go), the capture upload (upload.go), the phone's
 // message backups (sicherung.go), the phone's contacts mirrored
 // (kontakte.go), its positions passed on to Reitti (standort.go), a link shared
-// to the app kept as a note (merken.go) and the house persona. Every other /napi path is a JSON 404 (noSuchPath).
+// to the app kept as a note (merken.go) and the assistant's name. Every other /napi path is a JSON 404 (noSuchPath).
 package napi
 
 import (
@@ -18,11 +18,11 @@ import (
 	"time"
 
 	"github.com/mdopp/haus/internal/app"
+	"github.com/mdopp/haus/internal/assistent"
 	"github.com/mdopp/haus/internal/favoriten"
 	"github.com/mdopp/haus/internal/ha"
 	"github.com/mdopp/haus/internal/haushalt"
 	"github.com/mdopp/haus/internal/laib"
-	"github.com/mdopp/haus/internal/persona"
 	"github.com/mdopp/haus/internal/reitti"
 	"github.com/mdopp/haus/internal/schalter"
 	"github.com/mdopp/haus/internal/usage"
@@ -37,7 +37,6 @@ type Config struct {
 	Validate Validator
 	Whoami   func(bearer string) (string, bool) // the paired devices: uid behind a bearer
 	Witness  *schalter.Witness                  // who switched what (haus#89); nil: the log only
-	House    persona.Persona                    // the house persona the app shows (laib#129, #130)
 	HA       *ha.Client                         // Home Assistant for the house paths and the event stream (home.go, live.go); nil = 404
 	Ping     time.Duration                      // the event stream's keepalive; 0 = 90s
 	// SensorEvery: a sensor's card_state at most this often; 0 = 10s
@@ -99,32 +98,11 @@ func Handler(c Config) http.Handler {
 			next(w, r)
 		}
 	}
-	// the house persona for the app: name, greeting, colours, icon (laib#130).
-	// The icon is PNG, which a phone draws without a library (haus#28); the
-	// SVG is the pages' (/persona/icon.svg), for browsers.
-	mux.HandleFunc("GET /napi/persona", auth(func(w http.ResponseWriter, r *http.Request) {
-		p := c.House
-		if p.Display == "" {
-			p = persona.Default()
-		}
-		icon := ""
-		if len(p.IconPNG) > 0 {
-			icon = "/napi/persona/icon.png"
-		}
-		greeting := "" // the chat's alone, an easter egg for its games; not the start screen (haus#58)
-		if r.URL.Query().Get("surface") == "chat" {
-			greeting = p.Greet(r.URL.Query().Get("lang"))
-		}
-		writeJSON(w, map[string]any{"name": p.Name, "display": p.Display, "greeting": greeting,
-			"accent": p.Accent(), "ground": p.Ground(), "icon": icon})
-	}))
-	mux.HandleFunc("GET /napi/persona/icon.png", auth(func(w http.ResponseWriter, r *http.Request) {
-		if len(c.House.IconPNG) == 0 {
-			noSuchPath(w, r)
-			return
-		}
-		w.Header().Set("Content-Type", "image/png")
-		w.Write(c.House.IconPNG)
+	// the assistant's name, the one thing the app takes from the box about
+	// it: its colours are fixed in the app, its icon is the app's own
+	// ({"name":"Homes"}).
+	mux.HandleFunc("GET /napi/assistent", auth(func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]string{"name": assistent.Name()})
 	}))
 	// the Box keys (laib ADR 0022 §4: one name, app.BoxPrefix)
 	prefix := app.BoxPrefix

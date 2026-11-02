@@ -10,6 +10,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/mdopp/haus/internal/assistent"
 )
 
 // DokumentePath is the Dokumente page (haus#68); a document's own page is
@@ -33,7 +35,7 @@ const (
 // haus#13): who reads it and where it is found again.
 func docsWhatHappens() string {
 	return "Paperless liest den Text jedes Dokuments (Texterkennung) und legt es ins Archiv. Danach findest du es hier unter Notizen über die Suche, und " +
-		House.Display + " findet es, wenn du fragst, etwa „Wann läuft die Autoversicherung aus?“."
+		assistent.Name() + " findet es, wenn du fragst, etwa „Wann läuft die Autoversicherung aus?“."
 }
 
 // what a refused upload says: napi's reason in the family's words

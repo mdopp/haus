@@ -1280,7 +1280,7 @@ func TestFromEnvDocumentsCollection(t *testing.T) {
 	}
 }
 
-// haus#116: Joshua files a note with its kind and tags, finds the notes
+// haus#116: the assistant files a note with its kind and tags, finds the notes
 // by tag, and is told which tags there are; a search hit says its kind
 // and tags.
 func TestNoteToolsWithTags(t *testing.T) {

@@ -13,7 +13,6 @@ import (
 
 	"github.com/mdopp/haus/internal/bote"
 	"github.com/mdopp/haus/internal/bote/botefake"
-	"github.com/mdopp/haus/internal/persona"
 )
 
 func fakeBote(t *testing.T) (*botefake.Server, *bote.Client) {
@@ -44,11 +43,10 @@ func say(t *testing.T, h http.HandlerFunc, user, text string, hdr map[string]str
 
 // haus#12: Start has the Sprechen field at the top, under the day and
 // above the cards: one plain field and Senden, posting to Haus itself, a
-// plain form without script (haus#63: with it, the answer has its page). It names no persona: the persona speaks where you talk to it
+// plain form without script (haus#63: with it, the answer has its page). It names no assistant: its name appears where you talk to it
 // (haus#35). Without the Bote there is no field and no word about it.
 func TestStartHasTheSprechenField(t *testing.T) {
-	House = persona.Persona{Display: "Joshua", Greeting: map[string]string{"de": "Wollen wir ein Spiel spielen?"}}
-	defer func() { House = persona.Default() }()
+	named(t, "Ada")
 	fake, hc := house(t)
 	fake.Set("light.flur", "on", map[string]any{"friendly_name": "Flurlicht"})
 	_, bc := fakeBote(t)
@@ -58,7 +56,7 @@ func TestStartHasTheSprechenField(t *testing.T) {
 	before(t, body, "class=datum", "action=/sprechen")
 	before(t, body, "action=/sprechen", "karte-im-haus")
 	// the script hands the sentence on to /sprechen; the form works without it
-	mustNotContain(t, body, "Joshua", "Wollen wir", "Bote", "Hermes", "8642", "class=mikro")
+	mustNotContain(t, body, "Ada", "Bote", "Hermes", "8642", "class=mikro")
 
 	_, body = startPage(t, StartConfig{HA: hc}, "family")
 	mustNotContain(t, body, "/sprechen", "Sprechen", "Bote")
@@ -96,11 +94,10 @@ func TestSprechenIsNoTab(t *testing.T) {
 
 // haus#12, haus#1: a sentence goes to the Bote as the person who wrote it
 // (Remote-User, Remote-Name), and the reply comes back on /sprechen,
-// plainly, under the persona's name, after the person's own words. A
+// plainly, under the assistant's name, after the person's own words. A
 // reload sends nothing again (303). Each person sees only their own.
 func TestSprechenRelaysAndShowsTheReply(t *testing.T) {
-	House = persona.Persona{Display: "Joshua"}
-	defer func() { House = persona.Default() }()
+	named(t, "Ada")
 	fake, bc := fakeBote(t)
 	fake.Reply = "Das Licht im Flur ist an."
 	h := Sprechen(StartConfig{Bote: bc})
@@ -123,7 +120,7 @@ func TestSprechenRelaysAndShowsTheReply(t *testing.T) {
 		t.Fatalf("GET /sprechen → %d", code)
 	}
 	mustContain(t, body, "<title>Sprechen · Zuhause</title>", "<h1>Sprechen</h1>", "Mach das Licht im Flur an", "Das Licht im Flur ist an.",
-		">Du<", ">Joshua<", "action=/sprechen")
+		">Du<", ">Ada<", "action=/sprechen")
 	before(t, body, "action=/sprechen", "Mach das Licht im Flur an")
 	before(t, body, "Mach das Licht im Flur an", "Das Licht im Flur ist an.")
 	if len(fake.Seen()) != 1 {
@@ -132,20 +129,20 @@ func TestSprechenRelaysAndShowsTheReply(t *testing.T) {
 
 	_, body, _ = talkPage(t, h, "ben")
 	mustNotContain(t, body, "Mach das Licht", "Das Licht im Flur ist an.")
-	mustContain(t, body, "Joshua", "action=/sprechen")
+	mustContain(t, body, "Ada", "action=/sprechen")
 }
 
 // The reply is the Bote's text, shown as text: markup in it, and in the
 // person's own words, is escaped,
-// a code block (a persona's screen) keeps its lines in a box of its own,
+// a code block (a screen of text) keeps its lines in a box of its own,
 // **bold** is bold, and nothing runs.
 func TestSprechenShowsTheReplyAsText(t *testing.T) {
 	fake, bc := fakeBote(t)
-	fake.Reply = "Hier ist das **Menü**:\n\n```\nJOSHUA> 1 HAUS\n        2 SPIELE\n```\n<script>alert(1)</script> <a href=x>y</a>"
+	fake.Reply = "Hier ist das **Menü**:\n\n```\nHAUS> 1 LICHT\n      2 HEIZUNG\n```\n<script>alert(1)</script> <a href=x>y</a>"
 	h := Sprechen(StartConfig{Bote: bc})
 	say(t, h, "anna", "Menü <i>bitte</i>", nil)
 	_, body, _ := talkPage(t, h, "anna")
-	mustContain(t, body, "Menü &lt;i&gt;bitte&lt;/i&gt;", "<strong>Menü</strong>", "<pre>JOSHUA&gt; 1 HAUS\n        2 SPIELE</pre>", "&lt;script&gt;alert(1)&lt;/script&gt;", "&lt;a href=x&gt;")
+	mustContain(t, body, "Menü &lt;i&gt;bitte&lt;/i&gt;", "<strong>Menü</strong>", "<pre>HAUS&gt; 1 LICHT\n      2 HEIZUNG</pre>", "&lt;script&gt;alert(1)&lt;/script&gt;", "&lt;a href=x&gt;")
 	mustNotContain(t, body, "<script>alert", "<a href=x>", "<i>", "```", "**")
 }
 
@@ -209,8 +206,7 @@ func TestSprechenSendsNothingEmptyOrTooLong(t *testing.T) {
 // says so in one plain line — and that it may still happen, so nobody
 // sends it twice blindly. Never a reply, never an error.
 func TestSprechenSaysASlowBotePlainly(t *testing.T) {
-	House = persona.Persona{Display: "Joshua"}
-	defer func() { House = persona.Default() }()
+	named(t, "Ada")
 	wait := boteWait
 	boteWait = 200 * time.Millisecond
 	defer func() { boteWait = wait }()
@@ -226,17 +222,16 @@ func TestSprechenSaysASlowBotePlainly(t *testing.T) {
 		t.Fatalf("→ %d", rec.Code)
 	}
 	_, body, _ := talkPage(t, h, "anna")
-	mustContain(t, body, "Wie wird das Wetter?", "Joshua hat nach zweieinhalb Minuten noch nicht geantwortet.", "bevor du es noch einmal schickst")
-	mustNotContain(t, body, "Erledigt", ">Joshua<") // Haus says it, not in the persona's name
+	mustContain(t, body, "Wie wird das Wetter?", "Ada hat nach zweieinhalb Minuten noch nicht geantwortet.", "bevor du es noch einmal schickst")
+	mustNotContain(t, body, "Erledigt", ">Ada<") // Haus says it, not in the assistant's name
 	mustNotLeak(t, body, "deadline", "context", "timeout", "Bote", "Hermes")
 }
 
 // A Bote that is down, refuses Haus's key or fails its run is one plain
-// line: the persona does not answer right now. Never its error, its
+// line: the assistant does not answer right now. Never its error, its
 // address or its name, never a crash; the page is a 200.
 func TestSprechenSaysABoteThatDoesNotAnswerPlainly(t *testing.T) {
-	House = persona.Persona{Display: "Joshua"}
-	defer func() { House = persona.Default() }()
+	named(t, "Ada")
 	failing, bc := fakeBote(t)
 	failing.Status = 502
 	closed := botefake.New("k")
@@ -260,8 +255,8 @@ func TestSprechenSaysABoteThatDoesNotAnswerPlainly(t *testing.T) {
 		if code != 200 {
 			t.Fatalf("%s: page %d", what, code)
 		}
-		mustContain(t, body, "Hallo", "Joshua antwortet gerade nicht. Versuch es gleich noch einmal.")
-		mustNotContain(t, body, ">Joshua<")
+		mustContain(t, body, "Hallo", "Ada antwortet gerade nicht. Versuch es gleich noch einmal.")
+		mustNotContain(t, body, ">Ada<")
 		mustNotLeak(t, body, "502", "Agent run", "Invalid API key", "agent_incomplete", "Bote", "Hermes", "8642", "refused")
 	}
 }
@@ -277,7 +272,7 @@ func TestSprechenWithoutTheBote(t *testing.T) {
 	}
 	mustNotLeak(t, body, "Bote", "Hermes", "laib add")
 	rec := say(t, h, "anna", "Hallo", nil)
-	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Haus antwortet gerade nicht.") || !strings.Contains(rec.Body.String(), "href=/start") {
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Homes antwortet gerade nicht.") || !strings.Contains(rec.Body.String(), "href=/start") {
 		t.Fatalf("POST → %d %s", rec.Code, rec.Body.String())
 	}
 }
@@ -285,11 +280,10 @@ func TestSprechenWithoutTheBote(t *testing.T) {
 // Before anything is said, the page says what the field is for: who reads
 // it and where the answer appears ("leer heißt erklären", haus#35).
 func TestSprechenEmptySaysWhatItIsFor(t *testing.T) {
-	House = persona.Persona{Display: "Joshua"}
-	defer func() { House = persona.Default() }()
+	named(t, "Ada")
 	_, bc := fakeBote(t)
 	_, body, _ := talkPage(t, Sprechen(StartConfig{Bote: bc}), "anna")
-	mustContain(t, body, "Was du hier schreibst, liest Joshua. Die Antwort erscheint hier; das kann einen Moment dauern.")
+	mustContain(t, body, "Was du hier schreibst, liest Ada. Die Antwort erscheint hier; das kann einen Moment dauern.")
 }
 
 // A person who leaves the page while the Bote thinks (the phone locks,
@@ -297,8 +291,7 @@ func TestSprechenEmptySaysWhatItIsFor(t *testing.T) {
 // on anyway, so Haus waits on for the reply and keeps it — "antwortet
 // nicht" would make them send it twice.
 func TestSprechenKeepsTheReplyWhenThePageIsLeft(t *testing.T) {
-	House = persona.Persona{Display: "Joshua"}
-	defer func() { House = persona.Default() }()
+	named(t, "Ada")
 	fake, bc := fakeBote(t)
 	fake.Reply = "Der Wecker steht auf sieben."
 	fake.Hang = 300 * time.Millisecond
@@ -312,7 +305,7 @@ func TestSprechenKeepsTheReplyWhenThePageIsLeft(t *testing.T) {
 	time.AfterFunc(50*time.Millisecond, leave)
 	h.ServeHTTP(httptest.NewRecorder(), req)
 	_, body, _ := talkPage(t, h, "anna")
-	mustContain(t, body, "Weck mich um sieben", ">Joshua<", "Der Wecker steht auf sieben.")
+	mustContain(t, body, "Weck mich um sieben", ">Ada<", "Der Wecker steht auf sieben.")
 	mustNotContain(t, withoutScripts(body), "antwortet gerade nicht")
 }
 
@@ -344,13 +337,12 @@ func TestSprechenNeverShowsTheKey(t *testing.T) {
 	}
 }
 
-// The persona's name is the house's to set, the reply the Bote's: both
+// The assistant's name is the house's to set, the reply the Bote's: both
 // are text wherever they show — over the reply, in the line that says it
 // does not answer, in what the field is for — and so is a code block the
 // reply never closes. Two bold words are two, not one run.
-func TestSprechenEscapesThePersonaAndAnOpenBlock(t *testing.T) {
-	House = persona.Persona{Display: "<b>J&J</b>"}
-	defer func() { House = persona.Default() }()
+func TestSprechenEscapesTheNameAndAnOpenBlock(t *testing.T) {
+	named(t, "<b>J&J</b>")
 	fake, bc := fakeBote(t)
 	fake.Reply = "**eins** und **zwei**\n```\n<i>offen</i>"
 	h := Sprechen(StartConfig{Bote: bc})

@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mdopp/haus/internal/assistent"
 	"github.com/mdopp/haus/internal/caldav"
 	"github.com/mdopp/haus/internal/notes"
-	"github.com/mdopp/haus/internal/persona"
 )
 
 // familyPage asks one of the family's pages, with Start's test clock.
@@ -228,15 +228,13 @@ func TestFamilyPagesDecideNothing(t *testing.T) {
 	}
 }
 
-// haus#35: the persona speaks where you talk to it, not on the pages: no
-// greeting, name, icon or colours on any family page. The pages wear the
+// haus#35: the assistant's name appears where you talk to it, not on the
+// pages: no name on top of any family page. The pages wear the
 // house palette (the chat's tokens, haus-android's colors.xml), light
 // or dark as the phone is, and Haus's own Geist — never a font from
 // Google.
-func TestFamilyPagesWearTheHousePaletteNotThePersona(t *testing.T) {
-	House = persona.Persona{Display: "Joshua", Greeting: map[string]string{"de": "Wollen wir ein Spiel spielen?"},
-		Colors: map[string]string{"accent": "#3ddc84", "ground": "#0c120e"}, Icon: []byte("<svg/>")}
-	defer func() { House = persona.Default() }()
+func TestFamilyPagesWearTheHousePalette(t *testing.T) {
+	named(t, "Ada")
 	fake, hc := house(t)
 	fake.Set("light.flur", "on", map[string]any{"friendly_name": "Flurlicht"})
 	_, cal := calendar(t)
@@ -254,7 +252,7 @@ func TestFamilyPagesWearTheHousePaletteNotThePersona(t *testing.T) {
 			"@font-face", FontPath, "system-ui",
 			"rel=icon href=/symbol/favicon.svg", "rel=apple-touch-icon href=/symbol/apple-touch-icon.png",
 			"rel=manifest href=/symbol/haus.webmanifest crossorigin=use-credentials")
-		mustNotContain(t, body, "Wollen wir", "#3ddc84", "#0c120e", "/persona/icon.svg", "<header>", "class=sr>",
+		mustNotContain(t, body, "<header>", "class=sr>",
 			"<script src", "googleapis", "gstatic", "#faf9f6") // Haus's own small scripts only, never one from elsewhere
 		if h.Get("Content-Type") != "text/html; charset=utf-8" {
 			t.Fatalf("%s: %q", p.path, h.Get("Content-Type"))
@@ -459,3 +457,10 @@ func TestItemPagesSayPlainlyWhatDoesNotAnswer(t *testing.T) {
 
 // host is a backend's host and port, from its URL.
 func host(u string) string { return strings.TrimPrefix(u, "http://") }
+
+// named sets the assistant's name for one test, as Laib's HAUS_ASSISTANT would.
+func named(t *testing.T, name string) {
+	t.Helper()
+	assistent.Set(name)
+	t.Cleanup(func() { assistent.Set("") })
+}

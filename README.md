@@ -5,7 +5,9 @@ runs: pages for people, cards, and `/napi`, the API the widgets of the Haus
 app ([mdopp/haus-android](https://github.com/mdopp/haus-android)) speak.
 Haus renders and decides nothing; Laib acts; the Bote is who you talk to,
 and messages to people go through their chat channel, not the app (laib ADR
-0014, 0016, 0022). The family sees the house persona (laib ADR 0021). The
+0014, 0016, 0022). The assistant has one name for the whole box, set once in
+Laib (box.yml `assistant:`, reaching Haus as `HAUS_ASSISTANT`; *Homes*
+without it). The
 app's names (scheme `cloud.dopp.haus`, token prefix
 `haus_device_`, the Box keys under `/napi/box`) live in `internal/app`; a
 `/napi` path wants a paired device (`Authorization: Bearer haus_device_…`,
@@ -93,9 +95,9 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   right, Mehr open in it (its entries, who is signed in, Abmelden; Mehr's
   own entry is the phone's), the page and its entry marked, and the cards
   in two columns beside it. At the top of a page only the login, small
-  (haus#61's Abmelden moved under Mehr). The persona's greeting, colours
-  and icon stay off the family's pages; its name appears where a sentence
-  says how to address it.
+  (haus#61's Abmelden moved under Mehr). The assistant's name stays off the
+  top of the family's pages; it appears where a sentence says how to
+  address it („Sag Homes: Merk dir …“).
 - `POST /schalten` — a family page's button (haus#35): `geraet`, `tun`
   (`light|switch.turn_on|turn_off`, `media_player.media_pause`, Geräte's
   `cover.open_cover|stop_cover|close_cover|set_cover_position` (haus#64), or
@@ -205,10 +207,10 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     (`?tag=…`, several combine, each a pill with its count), lists kind
     and tags at each note; *Neue Notiz* and *Bearbeiten* set them in fields
     (offered tags to tick, others typed), the note's page shows them with
-    links. Joshua: `notiz_anlegen` takes `art` and `tags`, `notizen_mit_tag`
+    links. The assistant: `notiz_anlegen` takes `art` and `tags`, `notizen_mit_tag`
     lists by tag or says which tags there are, `notizen_suchen` names them.
   - *Aus Link merken* (haus#117, `internal/merken`): a link — on Notizen
-    (`POST /notizen/merken`: `link`, `hinweis`) or sent to Joshua
+    (`POST /notizen/merken`: `link`, `hinweis`) or sent to the assistant
     (`notiz_aus_link`) — becomes a note. Haus fetches the page itself, only
     public addresses (no home network by address or name, every redirect
     checked), 3 MB, 20 s. The page's JSON-LD makes a recipe (portions,
@@ -402,14 +404,11 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   the Haus app is not migrated, it pairs again (an old entry stays listed
   under Geräte until revoked).
 
-- The house persona (laib ADR 0020): Laib mounts `render/persona` at
-  `/persona` and sets `HAUS_PERSONA`. The admin's pages (/box) carry its
-  name in the title, a header with its icon, name and greeting in its
-  colours, and `/persona/icon.svg`; the family's pages do not (haus#35). The app reads `GET /napi/persona` (display, greeting,
-  accent, ground, icon) and `/napi/persona/icon.png` with its device token:
-  PNG, which a phone draws without a library (haus#28). It is the persona's
-  `icon.png` (laib#191); a persona without one has no icon on the phone.
-  Without a persona Haus is plain Haus; internally it is always `haus`.
+- The assistant's name: `GET /napi/assistent` with a device token →
+  `{"name":"Homes"}` — `HAUS_ASSISTANT` as Laib sets it from box.yml
+  `assistant:`, *Homes* when unset or empty. That is all the app takes
+  from the box about the assistant: its colours are fixed in the app, its
+  icon is the app's launcher icon. Internally Haus is always `haus`.
 
 - The house paths, from Home Assistant (haus#10, set by `HAUS_HA_URL` +
   `HAUS_HA_TOKEN`, a long-lived token; unset, they are 404):
@@ -803,8 +802,8 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   with the Bote installed, laib#215: no key, no field, no word about it).
   One line and *Senden*, a plain form post that works without script;
   the page's script (haus#63) sends it in the background instead: from
-  Start it hands the sentence to `/sprechen`, which shows at once *Joshua
-  denkt nach …* with a running indicator and the seconds, then the reply
+  Start it hands the sentence to `/sprechen`, which shows at once *Homes
+  denkt nach …* (the assistant's name) with a running indicator and the seconds, then the reply
   in pieces as it comes, then the exchange as a reload would show it — or
   the plain line, never silence. `POST /sprechen`
   takes it only from a person on Haus's own page (#35's rule) and sends it
@@ -822,17 +821,17 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   every 15 s while the Bote thinks, `{"stueck":…}` per piece, and
   `{"fertig":…}`, the exchange's HTML. A plain post gets 303 to
   `/sprechen`, which shows the person's last exchange (in memory, per
-  person): their words, the reply under the persona's name, as text (code
+  person): their words, the reply under the assistant's name, as text (code
   blocks kept, **bold** bold, nothing else rendered). Haus relays and
   decides nothing (haus#1). Leaving the page does not stop the wait: the
   reply is kept for the person's next look. It waits 150 s for the first
   word (the first message after a model reload takes 40–50 s, with a tool
-  more), and a reply under way up to 5 minutes in all; then, in the house persona's name, *Joshua hat nach zweieinhalb Minuten
+  more), and a reply under way up to 5 minutes in all; then, with the assistant's name, *Homes hat nach zweieinhalb Minuten
   noch nicht geantwortet. Vielleicht passiert es trotzdem noch: schau nach,
   bevor du es noch einmal schickst.* (a reply cut off keeps what came and
   says *… ist mit der Antwort nicht fertig geworden; hier bricht sie ab.*).
   A Bote down, refusing the key or
-  failing its run: *Joshua antwortet gerade nicht. Versuch es gleich noch
+  failing its run: *Homes antwortet gerade nicht. Versuch es gleich noch
   einmal.*, the error in the log. Over 1000 characters is refused plainly;
   empty sends nothing.
   The microphone beside the field (haus#63), with Home Assistant and
@@ -848,6 +847,16 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   (`{ok:false, says}`): *Nichts verstanden. …*, *Die Spracherkennung
   antwortet gerade nicht. …* (502, HA's detail in the log), *Die Aufnahme
   ließ sich nicht lesen. …* (400), too long (413).
+
+- The Aktivierungswort page (owner 2026-10-30): `GET /aktivierungswort`,
+  only with Home Assistant. The word each voice satellite listens for, as
+  the device reports it (its wake-word select, a Voice PE's
+  *… Aktivierungswort*). Every speaker is to listen for *„Hey Mycroft“*
+  (openWakeWord's pretrained `hey_mycroft`, which a Voice PE offers out
+  of the box; Laib selects it, nothing is trained). A device on another
+  word gets *„Hey Mycroft“ wird noch ausgewählt*, with the word it hears
+  until then; no device in HA, or HA not answering, says „Hey Mycroft“ as
+  what is set. Sprechen says the word in one line with a link there.
 
 - The Netzlaufwerk page (haus#52, laib#296): `/netzlaufwerk`, linked from
   Start for a family member or admin (a to-do card while they have no
@@ -937,7 +946,7 @@ retention.
 ```
 LAIB_URL=http://host.containers.internal:5900 LAIB_TOKEN=<the haus hand's token, minted on laib add haus> \
 HAUS_PROXY_SECRET=<what Caddy sends as X-Haus-Proxy> LAIB_PUBLIC_URL=https://laib.<domain> \
-HAUS_LISTEN=0.0.0.0:8650 \
+HAUS_LISTEN=0.0.0.0:8650 HAUS_ASSISTANT=Homes \
 HAUS_HA_URL=http://host.containers.internal:8123 HAUS_HA_TOKEN=<a long-lived HA token> \
 HAUS_ENERGY_FLOW=pv=sensor.…,house=sensor.…,grid=sensor.…,battery=sensor.… HAUS_ENERGY_TOTALS=PV-Erzeugung=sensor.…,… \
 HAUS_ENERGY_STATS=bezug=sensor.…,einspeisung=sensor.…,solar=sensor.… \
@@ -1084,13 +1093,13 @@ overwritten); the ticked ones go below, *Abgehakte entfernen* deletes them.
 scaled as one buys (grams to 5, whole tins up), each to leave out before
 it goes on the list; a recipe note links there. Every change is pushed
 over `/live` (`haus.einkauf`) to the other open pages; a phone app's change
-shows within a minute. Joshua: `einkaufsliste_dazu(dinge, rezepte,
+shows within a minute. The assistant: `einkaufsliste_dazu(dinge, rezepte,
 portionen)` and `einkaufsliste`.
 
 ## Musik-Wunschliste (owner 2026-10-25)
 
 A song or an album shared to Haus — the app's share target, *Aus Link
-merken* on Notizen, a link sent to Joshua (`notiz_aus_link`) — goes on the
+merken* on Notizen, a link sent to the assistant (`notiz_aus_link`) — goes on the
 household's list *Musik* (`haus/liste-musik`, made at start) instead of
 into a note: "Künstler – Titel", its origin `von <person>, <link>`. A
 YouTube video counts when YouTube's oEmbed says it is a music video
@@ -1151,7 +1160,7 @@ once for the household (`POST /api/podcasts`, auto-download) and sets it
 to keep only the last 3 episodes (owner 2026-10-25); `podcasts.json` in
 HAUS_DATA keeps who subscribed to what. *Meine Podcasts* with *Abo
 beenden* (the last one out takes the podcast off the box), their newest
-episodes. Joshua: `podcast_abonnieren(link, person)`. Every 15 minutes
+episodes. The assistant: `podcast_abonnieren(link, person)`. Every 15 minutes
 Haus looks for new episodes and tells each only to who subscribed,
 through Laib's `tell` (laib#676) — not before Laib has it, so nothing is
 taken as told unsaid.

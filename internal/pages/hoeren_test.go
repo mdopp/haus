@@ -12,8 +12,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/mdopp/haus/internal/persona"
 )
 
 // streamSay posts the field as the page's script does: in the background,
@@ -54,8 +52,7 @@ func fertig(t *testing.T, evs []map[string]any) string {
 // then each piece of the reply, and at the end the exchange as a reload
 // shows it — which /sprechen then does, too.
 func TestSprechenStreamsTheReply(t *testing.T) {
-	House = persona.Persona{Display: "Joshua"}
-	defer func() { House = persona.Default() }()
+	named(t, "Ada")
 	fake, bc := fakeBote(t)
 	fake.Reply = "Der Wecker steht auf sieben, wie jeden Tag."
 	h := Sprechen(StartConfig{Bote: bc})
@@ -77,7 +74,7 @@ func TestSprechenStreamsTheReply(t *testing.T) {
 		t.Fatalf("%d pieces %q", n, pieces.String())
 	}
 	done := fertig(t, evs)
-	mustContain(t, done, "<section class=gespraech", "Weck mich um sieben", "<span class=wer>Joshua</span>", fake.Reply)
+	mustContain(t, done, "<section class=gespraech", "Weck mich um sieben", "<span class=wer>Ada</span>", fake.Reply)
 	mustNotContain(t, done, "antwortet gerade nicht")
 	_, body, _ := talkPage(t, h, "anna")
 	mustContain(t, body, done)
@@ -88,10 +85,9 @@ func TestSprechenStreamsTheReply(t *testing.T) {
 
 // haus#63: the answer is never silence. A Bote that fails, or whose first
 // word does not come within boteWait, ends the stream with the plain line
-// — the persona does not answer, or has not yet — never its error.
+// — the assistant does not answer, or has not yet — never its error.
 func TestSprechenStreamSaysTimeoutAndFailurePlainly(t *testing.T) {
-	House = persona.Persona{Display: "Joshua"}
-	defer func() { House = persona.Default() }()
+	named(t, "Ada")
 	wait := boteWait
 	boteWait = 200 * time.Millisecond
 	defer func() { boteWait = wait }()
@@ -105,15 +101,15 @@ func TestSprechenStreamSaysTimeoutAndFailurePlainly(t *testing.T) {
 		t.Fatalf("the stream waited %s", d)
 	}
 	done := fertig(t, evs)
-	mustContain(t, done, "Wie wird das Wetter?", "<p class=keine>Joshua hat nach zweieinhalb Minuten noch nicht geantwortet.")
-	mustNotContain(t, done, ">Joshua<")
+	mustContain(t, done, "Wie wird das Wetter?", "<p class=keine>Ada hat nach zweieinhalb Minuten noch nicht geantwortet.")
+	mustNotContain(t, done, ">Ada<")
 	mustNotLeak(t, done, "deadline", "context", "timeout", "Bote", "Hermes")
 
 	failing, fc := fakeBote(t)
 	failing.Status = 502
 	_, evs = streamSay(t, Sprechen(StartConfig{Bote: fc}), "anna", "Hallo")
 	done = fertig(t, evs)
-	mustContain(t, done, "<p class=keine>Joshua antwortet gerade nicht. Versuch es gleich noch einmal.</p>")
+	mustContain(t, done, "<p class=keine>Ada antwortet gerade nicht. Versuch es gleich noch einmal.</p>")
 	mustNotLeak(t, done, "502", "Agent run", "agent_incomplete", "Bote", "Hermes", "8642")
 }
 
@@ -124,8 +120,7 @@ func TestSprechenWaitsForTheFirstWordNotTheWhole(t *testing.T) {
 	if boteWait < 150*time.Second || boteTurn < boteWait {
 		t.Fatalf("boteWait %s, boteTurn %s", boteWait, boteTurn)
 	}
-	House = persona.Persona{Display: "Joshua"}
-	defer func() { House = persona.Default() }()
+	named(t, "Ada")
 	wait := boteWait
 	boteWait = 150 * time.Millisecond
 	defer func() { boteWait = wait }()
@@ -146,15 +141,14 @@ func TestSprechenWaitsForTheFirstWordNotTheWhole(t *testing.T) {
 }
 
 // haus#63: /sprechen shows "… denkt nach" from the first moment: the field
-// carries the persona's words for the script, which shows them with a
+// carries the assistant's words for the script, which shows them with a
 // running indicator the moment the sentence goes. Without script the form
 // is the plain post it was.
 func TestSprechenSaysItIsThinking(t *testing.T) {
-	House = persona.Persona{Display: "Joshua"}
-	defer func() { House = persona.Default() }()
+	named(t, "Ada")
 	_, bc := fakeBote(t)
 	_, body, _ := talkPage(t, Sprechen(StartConfig{Bote: bc}), "anna")
-	mustContain(t, body, `<form method=post action=/sprechen class=sprechen data-hier data-wer="Joshua" data-denkt="Joshua denkt nach …">`,
+	mustContain(t, body, `<form method=post action=/sprechen class=sprechen data-hier data-wer="Ada" data-denkt="Ada denkt nach …">`,
 		"name=nachricht", "<button class=senden>Senden</button>", "<script>", "'Accept':'text/event-stream'", "el('span','laeuft')", ".laeuft{",
 		jsString(saysDown("")))
 	mustNotContain(t, body, "class=mikro") // no speech-to-text set: no microphone

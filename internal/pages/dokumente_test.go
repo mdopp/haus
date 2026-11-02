@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mdopp/haus/internal/assistent"
 	"github.com/mdopp/haus/internal/napi"
 	"github.com/mdopp/haus/internal/paperless"
 	"github.com/mdopp/haus/internal/paperless/paperlessfake"
@@ -43,7 +44,7 @@ func TestDokumenteShowsTheWaysIn(t *testing.T) {
 	home := getDokumente(cfg, "/dokumente", map[string]string{"X-Forwarded-For": "192.168.1.23"}).Body.String()
 	for _, want := range []string{"<h1>Dokumente</h1>", `href="mailto:dokumente@box.test"`, "Per E-Mail ablegen", "der Betreff wird der Titel",
 		`enctype=multipart/form-data`, `type=file name=file`, "application/pdf", "Dokument ablegen", "Datei wählen oder Foto machen",
-		`href="https://paperless.box.test/documents?sort=added&amp;reverse=1"`, "In Paperless öffnen", "Die neuesten zuerst", "Nur zu Hause im WLAN.", "Texterkennung", House.Display + " findet es"} {
+		`href="https://paperless.box.test/documents?sort=added&amp;reverse=1"`, "In Paperless öffnen", "Die neuesten zuerst", "Nur zu Hause im WLAN.", "Texterkennung", assistent.Name() + " findet es"} {
 		if !strings.Contains(home, want) {
 			t.Errorf("the page lacks %q", want)
 		}

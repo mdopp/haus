@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mdopp/haus/internal/assistent"
 	"github.com/mdopp/haus/internal/cards"
 	"github.com/mdopp/haus/internal/einkauf"
 	"github.com/mdopp/haus/internal/library"
@@ -262,10 +263,10 @@ func notePage(w http.ResponseWriter, r *http.Request, cfg StartConfig, ref strin
 }
 
 // What writing a note says (owner, 2026-10-24): where notes come from, and
-// each outcome in a sentence. The persona by name, as the one to tell it.
+// each outcome in a sentence. The assistant by name, as the one to tell it.
 func saysNotesHow() string {
-	return "Notizen entstehen, wenn du " + House.Display + " sagst „Merk dir …“ (unter Sprechen oder per Signal), hier mit „Neue Notiz“ oder als Datei im Ordner notes auf dem Netzlaufwerk. " +
-		House.Display + " findet sie wieder, wenn du fragst."
+	return "Notizen entstehen, wenn du " + assistent.Name() + " sagst „Merk dir …“ (unter Sprechen oder per Signal), hier mit „Neue Notiz“ oder als Datei im Ordner notes auf dem Netzlaufwerk. " +
+		assistent.Name() + " findet sie wieder, wenn du fragst."
 }
 
 const (
@@ -582,9 +583,9 @@ func merkenForm(link, hint, problem string) string {
 	return b.String()
 }
 
-// saysMerkenHow is the other way in: the persona on Signal.
+// saysMerkenHow is the other way in: the assistant on Signal.
 func saysMerkenHow() string {
-	return "Oder den Link einfach " + House.Display + " auf Signal schicken. Rezepte kommen mit Zutaten und Zubereitung, Rezensionen mit ihrem Kern, Reisen mit Ort und Preis; der Link bleibt immer dabei."
+	return "Oder den Link einfach " + assistent.Name() + " auf Signal schicken. Rezepte kommen mit Zutaten und Zubereitung, Rezensionen mit ihrem Kern, Reisen mit Ort und Preis; der Link bleibt immer dabei."
 }
 
 // merkenPost keeps a link as a note and opens it, or says why not with
