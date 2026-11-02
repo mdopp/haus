@@ -27,7 +27,7 @@ var notSetArchiv = notSet{"Das Nachrichten-Archiv ist auf dieser Box nicht einge
 	"Für Admins: Haus hat keinen Archiv-Eingang (HAUS_ARCHIV_DIR; laibs haus-Template hängt ${DATA_DIR}/archiv-eingang als /archiv-eingang ein)."}
 
 // quelleName is how the page names a quelle.
-var quelleName = map[string]string{"whatsapp": "WhatsApp", "signal": "Signal", "discord": "Discord"}
+var quelleName = map[string]string{"whatsapp": "WhatsApp", "signal": "Signal", "sms": "SMS und Anrufe", "discord": "Discord"}
 
 // the guide, step by step: each part a heading and its steps
 var nachrichtenAnleitung = []struct {

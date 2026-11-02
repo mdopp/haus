@@ -4,7 +4,8 @@
 // token, the house paths, the event stream and the camera from Home
 // Assistant (home.go, live.go, camera.go), the tool widgets from the
 // Haushalt source (tools.go), the capture upload (upload.go), the phone's
-// message backups (sicherung.go), a link shared
+// message backups (sicherung.go), the phone's contacts mirrored
+// (kontakte.go), a link shared
 // to the app kept as a note (merken.go) and the house persona. Every other /napi path is a JSON 404 (noSuchPath).
 package napi
 
@@ -236,6 +237,9 @@ func Handler(c Config) http.Handler {
 	// every other /napi path, passed on to nobody; a device first, so a
 	// stranger cannot tell which backends are set
 	mux.HandleFunc("POST /napi/merken", auth(c.merken)) // Share → Haus (haus#120)
+	// the phone's contacts, mirrored into the person's Handy-Kontakte (laib ADR 0029)
+	k := &kontakte{dav: c.Haushalt.Contacts, whoami: c.Whoami, busy: map[string]bool{}}
+	mux.HandleFunc("POST /napi/kontakte", auth(k.post))
 	mux.HandleFunc("/napi/", auth(noSuchPath))
 	return mux
 }

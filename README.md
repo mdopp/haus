@@ -544,11 +544,11 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   run, 408 when a body stalls past two minutes; a disk error is 500
   `store_failed`, not the phone's fault.
 - The phone's message backups (haus#207, laib ADR 0029; the app's side is
-  haus-android#194): WhatsApp, Signal and Discord files into
+  haus-android#194): WhatsApp, Signal, SMS/call log and Discord files into
   `HAUS_ARCHIV_DIR/<person>/<quelle>/<pfad>`, where that person's archive
   imports them. The person is the device's (the uid it was paired with),
   never the request's. `GET /napi/sicherung/stand` → `{quellen:{whatsapp|
-  signal|discord:{zuletzt, dateien, bytes, wartend}}, frei_bytes}`;
+  signal|sms|discord:{zuletzt, dateien, bytes, wartend}}, frei_bytes}`;
   `POST /napi/sicherung/fehlend {quelle, dateien:[{pfad, groesse}]}` (≤ 5000)
   → `{fehlend:[pfad]}`, against Haus's ledger
   (`HAUS_DATA/sicherung/<person>/<quelle>.jsonl`: the size each pfad last
@@ -574,6 +574,32 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   (`/nachrichten-sichern`, under Mehr when the box has the inbox) shows the
   same state for the signed-in person and how to switch the backups on;
   entering the keys comes with the archive (laib#986).
+  The source `sms` is the phone's SMS and call log
+  (`sms-<zeit>.xml.age`, `anrufe-<zeit>.xml.age`), which the app encrypts
+  on the phone to the person's archive before sending; Haus keeps them as
+  the bytes they are. The key: `GET /napi/sicherung/schluessel` → 200
+  `{empfaenger: "age1…"}`, read (through `os.Root`) from
+  `HAUS_ARCHIV_DIR/<person>/.briefkasten.pub`, which the archive writes
+  (one age X25519 recipient); 404 `{fehler}` until it did (*Dein
+  Nachrichten-Archiv ist noch nicht eingerichtet. Richte es einmal auf der
+  Archiv-Seite ein, …*), 500 when the file holds anything else.
+- The phone's contacts (laib ADR 0029; optional in the app, behind
+  Android's contacts permission): `POST /napi/kontakte`, `text/vcard`,
+  all of the phone's contacts as concatenated vCards (≤ 64 MB, else 413),
+  each with a `UID` (the app's Android lookup key; a card without is 400,
+  naming it). Haus mirrors them, as its own Radicale account
+  (`HAUS_RADICALE_USER`, which may read and write `<person>/handy-kontakte`
+  and nothing else of the person's), into the device's person's address
+  book `/<person>/handy-kontakte/` ("Handy-Kontakte", made when missing):
+  each card at `<sha256(UID)[:32 hex]>.vcf`, written only when its text
+  changed (Haus notes a hash of the phone's text on the card as
+  `X-HAUS-INHALT`), and every card in the book the upload lacks deleted —
+  the book is a mirror; an edit there is overwritten by the next upload.
+  → 200 `{kontakte, neu, geaendert, entfernt}`. Refusals `{fehler}`: 403 a
+  device of nobody, 409 an upload with no cards (a permission taken back
+  never empties the mirror), an upload of that person already running, or
+  the book changed under Haus (If-Match), 415 not `text/vcard`, 502 when
+  Radicale refuses, 503 without Radicale (`HAUS_RADICALE_*`).
 
 - The Haushalt MCP source (laib ADR 0017, haus#11): `POST /mcp/haushalt`,
   laib's MCP shape (JSON-RPC over POST: `initialize`, `tools/list`,

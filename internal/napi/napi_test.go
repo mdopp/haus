@@ -408,6 +408,7 @@ func TestEveryNapiRouteWantsADevice(t *testing.T) {
 		"GET /napi/portal/documents": true, "GET /napi/portal/notes": true, "POST /napi/upload": true, "POST /napi/merken": true,
 		"GET /napi/sicherung/stand": true, "POST /napi/sicherung/fehlend": true, "POST /napi/sicherung/uploads": true,
 		"HEAD /napi/sicherung/uploads/{id}": true, "PATCH /napi/sicherung/uploads/{id}": true,
+		"GET /napi/sicherung/schluessel": true, "POST /napi/kontakte": true,
 	}
 	// what the source registers: "METHOD /napi/…" and "METHOD "+prefix+"/…" (prefix is /napi/box)
 	re := regexp.MustCompile(`HandleFunc\("([A-Z]+) (?:(/napi/[^"]*)"|"\+prefix\+"([^"]*)")`)
