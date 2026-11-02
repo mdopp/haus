@@ -5,7 +5,7 @@
 // Assistant (home.go, live.go, camera.go), the tool widgets from the
 // Haushalt source (tools.go), the capture upload (upload.go), the phone's
 // message backups (sicherung.go), the phone's contacts mirrored
-// (kontakte.go), a link shared
+// (kontakte.go), its positions passed on to Reitti (standort.go), a link shared
 // to the app kept as a note (merken.go) and the house persona. Every other /napi path is a JSON 404 (noSuchPath).
 package napi
 
@@ -22,6 +22,7 @@ import (
 	"github.com/mdopp/haus/internal/haushalt"
 	"github.com/mdopp/haus/internal/laib"
 	"github.com/mdopp/haus/internal/persona"
+	"github.com/mdopp/haus/internal/reitti"
 	"github.com/mdopp/haus/internal/schalter"
 	"github.com/mdopp/haus/internal/usage"
 )
@@ -49,6 +50,10 @@ type Config struct {
 	// Sicherung: the message archives' inbox (sicherung.go, HAUS_ARCHIV_DIR,
 	// haus#207); nil = every /napi/sicherung path answers 503 in words
 	Sicherung *Sicherung
+	// Reitti: the household's timeline, where /napi/standort passes the
+	// app's points on with the person's token (standort.go, HAUS_REITTI_URL);
+	// nil = /napi/standort answers 503 in words
+	Reitti *reitti.Reitti
 	// Usage counts each paired phone's request by path (haus#50): which
 	// widgets refresh how often, never which phone; nil counts nothing
 	Usage *usage.Counter
@@ -240,6 +245,8 @@ func Handler(c Config) http.Handler {
 	// the phone's contacts, mirrored into the person's Handy-Kontakte (laib ADR 0029)
 	k := &kontakte{dav: c.Haushalt.Contacts, whoami: c.Whoami, busy: map[string]bool{}}
 	mux.HandleFunc("POST /napi/kontakte", auth(k.post))
+	// the phone's positions, passed on to the person's Reitti (owner 2026-11-02)
+	(&standort{r: c.Reitti, whoami: c.Whoami}).routes(mux, auth)
 	mux.HandleFunc("/napi/", auth(noSuchPath))
 	return mux
 }
