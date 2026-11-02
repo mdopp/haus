@@ -46,6 +46,8 @@ type Config struct {
 	// Favorites: each person's ☆ things, the app's start screen first
 	// (/napi/portal/favorites); nil = an empty list
 	Favorites *favoriten.Store
+	// Now is the clock for today's energy (tests); nil = time.Now
+	Now func() time.Time
 	// Haushalt: the backends of the tool widgets (tools.go); none set = 404
 	Haushalt haushalt.Config
 	// UploadDir: where /napi/upload stores (upload.go), the share's Paperless
@@ -233,7 +235,7 @@ func Handler(c Config) http.Handler {
 		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 	})
 	if c.HA != nil { // the house paths and the event stream, from Home Assistant
-		(&homeAPI{ha: c.HA, sources: c.Energy, witness: c.Witness, whoami: c.Whoami, favs: c.Favorites}).routes(mux, auth)
+		(&homeAPI{ha: c.HA, sources: c.Energy, witness: c.Witness, whoami: c.Whoami, favs: c.Favorites, loc: c.Haushalt.Loc, now: c.Now}).routes(mux, auth)
 		newLive(c.HA, c.Ping, c.SensorEvery).routes(mux, auth)
 	}
 	if t := newTools(c.Haushalt); t != nil { // the tool widgets from the Haushalt source

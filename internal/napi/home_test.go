@@ -278,6 +278,9 @@ func TestPortalEnergy(t *testing.T) {
 	if len(out.Energy.Circuits) != 1 || out.Energy.Circuits[0]["name"] != "Waschmaschine" {
 		t.Fatalf("circuits: %v", out.Energy.Circuits)
 	}
+	if _, ok := out.Energy.Totals[0]["today"]; ok {
+		t.Fatalf("no history since midnight, no today: %v", out.Energy.Totals[0])
+	}
 	fake.Down(true)
 	if code, _ := raw(t, h, "GET", "/napi/portal/energy", "dev1", ""); code != 502 {
 		t.Fatalf("HA down → %d, want 502", code)
@@ -1008,6 +1011,57 @@ func TestHACallNotesWhoItWas(t *testing.T) {
 	defer mu.Unlock()
 	if len(notes) != 1 || notes[0]["text"] != "ha person=ben service=switch.turn_off entity=switch.kaffee context=ctx-1" {
 		t.Fatalf("notes %v", notes)
+	}
+}
+
+// The app's one energy widget shows "heute" beside "jetzt" (owner,
+// 2026-11-02): each total carries what it added since the house's
+// midnight, by the Energie page's rule; a history that fails leaves today
+// out and the picture stands.
+func TestPortalEnergyToday(t *testing.T) {
+	berlin, err := time.LoadLocation("Europe/Berlin")
+	if err != nil {
+		t.Skip(err)
+	}
+	fake, h := houseWith(t, func(c *Config) {
+		c.Haushalt.Loc = berlin
+		c.Now = func() time.Time { return time.Date(2026, 10, 14, 9, 0, 0, 0, berlin) }
+	})
+	fake.Set("sensor.pv_total", "5012.4", map[string]any{"friendly_name": "PV Erzeugung", "device_class": "energy", "unit_of_measurement": "kWh"})
+	fake.Set("sensor.bezug_total", "1803100", map[string]any{"friendly_name": "Netzbezug", "device_class": "energy", "unit_of_measurement": "Wh"})
+	at := func(state, when string) map[string]any { return map[string]any{"state": state, "last_changed": when} }
+	fake.SetHistory("sensor.pv_total", []map[string]any{at("5000", "2026-10-13T22:00:00Z"), at("5006.1", "2026-10-14T06:00:00Z")})
+	fake.SetHistory("sensor.bezug_total", []map[string]any{at("1800000", "2026-10-13T22:00:00Z")})
+	totals := func() []map[string]any {
+		code, body := raw(t, h, "GET", "/napi/portal/energy", "dev1", "")
+		var out struct {
+			Energy struct {
+				Totals []map[string]any `json:"totals"`
+			} `json:"energy"`
+		}
+		if json.Unmarshal([]byte(body), &out); code != 200 || len(out.Energy.Totals) != 2 {
+			t.Fatalf("energy: %d %s", code, body)
+		}
+		return out.Energy.Totals
+	}
+	got := totals()
+	if v, _ := got[0]["today"].(float64); got[0]["label"] != "PV-Erzeugung" || v < 12.39 || v > 12.41 {
+		t.Fatalf("PV today: %v", got[0])
+	}
+	if v, _ := got[1]["today"].(float64); v < 3.09 || v > 3.11 {
+		t.Fatalf("Netzbezug today, Wh as kWh: %v", got[1])
+	}
+	starts, _ := fake.HistoryQueries()
+	for _, s := range starts {
+		if !strings.Contains(s, "2026-10-13T22:00:00Z") && !strings.Contains(s, "2026-10-14T00:00:00+02:00") {
+			t.Fatalf("today starts at the house's midnight: %v", starts)
+		}
+	}
+	fake.HistoryDown(true)
+	for _, tot := range totals() {
+		if _, ok := tot["today"]; ok {
+			t.Fatalf("a failed history is no today: %v", tot)
+		}
 	}
 }
 

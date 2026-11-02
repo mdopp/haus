@@ -175,11 +175,9 @@ func heuteCard(counters []energie.Counter, today map[string]float64, err error) 
 }
 
 // addedSince is what each counter added since start, in kWh, from HA's
-// history and its state now: every rise counts; a fall below newMeter of
-// the count is the counter starting over and counts from zero, a smaller
-// dip is noise (HA's own rule for a total_increasing sensor). A counter
-// without a reading in its history since start is left out; any history
-// read failing is the error.
+// history and its state now (energie.Added). A counter without a reading
+// in its history since start is left out; any history read failing is
+// the error.
 func addedSince(r *http.Request, c *ha.Client, counters []energie.Counter, start, now time.Time) (map[string]float64, error) {
 	var (
 		mu   sync.Mutex
@@ -196,38 +194,14 @@ func addedSince(r *http.Request, c *ha.Client, counters []energie.Counter, start
 				errs = err
 				return
 			}
-			scale := kwhScale(k.State)
-			var sum float64
-			prev, seen, read := 0.0, false, false
-			for i, p := range append(points, k.State) {
-				v, err := strconv.ParseFloat(strings.TrimSpace(p.State), 64)
-				if err != nil || math.IsNaN(v) || math.IsInf(v, 0) {
-					continue
-				}
-				switch {
-				case !seen:
-					prev = v
-				case v >= prev:
-					sum += v - prev
-					prev = v
-				case v < newMeter*prev: // started over: counts from zero
-					sum += v
-					prev = v
-				} // a smaller dip is noise: the count stands where it stood
-				seen, read = true, read || i < len(points)
-			}
-			if read {
-				out[k.State.EntityID] = sum * scale
+			if v, ok := energie.Added(points, k.State); ok {
+				out[k.State.EntityID] = v
 			}
 		})
 	}
 	fetch(r, reads...)
 	return out, errs
 }
-
-// newMeter: a counter falling below this share of its count started over
-// (a new meter, a reset); HA's recorder draws the line at 10 %.
-const newMeter = 0.9
 
 // watts is a power sensor's reading in W, from W, kW or MW.
 func watts(s ha.State) (float64, bool) {
@@ -243,18 +217,6 @@ func watts(s ha.State) (float64, bool) {
 		v *= 1e6
 	}
 	return v, true
-}
-
-// kwhScale turns a counter's unit into kWh.
-func kwhScale(s ha.State) float64 {
-	u, _ := s.Attributes["unit_of_measurement"].(string)
-	switch strings.TrimSpace(u) {
-	case "Wh":
-		return 1e-3
-	case "MWh":
-		return 1e3
-	}
-	return 1
 }
 
 // sign is -1, 0 or 1; below 1 W is 0.

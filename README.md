@@ -468,6 +468,10 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   and `HAUS_ENERGY_TOTALS` (`<Label>=sensor.…,…`, in that order) name;
   every other power sensor is a circuit. Unset, it falls back to matching
   one house's German friendly names (`Aktuell erzeugter PV-Strom`, …).
+  Each total carries `today`, the kWh it added since the house's midnight
+  (`TZ`'s; the Energie page's Heute rule, `energie.Added`), for the
+  app's one energy widget; a history that fails or has nothing since
+  midnight leaves it out.
 - The realtime pair `POST /napi/portal/watch` + `GET /napi/portal/events`,
   from Home Assistant too. The stream is SSE and carries state changes only
   (laib ADR 0022 §2): `card_state`, a frame for each entity the device

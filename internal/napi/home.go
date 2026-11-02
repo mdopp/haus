@@ -47,6 +47,8 @@ type homeAPI struct {
 	witness *schalter.Witness                  // who switched what (haus#89); nil: the log only
 	whoami  func(bearer string) (string, bool) // the person behind the device's bearer
 	favs    *favoriten.Store                   // each person's ☆ things (haus#35); nil: none
+	loc     *time.Location                     // the house's midnight for today's energy; nil: time.Local
+	now     func() time.Time                   // the clock; nil: time.Now
 }
 
 func (h *homeAPI) routes(mux *http.ServeMux, auth func(http.HandlerFunc) http.HandlerFunc) {
