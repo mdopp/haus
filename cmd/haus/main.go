@@ -20,6 +20,7 @@ import (
 
 	"github.com/mdopp/haus/internal/abs"
 	"github.com/mdopp/haus/internal/ansicht"
+	"github.com/mdopp/haus/internal/assistent"
 	"github.com/mdopp/haus/internal/bote"
 	"github.com/mdopp/haus/internal/caldav"
 	"github.com/mdopp/haus/internal/cards"
@@ -35,7 +36,6 @@ import (
 	"github.com/mdopp/haus/internal/musicbrainz"
 	"github.com/mdopp/haus/internal/napi"
 	"github.com/mdopp/haus/internal/pages"
-	"github.com/mdopp/haus/internal/persona"
 	"github.com/mdopp/haus/internal/podcasts"
 	"github.com/mdopp/haus/internal/reitti"
 	"github.com/mdopp/haus/internal/samba"
@@ -109,7 +109,6 @@ func routes(s site) http.Handler {
 		family.Discogs = s.hh.Wuensche.Regale
 	}
 	family.BoteSignal = strings.TrimSpace(os.Getenv("HAUS_BOTE_SIGNAL")) // haus#175: Willkommen's chat card
-	family.WakeRecordings = os.Getenv("HAUS_WAKE_RECORDINGS")            // laib#828; before any page takes its copy of family
 	family.Papierkorb = &papierkorb.Korb{Dir: s.dataDir}                 // haus#174: family deletes, for 30 days
 	family.MusicInbox = os.Getenv("HAUS_MUSIC_INBOX")
 	if fi, err := os.Stat(musicInboxMount); family.MusicInbox == "" && err == nil && fi.IsDir() {
@@ -128,9 +127,8 @@ func routes(s site) http.Handler {
 	}
 	start := pages.Start(family) // one: the page and its box line share laib's status (haus#67)
 	pagesMux.HandleFunc("/start", start)
-	// laib#828: the folder laib mounts for the family's takes of the wake phrase
-	if family.WakeRecordings != "" {
-		pagesMux.HandleFunc(pages.StimmePath, pages.Stimme(family))
+	if family.HA != nil { // the word each speaker listens for, as it reports it (owner 2026-10-30)
+		pagesMux.HandleFunc(pages.AktivierungswortPath, pages.Aktivierungswort(family))
 	}
 	if s.podcasts != nil {
 		pagesMux.HandleFunc(pages.PodcastsPath, pages.Podcasts(family)) // haus#123
@@ -194,7 +192,6 @@ func routes(s site) http.Handler {
 	pagesMux.HandleFunc("/box/geraete", pages.Geraete(s.store, s.publicURL, family))
 	pagesMux.HandleFunc("/pair-device", pages.PairDevice(s.store, family)) // the app's own pairing path (haus#6)
 	pagesMux.HandleFunc("/box/", box)
-	pagesMux.HandleFunc("/persona/icon.svg", pages.Icon())
 	pagesMux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
 	pagesMux.HandleFunc("/", pages.Elsewhere(family)) // "/" is Start; every path not served is a 404 with the way there
 	// counted behind the proxy secret: only what Caddy let through is a page view (haus#50)
@@ -323,8 +320,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("haus: devices: %v", err)
 	}
-	pages.House = persona.Load(env("HAUS_PERSONA_DIR", "/persona"), os.Getenv("HAUS_PERSONA")) // laib ADR 0020; plain Haus without it
-	cfg := napi.Config{Laib: ops, House: pages.House, Witness: &schalter.Witness{Laib: ops}}   // who switched what (haus#89)
+	assistent.Set(os.Getenv("HAUS_ASSISTANT"))                           // the name, from Laib's box.yml assistant:; "Homes" without it
+	cfg := napi.Config{Laib: ops, Witness: &schalter.Witness{Laib: ops}} // who switched what (haus#89)
 	cfg.Whoami = func(b string) (string, bool) {
 		d, ok := store.Lookup(b)
 		return d.UID, ok
@@ -435,7 +432,7 @@ func main() {
 		radicale: radicalePublic, views: ansicht.Open(dataDir), dataDir: dataDir,
 		docsMail: docsMail, paperlessPublic: paperlessPublic, paperlessLAN: paperlessLAN})
 	addr := env("HAUS_LISTEN", "127.0.0.1:8650")
-	log.Printf("haus %s: listening on %s as %s, laib %s, home assistant %v, haushalt %d tools, memory library %v (tidy-up %v), uploads %q, the Bote %v, counting %v (voice %v), pages only behind the proxy secret", Version, addr, pages.House.Display, ops.URL, cfg.HA != nil, len(haushalt.Tools(hh)), hh.Library != nil, hh.Judge != nil, cfg.UploadDir, b != nil, counter != nil, voice != nil)
+	log.Printf("haus %s: listening on %s as %s, laib %s, home assistant %v, haushalt %d tools, memory library %v (tidy-up %v), uploads %q, the Bote %v, counting %v (voice %v), pages only behind the proxy secret", Version, addr, assistent.Name(), ops.URL, cfg.HA != nil, len(haushalt.Tools(hh)), hh.Library != nil, hh.Judge != nil, cfg.UploadDir, b != nil, counter != nil, voice != nil)
 	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 	drained := make(chan struct{})
 	go func() {

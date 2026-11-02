@@ -23,7 +23,6 @@ import (
 	"github.com/mdopp/haus/internal/ha/hafake"
 	"github.com/mdopp/haus/internal/laib"
 	"github.com/mdopp/haus/internal/notes"
-	"github.com/mdopp/haus/internal/persona"
 )
 
 func berlin(t *testing.T) *time.Location {
@@ -185,13 +184,11 @@ func familyEvening(t *testing.T) StartConfig {
 		Favorites: favorites(t, `{"anna": ["light.buero", "cover.wohnzimmer", "climate.bad", "light.flur"], "ben": ["light.kueche"]}`)}
 }
 
-// haus#35: Start is "Zuhause" and the day — no persona's greeting, name,
-// icon or colours, and no admin words on top. Then Im Haus, Meine Geräte,
+// haus#35: Start is "Zuhause" and the day — no assistant's name and no
+// admin words on top. Then Im Haus, Meine Geräte,
 // Heute und demnächst, and the box in one calm line at the bottom.
 func TestStartIsZuhause(t *testing.T) {
-	House = persona.Persona{Display: "Joshua", Greeting: map[string]string{"de": "Wollen wir ein Spiel spielen?"},
-		Colors: map[string]string{"accent": "#3ddc84", "ground": "#0c120e"}, Icon: []byte("<svg/>")}
-	defer func() { House = persona.Default() }()
+	named(t, "Ada")
 	code, body := startPage(t, familyEvening(t), "family")
 	if code != 200 {
 		t.Fatalf("status %d", code)
@@ -200,7 +197,7 @@ func TestStartIsZuhause(t *testing.T) {
 		"<h2 id=karte-im-haus>Im Haus</h2>", "<h2 id=karte-meine-geraete>Meine Geräte</h2>",
 		"<h2 id=karte-heute-und-demnaechst>Heute und demnächst</h2>",
 		"Alles in Ordnung · eure Daten sind von gestern Abend gesichert")
-	mustNotContain(t, body, "Joshua", "Wollen wir", "#3ddc84", "#0c120e", "/persona/icon.svg",
+	mustNotContain(t, body, "Ada",
 		"Alles läuft", "Letzte Sicherung", "Orten", "Letzte Änderung", "Paperless wird installiert", "Operator", "Laib",
 		"Haushalt</h2>", "Jetzt</h2>", "Favoriten</h2>", "Einkaufsliste", "<script>alert", "fonts.googleapis", "fonts.gstatic")
 	// the day first, then what you switch, then the house (owner 2026-10-24)

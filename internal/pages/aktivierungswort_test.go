@@ -16,8 +16,8 @@ func voicePE(fake *hafake.HA, word string) {
 		{"entity_id": "select.voice_pe_aktivierungswort", "area_id": "kueche", "translation_key": "wake_word", "entity_category": "config"},
 		{"entity_id": "select.voice_pe_assistent", "area_id": "kueche", "translation_key": "pipeline", "entity_category": "config"},
 	})
-	fake.Set("select.voice_pe_aktivierungswort", word, map[string]any{"friendly_name": "Voice PE Aktivierungswort", "options": []string{"Okay Nabu", "Hey Jarvis", "Hey Joshua"}})
-	fake.Set("select.voice_pe_assistent", "Joshua", map[string]any{"friendly_name": "Voice PE Assistent"})
+	fake.Set("select.voice_pe_aktivierungswort", word, map[string]any{"friendly_name": "Voice PE Aktivierungswort", "options": []string{"Okay Nabu", "Hey Jarvis", "Hey Mycroft"}})
+	fake.Set("select.voice_pe_assistent", "Homes", map[string]any{"friendly_name": "Voice PE Assistent"})
 }
 
 func talkWithHA(t *testing.T, cfg StartConfig) string {
@@ -32,55 +32,58 @@ func talkWithHA(t *testing.T, cfg StartConfig) string {
 }
 
 // owner 2026-10-30: „Kannst du auf Haus darstellen, was das aktuelle Wakeword
-// ist“ — the word the device reports comes first; the persona's phrase,
-// set but not on the device yet, is said as such, with what works until then.
+// ist“ — the word the device reports comes first; „Hey Mycroft“, which the
+// device offers and Laib selects, is said as still to be chosen, with what
+// works until then.
 func TestWakeWordAsTheDeviceReportsIt(t *testing.T) {
-	joshua(t)
 	fake, hc := house(t)
 	voicePE(fake, "Okay Nabu")
-	cfg := StartConfig{HA: hc, WakeRecordings: t.TempDir()}
+	cfg := StartConfig{HA: hc}
 
-	code, body, _ := familyPage(t, Stimme, cfg, "GET", StimmePath, "family")
+	code, body, _ := familyPage(t, Aktivierungswort, cfg, "GET", AktivierungswortPath, "family")
 	if code != http.StatusOK {
 		t.Fatalf("→ %d", code)
 	}
-	mustContain(t, body, "<h2 id=karte-aktivierungswort>Aktivierungswort</h2>", "So meldet es der Lautsprecher selbst.",
+	mustContain(t, body, "<title>Aktivierungswort · Zuhause</title>", "<h2 id=karte-aktivierungswort>Aktivierungswort</h2>", "So meldet es der Lautsprecher selbst.",
 		"„Okay Nabu“", "Lautsprecher „Voice PE“ · Küche",
-		"„Hey Joshua“ kommt noch auf den Lautsprecher", "„Hey Joshua“ ist eingestellt, aber noch nicht auf dem Lautsprecher. Bis dahin hört er auf „Okay Nabu“.",
-		"Sag 5-mal „Hey Joshua“") // the recordings stay below
-	before(t, body, "karte-aktivierungswort", "Einsprechen")
-	if strings.Contains(body, "„Joshua“ ·") || strings.Contains(body, "Voice PE Assistent") {
+		"„Hey Mycroft“ wird noch ausgewählt", "„Hey Mycroft“ kann der Lautsprecher schon, Laib wählt es für ihn aus. Bis dahin hört er auf „Okay Nabu“.")
+	mustNotContain(t, body, "Einsprechen", "Aufnahme", "aufgespielt", "beibringen")
+	if strings.Contains(body, "„Homes“ ·") || strings.Contains(body, "Voice PE Assistent") {
 		t.Errorf("the pipeline select is no wake word:\n%s", body)
 	}
-	mustContain(t, talkWithHA(t, cfg), `Am Lautsprecher sagst du zuerst „Okay Nabu“, dann deine Frage. <a href="/stimme">Aktivierungswort und Stimme</a>`)
+	mustContain(t, talkWithHA(t, cfg), `Am Lautsprecher sagst du zuerst „Okay Nabu“, dann deine Frage. <a href="/aktivierungswort">Aktivierungswort</a>`)
 
-	// once laib put the phrase on the device, that is all there is to say
-	fake.Set("select.voice_pe_aktivierungswort", "Hey Joshua", map[string]any{"friendly_name": "Voice PE Aktivierungswort"})
-	_, body, _ = familyPage(t, Stimme, cfg, "GET", StimmePath, "family")
-	mustContain(t, body, "„Hey Joshua“ <span class=k>Lautsprecher „Voice PE“ · Küche</span>")
-	if strings.Contains(body, "kommt noch") || strings.Contains(body, "Okay Nabu") {
-		t.Errorf("the device has the phrase, nothing comes:\n%s", body)
+	// once Laib selected it on the device, that is all there is to say
+	fake.Set("select.voice_pe_aktivierungswort", "Hey Mycroft", map[string]any{"friendly_name": "Voice PE Aktivierungswort"})
+	_, body, _ = familyPage(t, Aktivierungswort, cfg, "GET", AktivierungswortPath, "family")
+	mustContain(t, body, "„Hey Mycroft“ <span class=k>Lautsprecher „Voice PE“ · Küche</span>")
+	if strings.Contains(body, "ausgewählt") || strings.Contains(body, "Okay Nabu") {
+		t.Errorf("the device has the phrase, nothing to choose:\n%s", body)
 	}
-	mustContain(t, talkWithHA(t, cfg), "Am Lautsprecher sagst du zuerst „Hey Joshua“, dann deine Frage.")
+	mustContain(t, talkWithHA(t, cfg), "Am Lautsprecher sagst du zuerst „Hey Mycroft“, dann deine Frage.")
+
+	// a POST changes nothing: the page only shows
+	if code, _, _ := familyPage(t, Aktivierungswort, cfg, "POST", AktivierungswortPath, "family"); code != http.StatusMethodNotAllowed {
+		t.Errorf("POST → %d", code)
+	}
 }
 
 // A device HA has no word from, two devices that differ, none at all: each
-// is said, and the persona's phrase stands in as what is set.
+// is said, and „Hey Mycroft“ stands in as what is set.
 func TestWakeWordWhenTheDevicesDoNotTell(t *testing.T) {
-	joshua(t)
 	fake, hc := house(t)
 	voicePE(fake, "unavailable")
 	cfg := StartConfig{HA: hc}
 
-	code, body, _ := familyPage(t, Stimme, cfg, "GET", StimmePath, "family")
+	code, body, _ := familyPage(t, Aktivierungswort, cfg, "GET", AktivierungswortPath, "family")
 	if code != http.StatusOK {
 		t.Fatalf("→ %d", code)
 	}
-	mustContain(t, body, "Lautsprecher „Voice PE“ · Küche <span class=k>antwortet gerade nicht; eingestellt ist „Hey Joshua“</span>")
-	if strings.Contains(body, "Einsprechen") || strings.Contains(body, "kommt noch") {
-		t.Errorf("no recordings here, and nothing heard instead:\n%s", body)
+	mustContain(t, body, "Lautsprecher „Voice PE“ · Küche <span class=k>antwortet gerade nicht; eingestellt ist „Hey Mycroft“</span>")
+	if strings.Contains(body, "ausgewählt") {
+		t.Errorf("nothing heard instead:\n%s", body)
 	}
-	mustContain(t, talkWithHA(t, cfg), "Am Lautsprecher sagst du zuerst „Hey Joshua“, dann deine Frage.")
+	mustContain(t, talkWithHA(t, cfg), "Am Lautsprecher sagst du zuerst „Hey Mycroft“, dann deine Frage.")
 
 	// two that differ: each with its own; Sprechen points to the page
 	fake.SetRegistries(nil, nil, []map[string]any{
@@ -90,53 +93,42 @@ func TestWakeWordWhenTheDevicesDoNotTell(t *testing.T) {
 	fake.Set("select.voice_pe_aktivierungswort", "Okay Nabu", map[string]any{"friendly_name": "Voice PE Aktivierungswort"})
 	fake.Set("select.bad_aktivierungswort", "Hey Jarvis", map[string]any{"friendly_name": "Bad Wake word"})
 	cfg.HA = freshClient(fake)
-	_, body, _ = familyPage(t, Stimme, cfg, "GET", StimmePath, "family")
+	_, body, _ = familyPage(t, Aktivierungswort, cfg, "GET", AktivierungswortPath, "family")
 	mustContain(t, body, "„Hey Jarvis“ <span class=k>Lautsprecher „Bad“</span>", "„Okay Nabu“ <span class=k>Lautsprecher „Voice PE“</span>",
-		"„Hey Joshua“ ist eingestellt, aber noch nicht auf dem Lautsprecher. Bis dahin hört er auf das Wort oben.")
+		"„Hey Mycroft“ kann der Lautsprecher schon, Laib wählt es für ihn aus. Bis dahin hört er auf das Wort oben.")
 	before(t, body, "Hey Jarvis", "Okay Nabu")
-	mustContain(t, talkWithHA(t, cfg), "Am Lautsprecher sagst du zuerst sein Aktivierungswort, dann deine Frage. <a href=\"/stimme\">")
+	mustContain(t, talkWithHA(t, cfg), "Am Lautsprecher sagst du zuerst sein Aktivierungswort, dann deine Frage. <a href=\"/aktivierungswort\">")
 
 	// no device with a wake word in HA
 	fake.SetRegistries(nil, nil, []map[string]any{{"entity_id": "light.k"}})
 	cfg.HA = freshClient(fake)
-	_, body, _ = familyPage(t, Stimme, cfg, "GET", StimmePath, "family")
-	mustContain(t, body, "„Hey Joshua“ <span class=k>So ist es eingestellt. Kein Lautsprecher in Home Assistant meldet ein Aktivierungswort.</span>")
+	_, body, _ = familyPage(t, Aktivierungswort, cfg, "GET", AktivierungswortPath, "family")
+	mustContain(t, body, "„Hey Mycroft“ <span class=k>So ist es eingestellt. Kein Lautsprecher in Home Assistant meldet ein Aktivierungswort.</span>")
 }
 
-// HA not answering costs the device's word, not the page: the phrase as set,
-// and that Haus cannot see the rest. Without HA the phrase is all there is.
+// HA not answering costs the device's word, not the page: „Hey Mycroft“ as
+// set, and that Haus cannot see the rest. Without HA there is no page and
+// no line: no speaker Haus could know of.
 func TestWakeWordWithoutHomeAssistant(t *testing.T) {
-	joshua(t)
 	fake, hc := house(t)
 	voicePE(fake, "Okay Nabu")
 	fake.Down(true)
 	cfg := StartConfig{HA: hc}
-	code, body, _ := familyPage(t, Stimme, cfg, "GET", StimmePath, "family")
+	code, body, _ := familyPage(t, Aktivierungswort, cfg, "GET", AktivierungswortPath, "family")
 	if code != http.StatusOK {
 		t.Fatalf("HA down → %d", code)
 	}
-	mustContain(t, body, "„Hey Joshua“ <span class=k>So ist es eingestellt. Ob der Lautsprecher es schon kennt, kann Haus gerade nicht sehen.</span>")
+	mustContain(t, body, "„Hey Mycroft“ <span class=k>So ist es eingestellt. Was der Lautsprecher gerade hört, kann Haus im Moment nicht sehen.</span>")
 	if strings.Contains(body, "Okay Nabu") {
 		t.Errorf("nothing heard from HA:\n%s", body)
 	}
-	mustContain(t, talkWithHA(t, cfg), "Am Lautsprecher sagst du zuerst „Hey Joshua“, dann deine Frage.")
+	mustContain(t, talkWithHA(t, cfg), "Am Lautsprecher sagst du zuerst „Hey Mycroft“, dann deine Frage.")
 
-	cfg = StartConfig{WakeRecordings: t.TempDir()}
-	_, body, _ = familyPage(t, Stimme, cfg, "GET", StimmePath, "family")
-	mustContain(t, body, "„Hey Joshua“ <span class=k>So ist es eingestellt.</span>", "Einsprechen")
-
-	// neither HA nor recordings: no page, and Sprechen says nothing of a speaker it cannot know
-	if code, _, _ := familyPage(t, Stimme, StartConfig{}, "GET", StimmePath, "family"); code != http.StatusNotFound {
-		t.Errorf("no HA, no recordings → %d", code)
+	if code, _, _ := familyPage(t, Aktivierungswort, StartConfig{}, "GET", AktivierungswortPath, "family"); code != http.StatusNotFound {
+		t.Errorf("no HA → %d", code)
 	}
-	if rec := stimmePost(t, StartConfig{HA: hc}, take(16000, 1, 1.5, 0.3), "anna", nil); rec.Code != http.StatusNotFound {
-		t.Errorf("a take where none is kept → %d", rec.Code)
-	}
-	old := House
-	House.Phrase = ""
-	t.Cleanup(func() { House = old })
 	if body := talkWithHA(t, StartConfig{}); strings.Contains(body, "Am Lautsprecher") {
-		t.Errorf("nothing known, yet a line:\n%s", body)
+		t.Errorf("no HA, yet a line:\n%s", body)
 	}
 }
 

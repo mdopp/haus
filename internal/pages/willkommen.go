@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/mdopp/haus/internal/assistent"
 )
 
 // What the Willkommen page says (haus#56): for someone who has never seen
@@ -86,11 +88,11 @@ func hausAppSteps(dom string) []string {
 	}
 }
 
-// signalSteps are the house's chat on Signal (haus#175), with the persona's name.
+// signalSteps are the house's chat on Signal (haus#175), with the assistant's name.
 func signalSteps(number string) []string {
 	n := html.EscapeString(number)
 	link := "https://signal.me/#p/" + url.PathEscape(number)
-	name := html.EscapeString(House.Display)
+	name := html.EscapeString(assistent.Name())
 	return []string{
 		"Lade die App „Signal“, falls du sie noch nicht hast.",
 		`Speichere die Nummer <span class=adresse>` + n + `</span> als „` + name + `“ in deinen Kontakten, oder öffne sie direkt: <a href="` + link + `">` + name + ` in Signal öffnen</a>.`,
@@ -151,7 +153,7 @@ func Willkommen(cfg StartConfig) http.HandlerFunc {
 			steps("Die Haus-App", hausAppSteps(dom))
 		}
 		if cfg.BoteSignal != "" {
-			steps(House.Display+" auf Signal", signalSteps(cfg.BoteSignal))
+			steps(assistent.Name()+" auf Signal", signalSteps(cfg.BoteSignal))
 		}
 		switch {
 		case cfg.Laib == nil:

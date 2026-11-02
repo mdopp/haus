@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/mdopp/haus/internal/assistent"
 	"github.com/mdopp/haus/internal/cards"
 	"github.com/mdopp/haus/internal/ha"
 )
@@ -15,11 +16,30 @@ import (
 // The wake word (owner 2026-10-30: „Kannst du auf Haus darstellen, was das
 // aktuelle Wakeword ist“): the word each voice satellite listens for, as
 // the device itself reports it in Home Assistant — its wake-word select, a
-// Voice PE's „… Aktivierungswort“ (ha.Registry.WakeWords). The house
-// persona's phrase (laib ADR 0020) is what laib trains and puts on the
-// devices; it stands in only where no device reports one, and the page
-// says so. Where a device still listens for another word, the page says
-// that too: the persona's phrase is set, the device does not have it yet.
+// Voice PE's „… Aktivierungswort“ (ha.Registry.WakeWords). Every speaker
+// is to listen for „Hey Mycroft“ (assistent.Wake): a Voice PE offers it out
+// of the box and Laib selects it. It stands in only where no device reports
+// a word, and the page says so. Where a device still listens for another
+// word, the page says that too, and that Laib selects „Hey Mycroft“.
+const AktivierungswortPath = "/aktivierungswort"
+
+// Aktivierungswort is the page: the word each speaker listens for. Only on
+// a box with Home Assistant, where speakers can be.
+func Aktivierungswort(cfg StartConfig) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != AktivierungswortPath || cfg.HA == nil {
+			missing{http.StatusNotFound, "Diese Seite gibt es nicht.", "Mehr", mehrPath, "Mehr"}.write(w, r, cfg)
+			return
+		}
+		if !showOnly(w, r, saysWakeTitle) {
+			return
+		}
+		b := familyHead(r, cfg, saysWakeTitle, saysWakeTitle)
+		b.WriteString("<h1>" + saysWakeTitle + "</h1>")
+		b.WriteString(wakeCard(lookWake(r, cfg)).HTML())
+		writePage(w, http.StatusOK, b)
+	}
+}
 
 // wakeDevice is one satellite's wake word as HA reports it.
 type wakeDevice struct {
@@ -35,7 +55,7 @@ type wakeLook struct {
 }
 
 // lookWake reads the wake-word selects' states; without HA, or with HA not
-// answering, seen is false and only the persona's phrase is known.
+// answering, seen is false and only the phrase meant to be set is known.
 func lookWake(r *http.Request, cfg StartConfig) wakeLook {
 	if cfg.HA == nil {
 		return wakeLook{}
@@ -98,36 +118,24 @@ func quoted(w string) string { return "„" + w + "“" }
 const (
 	saysWakeTitle     = "Aktivierungswort"
 	saysWakeReported  = "So meldet es der Lautsprecher selbst."
-	saysWakeSet       = "So ist es eingestellt."
-	saysWakeUnseen    = "So ist es eingestellt. Ob der Lautsprecher es schon kennt, kann Haus gerade nicht sehen."
+	saysWakeUnseen    = "So ist es eingestellt. Was der Lautsprecher gerade hört, kann Haus im Moment nicht sehen."
 	saysWakeNoDevice  = "So ist es eingestellt. Kein Lautsprecher in Home Assistant meldet ein Aktivierungswort."
-	saysWakeNone      = "Kein Lautsprecher in Home Assistant meldet ein Aktivierungswort."
 	saysWakeAway      = "antwortet gerade nicht"
-	saysWakeNotYet    = "kommt noch auf den Lautsprecher"
-	saysWakeUntilThen = "ist eingestellt, aber noch nicht auf dem Lautsprecher. Bis dahin hört er auf "
+	saysWakeChosen    = "wird noch ausgewählt"
+	saysWakeUntilThen = "kann der Lautsprecher schon, Laib wählt es für ihn aus. Bis dahin hört er auf "
 )
 
-// wakeCard is the Stimme page's Aktivierungswort card: each device's own
-// word first, the persona's phrase where none tells. Empty when there is
-// nothing to say (no HA, no phrase).
+// wakeCard is the Aktivierungswort page's card: each device's own word
+// first, „Hey Mycroft“ where none tells.
 func wakeCard(l wakeLook) cards.Card {
 	c := cards.Card{Title: saysWakeTitle}
-	phrase := House.Phrase
+	phrase := assistent.Wake
 	switch {
-	case !l.seen && phrase != "":
-		detail := saysWakeSet
-		if l.asked {
-			detail = saysWakeUnseen
-		}
-		c.Add(quoted(phrase), detail)
-		return c
 	case !l.seen:
-		return c
-	case len(l.devices) == 0 && phrase != "":
-		c.Add(quoted(phrase), saysWakeNoDevice)
+		c.Add(quoted(phrase), saysWakeUnseen)
 		return c
 	case len(l.devices) == 0:
-		c.Add(saysWakeNone, "")
+		c.Add(quoted(phrase), saysWakeNoDevice)
 		return c
 	}
 	c.Note = saysWakeReported
@@ -138,15 +146,11 @@ func wakeCard(l wakeLook) cards.Card {
 			where += " · " + d.room
 		}
 		if d.away {
-			detail := saysWakeAway
-			if phrase != "" {
-				detail += "; eingestellt ist " + quoted(phrase)
-			}
-			c.Add(where, detail)
+			c.Add(where, saysWakeAway+"; eingestellt ist "+quoted(phrase))
 			continue
 		}
 		c.Add(quoted(d.word), where)
-		if phrase != "" && !strings.EqualFold(d.word, phrase) {
+		if !strings.EqualFold(d.word, phrase) {
 			other = append(other, d.word)
 		}
 	}
@@ -155,33 +159,30 @@ func wakeCard(l wakeLook) cards.Card {
 		if w := l.one(); w != "" {
 			until = quoted(w) + "."
 		}
-		c.Add(quoted(phrase)+" "+saysWakeNotYet, quoted(phrase)+" "+saysWakeUntilThen+until)
+		c.Add(quoted(phrase)+" "+saysWakeChosen, quoted(phrase)+" "+saysWakeUntilThen+until)
 	}
 	return c
 }
 
 // wakeLine is Sprechen's one line on the speakers: which word wakes them,
-// leading to the Stimme page. "" when nothing is known.
-func wakeLine(l wakeLook, cfg StartConfig) string {
+// leading to the Aktivierungswort page. "" without Home Assistant: no
+// speaker Haus could know of.
+func wakeLine(l wakeLook) string {
+	if !l.asked {
+		return ""
+	}
 	answering := false
 	for _, d := range l.devices {
 		answering = answering || !d.away
 	}
-	word, how := l.one(), ""
-	switch {
+	how := ""
+	switch word := l.one(); {
 	case word != "":
-	case answering: // they differ: the Stimme page says which
-		how = "Am Lautsprecher sagst du zuerst sein Aktivierungswort, dann deine Frage."
-	case House.Phrase != "":
-		word = House.Phrase
-	default:
-		return ""
-	}
-	if how == "" {
 		how = "Am Lautsprecher sagst du zuerst " + html.EscapeString(quoted(word)) + ", dann deine Frage."
+	case answering: // they differ: the page says which
+		how = "Am Lautsprecher sagst du zuerst sein Aktivierungswort, dann deine Frage."
+	default:
+		how = "Am Lautsprecher sagst du zuerst " + html.EscapeString(quoted(assistent.Wake)) + ", dann deine Frage."
 	}
-	if stimmePage(cfg) {
-		how += ` <a href="` + StimmePath + `">Aktivierungswort und Stimme</a>`
-	}
-	return "<p class=\"k lautsprecher\">" + how + "</p>"
+	return "<p class=\"k lautsprecher\">" + how + ` <a href="` + AktivierungswortPath + `">Aktivierungswort</a></p>`
 }

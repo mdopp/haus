@@ -6,17 +6,14 @@ import (
 	"testing"
 
 	"github.com/mdopp/haus/internal/devices"
-	"github.com/mdopp/haus/internal/persona"
 )
 
-// haus#58 (#35's rule on the admin pages too): the persona speaks where you
-// talk to it, nowhere else. Box, Geräte and the app's pairing page wear the
+// haus#58 (#35's rule on the admin pages too): the assistant's name
+// appears where you talk to it, nowhere else. Box, Geräte and the app's pairing page wear the
 // family pages' frame — the house palette, Haus's Geist, the tab bar with
-// Box — and no persona name, greeting, icon or colours.
-func TestTheAdminPagesWearTheFamilyFrameNotThePersona(t *testing.T) {
-	House = persona.Persona{Display: "Joshua", Greeting: map[string]string{"de": "Hallo, hier ist Joshua. Wollen wir ein Spiel spielen?"},
-		Colors: map[string]string{"accent": "#3ddc84", "ground": "#0c120e"}, Icon: []byte("<svg/>")}
-	defer func() { House = persona.Default() }()
+// Box — and no assistant's name.
+func TestTheAdminPagesWearTheFamilyFrame(t *testing.T) {
+	named(t, "Ada")
 	store, _ := devices.Open(t.TempDir())
 	_, hc := house(t)
 	family := StartConfig{HA: hc}
@@ -37,11 +34,6 @@ func TestTheAdminPagesWearTheFamilyFrameNotThePersona(t *testing.T) {
 		body := rec.Body.String()
 		mustContain(t, body, "<title>"+p.title+"</title>", "#070709", "#14141a", "#f97316", "prefers-color-scheme:light", "@font-face", FontPath,
 			"<nav class=tabs", "href=/box aria-current=page", "href=/raeume")
-		mustNotContain(t, body, "Joshua", "Wollen wir", "Hallo, hier ist", "#3ddc84", "#0c120e", "/persona/icon.svg", "<header>", "#faf9f6", "class=gruss")
-	}
-	rec := httptest.NewRecorder()
-	Icon().ServeHTTP(rec, httptest.NewRequest("GET", "/persona/icon.svg", nil))
-	if rec.Body.String() != "<svg/>" || rec.Header().Get("Content-Type") != "image/svg+xml" {
-		t.Fatalf("icon: %q %q", rec.Header().Get("Content-Type"), rec.Body.String())
+		mustNotContain(t, body, "Ada", "<header>")
 	}
 }

@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mdopp/haus/internal/assistent"
 	"github.com/mdopp/haus/internal/caldav"
 	"github.com/mdopp/haus/internal/ha"
 	"github.com/mdopp/haus/internal/ha/hafake"
@@ -81,7 +82,7 @@ func TestPageViewsPerPage(t *testing.T) {
 	h := Counted(c, pagesLike(map[string]int{"/gibtsnicht": 404, "/notizen": 302}, nil))
 	for _, p := range []string{"/start", "/start", "/raeume", "/raeume/light.flur", "/energie", "/medien", "/kalender",
 		"/kalender/erinnerung/abc", "/kontakte/x", "/dokumente/12", "/notizen/einkauf.md", "/sprechen", "/box", "/box/geraete", "/pair-device",
-		"/gibtsnicht", "/notizen", "/schrift/geist-1b5ebf.woff2", "/persona/icon.svg", "/healthz"} {
+		"/gibtsnicht", "/notizen", "/schrift/geist-1b5ebf.woff2", "/healthz"} {
 		serve(h, "GET", p, "anna")
 	}
 	serve(h, "HEAD", "/start", "anna")
@@ -98,12 +99,11 @@ func TestPageViewsPerPage(t *testing.T) {
 // contains (Schalten's names Licht und Geräte).
 func TestDegradedLinesShownAreCounted(t *testing.T) {
 	fake, c := metrics(t)
-	House.Display = "Joshua & Co"
-	t.Cleanup(func() { House.Display = "Haus" })
+	named(t, "Ada & Co")
 	h := Counted(c, pagesLike(nil, map[string]string{
 		"/start":    "<p>" + saysNoHouse + " " + saysNoSwitching + "</p><p>" + saysNoCalendar + "</p><p>" + saysNoHouse + "</p>",
 		"/schalten": "<p>" + saysSwitchFailed + "</p>",
-		"/sprechen": "<p>" + html.EscapeString(saysDown(House.Display)) + "</p>",
+		"/sprechen": "<p>" + html.EscapeString(saysDown(assistent.Name())) + "</p>",
 		"/notizen":  "<p class=k>" + saysWordsOnly + "</p>",
 		"/energie":  "<p class=k>" + saysNoEnergy + "</p>",
 		"/raeume":   "<p>Alles da.</p>",

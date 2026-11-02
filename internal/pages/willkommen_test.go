@@ -91,12 +91,10 @@ func TestWillkommenHausAppSignalAndPaper(t *testing.T) {
 	if strings.Contains(page, "auf Signal</h2>") {
 		t.Error("a Signal card without a number")
 	}
-	old := House
-	House.Display = "Joshua"
-	t.Cleanup(func() { House = old })
+	named(t, "Ada")
 	cfg.BoteSignal = "+4915112345678"
 	page = welcomePage(t, cfg).Body.String()
-	for _, w := range []string{"<h2>Joshua auf Signal</h2>", "+4915112345678", `href="https://signal.me/#p/+4915112345678">Joshua in Signal öffnen</a>`, "als „Joshua“"} {
+	for _, w := range []string{"<h2>Ada auf Signal</h2>", "+4915112345678", `href="https://signal.me/#p/+4915112345678">Ada in Signal öffnen</a>`, "als „Ada“"} {
 		if !strings.Contains(page, w) {
 			t.Errorf("the page lacks %q", w)
 		}

@@ -267,13 +267,13 @@ test('a form in a card stacks its fields on a phone', async ({ page }) => {
   expect(box.width, 'the name field has room').toBeGreaterThan(250);
 });
 
-// owner 2026-10-30: the wake word the speaker reports, and the phrase still to come
-test('Stimme shows the wake word the speaker listens for', async ({ page }) => {
-  await page.goto('/stimme');
+// owner 2026-10-30: the wake word the speaker reports, and „Hey Mycroft“ Laib selects
+test('Aktivierungswort shows the wake word the speaker listens for', async ({ page }) => {
+  await page.goto('/aktivierungswort');
   const card = page.locator('section[aria-labelledby=karte-aktivierungswort]');
   await expect(card).toContainText('„Okay Nabu“');
   await expect(card).toContainText('Lautsprecher „Voice PE“ · Küche');
-  await expect(card).toContainText('„Hey Joshua“ ist eingestellt, aber noch nicht auf dem Lautsprecher. Bis dahin hört er auf „Okay Nabu“.');
+  await expect(card).toContainText('„Hey Mycroft“ kann der Lautsprecher schon, Laib wählt es für ihn aus. Bis dahin hört er auf „Okay Nabu“.');
 });
 
 // Every page, every field, on a phone (owner 2026-10-24: "werden alle
@@ -281,7 +281,7 @@ test('Stimme shows the wake word the speaker listens for', async ({ page }) => {
 // screen, a field to type in has room, a button is big enough for a
 // finger, and no text runs out of its box.
 const PAGES = ['/start', '/raeume', '/raeume/light.kueche', '/medien', '/energie', '/kalender', '/kalender/verwalten',
-  '/notizen', '/notizen?tag=kochen', '/notizen/einkaufsliste.md', '/notizen/markdown.md', '/notizen/einkaufsliste.md?bearbeiten=1', '/mehr', '/musik', '/platte', '/discogs', '/stimme', '/aufgaben', '/dokumente', '/willkommen', '/box/geraete', '/pair-device', '/podcasts', '/gesehen',
+  '/notizen', '/notizen?tag=kochen', '/notizen/einkaufsliste.md', '/notizen/markdown.md', '/notizen/einkaufsliste.md?bearbeiten=1', '/mehr', '/musik', '/platte', '/discogs', '/aktivierungswort', '/aufgaben', '/dokumente', '/willkommen', '/box/geraete', '/pair-device', '/podcasts', '/gesehen',
   '/einkauf', '/einkauf?liste=liste-baumarkt', '/einkauf?liste=liste-musik', '/einkauf/rezepte', '/einkauf/rezepte?n=rezepte%2Flasagne.md', '/notizen/rezepte/lasagne.md'];
 for (const path of PAGES) {
   test(`layout of ${path}`, async ({ page }) => {

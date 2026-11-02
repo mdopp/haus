@@ -16,35 +16,17 @@ import (
 	"time"
 
 	"github.com/mdopp/haus/internal/laib"
-	"github.com/mdopp/haus/internal/persona"
 	"github.com/mdopp/haus/internal/usage"
 	"github.com/mdopp/haus/internal/werkstatt"
 )
 
-// House is the house persona the family sees (laib ADR 0020), set once at
-// start; plain Haus without one.
-var House = persona.Default()
-
 // adminHead opens an admin page (haus#58): the family pages' frame (#35)
 // with Box marked in the tab bar, the admin cards' style and Box's own two
-// links. No persona: it speaks only where you talk to it.
+// links. No assistant's name: it appears only where you talk to it.
 func adminHead(r *http.Request, cfg StartConfig, title string) *strings.Builder {
 	b := familyHead(r, cfg, title, "Box")
 	b.WriteString(adminStyle)
 	return b
-}
-
-// Icon serves the persona's icon.svg.
-func Icon() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if len(House.Icon) == 0 {
-			http.NotFound(w, r)
-			return
-		}
-		w.Header().Set("Content-Type", "image/svg+xml")
-		w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'")
-		w.Write(House.Icon)
-	}
 }
 
 // adminStyle is the admin cards in the house palette: tables as cards,

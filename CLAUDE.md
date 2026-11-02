@@ -26,10 +26,12 @@ message), no raw errors, phone layout first. Tests cover the states: idle,
 running, done, failed, timed out. A page or button without them is not
 finished.
 
-**The persona (laib ADR 0020) speaks where you talk to it.** Family pages
-wear the house's palette, not its greeting, colours or icon; its name
-appears where a sentence says how to address it ("Sag Joshua: Merk dir …",
-owner 2026-10-24).
+**The assistant's name appears where you talk to it.** One name for the
+whole box, set once in Laib (box.yml `assistant:` → `HAUS_ASSISTANT`,
+*Homes* by default; `internal/assistent`). Family pages wear the house's
+palette; the name appears where a sentence says how to address it („Sag
+Homes: Merk dir …“, owner 2026-10-24). Every speaker wakes on „Hey
+Mycroft“; nothing trains a wake word.
 
 **Scripts are welcome (owner, 2026-10-24).** Use them wherever they make
 Haus better to use — the pressed button's "Speichert …" (`pressScript`),

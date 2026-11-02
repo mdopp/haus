@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/mdopp/haus/internal/assistent"
 	"github.com/mdopp/haus/internal/cards"
 	"github.com/mdopp/haus/internal/laib"
 )
@@ -78,11 +79,11 @@ func mitLaib(r *http.Request, cfg StartConfig) []aufgabe {
 	return append(wichtig, rest...)
 }
 
-// mitJoshua is a task's „Gemeinsam mit <persona>“: the Sprechen field's
+// mitAssistent is a task's „Gemeinsam mit <name>“: the Sprechen field's
 // post, the Bote reads the task and leads through it (laib#878).
-func mitJoshua(id int) string {
+func mitAssistent(id int) string {
 	return `<form method=post action=/sprechen><input type=hidden name=nachricht value="Aufgabe #` + strconv.Itoa(id) + ` mit dir erledigen">` +
-		`<button data-laeuft="Fragt ` + html.EscapeString(House.Display) + ` …">Gemeinsam mit ` + html.EscapeString(House.Display) + `</button></form>`
+		`<button data-laeuft="Fragt ` + html.EscapeString(assistent.Name()) + ` …">Gemeinsam mit ` + html.EscapeString(assistent.Name()) + `</button></form>`
 }
 
 // einrichtung are the person's tasks this box has, the important first.
@@ -99,15 +100,6 @@ func einrichtung(r *http.Request, cfg StartConfig) []aufgabe {
 					href: netzlaufwerkPath, wichtig: true, erledigt: !seit.IsZero()})
 			}
 		}
-	}
-	if stimmeShown(cfg) { // the wake word with the family's voices (laib#825)
-		n := stimmeCount(cfg, uploader(user))
-		a := aufgabe{titel: House.Display + " deine Stimme beibringen", warum: "Fünfmal „" + House.Phrase + "“ sagen; dann wacht " + House.Display + " bei dir zuverlässiger auf.",
-			href: StimmePath, erledigt: n >= stimmeWanted}
-		if n > 0 && n < stimmeWanted {
-			a.stand = strconv.Itoa(n) + " von " + strconv.Itoa(stimmeWanted) + " Aufnahmen"
-		}
-		out = append(out, a)
 	}
 	if cfg.Discogs != nil { // the household's Discogs app is there; each person connects their own
 		_, verbunden := cfg.Discogs.Konto(user)
@@ -208,7 +200,7 @@ func DeineAufgaben(cfg StartConfig) http.HandlerFunc {
 					if a.warum != "" {
 						b.WriteString(`<p class=k>` + html.EscapeString(a.warum) + `</p>`)
 					}
-					b.WriteString(`<p>` + html.EscapeString(House.Display) + ` führt dich Schritt für Schritt hindurch und prüft am Ende, ob es geklappt hat.</p>` + mitJoshua(a.gespraech) + `</section>`)
+					b.WriteString(`<p>` + html.EscapeString(assistent.Name()) + ` führt dich Schritt für Schritt hindurch und prüft am Ende, ob es geklappt hat.</p>` + mitAssistent(a.gespraech) + `</section>`)
 				}
 			}
 		} else if len(as) > 0 {
