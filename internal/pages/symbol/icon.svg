@@ -6,8 +6,9 @@
        tools/icons: it renders every file beside this one. mdopp/haus-android
        carries the same master (art/icon.svg) for the app. -->
   <rect id="ground" width="108" height="108" fill="#0c120e"/>
-  <path id="motif" fill="#3ddc84" fill-rule="evenodd"
-    d="M54 22 L86 48 L78 48 L78 77 L30 77 L30 48 L22 48 Z
-       M34 46 L45 46 L57 59 L45 72 L34 72 L46 59 Z
-       M61 63 L75 63 L75 72 L61 72 Z"/>
+  <g id="motif">
+    <path d="M54 24 L84 49 L77 49 L77 77 L31 77 L31 49 L24 49 Z" fill="none" stroke="#3ddc84" stroke-width="5" stroke-linejoin="round"/>
+    <path d="M39 51 L50 60 L39 69" fill="none" stroke="#3ddc84" stroke-width="6" stroke-linecap="square" stroke-linejoin="miter"/>
+    <rect id="cursor" x="55" y="65" width="15" height="5.5" fill="#3ddc84"/>
+  </g>
 </svg>
