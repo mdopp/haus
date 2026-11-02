@@ -31,7 +31,7 @@ func TestNachrichtenSichernShowsTheStandAndTheGuide(t *testing.T) {
 	for _, want := range []string{"<h1>Nachrichten sichern</h1>", "Dein Stand",
 		"zuletzt am 31. Oktober 2026 um 03:11 · 2 Dateien, 3,2 GB · 1 Datei wartet auf dein Archiv", // WhatsApp, Berlin time
 		"noch nichts angekommen", " frei.", "Schlüssel eingeben kommt mit dem Archiv",
-		"Einstellungen → Chats → Chat-Backup", "Ende-zu-Ende-verschlüsseltes Backup", "64-stelligen Schlüssel verwenden", "Vaultwarden",
+		"Einstellungen → Chats → Chat-Backup", "Ende-zu-Ende-verschlüsseltes Backup", "64-stelligen Schlüssel verwenden", "nicht Passkey", "Vaultwarden",
 		"Chat-Backups", "Backups → Auf dem Gerät", "30-stellige Passphrase",
 		"Mehr → Nachrichten sichern", "Ordner freigeben",
 		"Daten &amp; Datenschutz → Daten anfordern", "Server-Kanäle kommen später",
