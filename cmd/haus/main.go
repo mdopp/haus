@@ -185,6 +185,7 @@ func routes(s site) http.Handler {
 	pagesMux.HandleFunc("/adresse/vorschlagen", pages.AdresseVorschlagen(family)) // its form, a proposal to Laib
 	pagesMux.HandleFunc("/abmelden", pages.Abmelden(s.publicURL))                 // Authelia's logout, back to Haus (haus#61)
 	pagesMux.HandleFunc("/schrift/", pages.Font())                                // Geist, from Haus itself (haus#35)
+	pagesMux.HandleFunc(pages.SymbolPath, pages.Symbol())                         // the icon and the web app manifest (owner 2026-11-02)
 	boxCfg := pages.BoxConfig{Laib: s.ops, LaibURL: s.laibURL, Tickets: s.tickets, Family: family, Voice: s.voice}
 	box := pages.BoxPage(boxCfg)
 	pagesMux.HandleFunc("/box", box)
@@ -330,6 +331,8 @@ func main() {
 	}
 	// only phones paired through Haus; nothing old is carried (laib ADR 0022 §4)
 	cfg.Validate = func(_ context.Context, b string) bool { _, ok := store.Lookup(b); return ok }
+	// one favorites store for the pages' ☆ and the app's start screen
+	cfg.Favorites = favoriten.Open(dataDir)
 	if cfg.HA, err = ha.FromEnv(); err != nil { // the house paths and the event stream from HA; unset, 404
 		log.Fatalf("haus: %v", err)
 	}
@@ -424,7 +427,7 @@ func main() {
 	go func() { counter.Run(counting, 5*time.Minute); close(flushed) }()
 	go voice.Run(ctx, time.Minute)
 	mux := routes(site{napi: cfg, hh: hh, store: store, ops: ops, proxySecret: proxySecret, laibURL: laibURL,
-		publicURL: os.Getenv("HAUS_PUBLIC_URL"), tickets: werkstatt.FromEnv(), favorites: favoriten.Open(dataDir), bote: b, podcasts: pods, gesehen: gs,
+		publicURL: os.Getenv("HAUS_PUBLIC_URL"), tickets: werkstatt.FromEnv(), favorites: cfg.Favorites, bote: b, podcasts: pods, gesehen: gs,
 		samba: samba.FromEnv(), sambaHost: os.Getenv("HAUS_SAMBA_HOST"),
 		usage: counter, voice: voice, welcome: true,
 		stt:        pages.STT{Provider: os.Getenv("HAUS_STT_PROVIDER"), Language: env("HAUS_STT_LANGUAGE", "de")},

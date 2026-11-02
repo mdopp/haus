@@ -1,6 +1,8 @@
 package pages
 
 import (
+	"encoding/json"
+	"image/png"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -249,7 +251,9 @@ func TestFamilyPagesWearTheHousePaletteNotThePersona(t *testing.T) {
 		_, body, h := familyPage(t, p.page, all, "GET", p.path, "")
 		mustContain(t, body, "<title>"+p.title+"</title>", "lang=de", "<h1>",
 			"#070709", "#14141a", "#f97316", "#ffc107", "prefers-color-scheme:light", "color-scheme",
-			"@font-face", FontPath, "system-ui")
+			"@font-face", FontPath, "system-ui",
+			"rel=icon href=/symbol/favicon.svg", "rel=apple-touch-icon href=/symbol/apple-touch-icon.png",
+			"rel=manifest href=/symbol/haus.webmanifest crossorigin=use-credentials")
 		mustNotContain(t, body, "Wollen wir", "#3ddc84", "#0c120e", "/persona/icon.svg", "<header>", "class=sr>",
 			"<script src", "googleapis", "gstatic", "#faf9f6") // Haus's own small scripts only, never one from elsewhere
 		if h.Get("Content-Type") != "text/html; charset=utf-8" {
@@ -281,6 +285,57 @@ func TestHausServesItsFont(t *testing.T) {
 	Font().ServeHTTP(rec, httptest.NewRequest("GET", "/schrift/andere.woff2", nil))
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("another font → %d", rec.Code)
+	}
+}
+
+// Haus's own icon (owner, 2026-11-02): each size rendered from the master,
+// served with its type, and the manifest that puts Haus on a home screen;
+// nothing else under /symbol/.
+func TestHausServesItsIcon(t *testing.T) {
+	get := func(method, p string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		Symbol().ServeHTTP(rec, httptest.NewRequest(method, p, nil))
+		return rec
+	}
+	for name, side := range map[string]int{"favicon-32.png": 32, "apple-touch-icon.png": 180, "icon-192.png": 192, "icon-512.png": 512, "icon-maskable-512.png": 512} {
+		rec := get("GET", SymbolPath+name)
+		if rec.Code != 200 || rec.Header().Get("Content-Type") != "image/png" {
+			t.Fatalf("%s: %d %q", name, rec.Code, rec.Header().Get("Content-Type"))
+		}
+		cfg, err := png.DecodeConfig(rec.Body)
+		if err != nil || cfg.Width != side || cfg.Height != side {
+			t.Fatalf("%s: %v %dx%d, want %d", name, err, cfg.Width, cfg.Height, side)
+		}
+	}
+	rec := get("GET", SymbolPath+"favicon.svg")
+	if rec.Code != 200 || rec.Header().Get("Content-Type") != "image/svg+xml" || !strings.Contains(rec.Body.String(), "#3ddc84") ||
+		!strings.Contains(rec.Body.String(), "#0c120e") || strings.Contains(rec.Body.String(), "<script") {
+		t.Fatalf("favicon.svg: %d %q %s", rec.Code, rec.Header().Get("Content-Type"), rec.Body.String())
+	}
+	rec = get("GET", SymbolPath+"haus.webmanifest")
+	var m struct {
+		Name     string
+		StartURL string `json:"start_url"`
+		Icons    []struct{ Src, Purpose string }
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &m); err != nil || rec.Header().Get("Content-Type") != "application/manifest+json" || m.StartURL != "/start" {
+		t.Fatalf("manifest: %v %q %s", err, rec.Header().Get("Content-Type"), rec.Body.String())
+	}
+	for _, i := range m.Icons {
+		if c := get("GET", i.Src).Code; c != 200 {
+			t.Fatalf("the manifest names %s, which answers %d", i.Src, c)
+		}
+	}
+	if !strings.Contains(rec.Body.String(), `"purpose":"maskable"`) {
+		t.Fatalf("no maskable icon: %s", rec.Body.String())
+	}
+	for _, p := range []string{SymbolPath + "icon.svg", SymbolPath + "andere.png", SymbolPath + "sub/favicon.svg", SymbolPath} {
+		if c := get("GET", p).Code; c != http.StatusNotFound {
+			t.Fatalf("%s → %d", p, c)
+		}
+	}
+	if c := get("POST", SymbolPath+"favicon.svg").Code; c != http.StatusMethodNotAllowed {
+		t.Fatalf("POST → %d", c)
 	}
 }
 

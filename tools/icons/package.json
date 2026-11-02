@@ -1,0 +1,12 @@
+{
+  "name": "haus-icons",
+  "private": true,
+  "description": "Renders the web app icons from internal/pages/symbol/icon.svg (see icons.mjs).",
+  "type": "module",
+  "scripts": {
+    "icons": "node icons.mjs"
+  },
+  "dependencies": {
+    "@resvg/resvg-js": "2.6.2"
+  }
+}

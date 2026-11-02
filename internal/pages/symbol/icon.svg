@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="108" height="108" viewBox="0 0 108 108">
+  <!-- The Haus icon, master of the web app's icons (owner, 2026-11-02): a
+       green-phosphor terminal prompt inside a green house, accent #3ddc84 on
+       ground #0c120e. The 108 canvas is Android's adaptive icon; the house
+       stays inside its 66 safe circle (centre 54,54). Edit here, then run
+       tools/icons: it renders every file beside this one. mdopp/haus-android
+       carries the same master (art/icon.svg) for the app. -->
+  <rect id="ground" width="108" height="108" fill="#0c120e"/>
+  <path id="motif" fill="#3ddc84" fill-rule="evenodd"
+    d="M54 22 L86 48 L78 48 L78 77 L30 77 L30 48 L22 48 Z
+       M34 46 L45 46 L57 59 L45 72 L34 72 L46 59 Z
+       M61 63 L75 63 L75 72 L61 72 Z"/>
+</svg>

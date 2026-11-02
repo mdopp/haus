@@ -74,7 +74,10 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   green and red only for a state, never alone), dark or light as the phone
   is, Geist served by Haus itself at `/schrift/…woff2` (OFL, vendored in
   `internal/pages/schrift`; no request to Google, the phone's own font
-  when it does not load), and one selection on every family page
+  when it does not load), Haus's icon under `/symbol/` (the terminal prompt
+  inside a green house, the app's mark; `internal/pages/symbol/icon.svg`
+  is the master, `tools/icons` renders the favicon, the touch icon and the
+  web app manifest's icons from it), and one selection on every family page
   (haus#67; owner 2026-10-24: every page in exactly one tab, the page named
   like its tab): on the phone a bar at the bottom, icon and name — Start ·
   Geräte (`/raeume`: what plays on top as *Läuft gerade* with its buttons
@@ -465,6 +468,10 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   and `HAUS_ENERGY_TOTALS` (`<Label>=sensor.…,…`, in that order) name;
   every other power sensor is a circuit. Unset, it falls back to matching
   one house's German friendly names (`Aktuell erzeugter PV-Strom`, …).
+  Each total carries `today`, the kWh it added since the house's midnight
+  (`TZ`'s; the Energie page's Heute rule, `energie.Added`), for the
+  app's one energy widget; a history that fails or has nothing since
+  midnight leaves it out.
 - The realtime pair `POST /napi/portal/watch` + `GET /napi/portal/events`,
   from Home Assistant too. The stream is SSE and carries state changes only
   (laib ADR 0022 §2): `card_state`, a frame for each entity the device
@@ -487,6 +494,11 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   the camera picker the cameras; `{ok, rooms:[{room, cards:[{entity_id,
   name, domain, state, device_class?}]}], automations:[]}`, rooms by
   name, the room-less last.
+- The app's start screen (owner, 2026-11-02): `GET /napi/portal/favorites`
+  is `{ok, favorites:[card]}`, the device's person's ☆ things (the same
+  `favoriten.json` the pages pin to), in their order; a pinned thing HA
+  lost, or one Haus draws no card for, is left out, none is `[]`, and a
+  file that does not read is a 500 `favorites_unreadable`.
 - The tool widgets, from the Haushalt source's backends (haus#10, the
   same variables as below; none set, they are 404): `GET /napi/defs/tool`
   lists a tool per backend that is set: `task` (*Erinnerungen*,

@@ -1,9 +1,12 @@
 package napi
 
 import (
+	"context"
 	"net/http"
 	"sort"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/mdopp/haus/internal/energie"
 	"github.com/mdopp/haus/internal/ha"
@@ -11,7 +14,9 @@ import (
 
 // The energy picture (GET /napi/portal/energy → {ok, energy:{flow, totals,
 // circuits}}): the "now" flow from current-power sensors (W), the lifetime
-// counters (kWh) as totals, every other power sensor as a circuit. Which
+// counters (kWh) as totals, each with what it added since the house's
+// midnight (`today`, kWh, as the Energie page's Heute; left out when HA's
+// history does not say), every other power sensor as a circuit. Which
 // sensors those are is package energie's choice, the Energie page's too.
 
 // EnergyMap names the energy entities (package energie).
@@ -54,9 +59,13 @@ func (h *homeAPI) energy(w http.ResponseWriter, r *http.Request) {
 		m["label"], m["sense"] = l.Label, l.Sense
 		flow = append(flow, m)
 	}
+	today := h.today(r.Context(), counters)
 	for _, c := range counters {
 		m := meter(c.State)
 		m["label"] = c.Label
+		if v, ok := today[c.State.EntityID]; ok {
+			m["today"] = v
+		}
 		totals = append(totals, m)
 	}
 	circuits := []map[string]any{}
@@ -69,4 +78,48 @@ func (h *homeAPI) energy(w http.ResponseWriter, r *http.Request) {
 		return strings.ToLower(circuits[i]["name"].(string)) < strings.ToLower(circuits[j]["name"].(string))
 	})
 	answer(w, http.StatusOK, map[string]any{"ok": true, "energy": map[string]any{"flow": flow, "totals": totals, "circuits": circuits}})
+}
+
+// historyWait is how long the energy picture waits for today's history; a
+// counter whose history is later is shown without today.
+const historyWait = 5 * time.Second
+
+// today is what each counter added since the house's midnight, in kWh
+// (energie.Added), read from HA's history at once; a counter whose
+// history fails or has no reading since midnight is left out.
+func (h *homeAPI) today(ctx context.Context, counters []energie.Counter) map[string]float64 {
+	loc := h.loc
+	if loc == nil {
+		loc = time.Local
+	}
+	now := time.Now()
+	if h.now != nil {
+		now = h.now()
+	}
+	y, m, d := now.In(loc).Date()
+	start := time.Date(y, m, d, 0, 0, 0, 0, loc)
+	ctx, cancel := context.WithTimeout(ctx, historyWait)
+	defer cancel()
+	var (
+		mu  sync.Mutex
+		wg  sync.WaitGroup
+		out = map[string]float64{}
+	)
+	for _, c := range counters {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			points, err := h.ha.History(ctx, c.State.EntityID, start, now.Add(time.Minute))
+			if err != nil {
+				return
+			}
+			if v, ok := energie.Added(points, c.State); ok {
+				mu.Lock()
+				out[c.State.EntityID] = v
+				mu.Unlock()
+			}
+		}()
+	}
+	wg.Wait()
+	return out
 }

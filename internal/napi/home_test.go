@@ -5,11 +5,14 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/mdopp/haus/internal/favoriten"
 	"github.com/mdopp/haus/internal/ha"
 	"github.com/mdopp/haus/internal/ha/hafake"
 	"github.com/mdopp/haus/internal/laib"
@@ -71,6 +74,7 @@ func TestEveryHousePathWantsAPairedDevice(t *testing.T) {
 		{"GET", "/napi/portal/energy", ""},
 		{"GET", "/napi/portal/entity-history?entity_id=sensor.temp&range=24h", ""},
 		{"GET", "/napi/portal/active", ""},
+		{"GET", "/napi/portal/favorites", ""},
 		{"POST", "/napi/portal/watch", `{"entity_ids":["light.kueche"]}`},
 		{"GET", "/napi/portal/events", ""},
 	} {
@@ -273,6 +277,9 @@ func TestPortalEnergy(t *testing.T) {
 	}
 	if len(out.Energy.Circuits) != 1 || out.Energy.Circuits[0]["name"] != "Waschmaschine" {
 		t.Fatalf("circuits: %v", out.Energy.Circuits)
+	}
+	if _, ok := out.Energy.Totals[0]["today"]; ok {
+		t.Fatalf("no history since midnight, no today: %v", out.Energy.Totals[0])
 	}
 	fake.Down(true)
 	if code, _ := raw(t, h, "GET", "/napi/portal/energy", "dev1", ""); code != 502 {
@@ -1004,5 +1011,133 @@ func TestHACallNotesWhoItWas(t *testing.T) {
 	defer mu.Unlock()
 	if len(notes) != 1 || notes[0]["text"] != "ha person=ben service=switch.turn_off entity=switch.kaffee context=ctx-1" {
 		t.Fatalf("notes %v", notes)
+	}
+}
+
+// The app's one energy widget shows "heute" beside "jetzt" (owner,
+// 2026-11-02): each total carries what it added since the house's
+// midnight, by the Energie page's rule; a history that fails leaves today
+// out and the picture stands.
+func TestPortalEnergyToday(t *testing.T) {
+	berlin, err := time.LoadLocation("Europe/Berlin")
+	if err != nil {
+		t.Skip(err)
+	}
+	fake, h := houseWith(t, func(c *Config) {
+		c.Haushalt.Loc = berlin
+		c.Now = func() time.Time { return time.Date(2026, 10, 14, 9, 0, 0, 0, berlin) }
+	})
+	fake.Set("sensor.pv_total", "5012.4", map[string]any{"friendly_name": "PV Erzeugung", "device_class": "energy", "unit_of_measurement": "kWh"})
+	fake.Set("sensor.bezug_total", "1803100", map[string]any{"friendly_name": "Netzbezug", "device_class": "energy", "unit_of_measurement": "Wh"})
+	at := func(state, when string) map[string]any { return map[string]any{"state": state, "last_changed": when} }
+	fake.SetHistory("sensor.pv_total", []map[string]any{at("5000", "2026-10-13T22:00:00Z"), at("5006.1", "2026-10-14T06:00:00Z")})
+	fake.SetHistory("sensor.bezug_total", []map[string]any{at("1800000", "2026-10-13T22:00:00Z")})
+	totals := func() []map[string]any {
+		code, body := raw(t, h, "GET", "/napi/portal/energy", "dev1", "")
+		var out struct {
+			Energy struct {
+				Totals []map[string]any `json:"totals"`
+			} `json:"energy"`
+		}
+		if json.Unmarshal([]byte(body), &out); code != 200 || len(out.Energy.Totals) != 2 {
+			t.Fatalf("energy: %d %s", code, body)
+		}
+		return out.Energy.Totals
+	}
+	got := totals()
+	if v, _ := got[0]["today"].(float64); got[0]["label"] != "PV-Erzeugung" || v < 12.39 || v > 12.41 {
+		t.Fatalf("PV today: %v", got[0])
+	}
+	if v, _ := got[1]["today"].(float64); v < 3.09 || v > 3.11 {
+		t.Fatalf("Netzbezug today, Wh as kWh: %v", got[1])
+	}
+	starts, _ := fake.HistoryQueries()
+	for _, s := range starts {
+		if !strings.Contains(s, "2026-10-13T22:00:00Z") && !strings.Contains(s, "2026-10-14T00:00:00+02:00") {
+			t.Fatalf("today starts at the house's midnight: %v", starts)
+		}
+	}
+	fake.HistoryDown(true)
+	for _, tot := range totals() {
+		if _, ok := tot["today"]; ok {
+			t.Fatalf("a failed history is no today: %v", tot)
+		}
+	}
+}
+
+// The app's start screen shows the person's ☆ things first (owner,
+// 2026-11-02): the device's person's favorites, in their order, as cards;
+// what HA lost or Haus draws no card for is left out, and nobody's list
+// leaks to another person's phone.
+func TestPortalFavorites(t *testing.T) {
+	store := favoriten.Open(t.TempDir())
+	for _, id := range []string{"cover.rollo", "light.weg", "sensor.temp", "light.kueche", "button.tuer"} {
+		if err := store.Set("anna", id, true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := store.Set("ben", "switch.kaffee", true); err != nil {
+		t.Fatal(err)
+	}
+	_, h := houseWith(t, func(c *Config) {
+		c.Favorites = store
+		c.Whoami = func(b string) (string, bool) {
+			switch b {
+			case "dev1":
+				return "anna", true
+			case "dev2":
+				return "carla", true
+			}
+			return "", false
+		}
+	})
+	favorites := func(bearer string) (int, []map[string]any, string) {
+		code, body := raw(t, h, "GET", "/napi/portal/favorites", bearer, "")
+		var out struct {
+			OK        bool             `json:"ok"`
+			Favorites []map[string]any `json:"favorites"`
+		}
+		json.Unmarshal([]byte(body), &out)
+		return code, out.Favorites, body
+	}
+	code, got, body := favorites("dev1")
+	if code != 200 {
+		t.Fatalf("favorites: %d %s", code, body)
+	}
+	var ids []string
+	for _, c := range got {
+		ids = append(ids, c["entity_id"].(string))
+	}
+	// light.weg is gone from HA, button.tuer has no card; the sensor is a card
+	if strings.Join(ids, ",") != "cover.rollo,sensor.temp,light.kueche" {
+		t.Fatalf("anna's, in her order, cards only: %v", ids)
+	}
+	if k := got[2]; k["name"] != "Küche" || k["state"] != "on" || k["page"] != "/raeume/light.kueche" || k["brightness"] != 128.0 {
+		t.Fatalf("a favorite is the whole card: %v", k)
+	}
+	if code, got, body := favorites("dev2"); code != 200 || len(got) != 0 || !strings.Contains(body, `"favorites":[]`) {
+		t.Fatalf("a person without favorites gets an empty list, not ben's: %d %s", code, body)
+	}
+	if code, _, _ := favorites("wrong"); code != 401 {
+		t.Fatalf("a stranger: %d", code)
+	}
+	_, none := houseWith(t, func(c *Config) { c.Whoami = func(string) (string, bool) { return "anna", true } })
+	if code, body := raw(t, none, "GET", "/napi/portal/favorites", "dev1", ""); code != 200 || !strings.Contains(body, `"favorites":[]`) {
+		t.Fatalf("no store: an empty list: %d %s", code, body)
+	}
+}
+
+// A favorites file that does not read is said, never shown as "none".
+func TestPortalFavoritesUnreadable(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, favoriten.File), []byte("{kaputt"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, h := houseWith(t, func(c *Config) {
+		c.Favorites = favoriten.Open(dir)
+		c.Whoami = func(string) (string, bool) { return "anna", true }
+	})
+	if code, body := raw(t, h, "GET", "/napi/portal/favorites", "dev1", ""); code != 500 || !strings.Contains(body, "favorites_unreadable") {
+		t.Fatalf("an unreadable store: %d %s", code, body)
 	}
 }
