@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="72" height="72" viewBox="18 18 72 72"><clipPath id="clip"><rect x="18" y="18" width="72" height="72" rx="16"/></clipPath><g clip-path="url(#clip)">
+  <rect id="ground" width="108" height="108" fill="#0c120e"/>
+  <path id="motif" fill="#3ddc84" fill-rule="evenodd"
+    d="M54 22 L86 48 L78 48 L78 77 L30 77 L30 48 L22 48 Z
+       M34 46 L45 46 L57 59 L45 72 L34 72 L46 59 Z
+       M61 63 L75 63 L75 72 L61 72 Z"/>
+</g></svg>

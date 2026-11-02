@@ -241,7 +241,7 @@ func familyHead(r *http.Request, cfg StartConfig, title, current string) *string
 		title += " · Zuhause"
 	}
 	b.WriteString("<!doctype html><html lang=de><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1,viewport-fit=cover'>" +
-		"<meta name=color-scheme content='dark light'><meta name=theme-color content='#0c0c0e'><title>" + html.EscapeString(title) + "</title>")
+		"<meta name=color-scheme content='dark light'><meta name=theme-color content='#0c0c0e'><title>" + html.EscapeString(title) + "</title>" + symbolHead)
 	b.WriteString(frame)
 	b.WriteString(cards.Style + hausStyle + hausScript) // in the head: a page swapped in keeps it
 	b.WriteString(familyNav(r, cfg, current))
