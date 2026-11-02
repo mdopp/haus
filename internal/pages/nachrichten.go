@@ -38,7 +38,7 @@ var nachrichtenAnleitung = []struct {
 	{"WhatsApp, auf dem Handy", []string{
 		"WhatsApp öffnen: Einstellungen → Chats → Chat-Backup.",
 		"„Ende-zu-Ende-verschlüsseltes Backup“ antippen und einschalten.",
-		"„64-stelligen Schlüssel verwenden“ wählen, nicht ein Passwort.",
+		"„64-stelligen Schlüssel verwenden“ wählen, nicht Passwort und nicht Passkey: aus einem Passkey lässt sich der Schlüssel nicht auslesen. Nutzt WhatsApp schon einen Passkey: das Backup deaktivieren und sofort wieder aktivieren, diesmal mit dem 64-stelligen Schlüssel.",
 		"Den Schlüssel in Vaultwarden ablegen, als eigenen Eintrag „WhatsApp-Schlüssel“. Wer ihn verliert, kann keine dieser Sicherungen mehr lesen.",
 	}, "WhatsApp legt dann jede Nacht eine Sicherung auf dem Handy an."},
 	{"Signal, auf dem Handy", []string{
@@ -50,6 +50,7 @@ var nachrichtenAnleitung = []struct {
 		"Mehr → Nachrichten sichern.",
 		"Den WhatsApp-Ordner freigeben (Android → media → com.whatsapp → WhatsApp).",
 		"Den Signal-Ordner freigeben, den du oben gewählt hast.",
+		"Wenn du magst: „Kontakte übertragen“ und „SMS und Anrufliste übertragen“ einschalten.",
 	}, "Danach bringt die App neue Sicherungen auf die Box. Bricht die Verbindung ab, macht sie später dort weiter, wo sie war."},
 	{"Discord", []string{
 		"Server-Kanäle kommen später: über einen Bot, den du in deine Server einlädst.",
