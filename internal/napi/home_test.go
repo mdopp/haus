@@ -5,11 +5,14 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/mdopp/haus/internal/favoriten"
 	"github.com/mdopp/haus/internal/ha"
 	"github.com/mdopp/haus/internal/ha/hafake"
 	"github.com/mdopp/haus/internal/laib"
@@ -71,6 +74,7 @@ func TestEveryHousePathWantsAPairedDevice(t *testing.T) {
 		{"GET", "/napi/portal/energy", ""},
 		{"GET", "/napi/portal/entity-history?entity_id=sensor.temp&range=24h", ""},
 		{"GET", "/napi/portal/active", ""},
+		{"GET", "/napi/portal/favorites", ""},
 		{"POST", "/napi/portal/watch", `{"entity_ids":["light.kueche"]}`},
 		{"GET", "/napi/portal/events", ""},
 	} {
@@ -1004,5 +1008,82 @@ func TestHACallNotesWhoItWas(t *testing.T) {
 	defer mu.Unlock()
 	if len(notes) != 1 || notes[0]["text"] != "ha person=ben service=switch.turn_off entity=switch.kaffee context=ctx-1" {
 		t.Fatalf("notes %v", notes)
+	}
+}
+
+// The app's start screen shows the person's ☆ things first (owner,
+// 2026-11-02): the device's person's favorites, in their order, as cards;
+// what HA lost or Haus draws no card for is left out, and nobody's list
+// leaks to another person's phone.
+func TestPortalFavorites(t *testing.T) {
+	store := favoriten.Open(t.TempDir())
+	for _, id := range []string{"cover.rollo", "light.weg", "sensor.temp", "light.kueche", "button.tuer"} {
+		if err := store.Set("anna", id, true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := store.Set("ben", "switch.kaffee", true); err != nil {
+		t.Fatal(err)
+	}
+	_, h := houseWith(t, func(c *Config) {
+		c.Favorites = store
+		c.Whoami = func(b string) (string, bool) {
+			switch b {
+			case "dev1":
+				return "anna", true
+			case "dev2":
+				return "carla", true
+			}
+			return "", false
+		}
+	})
+	favorites := func(bearer string) (int, []map[string]any, string) {
+		code, body := raw(t, h, "GET", "/napi/portal/favorites", bearer, "")
+		var out struct {
+			OK        bool             `json:"ok"`
+			Favorites []map[string]any `json:"favorites"`
+		}
+		json.Unmarshal([]byte(body), &out)
+		return code, out.Favorites, body
+	}
+	code, got, body := favorites("dev1")
+	if code != 200 {
+		t.Fatalf("favorites: %d %s", code, body)
+	}
+	var ids []string
+	for _, c := range got {
+		ids = append(ids, c["entity_id"].(string))
+	}
+	// light.weg is gone from HA, button.tuer has no card; the sensor is a card
+	if strings.Join(ids, ",") != "cover.rollo,sensor.temp,light.kueche" {
+		t.Fatalf("anna's, in her order, cards only: %v", ids)
+	}
+	if k := got[2]; k["name"] != "Küche" || k["state"] != "on" || k["page"] != "/raeume/light.kueche" || k["brightness"] != 128.0 {
+		t.Fatalf("a favorite is the whole card: %v", k)
+	}
+	if code, got, body := favorites("dev2"); code != 200 || len(got) != 0 || !strings.Contains(body, `"favorites":[]`) {
+		t.Fatalf("a person without favorites gets an empty list, not ben's: %d %s", code, body)
+	}
+	if code, _, _ := favorites("wrong"); code != 401 {
+		t.Fatalf("a stranger: %d", code)
+	}
+	_, none := houseWith(t, func(c *Config) { c.Whoami = func(string) (string, bool) { return "anna", true } })
+	if code, body := raw(t, none, "GET", "/napi/portal/favorites", "dev1", ""); code != 200 || !strings.Contains(body, `"favorites":[]`) {
+		t.Fatalf("no store: an empty list: %d %s", code, body)
+	}
+}
+
+// A favorites file that does not read is said, never shown as "none".
+func TestPortalFavoritesUnreadable(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, favoriten.File), []byte("{kaputt"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, h := houseWith(t, func(c *Config) {
+		c.Favorites = favoriten.Open(dir)
+		c.Whoami = func(string) (string, bool) { return "anna", true }
+	})
+	if code, body := raw(t, h, "GET", "/napi/portal/favorites", "dev1", ""); code != 500 || !strings.Contains(body, "favorites_unreadable") {
+		t.Fatalf("an unreadable store: %d %s", code, body)
 	}
 }

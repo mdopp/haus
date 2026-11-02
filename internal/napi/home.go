@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/mdopp/haus/internal/cards"
+	"github.com/mdopp/haus/internal/favoriten"
 	"github.com/mdopp/haus/internal/ha"
 	"github.com/mdopp/haus/internal/schalter"
 )
@@ -45,6 +46,7 @@ type homeAPI struct {
 	sources EnergyMap                          // which entities the energy picture reads (energy.go)
 	witness *schalter.Witness                  // who switched what (haus#89); nil: the log only
 	whoami  func(bearer string) (string, bool) // the person behind the device's bearer
+	favs    *favoriten.Store                   // each person's ☆ things (haus#35); nil: none
 }
 
 func (h *homeAPI) routes(mux *http.ServeMux, auth func(http.HandlerFunc) http.HandlerFunc) {
@@ -55,6 +57,7 @@ func (h *homeAPI) routes(mux *http.ServeMux, auth func(http.HandlerFunc) http.Ha
 	mux.HandleFunc("GET /napi/portal/active", auth(h.active))
 	mux.HandleFunc("GET /napi/portal/camera/{entity_id}/snapshot", auth(h.snapshot))
 	mux.HandleFunc("GET /napi/portal/start/addable", auth(h.addable))
+	mux.HandleFunc("GET /napi/portal/favorites", auth(h.favorites))
 }
 
 func answer(w http.ResponseWriter, code int, v any) {
@@ -190,6 +193,52 @@ func (h *homeAPI) history(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	answer(w, http.StatusOK, map[string]any{"ok": true, "history": out})
+}
+
+// GET /napi/portal/favorites → {ok, favorites:[card]}: the things the
+// device's person pinned with ☆ (haus#35), in their order, as the app's
+// start screen shows them first. A pinned thing HA no longer has, or one
+// Haus draws no card for, is left out; a person with none, or no store, is
+// an empty list. A store that does not read is a 500, never "none".
+func (h *homeAPI) favorites(w http.ResponseWriter, r *http.Request) {
+	person := ""
+	if bearer, ok := bearerOf(r); ok && h.whoami != nil {
+		person, _ = h.whoami(bearer)
+	}
+	out := []map[string]any{}
+	if h.favs == nil || person == "" {
+		answer(w, http.StatusOK, map[string]any{"ok": true, "favorites": out})
+		return
+	}
+	ids, err := h.favs.For(person)
+	if err != nil {
+		log.Printf("haus: favorites of %s: %v", person, err)
+		refuse(w, http.StatusInternalServerError, "favorites_unreadable")
+		return
+	}
+	if len(ids) == 0 {
+		answer(w, http.StatusOK, map[string]any{"ok": true, "favorites": out})
+		return
+	}
+	states, err := h.ha.States(r.Context())
+	if err != nil {
+		refuse(w, http.StatusBadGateway, "ha_unavailable")
+		return
+	}
+	byID := make(map[string]ha.State, len(states))
+	for _, s := range states {
+		byID[s.EntityID] = s
+	}
+	for _, id := range ids {
+		s, ok := byID[id]
+		if !ok {
+			continue
+		}
+		if c := card(s); c != nil {
+			out = append(out, c)
+		}
+	}
+	answer(w, http.StatusOK, map[string]any{"ok": true, "favorites": out})
 }
 
 // GET /napi/portal/active → {ok, active:[card + room]}: the actuators that

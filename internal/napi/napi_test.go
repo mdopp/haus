@@ -403,7 +403,7 @@ func TestEveryNapiRouteWantsADevice(t *testing.T) {
 		"GET /napi/box/home": true, "GET /napi/box/services": true, "GET /napi/box/approvals": true, "GET /napi/box/upgrades": true,
 		"POST /napi/box/services/{name}/operate": true, "POST /napi/box/approvals/{id}/approve": true, "POST /napi/box/approvals/{id}/deny": true,
 		"POST /napi/ha/call": true, "GET /napi/portal/state": true, "GET /napi/portal/energy": true, "GET /napi/portal/entity-history": true,
-		"GET /napi/portal/active": true, "GET /napi/portal/camera/{entity_id}/snapshot": true, "GET /napi/portal/start/addable": true,
+		"GET /napi/portal/active": true, "GET /napi/portal/camera/{entity_id}/snapshot": true, "GET /napi/portal/start/addable": true, "GET /napi/portal/favorites": true,
 		"POST /napi/portal/watch": true, "GET /napi/portal/events": true,
 		"GET /napi/defs/tool": true, "POST /napi/action-callback": true, "GET /napi/portal/tasks": true, "GET /napi/portal/contacts": true,
 		"GET /napi/portal/documents": true, "GET /napi/portal/notes": true, "POST /napi/upload": true, "POST /napi/merken": true,
