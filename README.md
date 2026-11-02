@@ -600,6 +600,29 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   never empties the mirror), an upload of that person already running, or
   the book changed under Haus (If-Match), 415 not `text/vcard`, 502 when
   Radicale refuses, 503 without Radicale (`HAUS_RADICALE_*`).
+- The phone's positions, passed on to Reitti (owner 2026-11-02; optional
+  in the app, its own switch and background-location permission): the app
+  records where its person was and sends the points in batches to `POST
+  /napi/standort {punkte:[{zeit (RFC 3339), breite, laenge, genauigkeit
+  (m), hoehe?, tempo? (m/s)}]}` (≤ 1000 points, ≤ 2 MB). Haus passes them
+  on, inside the box, to Reitti's Overland ingest (`POST
+  <HAUS_REITTI_URL>/api/v1/ingest/overland`, GeoJSON points) with the
+  device's person's own Reitti token (`Authorization: Bearer`), and
+  answers 200 `{angenommen, verworfen}` only once Reitti said
+  `{"result":"ok"}`; a point without a readable time, a place on earth or
+  an accuracy is left out and counted (`verworfen`). The app keeps a batch
+  on every other answer and sends it again: 409 `{fehler, grund:
+  "kein_schluessel"}` before the person connected Reitti, 409 `grund:
+  "schluessel_abgelehnt"` when Reitti refuses the token (401/403), 503
+  `grund: "reitti_weg"` with `Retry-After: 300` when Reitti does not take
+  them (no answer, an error, a redirect, a 2xx without its `ok`), 503
+  `grund: "nicht_eingerichtet"` without `HAUS_REITTI_URL`. `GET
+  /napi/standort` → `{verbunden, seit?}`, never the token. The token: the
+  person pastes it once on the page *Standortverlauf* (`/standort`, under
+  Mehr when the box has Reitti); Haus checks it with an empty batch
+  (Reitti says yes only to a token it knows with a device attached), keeps
+  it in `HAUS_DATA/reitti-konten.json` (0600) for that person alone, never
+  logs or shows it (*Verbunden seit …* and Trennen).
 
 - The Haushalt MCP source (laib ADR 0017, haus#11): `POST /mcp/haushalt`,
   laib's MCP shape (JSON-RPC over POST: `initialize`, `tools/list`,
@@ -917,6 +940,7 @@ HAUS_BOTE_URL=http://host.containers.internal:8642/v1 HAUS_BOTE_KEY=<the Bote's 
 HAUS_STT_PROVIDER=stt.faster_whisper HAUS_STT_LANGUAGE=de \
 HAUS_SAMBA_DIR=/samba-accounts HAUS_SAMBA_HOST=<the box's LAN address> \
 HAUS_ARCHIV_DIR=/archiv-eingang \
+HAUS_REITTI_URL=http://host.containers.internal:<Reitti's host port> HAUS_REITTI_PUBLIC_URL=https://reitti.<domain> \
 
 HAUS_USAGE_URL=http://host.containers.internal:8094 HAUS_USAGE_TOKEN=<usage-metrics' USAGE_METRICS_TOKEN> ./haus
 ```

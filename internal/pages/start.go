@@ -31,6 +31,7 @@ import (
 	"github.com/mdopp/haus/internal/paperless"
 	"github.com/mdopp/haus/internal/podcasts"
 	"github.com/mdopp/haus/internal/qmd"
+	"github.com/mdopp/haus/internal/reitti"
 	"github.com/mdopp/haus/internal/samba"
 	"github.com/mdopp/haus/internal/schalter"
 	"github.com/mdopp/haus/internal/usage"
@@ -48,6 +49,7 @@ type StartConfig struct {
 	Einkauf   *einkauf.Liste    // the household's shopping list in Radicale (haus#118); nil: no page
 	Wuensche  *einkauf.Wuensche // the music wish list (owner 2026-10-25); nil: a song link is a note
 	Discogs   *discogs.Regale   // each person's records on Discogs, connected through the app (laib#696); nil: no Discogs
+	Reitti    *reitti.Reitti    // the household's timeline, each person's token (Standortverlauf, owner 2026-11-02); nil: no page
 	LaibURL   string            // where Rückgängig lives (the guarantees, admins only)
 	HA        *ha.Client
 	Energy    energie.Map // which sensors Energie reads (haus#12); empty: by friendly name

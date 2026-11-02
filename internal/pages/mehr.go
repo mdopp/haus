@@ -21,6 +21,7 @@ var mehrSays = map[string]string{
 	"Discogs":             "Dein Discogs-Konto verbinden: Sammlung, Wantlist, Platte erfassen",
 	"Musik":               "Hochladen, Platten erfassen, Discogs und die Musik-Wunschliste",
 	"Netzlaufwerk":        "Dein Passwort für das Netzlaufwerk",
+	"Standortverlauf":     "Wo du unterwegs warst, von der Haus-App in deinen Reitti-Zeitstrahl",
 	"Nachrichten sichern": "WhatsApp und Signal vom Handy auf die Box; was angekommen ist",
 	"Box":                 "Wie es der Box geht, für Admins",
 }

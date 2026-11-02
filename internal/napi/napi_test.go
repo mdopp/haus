@@ -22,6 +22,7 @@ import (
 	"github.com/mdopp/haus/internal/notes"
 	"github.com/mdopp/haus/internal/paperless"
 	"github.com/mdopp/haus/internal/persona"
+	"github.com/mdopp/haus/internal/reitti"
 )
 
 // fakeLaib answers tools/call per verb with canned text and records calls.
@@ -395,7 +396,7 @@ func TestEveryNapiRouteWantsADevice(t *testing.T) {
 	h := Handler(Config{Laib: &laib.Client{URL: lb.URL, Token: "ops"}, Validate: StaticValidator([]string{"dev1"}),
 		HA:        &ha.Client{URL: dead, Token: "ha"},
 		Haushalt:  haushalt.Config{Calendar: dav, Contacts: dav, Documents: &paperless.Client{URL: dead, Token: "pl"}, Notes: nd},
-		UploadDir: t.TempDir(), Sicherung: NewSicherung(t.TempDir(), t.TempDir()),
+		UploadDir: t.TempDir(), Sicherung: NewSicherung(t.TempDir(), t.TempDir()), Reitti: &reitti.Reitti{URL: dead, Dir: t.TempDir()},
 		House: persona.Load(personaDir(t, map[string][]byte{"icon.svg": []byte("<svg/>"), "icon.png": tinyPNG(t)}), "joshua")})
 	routes := map[string]bool{
 		"GET /napi/persona": true, "GET /napi/persona/icon.png": true, "GET /napi/whoami": true,
@@ -409,6 +410,7 @@ func TestEveryNapiRouteWantsADevice(t *testing.T) {
 		"GET /napi/sicherung/stand": true, "POST /napi/sicherung/fehlend": true, "POST /napi/sicherung/uploads": true,
 		"HEAD /napi/sicherung/uploads/{id}": true, "PATCH /napi/sicherung/uploads/{id}": true,
 		"GET /napi/sicherung/schluessel": true, "POST /napi/kontakte": true,
+		"GET /napi/standort": true, "POST /napi/standort": true,
 	}
 	// what the source registers: "METHOD /napi/…" and "METHOD "+prefix+"/…" (prefix is /napi/box)
 	re := regexp.MustCompile(`HandleFunc\("([A-Z]+) (?:(/napi/[^"]*)"|"\+prefix\+"([^"]*)")`)

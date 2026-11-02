@@ -37,6 +37,7 @@ import (
 	"github.com/mdopp/haus/internal/pages"
 	"github.com/mdopp/haus/internal/persona"
 	"github.com/mdopp/haus/internal/podcasts"
+	"github.com/mdopp/haus/internal/reitti"
 	"github.com/mdopp/haus/internal/samba"
 	"github.com/mdopp/haus/internal/schalter"
 	"github.com/mdopp/haus/internal/usage"
@@ -100,7 +101,8 @@ func routes(s site) http.Handler {
 		Notes: s.hh.Notes, Library: s.hh.Library, Judge: s.hh.Judge, Docs: s.hh.Documents, Loc: s.hh.Loc, Favorites: s.favorites, Bote: s.bote,
 		Samba: s.samba, SambaHost: s.sambaHost, Usage: s.usage, PublicURL: s.publicURL, Welcome: s.welcome, STT: s.stt,
 		HAPublicURL: s.haPublic, Inverted: s.inverted, RadicalePublicURL: s.radicale, Views: s.views, GesundheitURL: s.gesundheit,
-		DocumentsMail: s.docsMail, PaperlessPublicURL: s.paperlessPublic, PaperlessLANOnly: s.paperlessLAN, Sicherung: s.napi.Sicherung}
+		DocumentsMail: s.docsMail, PaperlessPublicURL: s.paperlessPublic, PaperlessLANOnly: s.paperlessLAN, Sicherung: s.napi.Sicherung,
+		Reitti: s.napi.Reitti}
 	// the lists, the music wish list and the shelf, before any page takes its copy of family
 	family.Einkauf, family.Wuensche = s.hh.Einkauf, s.hh.Wuensche
 	if s.hh.Wuensche != nil {
@@ -176,6 +178,7 @@ func routes(s site) http.Handler {
 	pagesMux.HandleFunc("/sprechen", pages.Sprechen(family))                      // the Sprechen field to the Bote, and its reply (haus#12)
 	pagesMux.HandleFunc(pages.HoerenPath, pages.Hoeren(family))                   // the field's microphone, HA's speech-to-text (haus#63)
 	pagesMux.HandleFunc(pages.NachrichtenPath, pages.Nachrichten(family))         // the phone's message backups and how to switch them on (haus#207)
+	pagesMux.HandleFunc(pages.StandortPath, pages.Standort(family))               // the person's Reitti token for the app's Standortverlauf (owner 2026-11-02)
 	pagesMux.HandleFunc("/netzlaufwerk", pages.Netzlaufwerk(family))              // each person's network-drive password (haus#52)
 	pagesMux.HandleFunc("/willkommen", pages.Willkommen(family))                  // a new person's apps and how to set them up (haus#56)
 	pagesMux.HandleFunc("/adresse", pages.Adresse(family))                        // the household's address, admins only (laib#561)
@@ -374,6 +377,9 @@ func main() {
 		}
 		go cfg.Sicherung.Pflegen(nil) // parts untouched for a week go, now and daily
 	}
+	// the app's Standortverlauf (owner 2026-11-02): Reitti inside the box,
+	// HAUS_REITTI_URL (http://host.containers.internal:<port>); unset, /napi/standort is 503
+	cfg.Reitti = reitti.FromEnv(dataDir)
 	gesundheit := pages.AppURL(pages.OnDomain(os.Getenv("HAUS_GESUNDHEIT_URL"), os.Getenv("HAUS_PUBLIC_URL"))) // haus#192
 	if gesundheit == "" && os.Getenv("HAUS_GESUNDHEIT_URL") != "" {
 		log.Printf("haus: HAUS_GESUNDHEIT_URL %q is no address on the house's domain: no Gesundheit card", os.Getenv("HAUS_GESUNDHEIT_URL"))
