@@ -3,9 +3,7 @@ package pages
 import (
 	"log"
 	"regexp"
-	"strconv"
 	"strings"
-	"time"
 )
 
 // Errors in the family's words (haus#176, as laib#855): an error that
@@ -27,18 +25,6 @@ func familySentence(where string, err error, fallback string) string {
 	}
 	log.Printf("homes: %s: %v", where, err)
 	return fallback
-}
-
-// dauerWorte is a duration as a person says it: „30 Sekunden“, „eine Minute“, „2 Minuten“.
-func dauerWorte(d time.Duration) string {
-	switch s := int(d.Round(time.Second) / time.Second); {
-	case s < 60:
-		return strconv.Itoa(s) + " Sekunden"
-	case s < 120:
-		return "einer Minute"
-	default:
-		return strconv.Itoa((s+30)/60) + " Minuten"
-	}
 }
 
 // saysLaibSilent is Laib not answering, on the admins' Box pages; the raw error folded beneath.

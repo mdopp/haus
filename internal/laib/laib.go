@@ -259,13 +259,6 @@ func (c *Client) Status(ctx context.Context) (Readiness, []Service, error) {
 	return out.Ready, out.Services, err
 }
 
-// ServiceDetail is one service's line from status (its status file's
-// detail with its age, laib#309): "" when it says nothing.
-func (c *Client) ServiceDetail(ctx context.Context, service string) (string, error) {
-	d, _, err := c.ServiceStatus(ctx, service)
-	return d, err
-}
-
 // ServiceStatus is one service's line and what its status file says of
 // itself beyond it (laib#688: "eigenes", e.g. beets' uploads and their
 // results), raw for the caller to read.
