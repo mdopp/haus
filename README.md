@@ -594,6 +594,26 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   (one age X25519 recipient); 404 `{fehler}` until it did (*Dein
   Nachrichten-Archiv ist noch nicht eingerichtet. Richte es einmal auf der
   Archiv-Seite ein, …*), 500 when the file holds anything else.
+- A new phone gets the newest backup back (haus#209, laib ADR 0029
+  amendment 2026-11-01): the person's archive keeps it in
+  `HAUS_ARCHIV_DIR/<person>/letzte/` — `signal/signal-*.backup` and
+  `whatsapp/Databases/msgstore.db.crypt15`, encrypted by the messenger,
+  and `whatsapp/Media/<pfad>.age`, encrypted to the archive.
+  `GET /napi/sicherung/letzte` → `{quellen:{signal|whatsapp:[{pfad,
+  groesse, geaendert}]}}` (epoch ms; a medium's `pfad` without `.age`, its
+  `groesse` the plaintext's, read from the age header). `GET|HEAD
+  /napi/sicherung/letzte/<quelle>/<pfad>` gives the file with `Range` and a
+  strong `ETag` (send it as `If-Range` when resuming: a backup replaced in
+  the meantime comes whole, never mixed). The person is the device's, so
+  another person's device gets 404. Media (`whatsapp/Media/…`) come only
+  from the person's open archive: Haus asks its
+  `/intern/whatsapp/medien/<pfad>` with `X-Archiv-Haus` and passes Range
+  and the answer on; a closed vault is 423 (*Öffne dein Archiv, dann
+  kommen auch die Fotos und Sprachnachrichten zurück.*), an archive Haus
+  has no way into 503. The ways in: `HAUS_ARCHIV_INTERN="<person>=<url>
+  …"` (each archive as Haus's pod reaches it) and
+  `HAUS_ARCHIV_SECRET_<PERSON>` (laib's per-person suffix: upper case,
+  `-` as `_`), the instance's `ARCHIV_HAUS_SECRET`.
 - The phone's contacts (laib ADR 0029; optional in the app, behind
   Android's contacts permission): `POST /napi/kontakte`, `text/vcard`,
   all of the phone's contacts as concatenated vCards (≤ 64 MB, else 413),

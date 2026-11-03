@@ -345,6 +345,7 @@ func TestEveryNapiRouteWantsADevice(t *testing.T) {
 		"GET /napi/sicherung/stand": true, "POST /napi/sicherung/fehlend": true, "POST /napi/sicherung/uploads": true,
 		"HEAD /napi/sicherung/uploads/{id}": true, "PATCH /napi/sicherung/uploads/{id}": true,
 		"GET /napi/sicherung/schluessel": true, "POST /napi/kontakte": true,
+		"GET /napi/sicherung/letzte": true, "GET /napi/sicherung/letzte/{quelle}/{pfad...}": true,
 		"GET /napi/standort": true, "POST /napi/standort": true,
 	}
 	// what the source registers: "METHOD /napi/…" and "METHOD "+prefix+"/…" (prefix is /napi/box)
@@ -365,7 +366,7 @@ func TestEveryNapiRouteWantsADevice(t *testing.T) {
 			}
 		}
 	}
-	fill := strings.NewReplacer("{name}", "media", "{id}", "7", "{entity_id}", "camera.einfahrt")
+	fill := strings.NewReplacer("{quelle}/{pfad...}", "signal/x.backup", "{name}", "media", "{id}", "7", "{entity_id}", "camera.einfahrt")
 	for route := range routes {
 		method, path, _ := strings.Cut(route, " ")
 		path = fill.Replace(path)
