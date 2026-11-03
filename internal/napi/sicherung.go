@@ -104,6 +104,7 @@ type Sicherung struct {
 	ledger string // HAUS_DATA/sicherung: one folder per person, one file per quelle
 	slots  chan struct{}
 	now    func() time.Time
+	intern map[string]ArchivIntern // each person's archive, for the media of a restore (haus#209)
 
 	mu      sync.Mutex
 	busy    map[string]*schreiber // person/id being written
@@ -127,6 +128,8 @@ func (s *Sicherung) routes(mux *http.ServeMux, auth func(http.HandlerFunc) http.
 	mux.HandleFunc("HEAD /napi/sicherung/uploads/{id}", as(s.head))
 	mux.HandleFunc("PATCH /napi/sicherung/uploads/{id}", as(s.patch))
 	mux.HandleFunc("GET /napi/sicherung/schluessel", as(s.schluessel))
+	mux.HandleFunc("GET /napi/sicherung/letzte", as(s.letzteListe))                    // a new phone gets the newest back (haus#209)
+	mux.HandleFunc("GET /napi/sicherung/letzte/{quelle}/{pfad...}", as(s.letzteDatei)) // GET also answers HEAD
 }
 
 // fehler is a refusal of /napi/sicherung: {"fehler": a German sentence}.

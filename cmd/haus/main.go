@@ -373,6 +373,9 @@ func main() {
 	// person, where the app's phone backups land; unset, /napi/sicherung is 503
 	if dir := os.Getenv("HAUS_ARCHIV_DIR"); dir != "" {
 		cfg.Sicherung = napi.NewSicherung(dir, dataDir)
+		// a new phone's restore (haus#209): each person's archive for the WhatsApp media,
+		// HAUS_ARCHIV_INTERN and HAUS_ARCHIV_SECRET_<PERSON>; without them the media answer 503
+		cfg.Sicherung.SetArchive(napi.ArchivInternFromEnv(os.Getenv))
 		if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
 			log.Printf("haus: HAUS_ARCHIV_DIR %s is not a folder (yet): backups answer 503 until it is", dir)
 		}
