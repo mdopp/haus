@@ -244,8 +244,8 @@ func TestFamilyPagesWearTheHousePalette(t *testing.T) {
 		page  func(StartConfig) http.HandlerFunc
 		path  string
 		title string
-	}{{Start, "/start", "Zuhause"}, {Raeume, "/raeume", "Geräte · Zuhause"}, {Kalender, "/kalender", "Kalender · Zuhause"},
-		{Notizen, "/notizen", "Notizen · Zuhause"}, {Ding, "/raeume/light.flur", "Flurlicht · Zuhause"}} {
+	}{{Start, "/start", "Homes"}, {Raeume, "/raeume", "Geräte · Homes"}, {Kalender, "/kalender", "Kalender · Homes"},
+		{Notizen, "/notizen", "Notizen · Homes"}, {Ding, "/raeume/light.flur", "Flurlicht · Homes"}} {
 		_, body, h := familyPage(t, p.page, all, "GET", p.path, "")
 		mustContain(t, body, "<title>"+p.title+"</title>", "lang=de", "<h1>",
 			"#070709", "#14141a", "#f97316", "#ffc107", "prefers-color-scheme:light", "color-scheme",
@@ -358,7 +358,7 @@ func TestFamilyPagesDoNotWaitForAHangingBackend(t *testing.T) {
 		page func(StartConfig) http.HandlerFunc
 		path string
 		want string
-	}{{Start, "/start", "<h1>Zuhause</h1>"}, {Kalender, "/kalender", "<h1>Kalender</h1>"}} {
+	}{{Start, "/start", "<h1>Homes</h1>"}, {Kalender, "/kalender", "<h1>Kalender</h1>"}} {
 		began := time.Now()
 		code, body, _ := familyPage(t, p.page, StartConfig{Calendar: cal, Notes: nd}, "GET", p.path, "")
 		if took := time.Since(began); took > 3*time.Second || code != 200 {

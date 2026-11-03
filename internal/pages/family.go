@@ -191,12 +191,12 @@ const frame = `<style>@font-face{font-family:Geist;src:url(` + FontPath + `) for
 --accent:#ea580c;--accent-soft:rgba(234,88,12,.10);--state:#b45309;--ok:#059669;--warn:#b45309;--warn-soft:rgba(180,83,9,.10);--danger:#dc2626;--danger-soft:rgba(220,38,38,.08);--track:rgba(15,23,42,.12);--tile:linear-gradient(180deg,#ffffff,#f6f7f9)}}
 *{box-sizing:border-box}html{background:var(--bg)}
 body{margin:0 auto;max-width:40rem;padding:0 16px calc(88px + env(safe-area-inset-bottom));background:var(--bg);color:var(--ink);font:16px/1.5 Geist,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-text-size-adjust:100%}
-h1{font-size:1.6rem;font-weight:700;letter-spacing:-.01em;line-height:1.2;margin:22px 0 2px;overflow-wrap:anywhere}.datum{margin:0;color:var(--muted);font-size:.9rem}
+h1{font-size:1.6rem;font-weight:700;letter-spacing:-.01em;line-height:1.2;margin:22px 0 2px;overflow-wrap:anywhere}.datum{margin:0;color:var(--muted);font-size:.9rem}.marke{display:flex;align-items:center;gap:14px;margin:22px 0 10px}.marke svg{width:52px;height:52px;flex:none}.marke h1{margin:0}.marke .claim{margin:2px 0 0;color:var(--muted);font-size:.95rem}
 p{margin:12px 0}a{color:var(--accent)}.k{color:var(--muted)}
 button{font:inherit;font-size:.85rem;font-weight:600;color:var(--accent);background:var(--accent-soft);border:0;border-radius:999px;padding:0 16px;min-height:44px;cursor:pointer;white-space:nowrap}
 input[type=search]{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--edge);border-radius:999px;padding:0 16px;min-height:44px;width:min(24rem,62vw)}
 form[role=search]{display:flex;gap:8px;margin:16px 0 0}
-.sprechen{margin:20px 0 0}.sprechen label{display:block;font-size:.72rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:0 0 8px}
+.sprechen{margin:20px 0 0}.sprechen label{display:block;font-size:.95rem;font-weight:700;color:var(--muted);margin:0 0 8px}
 .sprechen div{display:flex;gap:8px}.sprechen input{flex:1;min-width:0;font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--edge);border-radius:999px;padding:0 16px;min-height:44px}
 .gespraech{margin:16px 0 0;padding:12px 14px;background:var(--card);border:1px solid var(--edge);border-radius:14px;overflow-wrap:anywhere}
 .gespraech .wer{display:block;font-size:.72rem;font-weight:600;letter-spacing:.04em;color:var(--muted);margin:0 0 2px}.gespraech .frage{margin:0;white-space:pre-wrap}
@@ -230,15 +230,15 @@ body>*{grid-column:1/-1}body>.karte{grid-column:auto}body>.karte.kacheln{grid-co
 .tabs a{flex:none;max-width:none;min-height:44px;flex-direction:row;justify-content:flex-start;gap:12px;padding:0 12px;border-radius:10px;font-size:.92rem;color:var(--ink)}.tabs a:hover{background:var(--card)}
 .tabs a[aria-current]{background:var(--accent-soft);color:var(--accent);font-weight:600}.tabs .zu-mehr{display:none}
 .tabs .mehr{display:flex;flex-direction:column;gap:2px;margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
-.mehr-titel{margin:0 12px 6px;font-size:.72rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}.mehr-wer{margin:14px 12px 2px;font-size:.8rem;color:var(--muted)}.mehr-wer .wer{color:var(--ink);font-weight:600}}</style>`
+.mehr-titel{margin:0 12px 6px;font-size:.95rem;font-weight:700;color:var(--muted)}.mehr-wer{margin:14px 12px 2px;font-size:.8rem;color:var(--muted)}.mehr-wer .wer{color:var(--ink);font-weight:600}}</style>`
 
 // familyHead opens a family page: its title, the frame, the cards' style,
 // the selection (current marks the page) and, small, who is signed in
 // (haus#61, haus#67: Abmelden is under Mehr). The page writes its own h1.
 func familyHead(r *http.Request, cfg StartConfig, title, current string) *strings.Builder {
 	b := &strings.Builder{}
-	if title != "Zuhause" {
-		title += " · Zuhause"
+	if title != "Homes" {
+		title += " · Homes"
 	}
 	b.WriteString("<!doctype html><html lang=de><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1,viewport-fit=cover'>" +
 		"<meta name=color-scheme content='dark light'><meta name=theme-color content='#0c0c0e'><title>" + html.EscapeString(title) + "</title>" + symbolHead)
@@ -406,7 +406,7 @@ type missing struct {
 
 func (m missing) write(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
 	tab := m.page
-	if tab == "Zuhause" || tab == "Sprechen" { // Sprechen is Start's field, no tab (haus#12)
+	if tab == "Homes" || tab == "Sprechen" { // Sprechen is Start's field, no tab (haus#12)
 		tab = "Start"
 	}
 	b := familyHead(r, cfg, m.page, tab)

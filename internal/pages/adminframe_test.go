@@ -22,9 +22,9 @@ func TestTheAdminPagesWearTheFamilyFrame(t *testing.T) {
 		path  string
 		title string
 	}{
-		{BoxPage(BoxConfig{Laib: fakeLaib(t, map[string]any{"state": "bereit"}, nil), LaibURL: "https://laib.box.test", Family: family}), "/box", "Box · Zuhause"},
-		{Geraete(store, "https://homes.example", family), "/box/geraete", "Geräte · Zuhause"},
-		{PairDevice(store, family), "/pair-device", "Telefon koppeln · Zuhause"},
+		{BoxPage(BoxConfig{Laib: fakeLaib(t, map[string]any{"state": "bereit"}, nil), LaibURL: "https://laib.box.test", Family: family}), "/box", "Box · Homes"},
+		{Geraete(store, "https://homes.example", family), "/box/geraete", "Geräte · Homes"},
+		{PairDevice(store, family), "/pair-device", "Telefon koppeln · Homes"},
 	} {
 		req := httptest.NewRequest("GET", p.path, nil)
 		req.Header.Set("Remote-User", "anna")

@@ -85,7 +85,7 @@ func Trennblatt(cfg StartConfig) http.HandlerFunc {
 		}
 		var b strings.Builder
 		b.WriteString("<!doctype html><html lang=de><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>" +
-			"<meta name=color-scheme content='dark light'><title>Trennblätter · Zuhause</title>" + frame + separatorStyle)
+			"<meta name=color-scheme content='dark light'><title>Trennblätter · Homes</title>" + frame + separatorStyle)
 		b.WriteString(`<div class=leiste><a href=` + DokumentePath + `#scanner>Zurück</a><p><b>` + what + `</b>`)
 		if capped {
 			b.WriteString(` <span class=k>` + html.EscapeString(saysSeparatorMax) + `</span>`)

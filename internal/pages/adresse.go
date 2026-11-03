@@ -308,7 +308,7 @@ const adresseStyle = `<style>.adresse-form{display:block!important;background:va
 .adresse-form input{display:block;width:100%;margin-top:4px;font:inherit;font-size:1rem;color:var(--ink);background:var(--bg);border:1px solid var(--edge);border-radius:10px;padding:0 12px;min-height:44px}
 .adresse-form input:focus{outline:2px solid var(--accent);outline-offset:1px}.adresse-form input.kurz{width:7rem}
 .adresse-form .zwei{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,3fr);gap:0 10px}.adresse-form fieldset .zwei{grid-template-columns:1fr 1fr}
-.adresse-form fieldset{border:0;border-top:1px solid var(--line);margin:16px 0 0;padding:6px 0 0}.adresse-form legend{padding:0;margin:10px 0 0;font-size:.72rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.adresse-form fieldset{border:0;border-top:1px solid var(--line);margin:16px 0 0;padding:6px 0 0}.adresse-form legend{padding:0;margin:10px 0 0;font-size:.95rem;font-weight:700;color:var(--muted)}
 .adresse-form .wege{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 0}.adresse-form .wege button{background:var(--panel);border:1px solid var(--edge);color:var(--ink);white-space:normal;text-align:left}
 .adresse-form .hilfe{margin:6px 2px 0;font-size:.8rem;color:var(--muted)}.adresse-form .senden{margin-top:18px;min-height:44px;padding:0 22px;background:var(--accent);color:#fff}
 .gesagt{margin:16px 0 0;padding:10px 14px;border-left:3px solid var(--ok);background:var(--card);border-radius:0 10px 10px 0}.gesagt.nein{border-left-color:var(--warn)}.gesagt a{font-weight:600}

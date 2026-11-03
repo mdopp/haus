@@ -127,7 +127,7 @@ func TestNotizShowsItsTextEscaped(t *testing.T) {
 		if code != 200 {
 			t.Fatalf("%s → %d", path, code)
 		}
-		mustContain(t, body, "<title>Einkaufsliste · Zuhause</title>", ">Einkaufsliste</h1>",
+		mustContain(t, body, "<title>Einkaufsliste · Homes</title>", ">Einkaufsliste</h1>",
 			"Milch<br>Brot", "Käse &lt;b&gt;fett&lt;/b&gt;", "&lt;script&gt;alert(1)&lt;/script&gt;",
 			`href=/notizen`, "href=/notizen aria-current=page>")
 		mustNotContain(t, body, "<b>fett", "<script>alert", "# Einkaufsliste")

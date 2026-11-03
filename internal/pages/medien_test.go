@@ -53,7 +53,7 @@ func TestMedienWhatPlaysWhere(t *testing.T) {
 	if code != 200 {
 		t.Fatalf("status %d", code)
 	}
-	mustContain(t, body, "<title>Medien · Zuhause</title>", "<h1>Medien</h1>")
+	mustContain(t, body, "<title>Medien · Homes</title>", "<h1>Medien</h1>")
 	laeuft := section(t, body, "karte-laeuft-gerade")
 	mustContain(t, laeuft,
 		`<a href="/raeume/media_player.wz">Sonos</a> <span class=k>Wohnzimmer · Abbey Road · The Beatles · Lautstärke 35 %</span>`,

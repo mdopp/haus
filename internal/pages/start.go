@@ -124,7 +124,21 @@ const (
 	saysAgendaHow   = "Termine und Erinnerungen aus dem Kalender stehen hier."
 )
 
-// Start is the family's page (haus#12, haus#35): "Zuhause" and the day,
+// marke is Start's head, the app's start screen in words and mark: the
+// icon, the name and the claim, so the page and the app are recognised as
+// one (owner 2026-11-03).
+var marke = func() string {
+	svg, err := symbole.ReadFile("symbol/favicon.svg") // inline: no request, no login in the way
+	if err != nil {
+		panic(err)
+	}
+	s := strings.Replace(string(svg), `width="72" height="72"`, `width="52" height="52" aria-hidden="true"`, 1)
+	s = strings.ReplaceAll(s, `"clip"`, `"marke-clip"`)
+	s = strings.ReplaceAll(s, "url(#clip)", "url(#marke-clip)")
+	return "<header class=marke>" + s + "<div><h1>Homes</h1><p class=claim>Dein Zuhause, klar im Blick.</p></div></header>"
+}()
+
+// Start is the family's page (haus#12, haus#35): Homes' mark, name and claim (as in the app, owner 2026-11-03) and the day,
 // then each part answering one question a family member has — who is
 // home and what is on (Im Haus, one action a row), my own things (Meine
 // Geräte, switched in place), what comes up (Heute und demnächst) — and
@@ -191,9 +205,9 @@ func Start(cfg StartConfig) http.HandlerFunc {
 		states = cfg.allAsSeen(states) // a cover wired the wrong way round, turned over (haus#64)
 		logErrs("start", map[string]error{"laib": laibErr, "home assistant": haErr, "calendar": evErr, "reminders": todoErr, "favorites": favErr})
 
-		b := familyHead(r, cfg, "Zuhause", "Start")
+		b := familyHead(r, cfg, "Homes", "Start")
 		b.WriteString(liveRefresh("alle", 120)) // lamps and players by push; the day and the box line every two minutes
-		b.WriteString("<h1>Zuhause</h1><p class=datum>" + dateWords(now, loc) + "</p>")
+		b.WriteString(marke + "<p class=datum>" + dateWords(now, loc) + "</p>")
 		var top, bottom string
 		if cfg.Laib != nil {
 			quiet := haErr == nil && evErr == nil && todoErr == nil && favErr == nil

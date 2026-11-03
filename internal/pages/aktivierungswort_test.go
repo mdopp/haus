@@ -44,7 +44,7 @@ func TestWakeWordAsTheDeviceReportsIt(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("→ %d", code)
 	}
-	mustContain(t, body, "<title>Aktivierungswort · Zuhause</title>", "<h2 id=karte-aktivierungswort>Aktivierungswort</h2>", "So meldet es der Lautsprecher selbst.",
+	mustContain(t, body, "<title>Aktivierungswort · Homes</title>", "<h2 id=karte-aktivierungswort>Aktivierungswort</h2>", "So meldet es der Lautsprecher selbst.",
 		"„Okay Nabu“", "Lautsprecher „Voice PE“ · Küche",
 		"„Hey Mycroft“ wird noch ausgewählt", "„Hey Mycroft“ kann der Lautsprecher schon, Laib wählt es für ihn aus. Bis dahin hört er auf „Okay Nabu“.")
 	mustNotContain(t, body, "Einsprechen", "Aufnahme", "aufgespielt", "beibringen")

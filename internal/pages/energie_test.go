@@ -49,7 +49,7 @@ func TestEnergieNowAndToday(t *testing.T) {
 	if code != 200 {
 		t.Fatalf("status %d", code)
 	}
-	mustContain(t, body, "<title>Energie · Zuhause</title>", "<h1>Energie</h1>")
+	mustContain(t, body, "<title>Energie · Homes</title>", "<h1>Energie</h1>")
 	mustContain(t, body, `<section class="karte fluss" aria-labelledby=karte-jetzt>`, `<section class="karte kacheln" aria-labelledby=karte-heute>`)
 	jetzt := section(t, body, "karte-jetzt")
 	mustContain(t, jetzt,

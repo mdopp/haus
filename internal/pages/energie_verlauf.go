@@ -730,7 +730,7 @@ const verlaufStyle = `<style>:root{--e-eigen:#c27c0e;--e-bezug:#4f8ff7;--e-einsp
 @keyframes fliesst{to{stroke-dashoffset:-12}}@media (prefers-reduced-motion:reduce){.fluss .lauf{animation:none}}
 .knoten.solar{--c:var(--e-solar)}.knoten.netz{--c:var(--e-bezug)}.knoten.akku{--c:var(--e-akku)}.knoten.haus{--c:var(--accent)}
 .knoten circle{fill:var(--card);stroke:var(--c);stroke-width:3}.knoten circle.fuell{fill:none;stroke:var(--c);stroke-width:5;stroke-linecap:round;opacity:.55}.knoten.aus circle{stroke:var(--faint);stroke-dasharray:4 4;stroke-width:2}
-.knoten .name{fill:var(--muted);font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase}
+.knoten .name{fill:var(--muted);font-size:11px;font-weight:600}
 .knoten .zahl{fill:var(--ink);font-size:17px;font-weight:700;font-variant-numeric:tabular-nums}.knoten .zahl.leer{fill:var(--faint)}.knoten .zahl.lang{font-size:13.5px}
 .knoten .wort{fill:var(--muted);font-size:11.5px}.knoten .zweit{fill:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
 .kennzahlen{display:grid;grid-template-columns:1fr 1fr;gap:0 12px;margin:6px 6px 0;padding:10px 0 0;border-top:1px solid var(--line)}
@@ -738,7 +738,7 @@ const verlaufStyle = `<style>:root{--e-eigen:#c27c0e;--e-bezug:#4f8ff7;--e-einsp
 .kennzahlen dd{margin:0}.kennzahlen .zahl{font-size:2rem;font-weight:700;line-height:1.15;font-variant-numeric:tabular-nums;color:var(--ink)}.kennzahlen .k{font-size:.8rem}
 .karte ul.zahlen{background:none;border:0;border-radius:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:8px}
 .karte .zahlen li,.karte .zahlen li:first-child{background:var(--card);border:1px solid var(--edge);border-radius:14px;padding:11px 13px 12px;display:flex;flex-direction:column;align-items:flex-start;gap:3px}
-.karte ul.legende{background:none;border:0;border-radius:0}.karte .legende li{padding:0;border:0;min-height:0}.zahlen .name{font-size:.72rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.karte ul.legende{background:none;border:0;border-radius:0}.karte .legende li{padding:0;border:0;min-height:0}.zahlen .name{font-size:.85rem;font-weight:600;color:var(--muted)}
 .zahlen .zahl{font-size:1.45rem;font-weight:700;line-height:1.2;font-variant-numeric:tabular-nums;color:var(--ink)}.karte .zahlen .k{font-size:.78rem;margin:0}
 .delta{display:inline-flex;align-items:center;gap:4px;padding:1px 8px;border-radius:999px;font-size:.78rem;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
 .delta.gut{color:var(--e-gut);background:var(--e-gut-soft)}.delta.schlecht{color:var(--e-schlecht);background:var(--e-schlecht-soft)}.delta.neutral,.delta.gleich{color:var(--muted);background:var(--line)}
