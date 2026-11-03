@@ -26,6 +26,9 @@ type Client struct {
 	toolsMu sync.Mutex // Takes' tools/list, kept takesFresh
 	tools   map[string]map[string]bool
 	toolsAt time.Time
+
+	aufgabenMu sync.Mutex // KeptAufgaben's lists, per person
+	aufgaben   map[string]*aufgabenKept
 }
 
 // Readiness is `laib status --json`.ready.
@@ -823,7 +826,16 @@ type Aufgaben struct {
 // BoxAufgaben lists the Box-Aufgaben, the done ones too (haus#115).
 // MeineAufgaben are the tasks a person sees (laib#878): the admins', the
 // household's and their own, open and done; Homes decides who sees the admins'.
+// A list read is kept for KeptAufgaben.
 func (c *Client) MeineAufgaben(ctx context.Context, von string) (Aufgaben, error) {
+	out, err := c.meineAufgaben(ctx, von)
+	if err == nil {
+		c.keepAufgaben(von, out)
+	}
+	return out, err
+}
+
+func (c *Client) meineAufgaben(ctx context.Context, von string) (Aufgaben, error) {
 	var out Aufgaben
 	text, err := c.CallTyped(ctx, "aufgabe", map[string]any{"action": "list", "alle": true, "von": von})
 	if err != nil {
@@ -853,6 +865,7 @@ func (c *Client) AufgabeSpaeter(ctx context.Context, id int, erinnern, von strin
 }
 
 func (c *Client) aufgabe(ctx context.Context, args map[string]any) (string, error) {
+	defer c.forgetAufgaben() // ticked or deferred: the kept lists are old
 	text, err := c.CallTyped(ctx, "aufgabe", args)
 	if err != nil {
 		return "", err
