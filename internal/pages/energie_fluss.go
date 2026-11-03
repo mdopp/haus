@@ -452,7 +452,11 @@ func flussHTML(f fluss) string {
 			b.WriteString(`<text class=wort x=` + n(p.x) + ` y=` + n(p.y-2) + ` text-anchor=middle><tspan class=nm>` + kn.name + `</tspan></text>`)
 			b.WriteString(`<text class=grund x=` + n(p.x) + ` y=` + n(p.y+15) + ` text-anchor=middle>` + html.EscapeString(f.off[kn.key]) + `</text>`)
 		} else {
-			b.WriteString(`<text class=zahl x=` + n(p.x) + ` y=` + n(p.y-1) + ` text-anchor=middle>` + html.EscapeString(zahl) + `</text>`)
+			zahlClass := "zahl"
+			if len([]rune(zahl)) > 7 { // "2.320 kWh" fits the pill a size smaller
+				zahlClass = `"zahl lang"`
+			}
+			b.WriteString(`<text class=` + zahlClass + ` x=` + n(p.x) + ` y=` + n(p.y-1) + ` text-anchor=middle>` + html.EscapeString(zahl) + `</text>`)
 			b.WriteString(`<text class=wort x=` + n(p.x) + ` y=` + n(p.y+16) + ` text-anchor=middle>` + html.EscapeString(s.vor) +
 				`<tspan class=nm>` + s.name + `</tspan>` + html.EscapeString(s.nach) + `</text>`)
 			if z := f.zweit(); kn.key == "netz" && z != "" {

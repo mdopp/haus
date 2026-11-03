@@ -721,7 +721,7 @@ const verlaufStyle = `<style>:root{--e-bezug:#4f8ff7;--e-einsp:#1fa592;--e-solar
 .knoten .pill{fill:var(--c);fill-opacity:.18;stroke:var(--c);stroke-width:2.6}.knoten.aus .pill{fill:none;stroke:var(--faint);stroke-dasharray:5 4;stroke-width:2}
 .knoten .fuell-spur,.knoten .fuell{fill:none;stroke:var(--c);stroke-width:3.5}.knoten .fuell-spur{opacity:.25}.knoten .fuell{stroke-linecap:round}
 .knoten .fuell-schild{fill:var(--e-karte);stroke:var(--c);stroke-width:1.5}.knoten .fuell-zahl{fill:var(--c);font-size:11px;font-weight:800;font-variant-numeric:tabular-nums}
-.knoten .zahl{fill:var(--ink);font-size:22px;font-weight:800;font-variant-numeric:tabular-nums}
+.knoten .zahl{fill:var(--ink);font-size:22px;font-weight:800;font-variant-numeric:tabular-nums}.knoten .zahl.lang{font-size:17px}
 .knoten .wort{fill:var(--e-wort);font-size:12px;font-weight:700}.knoten .nm{fill:var(--c);font-weight:800}.knoten.aus .nm{fill:var(--faint)}
 .knoten .grund{fill:var(--faint);font-size:11px;font-weight:600}.knoten .zweit{fill:var(--e-wort);font-size:12px;font-weight:700;font-variant-numeric:tabular-nums}
 .fluss .autarkie{margin:4px 0 2px;text-align:center;font-size:1.05rem;font-weight:600;color:var(--e-wort)}.fluss .autarkie b{color:var(--ink);font-weight:800;font-variant-numeric:tabular-nums}

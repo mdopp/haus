@@ -289,6 +289,10 @@ func TestEnergieSpanAsAFlow(t *testing.T) {
 	mustContain(t, mon, "<tr><th scope=row>Solar erzeugt</th><td>133 kWh</td></tr>", "<tr><th scope=row>ins Netz</th><td>79 kWh</td></tr>",
 		"<tr><th scope=row>aus dem Netz</th><td>41 kWh</td></tr>", "<tr><th scope=row>Haus verbraucht</th><td>95 kWh</td></tr>",
 		"<p class=autarkie><b>57\u00a0%</b> Autarkie</p>")
+	// a long number takes the smaller size, so it stays inside its pill
+	_, body, _ = familyPage(t, Energie, cfg, "GET", "/energie?zeitraum=jahr", "family")
+	mustContain(t, section(t, body, "karte-das-jahr-2026-bis-heute"), `<text class="zahl lang" x=198 y=39 text-anchor=middle>1.343 kWh</text>`)
+	_, body, _ = familyPage(t, Energie, cfg, "GET", "/energie?zeitraum=monat", "family")
 	arrowsPointIn(t, mon)
 	if n := strings.Count(body, `class="karte spalte"`); n != 1 {
 		t.Fatalf("%d number columns, want Heute's alone", n)
