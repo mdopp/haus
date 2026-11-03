@@ -53,7 +53,7 @@ func TestRaeumeOneCardPerRoom(t *testing.T) {
 	}
 	mustContain(t, body,
 		"<h2 id=karte-kueche>Küche</h2>", "<h2 id=karte-wohnzimmer>Wohnzimmer</h2>", "<h2 id=karte-ohne-raum>Ohne Raum</h2>",
-		"Deckenlampe", "an · 60 %",
+		"Deckenlampe", `an · <button type=button class=stufe popovertarget=regler-light-kueche-decke aria-haspopup=dialog aria-label="Deckenlampe Helligkeit 60 %, einstellen">60 %</button>`,
 		"Rollo Küche", "offen · 40 %",
 		"Stehlampe", "aus",
 		"Heizung Wohnzimmer", "21,5 °C · Soll 22 °C",
@@ -215,8 +215,8 @@ func TestRaeumeSwitchesLampsInPlace(t *testing.T) {
 	if n := strings.Count(body, "role=switch"); n != 3 {
 		t.Fatalf("%d switches, want 3 (Deckenlampe, Stehlampe, Kellerlicht):\n%s", n, body)
 	}
-	if n := strings.Count(body, "action=/schalten"); n != 4 {
-		t.Fatalf("%d forms, want 4 (three switches, Deckenlampe's slider):\n%s", n, body)
+	if n := strings.Count(body, "action=/schalten"); n != 8 {
+		t.Fatalf("%d forms, want 8 (three switches, Deckenlampe's slider and its four steps):\n%s", n, body)
 	}
 	mustNotContain(t, body, `value="cover.`, `value="climate.`, `value="media_player.`, `value="light.eg"`, `value="light.garten"`,
 		"<script>alert")

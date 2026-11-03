@@ -123,8 +123,8 @@ func TestInvertedCoverIsTurnedOver(t *testing.T) {
 	}
 	_, body, _ := familyPage(t, Raeume, cfg, "GET", "/raeume", "family")
 	ess := section(t, body, "karte-esszimmer")
-	mustContain(t, ess, "Esszimmerjalousie</a> <span class=k>geschlossen</span>", `value=0 aria-label="Esszimmerjalousie Position"`,
-		"Rollo</a> <span class=k>offen · 40 %</span>", `value=40 aria-label="Rollo Position"`)
+	mustContain(t, ess, "Esszimmerjalousie</a> <span class=k>geschlossen · <button type=button class=stufe popovertarget=regler-cover-esszimmer aria-haspopup=dialog aria-label=\"Esszimmerjalousie Position 0 %, einstellen\">0 %</button></span>", `value=0 aria-label="Esszimmerjalousie Position"`,
+		"Rollo</a> <span class=k>offen · <button type=button class=stufe popovertarget=regler-cover-rollo aria-haspopup=dialog aria-label=\"Rollo Position 40 %, einstellen\">40 %</button></span>", `value=40 aria-label="Rollo Position"`)
 	_, body, _ = familyPage(t, Ding, cfg, "GET", "/raeume/cover.esszimmer", "family")
 	mustContain(t, body, "geschlossen", `value=0 aria-label="Esszimmerjalousie Position"`)
 
