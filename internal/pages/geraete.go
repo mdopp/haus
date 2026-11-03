@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/mdopp/haus/internal/app"
-	"github.com/mdopp/haus/internal/devices"
+	"github.com/mdopp/homes/internal/app"
+	"github.com/mdopp/homes/internal/devices"
 )
 
 // Geraete lists the paired phones with Entfernen and says how to pair one:

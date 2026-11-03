@@ -3,7 +3,7 @@
 // Haushalt calendar and the contacts into the Haushalt address book, both
 // in Radicale where the phones sync them, and the Google Keep notes as
 // Markdown notes into the notes folder, where the memory library finds
-// them. It is a one-shot import, not a service: Haus keeps nothing of it.
+// them. It is a one-shot import, not a service: Homes keeps nothing of it.
 //
 // Running it twice adds nothing twice. Every entry gets a name that comes
 // from what it is — a calendar entry its UID, a contact its UID or one
@@ -27,8 +27,8 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/mdopp/haus/internal/caldav"
-	"github.com/mdopp/haus/internal/notes"
+	"github.com/mdopp/homes/internal/caldav"
+	"github.com/mdopp/homes/internal/notes"
 )
 
 // Target is where an import writes, and what it leaves out.
@@ -314,6 +314,7 @@ func hasPrefixFold(s, prefix string) bool {
 	return len(s) >= len(prefix) && strings.EqualFold(s[:len(prefix)], prefix)
 }
 
+// prodID keeps the old name: stored data, on every entry already in Radicale (laib#1021).
 const prodID = "-//mdopp//Haus Takeout-Import//DE"
 
 // calName is a calendar's name: X-WR-CALNAME, else its file's.
@@ -374,6 +375,7 @@ func calendar(ctx context.Context, a *archive, file string, t Target, rep *Repor
 			case "VEVENT", "VTODO":
 				uid := c.prop("UID")
 				if uid == "" {
+					// "@haus" stays (stored data, laib#1021): a second import finds the same UID
 					uid = "takeout-" + id(c.prop("SUMMARY"), c.prop("DTSTART"), c.prop("DTEND"), c.prop("DUE")) + "@haus"
 					c.lines = append([]string{c.lines[0], "UID:" + uid}, c.lines[1:]...)
 				}

@@ -19,9 +19,9 @@ import (
 )
 
 // App is the household's Discogs app ("Joshua", its consumer key and
-// secret from laib, HAUS_DISCOGS_KEY and HAUS_DISCOGS_SECRET), through
+// secret from laib, HOMES_DISCOGS_KEY and HOMES_DISCOGS_SECRET), through
 // which each person connects their own account: Discogs asks them in the
-// browser, Haus keeps their token. OAuth 1.0a with PLAINTEXT signatures,
+// browser, Homes keeps their token. OAuth 1.0a with PLAINTEXT signatures,
 // over https only, as Discogs allows.
 type App struct {
 	Key, Secret string
@@ -30,10 +30,10 @@ type App struct {
 	HTTP        *http.Client
 }
 
-// AppFromEnv is the app from HAUS_DISCOGS_KEY and HAUS_DISCOGS_SECRET, or
+// AppFromEnv is the app from HOMES_DISCOGS_KEY and HOMES_DISCOGS_SECRET, or
 // nil without both.
 func AppFromEnv() *App {
-	k, s := strings.TrimSpace(os.Getenv("HAUS_DISCOGS_KEY")), strings.TrimSpace(os.Getenv("HAUS_DISCOGS_SECRET"))
+	k, s := strings.TrimSpace(os.Getenv("HOMES_DISCOGS_KEY")), strings.TrimSpace(os.Getenv("HOMES_DISCOGS_SECRET"))
 	if k == "" || s == "" {
 		return nil
 	}
@@ -130,7 +130,7 @@ func (a *App) Client(token, secret string) *Client {
 }
 
 // Konto is a person's connected Discogs account: its name and its token
-// (kept by Haus alone, never shown).
+// (kept by Homes alone, never shown).
 type Konto struct {
 	Name   string    `json:"name"`
 	Token  string    `json:"token"`
@@ -142,7 +142,7 @@ type Konto struct {
 // read as a Regal, and the connections on their way.
 type Regale struct {
 	App *App
-	Dir string // HAUS_DATA: discogs-konten.json, 0600
+	Dir string // HOMES_DATA: discogs-konten.json, 0600
 
 	mu      sync.Mutex
 	regale  map[string]*Regal
@@ -226,8 +226,8 @@ func (r *Regale) Verbinden(ctx context.Context, user, callback string) (string, 
 }
 
 // ErrFremd is a return from Discogs that is not this person's connection
-// (another person's, an old one, or none Haus started).
-var ErrFremd = errors.New("Diese Verbindung hat Haus nicht für dich begonnen. Tipp noch einmal auf „Mit Discogs verbinden“.")
+// (another person's, an old one, or none Homes started).
+var ErrFremd = errors.New("Diese Verbindung hat Homes nicht für dich begonnen. Tipp noch einmal auf „Mit Discogs verbinden“.")
 
 // Fertig finishes user's connection with what Discogs sent back, and keeps
 // the account: its name answers.

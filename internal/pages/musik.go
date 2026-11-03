@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/mdopp/haus/internal/einkauf"
-	"github.com/mdopp/haus/internal/papierkorb"
+	"github.com/mdopp/homes/internal/einkauf"
+	"github.com/mdopp/homes/internal/papierkorb"
 	"html"
 	"io"
 	"io/fs"
@@ -19,7 +19,7 @@ import (
 	"time"
 )
 
-// Musik hinzufügen (haus#107; owner 2026-10-24: "einfach über die Haus App
+// Musik hinzufügen (haus#107; owner 2026-10-24: "einfach über die Homes App
 // hochladen"): files, a whole folder or ZIPs into the music inbox, which
 // laib's importer (beets) sorts into the music and Jellyfin. Anyone in the
 // family; music only, into that folder only.
@@ -221,8 +221,8 @@ func nichtUebernommen(cfg StartConfig) string {
 // takes it in about a minute; or (tun=loeschen) deletes it. A run left
 // with only its GRUND.txt goes.
 func musikNochmal(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
-	if !fromHaus(r) {
-		http.Error(w, "Das geht nur von Haus' eigener Seite.", http.StatusForbidden)
+	if !fromHomes(r) {
+		http.Error(w, "Das geht nur von Homes' eigener Seite.", http.StatusForbidden)
 		return
 	}
 	r.ParseForm()
@@ -258,18 +258,18 @@ func musikNochmal(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
 				}
 			}
 			if err != nil {
-				log.Printf("haus: musik: deleting %s: %v", from, err)
+				log.Printf("homes: musik: deleting %s: %v", from, err)
 				http.Error(w, "Die Datei ließ sich gerade nicht löschen; sie bleibt. Versuch es gleich noch einmal.", http.StatusInternalServerError)
 				return
 			}
 			undo = e.ID
 		} else if err := root.RemoveAll(from); err != nil {
-			log.Printf("haus: musik: deleting %s: %v", from, err)
+			log.Printf("homes: musik: deleting %s: %v", from, err)
 			http.Error(w, "Die Datei ließ sich nicht löschen.", http.StatusInternalServerError)
 			return
 		}
 		tidyRun(root, run)
-		log.Printf("haus: musik: %s deleted %s", r.Header.Get("Remote-User"), from)
+		log.Printf("homes: musik: %s deleted %s", r.Header.Get("Remote-User"), from)
 		writeMusikUndo(w, r, cfg, "„"+name+"“ ist gelöscht.", undo)
 		return
 	}
@@ -292,12 +292,12 @@ func musikNochmal(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
 		}
 	}
 	if err := root.Rename(from, to); err != nil {
-		log.Printf("haus: musik: again %s: %v", from, err)
+		log.Printf("homes: musik: again %s: %v", from, err)
 		http.Error(w, "Die Datei ließ sich nicht zurücklegen.", http.StatusInternalServerError)
 		return
 	}
 	tidyRun(root, run)
-	log.Printf("haus: musik: %s put %s back into the inbox", r.Header.Get("Remote-User"), name)
+	log.Printf("homes: musik: %s put %s back into the inbox", r.Header.Get("Remote-User"), name)
 	writeMusik(w, r, cfg, "„"+name+"“ liegt wieder im Musik-Eingang. Die Box sortiert es in etwa einer Minute ein.", to)
 }
 
@@ -309,7 +309,7 @@ func plainName(s string) bool {
 // musikTeil takes one piece: ?pfad=<place>&ab=<offset>&gesamt=<size>, the
 // bytes as the body. It answers {"ab": the part's size now, "fertig": true
 // when the file is in place}; a piece at the wrong offset 409 with the
-// size there; what is not music, too big or not Haus's own page, a
+// size there; what is not music, too big or not Homes' own page, a
 // sentence.
 func musikTeil(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
 	if r.Method != http.MethodPost {
@@ -321,8 +321,8 @@ func musikTeil(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
 		http.NotFound(w, r)
 		return
 	}
-	if !fromHaus(r) {
-		http.Error(w, "Hochladen geht nur von Haus' eigener Seite.", http.StatusForbidden)
+	if !fromHomes(r) {
+		http.Error(w, "Hochladen geht nur von Homes' eigener Seite.", http.StatusForbidden)
 		return
 	}
 	q := r.URL.Query()
@@ -342,7 +342,7 @@ func musikTeil(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
 	}
 	root, err := os.OpenRoot(cfg.MusicInbox)
 	if err != nil {
-		log.Printf("haus: musik: inbox: %v", err)
+		log.Printf("homes: musik: inbox: %v", err)
 		http.Error(w, "Der Musik-Eingang ist gerade nicht erreichbar.", http.StatusServiceUnavailable)
 		return
 	}
@@ -351,7 +351,7 @@ func musikTeil(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
 	dir = strings.TrimSuffix(dir, "/")
 	if dir != "" {
 		if err := root.MkdirAll(dir, 0o775); err != nil {
-			log.Printf("haus: musik: %s: %v", dir, err)
+			log.Printf("homes: musik: %s: %v", dir, err)
 			http.Error(w, "Der Ordner lässt sich nicht anlegen.", http.StatusInternalServerError)
 			return
 		}
@@ -359,7 +359,7 @@ func musikTeil(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
 	part := path.Join(dir, "._"+file+".part")
 	f, err := root.OpenFile(part, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o664)
 	if err != nil {
-		log.Printf("haus: musik: %s: %v", part, err)
+		log.Printf("homes: musik: %s: %v", part, err)
 		http.Error(w, "Die Datei lässt sich nicht schreiben.", http.StatusInternalServerError)
 		return
 	}
@@ -384,7 +384,7 @@ func musikTeil(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
 	size := at + n
 	switch {
 	case err != nil || cerr != nil:
-		log.Printf("haus: musik: %s: %v %v", part, err, cerr)
+		log.Printf("homes: musik: %s: %v %v", part, err, cerr)
 		http.Error(w, "Das Stück kam nicht ganz an. Es wird noch einmal geschickt.", http.StatusBadGateway)
 		return
 	case size > total || n > musikPiece:
@@ -409,25 +409,25 @@ func musikTeil(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
 		}
 	}
 	// who uploaded, for the importer's message (laib templates/beets
-	// README, "Uploading from Haus" 2): beside the upload at the inbox's
+	// README, "Uploading from Homes" 2): beside the upload at the inbox's
 	// top, named after it, written before the upload is whole
 	if who := uploader(r.Header.Get("Remote-User")); who != "" {
 		top, _, _ := strings.Cut(final, "/")
 		if f, err := root.OpenFile("._"+top+".von", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o664); err == nil {
 			_, werr := f.WriteString(who + "\n")
 			if cerr := f.Close(); werr != nil || cerr != nil {
-				log.Printf("haus: musik: ._%s.von: %v %v", top, werr, cerr)
+				log.Printf("homes: musik: ._%s.von: %v %v", top, werr, cerr)
 			}
 		} else {
-			log.Printf("haus: musik: ._%s.von: %v", top, err)
+			log.Printf("homes: musik: ._%s.von: %v", top, err)
 		}
 	}
 	if err := root.Rename(part, final); err != nil {
-		log.Printf("haus: musik: %s → %s: %v", part, final, err)
+		log.Printf("homes: musik: %s → %s: %v", part, final, err)
 		http.Error(w, "Die Datei lässt sich nicht ablegen.", http.StatusInternalServerError)
 		return
 	}
-	log.Printf("haus: musik: %s by %s (%d bytes)", final, r.Header.Get("Remote-User"), size)
+	log.Printf("homes: musik: %s by %s (%d bytes)", final, r.Header.Get("Remote-User"), size)
 	answer(http.StatusOK, size, true)
 }
 
@@ -498,7 +498,7 @@ func musikStand(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
 		ctx, cancel := context.WithTimeout(r.Context(), backendWait)
 		defer cancel()
 		if line, own, err := cfg.Laib.ServiceStatus(ctx, "beets"); err != nil {
-			log.Printf("haus: musik: laib status beets: %v", err)
+			log.Printf("homes: musik: laib status beets: %v", err)
 		} else {
 			out["stand"], out["wartet"] = importLine(line)
 			out["ergebnis"] = uploadResults(own, r.URL.Query()["namen"], r.URL.Query().Get("seit"))
@@ -665,13 +665,13 @@ func musikZurueck(w http.ResponseWriter, r *http.Request, cfg StartConfig, id st
 	defer root.Close()
 	root.MkdirAll(keptBack+"/"+d.Lauf, 0o755)
 	if err := root.Rename(musikKorb+"/"+e.ID+"/"+d.Name, keptBack+"/"+d.Lauf+"/"+d.Name); err != nil {
-		log.Printf("haus: musik: zurück %s: %v", d.Name, err)
+		log.Printf("homes: musik: zurück %s: %v", d.Name, err)
 		http.Error(w, "„"+d.Name+"“ ließ sich gerade nicht zurückholen. Versuch es gleich noch einmal.", http.StatusConflict)
 		return
 	}
 	root.Remove(musikKorb + "/" + e.ID)
 	cfg.Papierkorb.Raus(e.ID)
-	log.Printf("haus: musik: %s put %s back", r.Header.Get("Remote-User"), d.Name)
+	log.Printf("homes: musik: %s put %s back", r.Header.Get("Remote-User"), d.Name)
 	writeMusik(w, r, cfg, "„"+d.Name+"“ ist wieder da, unter „Nicht übernommen“.", "")
 }
 

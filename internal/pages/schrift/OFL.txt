@@ -1,5 +1,5 @@
 geist-1b5ebf.woff2 (its name: the start of its sha256) is Geist 1.401, the variable font (all weights), its
-Latin subset as Google Fonts serves it. Haus serves it itself so the
+Latin subset as Google Fonts serves it. Homes serves it itself so the
 family's box asks no one else for a font (haus#35).
 
 Copyright 2024 The Geist Project Authors (https://github.com/vercel/geist-font)

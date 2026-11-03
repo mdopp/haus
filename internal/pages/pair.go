@@ -4,12 +4,12 @@ import (
 	"html"
 	"net/http"
 
-	"github.com/mdopp/haus/internal/app"
-	"github.com/mdopp/haus/internal/devices"
+	"github.com/mdopp/homes/internal/app"
+	"github.com/mdopp/homes/internal/devices"
 )
 
 // PairDevice is where the app pairs itself (haus#6): after the person enters
-// Haus's address, the app opens /pair-device in a Custom Tab, where the
+// Homes' address, the app opens /pair-device in a Custom Tab, where the
 // browser's Authelia session is. GET only asks; a prefetch mints nothing.
 // POST mints a device for the logged-in person and redirects to the app's
 // pair link with the token in the fragment, which never reaches a proxy log.

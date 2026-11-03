@@ -1,5 +1,5 @@
 // Package merken makes a note from a link (haus#117; owner 2026-10-25:
-// "faul und einfach"): Haus fetches the page itself, from the box, reads
+// "faul und einfach"): Homes fetches the page itself, from the box, reads
 // what the page says of itself in machine words (schema.org's JSON-LD: a
 // recipe, an album's review, a hotel or an offer) and its meta tags and
 // text, asks the house model for the core where the page carries no such
@@ -31,13 +31,13 @@ import (
 const (
 	maxPage   = 3 << 20
 	fetchWait = 20 * time.Second
-	userAgent = "Mozilla/5.0 (compatible; Haus; +https://github.com/mdopp/haus) Notizen"
+	userAgent = "Mozilla/5.0 (compatible; Homes; +https://github.com/mdopp/homes) Notizen"
 )
 
 // What the family reads when a page cannot be had.
 var (
 	ErrNoAddress = errors.New("Das ist keine Webadresse. Sie beginnt mit https:// oder http://.")
-	ErrPrivate   = errors.New("Diese Adresse liegt im eigenen Netz; Haus merkt sich nur Seiten aus dem Internet.")
+	ErrPrivate   = errors.New("Diese Adresse liegt im eigenen Netz; Homes merkt sich nur Seiten aus dem Internet.")
 	ErrNoAnswer  = errors.New("Die Seite antwortet gerade nicht. Später noch einmal versuchen.")
 	ErrNoPage    = errors.New("Unter dieser Adresse ist keine Webseite.")
 )
@@ -103,7 +103,7 @@ func (f Fetcher) client() *http.Client {
 	}}
 }
 
-// checkURL is an address Haus fetches: http(s), a host, no login in it.
+// checkURL is an address Homes fetches: http(s), a host, no login in it.
 func checkURL(u *url.URL) error {
 	if (u.Scheme != "https" && u.Scheme != "http") || u.Hostname() == "" || u.User != nil {
 		return ErrNoAddress
@@ -175,7 +175,7 @@ func (f Fetcher) Get(ctx context.Context, u *url.URL) (string, string, []byte, s
 		if errors.As(err, &ue) && errors.Is(ue.Err, ErrNoAddress) {
 			return "", "", nil, "", ErrNoAddress
 		}
-		log.Printf("haus: merken: %s: %v", u.Host, err) // why it did not answer: the name, the way, the time
+		log.Printf("homes: merken: %s: %v", u.Host, err) // why it did not answer: the name, the way, the time
 		return "", "", nil, "", why(u.Hostname(), err)
 	}
 	defer res.Body.Close()
@@ -185,7 +185,7 @@ func (f Fetcher) Get(ctx context.Context, u *url.URL) (string, string, []byte, s
 	ct, params, _ := mime.ParseMediaType(res.Header.Get("Content-Type"))
 	raw, err := io.ReadAll(io.LimitReader(res.Body, maxPage))
 	if err != nil {
-		log.Printf("haus: merken: %s: reading: %v", u.Host, err)
+		log.Printf("homes: merken: %s: reading: %v", u.Host, err)
 		return "", "", nil, "", &NoAnswer{Reason: u.Hostname() + " hat die Seite nicht ganz geschickt; die Verbindung brach ab.", Next: "Gleich noch einmal teilen."}
 	}
 	return res.Request.URL.String(), ct, raw, params["charset"], nil
@@ -235,9 +235,9 @@ func why(host string, err error) error {
 	case errors.Is(err, context.DeadlineExceeded) || isTimeout(err):
 		return &NoAnswer{Reason: host + " hat nicht rechtzeitig geantwortet (" + fetchWait.String() + ").", Next: "Später noch einmal teilen."}
 	case errors.As(err, &cert):
-		return &NoAnswer{Reason: "Die sichere Verbindung zu " + host + " kam nicht zustande: Das Zertifikat der Seite stimmt nicht.", Next: "Die Seite merkt sich Haus so nicht."}
+		return &NoAnswer{Reason: "Die sichere Verbindung zu " + host + " kam nicht zustande: Das Zertifikat der Seite stimmt nicht.", Next: "Die Seite merkt sich Homes so nicht."}
 	case errors.As(err, &op) && op.Op == "dial":
-		return &NoAnswer{Reason: "Die Box kommt nicht zu " + host + " durch: keine Verbindung ins Internet von Haus aus.", Next: "Bleibt es so, liegt es an der Box; sag Bescheid."}
+		return &NoAnswer{Reason: "Die Box kommt nicht zu " + host + " durch: keine Verbindung ins Internet von Homes aus.", Next: "Bleibt es so, liegt es an der Box; sag Bescheid."}
 	}
 	return &NoAnswer{Reason: host + " hat die Verbindung abgelehnt oder abgebrochen.", Next: "Später noch einmal teilen."}
 }

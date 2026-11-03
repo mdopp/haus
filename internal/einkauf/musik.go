@@ -13,11 +13,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mdopp/haus/internal/caldav"
-	"github.com/mdopp/haus/internal/discogs"
-	"github.com/mdopp/haus/internal/jellyfin"
-	"github.com/mdopp/haus/internal/merken"
-	"github.com/mdopp/haus/internal/musicbrainz"
+	"github.com/mdopp/homes/internal/caldav"
+	"github.com/mdopp/homes/internal/discogs"
+	"github.com/mdopp/homes/internal/jellyfin"
+	"github.com/mdopp/homes/internal/merken"
+	"github.com/mdopp/homes/internal/musicbrainz"
 )
 
 // The household's music wish list (owner 2026-10-25: "nur noch eigene
@@ -47,7 +47,7 @@ type Wuensche struct {
 	Bib    Bibliothek
 	MB     Suche
 	Regale *discogs.Regale // each person's records on Discogs; nil: none
-	Dir    string          // HAUS_DATA: musikwuensche.json, each wish's stage and where it is
+	Dir    string          // HOMES_DATA: musikwuensche.json, each wish's stage and where it is
 	Now    func() time.Time
 
 	mu        sync.Mutex
@@ -172,7 +172,7 @@ func (w *Wuensche) Pruefen(ctx context.Context) ([]Erfuellt, error) {
 					}
 					if wl, ok := w.Regale.For(st.WantlistVon); ok && st.Wantlist != 0 {
 						if err := wl.C.Entwuenschen(ctx, st.Wantlist); err != nil {
-							log.Printf("haus: musikwunsch: wantlist: %v", err)
+							log.Printf("homes: musikwunsch: wantlist: %v", err)
 						}
 					}
 					out = append(out, Erfuellt{Person: Wer(it.Herkunft), Satz: "Die Platte „" + p.Titel + "“ ist in deiner Sammlung; ich habe „" + it.Summary + "“ auf der Wunschliste abgehakt."})
@@ -306,7 +306,7 @@ func (w *Wuensche) load() map[string]Stand {
 	}
 	if b, err := os.ReadFile(filepath.Join(w.Dir, wishFile)); err == nil {
 		if err := json.Unmarshal(b, &out); err != nil {
-			log.Printf("haus: musikwünsche: %s: %v", wishFile, err)
+			log.Printf("homes: musikwünsche: %s: %v", wishFile, err)
 		}
 	}
 	return out
@@ -321,7 +321,7 @@ func (w *Wuensche) save(all map[string]Stand) {
 	if err := os.WriteFile(p+".tmp", b, 0o600); err == nil {
 		err = os.Rename(p+".tmp", p)
 		if err != nil {
-			log.Printf("haus: musikwünsche: %v", err)
+			log.Printf("homes: musikwünsche: %v", err)
 		}
 	}
 }
@@ -370,7 +370,7 @@ func (w *Wuensche) suchen(uid, artist, title string, album bool) {
 	defer cancel()
 	f, err := w.MB.Suchen(ctx, artist, title, album, w.now())
 	if err != nil && !errors.Is(err, musicbrainz.ErrNichts) {
-		log.Printf("haus: musikwunsch %q: %v", artist+" – "+title, err)
+		log.Printf("homes: musikwunsch %q: %v", artist+" – "+title, err)
 	}
 	w.setzen(uid, func(st *Stand) {
 		st.Versucht = w.now()
@@ -500,7 +500,7 @@ func (w *Wuensche) AufWantlist(ctx context.Context, uid, person string) (string,
 		artist, title := Teile(it.Summary)
 		album := w.Stand(uid).AlbumName(title)
 		if album == "" {
-			return "", errors.New("Auf welchem Album das ist, weiß Haus noch nicht; erst wenn es gefunden ist, geht es auf die Wantlist.")
+			return "", errors.New("Auf welchem Album das ist, weiß Homes noch nicht; erst wenn es gefunden ist, geht es auf die Wantlist.")
 		}
 		t, ok, err := rg.C.Album(ctx, artist, album)
 		if err != nil {

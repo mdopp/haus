@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/mdopp/haus/internal/cards"
-	"github.com/mdopp/haus/internal/ha"
+	"github.com/mdopp/homes/internal/cards"
+	"github.com/mdopp/homes/internal/ha"
 )
 
 // medienPath is Medien's own path, where its buttons land back.

@@ -8,7 +8,7 @@ import (
 // haus#192: Mehr carries one card for the Gesundheit program when the box
 // has it: each of its pages a link, who sees what in one quiet line; without the
 // address there is no card and no empty space. Nothing of a person's health
-// passes through Haus.
+// passes through Homes.
 func TestMehrLinksToGesundheitOnlyWhenTheBoxHasIt(t *testing.T) {
 	_, body, _ := familyPage(t, Mehr, StartConfig{GesundheitURL: "https://gesundheit.example.org"}, "GET", mehrPath, "family")
 	for _, want := range []string{"Gesundheit", saysGesundheitWer, `href="https://gesundheit.example.org/werte"`, `href="https://gesundheit.example.org/befunde"`,

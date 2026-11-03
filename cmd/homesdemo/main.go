@@ -1,4 +1,4 @@
-// Command hausdemo serves Haus's family pages against fakes: for the
+// Command homesdemo serves Homes' family pages against fakes: for the
 // browser tests (e2e/) and to look at a page without a box. Home
 // Assistant is hafake with a few lamps, a switch, a cover and a player,
 // whose calls change their state as HA's do; the notes and the
@@ -14,9 +14,9 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
-	"github.com/mdopp/haus/internal/devices"
-	"github.com/mdopp/haus/internal/discogs"
-	"github.com/mdopp/haus/internal/napi"
+	"github.com/mdopp/homes/internal/devices"
+	"github.com/mdopp/homes/internal/discogs"
+	"github.com/mdopp/homes/internal/napi"
 	"log"
 	"net/http"
 	"os"
@@ -24,22 +24,22 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/mdopp/haus/internal/abs"
-	"github.com/mdopp/haus/internal/abs/absfake"
-	"github.com/mdopp/haus/internal/ansicht"
-	"github.com/mdopp/haus/internal/caldav"
-	"github.com/mdopp/haus/internal/caldav/davfake"
-	"github.com/mdopp/haus/internal/cards"
-	"github.com/mdopp/haus/internal/einkauf"
-	"github.com/mdopp/haus/internal/favoriten"
-	"github.com/mdopp/haus/internal/gesehen"
-	"github.com/mdopp/haus/internal/ha"
-	"github.com/mdopp/haus/internal/ha/hafake"
-	"github.com/mdopp/haus/internal/jellyfin"
-	"github.com/mdopp/haus/internal/merken"
-	"github.com/mdopp/haus/internal/notes"
-	"github.com/mdopp/haus/internal/pages"
-	"github.com/mdopp/haus/internal/podcasts"
+	"github.com/mdopp/homes/internal/abs"
+	"github.com/mdopp/homes/internal/abs/absfake"
+	"github.com/mdopp/homes/internal/ansicht"
+	"github.com/mdopp/homes/internal/caldav"
+	"github.com/mdopp/homes/internal/caldav/davfake"
+	"github.com/mdopp/homes/internal/cards"
+	"github.com/mdopp/homes/internal/einkauf"
+	"github.com/mdopp/homes/internal/favoriten"
+	"github.com/mdopp/homes/internal/gesehen"
+	"github.com/mdopp/homes/internal/ha"
+	"github.com/mdopp/homes/internal/ha/hafake"
+	"github.com/mdopp/homes/internal/jellyfin"
+	"github.com/mdopp/homes/internal/merken"
+	"github.com/mdopp/homes/internal/notes"
+	"github.com/mdopp/homes/internal/pages"
+	"github.com/mdopp/homes/internal/podcasts"
 )
 
 func main() {
@@ -77,7 +77,7 @@ func main() {
 	fake.Set("media_player.wz", "playing", map[string]any{"friendly_name": "Wohnzimmer", "media_title": "Abbey Road", "media_artist": "The Beatles",
 		"volume_level": 0.3, "supported_features": 1.0 + 4 + 1024 + 16384})
 
-	dir, err := os.MkdirTemp("", "hausdemo-")
+	dir, err := os.MkdirTemp("", "homesdemo-")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -151,7 +151,7 @@ func main() {
 	mux.HandleFunc("/willkommen", pages.Willkommen(cfg))
 	mux.HandleFunc("/sprechen", pages.Sprechen(cfg))
 	if store, err := devices.Open(dir); err == nil { // haus#172: pairing and removing a phone, end to end
-		mux.HandleFunc("/box/geraete", pages.Geraete(store, "https://haus.example", cfg))
+		mux.HandleFunc("/box/geraete", pages.Geraete(store, "https://homes.example", cfg))
 		mux.HandleFunc("/pair-device", pages.PairDevice(store, cfg))
 	}
 	mux.HandleFunc(pages.DiscogsPath, pages.Discogs(cfg))
@@ -205,7 +205,7 @@ func main() {
 	})
 	absFake.AddFeed("http://"+*addr+"/demo/feed.xml", "Demo-Podcast")
 	srv := &http.Server{Addr: *addr, Handler: anna, ReadHeaderTimeout: 5 * time.Second}
-	log.Printf("hausdemo: http://%s/start (fakes only, not for a box)", *addr)
+	log.Printf("homesdemo: http://%s/start (fakes only, not for a box)", *addr)
 	log.Fatal(srv.ListenAndServe())
 }
 

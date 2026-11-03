@@ -42,10 +42,10 @@ type Tickets struct {
 // cacheFor keeps GitHub's unauthenticated limit (60 an hour) far away.
 const cacheFor = 5 * time.Minute
 
-// FromEnv reads HAUS_WERKSTATT_REPOS (owner/name, comma-separated); none, no card.
+// FromEnv reads HOMES_WERKSTATT_REPOS (owner/name, comma-separated); none, no card.
 func FromEnv() *Tickets {
 	var repos []string
-	for _, r := range strings.Split(os.Getenv("HAUS_WERKSTATT_REPOS"), ",") {
+	for _, r := range strings.Split(os.Getenv("HOMES_WERKSTATT_REPOS"), ",") {
 		if r = strings.TrimSpace(r); r != "" {
 			repos = append(repos, r)
 		}
@@ -53,7 +53,7 @@ func FromEnv() *Tickets {
 	if len(repos) == 0 {
 		return nil
 	}
-	api := strings.TrimRight(os.Getenv("HAUS_GITHUB_API"), "/")
+	api := strings.TrimRight(os.Getenv("HOMES_GITHUB_API"), "/")
 	if api == "" {
 		api = "https://api.github.com"
 	}

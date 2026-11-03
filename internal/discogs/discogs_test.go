@@ -22,7 +22,7 @@ func TestEAN(t *testing.T) {
 func fake(t *testing.T) (*Client, *[]string) {
 	var calls []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "Discogs token=tok" || !strings.HasPrefix(r.Header.Get("User-Agent"), "Haus/") {
+		if r.Header.Get("Authorization") != "Discogs token=tok" || !strings.HasPrefix(r.Header.Get("User-Agent"), "Homes/") {
 			w.WriteHeader(401)
 			json.NewEncoder(w).Encode(map[string]string{"message": "You must authenticate"})
 			return

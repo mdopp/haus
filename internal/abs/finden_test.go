@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mdopp/haus/internal/merken"
+	"github.com/mdopp/homes/internal/merken"
 )
 
 // haus#123: the feed behind a link — the feed itself, a website's feed

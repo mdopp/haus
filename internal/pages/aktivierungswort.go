@@ -8,12 +8,12 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/mdopp/haus/internal/assistent"
-	"github.com/mdopp/haus/internal/cards"
-	"github.com/mdopp/haus/internal/ha"
+	"github.com/mdopp/homes/internal/assistent"
+	"github.com/mdopp/homes/internal/cards"
+	"github.com/mdopp/homes/internal/ha"
 )
 
-// The wake word (owner 2026-10-30: „Kannst du auf Haus darstellen, was das
+// The wake word (owner 2026-10-30: „Kannst du auf Homes darstellen, was das
 // aktuelle Wakeword ist“): the word each voice satellite listens for, as
 // the device itself reports it in Home Assistant — its wake-word select, a
 // Voice PE's „… Aktivierungswort“ (ha.Registry.WakeWords). Every speaker
@@ -47,10 +47,10 @@ type wakeDevice struct {
 	away             bool // HA has no word from it (unavailable, unknown)
 }
 
-// wakeLook is what Haus could see of the wake words.
+// wakeLook is what Homes could see of the wake words.
 type wakeLook struct {
 	devices []wakeDevice
-	asked   bool // this Haus has Home Assistant
+	asked   bool // this Homes has Home Assistant
 	seen    bool // HA answered and its registry is known: devices is the whole truth
 }
 
@@ -71,7 +71,7 @@ func lookWake(r *http.Request, cfg StartConfig) wakeLook {
 		func(ctx context.Context) { states, err = cfg.HA.States(ctx) },
 		func(ctx context.Context) { reg, ok = cfg.HA.CachedRegistry(ctx) })
 	if err != nil {
-		log.Printf("haus: wake word: home assistant: %v", err)
+		log.Printf("homes: wake word: home assistant: %v", err)
 		return look
 	}
 	if !ok { // the registry not read yet: which selects are wake words is unknown
@@ -118,7 +118,7 @@ func quoted(w string) string { return "„" + w + "“" }
 const (
 	saysWakeTitle     = "Aktivierungswort"
 	saysWakeReported  = "So meldet es der Lautsprecher selbst."
-	saysWakeUnseen    = "So ist es eingestellt. Was der Lautsprecher gerade hört, kann Haus im Moment nicht sehen."
+	saysWakeUnseen    = "So ist es eingestellt. Was der Lautsprecher gerade hört, kann Homes im Moment nicht sehen."
 	saysWakeNoDevice  = "So ist es eingestellt. Kein Lautsprecher in Home Assistant meldet ein Aktivierungswort."
 	saysWakeAway      = "antwortet gerade nicht"
 	saysWakeChosen    = "wird noch ausgewählt"
@@ -166,7 +166,7 @@ func wakeCard(l wakeLook) cards.Card {
 
 // wakeLine is Sprechen's one line on the speakers: which word wakes them,
 // leading to the Aktivierungswort page. "" without Home Assistant: no
-// speaker Haus could know of.
+// speaker Homes could know of.
 func wakeLine(l wakeLook) string {
 	if !l.asked {
 		return ""

@@ -15,21 +15,21 @@ import (
 
 // Kopf is a note's head (haus#116): its kind, its tags and where it came
 // from, the front matter between two "---" lines at the top of the file.
-// Haus reads and writes a small part of YAML by hand; any other line in a
+// Homes reads and writes a small part of YAML by hand; any other line in a
 // head (an older note's id, resident, …) is kept as it was.
 type Kopf struct {
 	Art    string   // one of Arten; "" is a plain note
 	Tags   []string // normalised by Tag, in the order given
 	Quelle string   // the address a note was made from
 	Titel  string   // title:, which some older notes carry instead of "# "
-	// what Haus kept of the page and of its own text when it made the note
+	// what Homes kept of the page and of its own text when it made the note
 	// from a link: the page's fingerprint (stand:) and the text's (inhalt:),
 	// so a link shared again finds a changed page and a note edited since
 	Stand, Inhalt string
 	other         []string // every other line of the head, as it was
 }
 
-// Arten are the kinds a note can be: what Haus can do with it.
+// Arten are the kinds a note can be: what Homes can do with it.
 var Arten = []struct{ Key, Name string }{
 	{"notiz", "Notiz"}, {"rezept", "Rezept"}, {"album", "Album"}, {"reise", "Reise"}, {"liste", "Liste"},
 }
@@ -42,7 +42,7 @@ const (
 	maxTagLen = 32
 )
 
-// Tag is a tag as Haus keeps it: lower case, a word or words joined by
+// Tag is a tag as Homes keeps it: lower case, a word or words joined by
 // "-", letters and digits only; "" when nothing is left.
 func Tag(s string) string {
 	var b strings.Builder
@@ -166,7 +166,7 @@ func (k Kopf) Empty() bool {
 	return k.Art == "" && len(k.Tags) == 0 && k.Quelle == "" && k.Titel == "" && k.Stand == "" && k.Inhalt == "" && len(k.other) == 0
 }
 
-// Text is the head as the file carries it, "" when it is empty: Haus's
+// Text is the head as the file carries it, "" when it is empty: Homes'
 // fields first, the other lines after them as they were.
 func (k Kopf) Text() string {
 	if k.Empty() {
@@ -394,7 +394,7 @@ func (d *Dir) ByQuelleWie(ctx context.Context, quelle string, key func(string) s
 	return found, ok, nil
 }
 
-// Inhalt is a note's text as a fingerprint: what Haus wrote, to see later
+// Inhalt is a note's text as a fingerprint: what Homes wrote, to see later
 // whether someone changed it.
 func Inhalt(body string) string {
 	sum := sha256.Sum256([]byte(strings.TrimSpace(strings.ReplaceAll(body, "\r\n", "\n"))))

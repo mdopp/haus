@@ -11,14 +11,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mdopp/haus/internal/cards"
+	"github.com/mdopp/homes/internal/cards"
 )
 
 // The family's pages (haus#12): Start, Räume, Kalender, Notizen and what
 // Mehr holds. They read one config (StartConfig), share one nav, and
 // show without changing anything (haus#1). A page whose backend is not set
 // has no tab and, reached anyway, says what is missing (notSet, laib#418).
-// A path Haus does not serve at all is
+// A path Homes does not serve at all is
 // a 404 with the way to Start (Elsewhere).
 
 // What a family page says, in one plain line where the rows would be,
@@ -180,8 +180,8 @@ func familyNav(r *http.Request, cfg StartConfig, current string) string {
 }
 
 // frame is the family pages' look (haus#35): the house palette — the
-// values of the chat's tokens and haus-android's colors.xml — dark
-// first, light when the phone is; Geist from Haus itself, else the
+// values of the chat's tokens and homes-android's colors.xml — dark
+// first, light when the phone is; Geist from Homes itself, else the
 // phone's own font; orange for what you can do, amber for what is on,
 // green and red only for a state, never alone.
 const frame = `<style>@font-face{font-family:Geist;src:url(` + FontPath + `) format("woff2");font-weight:100 900;font-display:swap}
@@ -243,7 +243,7 @@ func familyHead(r *http.Request, cfg StartConfig, title, current string) *string
 	b.WriteString("<!doctype html><html lang=de><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1,viewport-fit=cover'>" +
 		"<meta name=color-scheme content='dark light'><meta name=theme-color content='#0c0c0e'><title>" + html.EscapeString(title) + "</title>" + symbolHead)
 	b.WriteString(frame)
-	b.WriteString(cards.Style + hausStyle + hausScript) // in the head: a page swapped in keeps it
+	b.WriteString(cards.Style + homesStyle + homesScript) // in the head: a page swapped in keeps it
 	b.WriteString(familyNav(r, cfg, current))
 	b.WriteString(konto(r))
 	if tabOf(current) == "Haushalt" {
@@ -275,12 +275,12 @@ func haushaltNav(r *http.Request, cfg StartConfig, current string) string {
 	return `<nav class=unterseiten aria-label=Haushalt>` + b.String() + `</nav>`
 }
 
-// fromHaus is a POST the person sent from Haus's own page (haus#35): the
+// fromHomes is a POST the person sent from Homes' own page (haus#35): the
 // browser says same-origin (Sec-Fetch-Site), or, from one too old to say,
-// the Origin is Haus's own host; and Authelia names the person. A form on
+// the Origin is Homes' own host; and Authelia names the person. A form on
 // another site cannot switch the house with the family's session, and a
-// POST that says neither is refused: Haus's own form always sends one.
-func fromHaus(r *http.Request) bool {
+// POST that says neither is refused: Homes' own form always sends one.
+func fromHomes(r *http.Request) bool {
 	if r.Header.Get("Remote-User") == "" {
 		return false
 	}
@@ -313,11 +313,11 @@ func showOnly(w http.ResponseWriter, r *http.Request, what string) bool {
 type notSet struct{ say, admin string }
 
 var (
-	notSetHA       = notSet{"Licht und Geräte sind hier noch nicht eingerichtet.", "Für Admins: Home Assistant ist nicht verbunden (HAUS_HA_TOKEN, das home-assistant beim Einrichten erzeugt)."}
-	notSetCalendar = notSet{"Der Kalender ist hier noch nicht eingerichtet.", "Für Admins: Haus hat kein Radicale-Konto (RADICALE_USER in services/haus/values.yml, das Passwort HAUS_RADICALE_PASSWORD)."}
+	notSetHA       = notSet{"Licht und Geräte sind hier noch nicht eingerichtet.", "Für Admins: Home Assistant ist nicht verbunden (HOMES_HA_TOKEN, das home-assistant beim Einrichten erzeugt)."}
+	notSetCalendar = notSet{"Der Kalender ist hier noch nicht eingerichtet.", "Für Admins: Homes hat kein Radicale-Konto (RADICALE_USER in services/homes/values.yml, das Passwort HOMES_RADICALE_PASSWORD)."}
 	notSetContacts = notSet{"Die Kontakte sind hier noch nicht eingerichtet.", notSetCalendar.admin}
-	notSetNotes    = notSet{"Die Notizen sind hier noch nicht eingerichtet.", "Für Admins: Haus hat keinen Notizen-Ordner (HAUS_NOTES_DIR, von file-share)."}
-	notSetDocs     = notSet{"Die Dokumente sind hier noch nicht eingerichtet.", "Für Admins: Paperless ist nicht verbunden (HAUS_PAPERLESS_TOKEN)."}
+	notSetNotes    = notSet{"Die Notizen sind hier noch nicht eingerichtet.", "Für Admins: Homes hat keinen Notizen-Ordner (HOMES_NOTES_DIR, von file-share)."}
+	notSetDocs     = notSet{"Die Dokumente sind hier noch nicht eingerichtet.", "Für Admins: Paperless ist nicht verbunden (HOMES_PAPERLESS_TOKEN)."}
 	notSetSamba    = notSet{"Das Netzlaufwerk ist hier noch nicht eingerichtet.", "Für Admins: file-share ist nicht installiert (laib add file-share)."}
 )
 
@@ -350,8 +350,8 @@ func (cfg StartConfig) clock() (time.Time, *time.Location) {
 	return now.In(loc), loc
 }
 
-// slowFetch is how long a page may wait for its backends before Haus's
-// log says so (haus#184): the page's time, readable with laib logs haus.
+// slowFetch is how long a page may wait for its backends before Homes'
+// log says so (haus#184): the page's time, readable with laib logs homes.
 var slowFetch = time.Second
 
 // fetch runs each backend read at once, each within backendWait: a slow
@@ -360,7 +360,7 @@ func fetch(r *http.Request, reads ...func(context.Context)) {
 	began := time.Now()
 	defer func() {
 		if took := time.Since(began); took > slowFetch && r.URL != nil {
-			log.Printf("haus: %s waited %.2fs for its backends", r.URL.Path, took.Seconds())
+			log.Printf("homes: %s waited %.2fs for its backends", r.URL.Path, took.Seconds())
 		}
 	}()
 	var wg sync.WaitGroup
@@ -376,11 +376,11 @@ func fetch(r *http.Request, reads ...func(context.Context)) {
 	wg.Wait()
 }
 
-// logErrs puts a page's backend errors in Haus's log, not on the page.
+// logErrs puts a page's backend errors in Homes' log, not on the page.
 func logErrs(page string, errs map[string]error) {
 	for what, err := range errs {
 		if err != nil {
-			log.Printf("haus: %s page: %s: %v", page, what, err)
+			log.Printf("homes: %s page: %s: %v", page, what, err)
 		}
 	}
 }

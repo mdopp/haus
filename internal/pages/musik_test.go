@@ -3,8 +3,8 @@ package pages
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/mdopp/haus/internal/laib"
-	"github.com/mdopp/haus/internal/papierkorb"
+	"github.com/mdopp/homes/internal/laib"
+	"github.com/mdopp/homes/internal/papierkorb"
 	"net/http"
 	"net/http/httptest"
 	"net/url"

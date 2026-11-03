@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mdopp/haus/internal/qmd/qmdfake"
+	"github.com/mdopp/homes/internal/qmd/qmdfake"
 )
 
 // testdata holds what the Vermittler's prototype (laib#198: qmd 2.8.3's
@@ -48,7 +48,7 @@ func paths(hits []Hit) []string {
 
 // The defaults are the slow path: a plain query pulls in the 1.7B query
 // expansion model and the reranker, 30–140 s a query on the CPU (haus#13).
-// Haus always sends the two typed searches, words (lex) and meaning (vec),
+// Homes always sends the two typed searches, words (lex) and meaning (vec),
 // with rerank off, scoped to the notes' collection — and nothing else.
 func TestSendsTypedSearchesNeverThePlainQuery(t *testing.T) {
 	f := qmdfake.New("notizen")
@@ -220,7 +220,7 @@ func TestStatusFromRealAnswers(t *testing.T) {
 	if err != nil || !st.Ready() || st.Documents != 46 || st.Embedded != 46 {
 		t.Fatalf("captured: %+v %v", st, err)
 	}
-	// the same index, but Haus's collection is not in it
+	// the same index, but Homes' collection is not in it
 	c.Collection = "andere"
 	if st, err := c.Status(ctx); err != nil || st.Ready() {
 		t.Fatalf("a collection the index does not have is not ready: %+v %v", st, err)
@@ -302,7 +302,7 @@ func TestFakeAnswersLikeQmd(t *testing.T) {
 	}
 }
 
-// Haus reads qmd's answer and nothing else: a redirect is not followed,
+// Homes reads qmd's answer and nothing else: a redirect is not followed,
 // a status other than 200 is an error that names it, never qmd's body.
 func TestErrorsArePlain(t *testing.T) {
 	ctx := context.Background()
@@ -330,7 +330,7 @@ func TestErrorsArePlain(t *testing.T) {
 	f.Status = 0
 	f.Results = `{"results":"kaputt"}`
 	if _, err := c.Search(ctx, "x", 3); err == nil {
-		t.Fatal("a shape Haus does not know is an error")
+		t.Fatal("a shape Homes does not know is an error")
 	}
 	f.Results = ""
 	// qmd's guard lets a loopback Host in
@@ -347,7 +347,7 @@ func TestErrorsArePlain(t *testing.T) {
 	}
 }
 
-// An answer is read through a limit: a qmd gone wrong cannot fill Haus's
+// An answer is read through a limit: a qmd gone wrong cannot fill Homes'
 // memory.
 func TestAnswerIsBounded(t *testing.T) {
 	big := `{"results":[` + strings.Repeat(`{"docid":"#1","file":"qmd://notizen/a.md","title":"`+strings.Repeat("x", 1<<16)+`","score":1,"context":null,"line":1,"snippet":""},`, 200) + `{}]}`
@@ -365,7 +365,7 @@ func TestAnswerIsBounded(t *testing.T) {
 
 // The fake refuses what the Vermittler refuses (laib#198): a field it does
 // not take — minScore, intent, a plain query — rerank on, a search that is
-// not lex or vec. So a Haus that sends one fails here, not on the box,
+// not lex or vec. So a Homes that sends one fails here, not on the box,
 // where every search would fall to words (haus#13).
 func TestFakeRefusesLikeTheVermittler(t *testing.T) {
 	f := qmdfake.New("notizen")
@@ -388,7 +388,7 @@ func TestFakeRefusesLikeTheVermittler(t *testing.T) {
 			t.Fatalf("%s: %d, want 400", body, resp.StatusCode)
 		}
 	}
-	// and Haus's own body is taken
+	// and Homes' own body is taken
 	c := &Client{URL: f.URL, Collection: "notizen"}
 	if hits, err := c.Search(context.Background(), "Kellerschlüssel", 3); err != nil || len(hits) != 1 {
 		t.Fatalf("%v %v", hits, err)

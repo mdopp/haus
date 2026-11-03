@@ -1,7 +1,7 @@
-// Package abs is what Haus asks of Audiobookshelf (haus#123): the podcast
+// Package abs is what Homes asks of Audiobookshelf (haus#123): the podcast
 // library, a feed's podcast, a subscription that downloads by itself and
 // keeps only the last few episodes, the newest episodes, and an end to a
-// subscription. One API key (a user Laib makes for Haus, laib#676), as a
+// subscription. One API key (a user Laib makes for Homes, laib#676), as a
 // bearer; ABS's routes as its server code has them (ApiRouter.js,
 // PodcastController.js).
 package abs
@@ -28,9 +28,9 @@ type Client struct {
 	HTTP  *http.Client
 }
 
-// FromEnv is ABS from HAUS_ABS_URL and HAUS_ABS_TOKEN, or nil without both.
+// FromEnv is ABS from HOMES_ABS_URL and HOMES_ABS_TOKEN, or nil without both.
 func FromEnv() *Client {
-	u, t := strings.TrimRight(strings.TrimSpace(os.Getenv("HAUS_ABS_URL")), "/"), strings.TrimSpace(os.Getenv("HAUS_ABS_TOKEN"))
+	u, t := strings.TrimRight(strings.TrimSpace(os.Getenv("HOMES_ABS_URL")), "/"), strings.TrimSpace(os.Getenv("HOMES_ABS_TOKEN"))
 	if u == "" || t == "" {
 		return nil
 	}

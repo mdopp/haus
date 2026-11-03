@@ -12,15 +12,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/assistent"
-	"github.com/mdopp/haus/internal/caldav"
-	"github.com/mdopp/haus/internal/ha"
-	"github.com/mdopp/haus/internal/ha/hafake"
-	"github.com/mdopp/haus/internal/usage"
-	"github.com/mdopp/haus/internal/usage/usagefake"
+	"github.com/mdopp/homes/internal/assistent"
+	"github.com/mdopp/homes/internal/caldav"
+	"github.com/mdopp/homes/internal/ha"
+	"github.com/mdopp/homes/internal/ha/hafake"
+	"github.com/mdopp/homes/internal/usage"
+	"github.com/mdopp/homes/internal/usage/usagefake"
 )
 
-// #50: Haus counts what the family uses — per event and UTC day, never
+// #50: Homes counts what the family uses — per event and UTC day, never
 // who — and the Box page shows it to admins.
 
 // regexpTags strips tags, so a test reads the page's text.
@@ -33,7 +33,7 @@ func metrics(t *testing.T) (*usagefake.Fake, *usage.Counter) {
 	return fake, usage.New(fake.URL, "um-token")
 }
 
-// events flushes c and returns haus's counts by event.
+// events flushes c and returns homes' counts by event.
 func events(t *testing.T, fake *usagefake.Fake, c *usage.Counter) map[string]int64 {
 	t.Helper()
 	c.Flush(context.Background())
@@ -58,7 +58,7 @@ func serve(h http.Handler, method, target, user string) *httptest.ResponseRecord
 	return rec
 }
 
-// a stand-in for Haus's pages: each path answers what a page would
+// a stand-in for Homes' pages: each path answers what a page would
 func pagesLike(status map[string]int, body map[string]string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		code := status[r.URL.Path]
@@ -127,7 +127,7 @@ func TestDegradedLinesShownAreCounted(t *testing.T) {
 }
 
 // A tap from a widget arrives with ?von=widget.<kind>: counted by kind,
-// only for the app's nine widgets (haus-android#181); anything else is no
+// only for the app's nine widgets (homes-android#181); anything else is no
 // source tag, never stored raw.
 func TestWidgetTapsBySource(t *testing.T) {
 	fake, c := metrics(t)
@@ -157,7 +157,7 @@ func TestNotesSearchIsCounted(t *testing.T) {
 	}
 	for _, b := range fake.Bodies() {
 		if strings.Contains(strings.ToLower(b), "rezept") {
-			t.Errorf("the search words left Haus: %s", b)
+			t.Errorf("the search words left Homes: %s", b)
 		}
 	}
 }
@@ -193,7 +193,7 @@ func TestActionsCountAfterTheirGuards(t *testing.T) {
 	for _, b := range fake.Bodies() {
 		for _, leak := range []string{"anna", "Anna", "buero", "Müll", "192.0.2"} {
 			if strings.Contains(b, leak) {
-				t.Errorf("%q left Haus: %s", leak, b)
+				t.Errorf("%q left Homes: %s", leak, b)
 			}
 		}
 	}
@@ -280,7 +280,7 @@ func TestBoxCardWhatIsUsed(t *testing.T) {
 	}
 }
 
-// Nothing counted yet: said plainly, with since when Haus counts.
+// Nothing counted yet: said plainly, with since when Homes counts.
 func TestBoxCardEmpty(t *testing.T) {
 	_, c := metrics(t)
 	c.Started = time.Date(2026, 10, 16, 21, 30, 0, 0, time.Local)
@@ -327,7 +327,7 @@ func TestBoxCardOnlyWhenCountingAndOnlyForAdmins(t *testing.T) {
 	}
 }
 
-// HA refuses Haus the Assist runs: the card says the voice is not counted
+// HA refuses Homes the Assist runs: the card says the voice is not counted
 // and what it takes.
 func TestBoxCardSaysWhyVoiceIsNotCounted(t *testing.T) {
 	fake, c := metrics(t)

@@ -12,14 +12,14 @@ import (
 
 // What a person watched (haus#152): Jellyfin keeps each user's played
 // state; reading another user's needs an administrator, so this is a
-// second client, with the API key Laib's media template mints for Haus
-// (HAUS_JELLYFIN_KEY), not the music-only token of Haus's own user.
+// second client, with the API key Laib's media template mints for Homes
+// (HOMES_JELLYFIN_KEY), not the music-only token of Homes' own user.
 // Reading only.
 
-// KeyFromEnv is Jellyfin from HAUS_JELLYFIN_URL and HAUS_JELLYFIN_KEY, or
+// KeyFromEnv is Jellyfin from HOMES_JELLYFIN_URL and HOMES_JELLYFIN_KEY, or
 // nil without both.
 func KeyFromEnv() *Client {
-	u, k := strings.TrimRight(strings.TrimSpace(os.Getenv("HAUS_JELLYFIN_URL")), "/"), strings.TrimSpace(os.Getenv("HAUS_JELLYFIN_KEY"))
+	u, k := strings.TrimRight(strings.TrimSpace(os.Getenv("HOMES_JELLYFIN_URL")), "/"), strings.TrimSpace(os.Getenv("HOMES_JELLYFIN_KEY"))
 	if u == "" || k == "" {
 		return nil
 	}

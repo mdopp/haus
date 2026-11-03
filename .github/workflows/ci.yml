@@ -15,9 +15,9 @@ jobs:
         with:
           go-version-file: go.mod
       - run: go vet ./... && go test ./...
-      - run: CGO_ENABLED=0 go build -o /dev/null ./cmd/haus
+      - run: CGO_ENABLED=0 go build -o /dev/null ./cmd/homes
   e2e:
-    # the family pages in a real browser against cmd/hausdemo's fakes
+    # the family pages in a real browser against cmd/homesdemo's fakes
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -61,4 +61,4 @@ jobs:
           context: .
           file: Containerfile
           push: true
-          tags: ghcr.io/mdopp/haus:latest,ghcr.io/mdopp/haus:${{ github.sha }}
+          tags: ghcr.io/mdopp/homes:latest,ghcr.io/mdopp/homes:${{ github.sha }}

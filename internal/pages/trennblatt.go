@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/mdopp/haus/internal/code128"
+	"github.com/mdopp/homes/internal/code128"
 )
 
 // TrennblattPath is the separator sheets' print page (haus#161).

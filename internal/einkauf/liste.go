@@ -5,7 +5,7 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/mdopp/haus/internal/caldav"
+	"github.com/mdopp/homes/internal/caldav"
 )
 
 // Name is the list's name on the phones.
@@ -16,7 +16,7 @@ const Name = "Einkauf"
 type Liste struct {
 	DAV *caldav.Client
 	Ref caldav.ListRef
-	// Changed is told after every change Haus makes, with the list (the
+	// Changed is told after every change Homes makes, with the list (the
 	// pages' live stream); nil: nobody listens.
 	Changed func(caldav.ListRef)
 

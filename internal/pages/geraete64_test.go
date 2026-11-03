@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mdopp/haus/internal/ha/hafake"
+	"github.com/mdopp/homes/internal/ha/hafake"
 )
 
 // a house with what haus#64 is about: a dimmer on and one off, a lamp
@@ -110,7 +110,7 @@ func fmtData(m map[string]any) string {
 	return strings.Join(parts, " ")
 }
 
-// haus#64: a cover wired the wrong way round (HAUS_COVER_INVERTED) is
+// haus#64: a cover wired the wrong way round (HOMES_COVER_INVERTED) is
 // shown and set turned over: HA's "open at 100" is closed at 0 on the
 // page, Hoch is HA's close, a position is 100 − the slider's. Every other
 // cover is as HA says.
@@ -157,15 +157,15 @@ func TestInvertedCoverIsTurnedOver(t *testing.T) {
 }
 
 // haus#64: "Weiter in Home Assistant" — Geräte links to HA's own page for
-// what Haus does not do, and a thing's page to its device in HA (else
-// the entity's history), from HAUS_HA_PUBLIC_URL; without it, no link.
-// A cover Haus does not open says why and where it goes.
+// what Homes does not do, and a thing's page to its device in HA (else
+// the entity's history), from HOMES_HA_PUBLIC_URL; without it, no link.
+// A cover Homes does not open says why and where it goes.
 func TestGeraeteGoOnInHomeAssistant(t *testing.T) {
 	fake, hc := house(t)
 	dimHouse(t, fake)
 	cfg := StartConfig{HA: hc, HAPublicURL: AppURL("https://home.box.test/")}
 	_, body, _ := familyPage(t, Raeume, cfg, "GET", "/raeume", "family")
-	mustContain(t, body, `<p class=weiter-in><a href="https://home.box.test/">In Home Assistant öffnen</a> <span class=k>Für alles, was Haus nicht kann: Automationen, Einstellungen, Verlauf.</span></p>`)
+	mustContain(t, body, `<p class=weiter-in><a href="https://home.box.test/">In Home Assistant öffnen</a> <span class=k>Für alles, was Homes nicht kann: Automationen, Einstellungen, Verlauf.</span></p>`)
 	before(t, body, "<p class=weiter-in>", "<h2 id=karte-esszimmer")
 	_, body, _ = familyPage(t, Ding, cfg, "GET", "/raeume/light.bambi", "family")
 	mustContain(t, body, `<a href="https://home.box.test/config/devices/device/dev-bambi">In Home Assistant öffnen</a>`,
@@ -176,7 +176,7 @@ func TestGeraeteGoOnInHomeAssistant(t *testing.T) {
 	mustContain(t, body, "Home Assistant sagt nicht, ob das ein Rollladen oder ein Tor ist")
 	mustNotContain(t, body, "<button data-laeuft=\"Schaltet …\">Hoch</button>", "class=regler")
 	_, body, _ = familyPage(t, Ding, cfg, "GET", "/raeume/cover.garage", "family")
-	mustContain(t, body, "Tore und Türen öffnet Haus nicht; das geht in Home Assistant.")
+	mustContain(t, body, "Tore und Türen öffnet Homes nicht; das geht in Home Assistant.")
 	mustNotContain(t, body, "<button data-laeuft=\"Schaltet …\">Hoch</button>", "<button data-laeuft=\"Schaltet …\">Runter</button>")
 
 	// no address, no link; HA not answering, no word of it

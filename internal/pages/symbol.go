@@ -6,7 +6,7 @@ import (
 	"path"
 )
 
-// Haus's own icon (owner, 2026-11-02): the terminal prompt inside a green
+// Homes' own icon (owner, 2026-11-02): the terminal prompt inside a green
 // house, the same mark as the app's. symbol/icon.svg is the master;
 // tools/icons renders the other files from it, never by hand.
 //
@@ -16,9 +16,9 @@ var symbole embed.FS
 // SymbolPath is where the pages find the icons and the web app manifest.
 const SymbolPath = "/symbol/"
 
-// manifest makes Haus a web app on a phone's home screen: its name, Start,
+// manifest makes Homes a web app on a phone's home screen: its name, Start,
 // and the icons. The ground is the icon's.
-const manifest = `{"name":"Haus","short_name":"Haus","lang":"de","start_url":"/start","scope":"/","display":"standalone",` +
+const manifest = `{"name":"Homes","short_name":"Homes","lang":"de","start_url":"/start","scope":"/","display":"standalone",` +
 	`"background_color":"#0c120e","theme_color":"#0c0c0e","icons":[` +
 	`{"src":"/symbol/favicon.svg","sizes":"any","type":"image/svg+xml","purpose":"any"},` +
 	`{"src":"/symbol/icon-192.png","sizes":"192x192","type":"image/png","purpose":"any"},` +
@@ -29,7 +29,7 @@ const manifest = `{"name":"Haus","short_name":"Haus","lang":"de","start_url":"/s
 // (iOS's touch icon, everyone else's manifest). The manifest goes with the
 // Authelia cookie, or the proxy turns it away.
 const symbolHead = "<link rel=icon href=/symbol/favicon.svg type=image/svg+xml><link rel=icon href=/symbol/favicon-32.png sizes=32x32 type=image/png>" +
-	"<link rel=apple-touch-icon href=/symbol/apple-touch-icon.png><link rel=manifest href=/symbol/haus.webmanifest crossorigin=use-credentials>"
+	"<link rel=apple-touch-icon href=/symbol/apple-touch-icon.png><link rel=manifest href=/symbol/homes.webmanifest crossorigin=use-credentials>"
 
 // Symbol serves the icons and the manifest under SymbolPath, and nothing else there.
 func Symbol() http.HandlerFunc {
@@ -45,7 +45,7 @@ func Symbol() http.HandlerFunc {
 			return
 		}
 		w.Header().Set("Cache-Control", "public, max-age=86400")
-		if name == "haus.webmanifest" {
+		if name == "homes.webmanifest" {
 			w.Header().Set("Content-Type", "application/manifest+json")
 			w.Write([]byte(manifest))
 			return

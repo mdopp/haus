@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/notes"
-	"github.com/mdopp/haus/internal/qmd"
-	"github.com/mdopp/haus/internal/qmd/qmdfake"
+	"github.com/mdopp/homes/internal/notes"
+	"github.com/mdopp/homes/internal/qmd"
+	"github.com/mdopp/homes/internal/qmd/qmdfake"
 )
 
 var bg = context.Background()
@@ -64,7 +64,7 @@ func names(hs []notes.Hit) string {
 }
 
 // Search by meaning: qmd finds the note by a word it does not contain,
-// which the word search cannot; the title is Haus's own (the note's
+// which the word search cannot; the title is Homes' own (the note's
 // heading, as its page shows it), the lines qmd's best passage.
 func TestFindsByMeaning(t *testing.T) {
 	_, d, f := shelf(t)

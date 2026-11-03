@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mdopp/haus/internal/judge"
-	"github.com/mdopp/haus/internal/notes"
+	"github.com/mdopp/homes/internal/judge"
+	"github.com/mdopp/homes/internal/notes"
 )
 
 // Gemerkt is what Merken did: the note's file and title, its kind, a line
@@ -25,7 +25,7 @@ type Gemerkt struct {
 // Weihnachten"; #words in it are tags). A page that cannot be read is kept
 // as link and title. model may be nil (no summary, the page's own
 // description instead). A link kept already — shared again, maybe with
-// ?si=… or utm_… — is not kept twice (owner 2026-10-26): Haus says so, and
+// ?si=… or utm_… — is not kept twice (owner 2026-10-26): Homes says so, and
 // brings the note up to the page's new state when the page changed and
 // nobody edited the note since; a note someone edited is left as it is.
 func Merken(ctx context.Context, f Fetcher, model *judge.Client, d *notes.Dir, link, hint string) (Gemerkt, error) {
@@ -45,7 +45,7 @@ func Merken(ctx context.Context, f Fetcher, model *judge.Client, d *notes.Dir, l
 	var s Seite
 	partial := err != nil
 	if partial {
-		log.Printf("haus: merken: %s: %v", u.Host, err)
+		log.Printf("homes: merken: %s: %v", u.Host, err)
 		s = Seite{URL: u.String(), Titel: u.Host + u.EscapedPath()}
 	} else {
 		s = Lesen(final, page)
@@ -84,7 +84,7 @@ func gist(ctx context.Context, model *judge.Client, s Seite, partial bool) judge
 	defer cancel()
 	g, err := model.Summarize(gctx, s.Titel, first(s.Text, s.Beschreibung))
 	if err != nil {
-		log.Printf("haus: merken: the house model: %v", err)
+		log.Printf("homes: merken: the house model: %v", err)
 		return judge.Gist{}
 	}
 	return g
@@ -95,7 +95,7 @@ func schon(e notes.Entry, more string) Gemerkt {
 	return Gemerkt{Name: e.Name, Titel: e.Title, Art: e.Kopf.Art, Schon: true, Kurz: "Das ist schon gemerkt: „" + e.Title + "“." + more}
 }
 
-// stempeln keeps the fingerprint of the note's text as Haus wrote it, so a
+// stempeln keeps the fingerprint of the note's text as Homes wrote it, so a
 // later share sees whether someone edited it.
 func stempeln(ctx context.Context, d *notes.Dir, name string) {
 	n, err := d.Read(ctx, name)
@@ -105,7 +105,7 @@ func stempeln(ctx context.Context, d *notes.Dir, name string) {
 	k, body := notes.SplitKopf(n.Text)
 	k.Inhalt = notes.Inhalt(body)
 	if err := d.Update(name, k.With(body), n.Changed); err != nil {
-		log.Printf("haus: merken: %s: %v", name, err)
+		log.Printf("homes: merken: %s: %v", name, err)
 	}
 }
 
@@ -137,7 +137,7 @@ func auffrischen(ctx context.Context, model *judge.Client, d *notes.Dir, e notes
 	switch {
 	case k.Stand == fp:
 		more = " Die Seite hat sich seither nicht geändert."
-	case k.Stand == "": // kept before Haus kept a fingerprint: from now on
+	case k.Stand == "": // kept before Homes kept a fingerprint: from now on
 		k.Stand = fp
 	case edited:
 		more = " Die Seite hat sich seither geändert; die Notiz hast du selbst bearbeitet, darum lasse ich sie, wie sie ist."
@@ -161,7 +161,7 @@ func auffrischen(ctx context.Context, model *judge.Client, d *notes.Dir, e notes
 			k.Stand = fp
 		}
 		if err := d.Update(e.Name, k.With(body), n.Changed); err != nil {
-			log.Printf("haus: merken: %s: %v", e.Name, err)
+			log.Printf("homes: merken: %s: %v", e.Name, err)
 		}
 	}
 	return schon(e, more+tagsSaid), nil
@@ -219,7 +219,7 @@ func zutaten(body string) []string {
 	return out
 }
 
-// kurz is the line Haus says after keeping: what it is, in a few words.
+// kurz is the line Homes says after keeping: what it is, in a few words.
 func kurz(s Seite, g judge.Gist, k notes.Kopf, partial bool) string {
 	switch {
 	case partial:

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mdopp/haus/internal/ha/hafake"
+	"github.com/mdopp/homes/internal/ha/hafake"
 )
 
 // HA's media player features: PAUSE, VOLUME_SET, VOLUME_STEP, PLAY
@@ -193,7 +193,7 @@ func TestMedienEscapes(t *testing.T) {
 	mustNotContain(t, body, "<b>Box", "<img src=x")
 }
 
-// A path under Medien that Haus does not serve is a 404 with the way
+// A path under Medien that Homes does not serve is a 404 with the way
 // back, never Start pretending all is well (haus#12).
 func TestMedienUnknownPathIsA404(t *testing.T) {
 	fake, hc := house(t)

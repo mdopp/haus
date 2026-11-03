@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mdopp/haus/internal/caldav"
-	"github.com/mdopp/haus/internal/caldav/davfake"
+	"github.com/mdopp/homes/internal/caldav"
+	"github.com/mdopp/homes/internal/caldav/davfake"
 )
 
 func allDay(uid, day, next, summary string) string {

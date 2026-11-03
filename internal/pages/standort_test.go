@@ -12,11 +12,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/reitti"
+	"github.com/mdopp/homes/internal/reitti"
 )
 
 // Standortverlauf (owner 2026-11-02): each person pastes their Reitti
-// token once; Haus checks it with Reitti, keeps it, never shows it back.
+// token once; Homes checks it with Reitti, keeps it, never shows it back.
 // A fake Reitti answers by the token.
 func standortCfg(t *testing.T) (StartConfig, *httptest.Server) {
 	t.Helper()
@@ -33,7 +33,7 @@ func standortCfg(t *testing.T) (StartConfig, *httptest.Server) {
 	t.Cleanup(srv.Close)
 	r := &reitti.Reitti{URL: srv.URL, PublicURL: "https://reitti.", Dir: t.TempDir(),
 		Now: func() time.Time { return time.Date(2026, 11, 2, 9, 0, 0, 0, time.UTC) }}
-	return StartConfig{Reitti: r, PublicURL: "https://haus.box.test", Loc: time.UTC}, srv
+	return StartConfig{Reitti: r, PublicURL: "https://homes.box.test", Loc: time.UTC}, srv
 }
 
 func getStandort(cfg StartConfig, user, query string) *httptest.ResponseRecorder {
@@ -55,7 +55,7 @@ func TestStandortConnectsWithATokenReittiTakes(t *testing.T) {
 	rec := getStandort(cfg, "anna", "")
 	page := rec.Body.String()
 	mustContain(t, page, "<h1>Standortverlauf</h1>", "Einstellungen → API-Token", "Mit Gerät verbinden", `name=token type=password`,
-		`data-laeuft="Prüft bei Reitti …"`, `href="https://reitti.box.test"`, "Haus-App")
+		`data-laeuft="Prüft bei Reitti …"`, `href="https://reitti.box.test"`, "Homes-App")
 	if rec.Code != 200 || rec.Header().Get("Cache-Control") != "no-store" || strings.Contains(page, "Verbunden seit") {
 		t.Fatalf("%d %q", rec.Code, rec.Header().Get("Cache-Control"))
 	}
@@ -99,7 +99,7 @@ func TestStandortConnectsWithATokenReittiTakes(t *testing.T) {
 		t.Fatalf("a token in the log:\n%s", logs.String())
 	}
 
-	// only from Haus's own page
+	// only from Homes' own page
 	if rec := post(t, h, StandortPath, url.Values{"tun": {"trennen"}}, "anna", map[string]string{"Sec-Fetch-Site": "cross-site"}); rec.Code != 403 {
 		t.Fatalf("a cross-site Trennen → %d", rec.Code)
 	}

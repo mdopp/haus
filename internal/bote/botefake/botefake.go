@@ -3,7 +3,7 @@
 // /v1/chat/completions with the right bearer answers a chat completion
 // whose content is Reply; a wrong or missing bearer is Hermes' 401; a
 // failed run is Hermes' 502 envelope. Every request is recorded, so a test
-// can say who Haus said was speaking, and that nothing was sent.
+// can say who Homes said was speaking, and that nothing was sent.
 package botefake
 
 import (
@@ -62,7 +62,7 @@ func New(key string) *Server {
 	return s
 }
 
-// Base is the OpenAI base, as HAUS_BOTE_URL has it.
+// Base is the OpenAI base, as HOMES_BOTE_URL has it.
 func (s *Server) Base() string { return s.URL + "/v1" }
 
 // Seen returns the requests so far.

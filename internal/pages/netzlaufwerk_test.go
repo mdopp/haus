@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/samba"
-	"github.com/mdopp/haus/internal/samba/sambafake"
+	"github.com/mdopp/homes/internal/samba"
+	"github.com/mdopp/homes/internal/samba/sambafake"
 )
 
 // haus#52, laib#296: each person sets their own network-drive password on

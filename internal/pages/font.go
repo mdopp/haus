@@ -5,7 +5,7 @@ import (
 	"net/http"
 )
 
-// Geist, served by Haus itself (haus#35): the family's box asks no one
+// Geist, served by Homes itself (haus#35): the family's box asks no one
 // else for a font, and a page without it falls back to the phone's own
 // (schrift/OFL.txt: the licence, and which cut this is). The version is in
 // the path, so the browser keeps it for good.

@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/mdopp/haus/internal/cards"
-	"github.com/mdopp/haus/internal/ha"
+	"github.com/mdopp/homes/internal/cards"
+	"github.com/mdopp/homes/internal/ha"
 )
 
 // what a room card shows, in this order (laib DEKONSTRUKTION: Lichter,
@@ -63,7 +63,7 @@ func Raeume(cfg StartConfig) http.HandlerFunc {
 		states = cfg.allAsSeen(states) // a cover wired the wrong way round, turned over (haus#64)
 		logErrs("räume", map[string]error{"home assistant": haErr, "favorites": favErr})
 		if haErr == nil && !roomsOK {
-			log.Printf("haus: räume page: home assistant's rooms are not known yet; the cards are left out")
+			log.Printf("homes: räume page: home assistant's rooms are not known yet; the cards are left out")
 		}
 		b := familyHead(r, cfg, "Geräte", "Räume")
 		b.WriteString(liveRefresh("seite", 120))
@@ -103,8 +103,8 @@ func Raeume(cfg StartConfig) http.HandlerFunc {
 // saysPinWhat is what Räume's ☆ does, once above the rooms.
 const saysPinWhat = "Mit ☆ steht ein Gerät auf Start unter „Meine Geräte“."
 
-// saysInHA is what Home Assistant has that Haus does not (haus#64).
-const saysInHA = "Für alles, was Haus nicht kann: Automationen, Einstellungen, Verlauf."
+// saysInHA is what Home Assistant has that Homes does not (haus#64).
+const saysInHA = "Für alles, was Homes nicht kann: Automationen, Einstellungen, Verlauf."
 
 // roomCards groups the states by room: rooms by name, "Ohne Raum" last;
 // in a room lights, heating, covers, media, each by name, each leading to

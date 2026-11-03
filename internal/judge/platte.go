@@ -27,11 +27,11 @@ type Plattenhinweise struct {
 	Titel         string `json:"titel"`
 }
 
-// visionModel is the model that reads photos: HAUS_LLM_VISION_MODEL
+// visionModel is the model that reads photos: HOMES_LLM_VISION_MODEL
 // (laib#697: the 12B with its image part), else the house model, which
 // on this box can.
 func (c *Client) visionModel() string {
-	if m := strings.TrimSpace(os.Getenv("HAUS_LLM_VISION_MODEL")); m != "" {
+	if m := strings.TrimSpace(os.Getenv("HOMES_LLM_VISION_MODEL")); m != "" {
 		return m
 	}
 	return c.Model

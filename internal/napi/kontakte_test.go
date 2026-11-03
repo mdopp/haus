@@ -7,12 +7,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mdopp/haus/internal/caldav"
-	"github.com/mdopp/haus/internal/caldav/davfake"
-	"github.com/mdopp/haus/internal/haushalt"
+	"github.com/mdopp/homes/internal/caldav"
+	"github.com/mdopp/homes/internal/caldav/davfake"
+	"github.com/mdopp/homes/internal/haushalt"
 )
 
-// laib ADR 0029: the app sends all of a person's phone contacts; Haus, as
+// laib ADR 0029: the app sends all of a person's phone contacts; Homes, as
 // its own Radicale account, mirrors them into <person>/handy-kontakte/.
 
 func vcard(uid, fn string) string {
@@ -90,7 +90,7 @@ func TestKontakteMirror(t *testing.T) {
 			t.Errorf("href %q is not a hash of the UID", name)
 		}
 		if !strings.Contains(v, "X-HAUS-INHALT:") {
-			t.Errorf("card without Haus's note: %q", v)
+			t.Errorf("card without Homes' note: %q", v)
 		}
 	}
 	if _, ok := cards["/anna/handy-kontakte/"+caldav.CardHref("0r1-2A.%3D")]; !ok {

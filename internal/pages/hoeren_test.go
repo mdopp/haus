@@ -176,7 +176,7 @@ func speech(samples int) []byte {
 func hear(t *testing.T, h http.HandlerFunc, body []byte, user string, hdr map[string]string) (int, map[string]any) {
 	t.Helper()
 	req := httptest.NewRequest("POST", HoerenPath, strings.NewReader(string(body)))
-	req.Host = "haus.box.test"
+	req.Host = "homes.box.test"
 	req.Header.Set("Content-Type", "audio/wav")
 	req.Header.Set("Sec-Fetch-Site", "same-origin")
 	if user != "" {
@@ -193,7 +193,7 @@ func hear(t *testing.T, h http.HandlerFunc, body []byte, user string, hdr map[st
 }
 
 // haus#63: the microphone's recording goes to Home Assistant's
-// speech-to-text (Whisper on the box), through Haus, as it is — with the
+// speech-to-text (Whisper on the box), through Homes, as it is — with the
 // format HA needs — and the words come back for the field to send like
 // typed ones. The microphone shows only when a provider is set.
 func TestHoerenAsksHomeAssistantsSpeechToText(t *testing.T) {
@@ -235,7 +235,7 @@ func TestHoerenAsksHomeAssistantsSpeechToText(t *testing.T) {
 
 // What is no words is one plain line, never HA's detail: nothing heard,
 // HA in trouble, a recording that is not the page's, too long. Only a
-// person, only from Haus's own page, only POST.
+// person, only from Homes' own page, only POST.
 func TestHoerenSaysPlainlyWhenThereAreNoWords(t *testing.T) {
 	var logged strings.Builder
 	log.SetOutput(&logged)

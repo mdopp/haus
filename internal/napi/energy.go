@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mdopp/haus/internal/energie"
-	"github.com/mdopp/haus/internal/ha"
+	"github.com/mdopp/homes/internal/energie"
+	"github.com/mdopp/homes/internal/ha"
 )
 
 // The energy picture (GET /napi/portal/energy → {ok, energy:{flow, totals,
@@ -25,7 +25,7 @@ type EnergyMap = energie.Map
 // EnergyTotal is one labelled lifetime counter.
 type EnergyTotal = energie.Total
 
-// EnergyFromEnv reads HAUS_ENERGY_FLOW and HAUS_ENERGY_TOTALS.
+// EnergyFromEnv reads HOMES_ENERGY_FLOW and HOMES_ENERGY_TOTALS.
 func EnergyFromEnv() (EnergyMap, error) { return energie.FromEnv() }
 
 // meter is one sensor as the energy picture shows it (no nulls).

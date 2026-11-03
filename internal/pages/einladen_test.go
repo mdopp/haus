@@ -13,7 +13,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/mdopp/haus/internal/laib"
+	"github.com/mdopp/homes/internal/laib"
 )
 
 // a Laib with laib#360's two tools, or without them (an older Laib);
@@ -172,7 +172,7 @@ func TestEinladenWithoutTheToolSaysSo(t *testing.T) {
 	}
 }
 
-// Admins only, from Haus's own page only; what is not filled in is said
+// Admins only, from Homes' own page only; what is not filled in is said
 // and nothing goes to Laib.
 func TestEinladenOnlyAdminsAndOnlyComplete(t *testing.T) {
 	f := &inviteLaib{reply: map[string]any{"user": "anna", "mailed": true}}
@@ -205,7 +205,7 @@ func TestEinladenOnlyAdminsAndOnlyComplete(t *testing.T) {
 	}
 }
 
-// laib#362: the haus hand invites to the family only; a forged
+// laib#362: the homes hand invites to the family only; a forged
 // gruppe=admins still asks for family.
 func TestEinladenInvitesToTheFamilyOnly(t *testing.T) {
 	f := &inviteLaib{reply: map[string]any{"user": "anna", "mailed": true}}

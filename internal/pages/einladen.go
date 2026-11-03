@@ -12,19 +12,19 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mdopp/haus/internal/laib"
+	"github.com/mdopp/homes/internal/laib"
 )
 
 // What the Box card "Person einladen" says (haus#56, laib#360): an admin
 // invites someone new; Laib makes the account in its group and Authelia
 // mails the set-password link, or Laib hands the link back when the box
-// has no mail. No password passes through Haus.
+// has no mail. No password passes through Homes.
 const (
 	invitePath        = "/box/einladen"
 	saysInviteWhat    = "Für jemanden, der neu dazukommt: Die Person bekommt ein eigenes Konto für alle Apps der Box und legt ihr Passwort selbst fest. Du siehst es nie."
 	saysUserHint      = "Damit meldet sich die Person an: Kleinbuchstaben, ohne Leerzeichen. Leer lassen, dann wird es der Vorname."
 	saysEmailHint     = "Dorthin schickt die Box den Link, mit dem die Person ihr Passwort festlegt."
-	saysFamilyOnly    = "Haus lädt nur in die Familie ein. Einen weiteren Admin legst du aus Sicherheitsgründen direkt an der Box an: laib person invite <benutzer> … --group admins"
+	saysFamilyOnly    = "Homes lädt nur in die Familie ein. Einen weiteren Admin legst du aus Sicherheitsgründen direkt an der Box an: laib person invite <benutzer> … --group admins"
 	saysInviteMissing = "Einladen geht auf dieser Box noch nicht: Laib kann es hier noch nicht. Bis zum nächsten Laib-Update legst du neue Personen wie bisher in LLDAP an."
 	saysNeedFirst     = "Bitte den Vornamen eintragen."
 	saysBadEmail      = "Die E-Mail-Adresse sieht nicht vollständig aus."
@@ -36,7 +36,7 @@ const (
 	saysSignalWaits   = "Signal-Nummer eingetragen: Sie gilt, sobald der Vorschlag freigegeben ist."
 	saysSignalLater   = "Signal-Nummer für jemanden, der schon ein Konto hat: Benutzername und Nummer. Die Nummer kommt als Vorschlag in Laibs Eingang."
 	saysSignalSet     = "Signal-Nummer für %s eingetragen: Sie gilt, sobald der Vorschlag freigegeben ist."
-	saysWelcomeAfter  = "Nach dem ersten Anmelden zeigt Haus die Seite „Willkommen“: welche Apps es gibt und wie man sie einrichtet."
+	saysWelcomeAfter  = "Nach dem ersten Anmelden zeigt Homes die Seite „Willkommen“: welche Apps es gibt und wie man sie einrichtet."
 )
 
 // invitation is what the card says after a POST: the result, or what
@@ -95,7 +95,7 @@ func suggestUser(first string) string {
 	return b.String()
 }
 
-// Einladen is the card's form (haus#56): admins only, from Haus's own
+// Einladen is the card's form (haus#56): admins only, from Homes' own
 // page only. It passes the invitation to Laib and shows the Box page
 // again with what Laib did; the link, if any, is in that answer only,
 // never in a URL or a log.
@@ -109,8 +109,8 @@ func Einladen(cfg BoxConfig) http.HandlerFunc {
 			http.Error(w, "Einladen dürfen nur Admins.", http.StatusForbidden)
 			return
 		}
-		if !fromHaus(r) {
-			http.Error(w, "Das geht nur von Haus' eigener Seite.", http.StatusForbidden)
+		if !fromHomes(r) {
+			http.Error(w, "Das geht nur von Homes' eigener Seite.", http.StatusForbidden)
 			return
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, 4<<10)
@@ -159,7 +159,7 @@ func Einladen(cfg BoxConfig) http.HandlerFunc {
 		inv.form = in
 		got, err := cfg.Laib.PersonInvite(r.Context(), in)
 		if err != nil {
-			log.Printf("haus: einladen: %s by %s: %v", in.User, r.Header.Get("Remote-User"), err) // no link is in an error
+			log.Printf("homes: einladen: %s by %s: %v", in.User, r.Header.Get("Remote-User"), err) // no link is in an error
 			inv.problem = inviteProblem(err)
 			code := http.StatusBadGateway
 			if errors.Is(err, laib.ErrNoTool) {
@@ -171,7 +171,7 @@ func Einladen(cfg BoxConfig) http.HandlerFunc {
 		inv.done = &got
 		inv.signal = in.Signal != ""
 		inv.form = laib.Invite{} // the form is empty again for the next one
-		log.Printf("haus: einladen: %s by %s: mailed %v", in.User, r.Header.Get("Remote-User"), got.Mailed)
+		log.Printf("homes: einladen: %s by %s: mailed %v", in.User, r.Header.Get("Remote-User"), got.Mailed)
 		writeBox(w, r, cfg, http.StatusOK, inv)
 	}
 }
@@ -194,12 +194,12 @@ func signalLater(w http.ResponseWriter, r *http.Request, cfg BoxConfig) {
 	}
 	p, err := cfg.Laib.PersonSignal(r.Context(), user, number)
 	if err != nil {
-		log.Printf("haus: einladen: signal for %s by %s: %v", user, r.Header.Get("Remote-User"), err)
+		log.Printf("homes: einladen: signal for %s by %s: %v", user, r.Header.Get("Remote-User"), err)
 		inv.problem = inviteProblem(err)
 		writeBox(w, r, cfg, http.StatusBadGateway, inv)
 		return
 	}
-	log.Printf("haus: einladen: signal for %s by %s: Vorschlag #%d", user, r.Header.Get("Remote-User"), p.Proposal)
+	log.Printf("homes: einladen: signal for %s by %s: Vorschlag #%d", user, r.Header.Get("Remote-User"), p.Proposal)
 	inv.numbered = &p
 	writeBox(w, r, cfg, http.StatusOK, inv)
 }
@@ -271,7 +271,7 @@ func inviteCard(ctx context.Context, c *laib.Client, inv invitation) string {
 	if takes, err := c.Takes(ctx, "person_invite", "signal"); takes { // only once Laib takes it (laib#596)
 		field("signal", "Signal-Nummer", "tel", f.Signal, " autocomplete=off inputmode=tel placeholder=\"+49 170 1234567\"", saysSignalHint)
 	} else if err != nil {
-		log.Printf("haus: einladen: tools/list: %v", err)
+		log.Printf("homes: einladen: tools/list: %v", err)
 	}
 	b.WriteString("<button data-laeuft=\"Lädt ein …\">Einladen</button></form><p class=k>" + html.EscapeString(saysFamilyOnly) + "</p>")
 	if takes, _ := c.Takes(ctx, "person_signal", "number"); takes { // laib#596
@@ -294,7 +294,7 @@ func inviteCard(ctx context.Context, c *laib.Client, inv invitation) string {
 	}
 	switch {
 	case perr != nil:
-		log.Printf("haus: einladen: pending: %v", perr)
+		log.Printf("homes: einladen: pending: %v", perr)
 		b.WriteString("<p class=k>" + html.EscapeString(saysPendingNone) + "</p>")
 	case len(pending) > 0:
 		b.WriteString("<h3>" + html.EscapeString(saysPendingTitle) + "</h3><table>")
@@ -319,7 +319,7 @@ func inviteCard(ctx context.Context, c *laib.Client, inv invitation) string {
 	return b.String()
 }
 
-// inviteDone says what Laib did: its own sentence, else Haus's; without
+// inviteDone says what Laib did: its own sentence, else Homes'; without
 // mail the link to pass on, with a copy button, and how long it lasts.
 func inviteDone(got laib.Invited, first string) string {
 	if first == "" {

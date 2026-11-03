@@ -15,9 +15,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/caldav"
-	"github.com/mdopp/haus/internal/caldav/davfake"
-	"github.com/mdopp/haus/internal/notes"
+	"github.com/mdopp/homes/internal/caldav"
+	"github.com/mdopp/homes/internal/caldav/davfake"
+	"github.com/mdopp/homes/internal/notes"
 )
 
 var bg = context.Background()
@@ -71,7 +71,7 @@ func fixture(t *testing.T) []string {
 	return []string{one, two}
 }
 
-// a box: Haus's Radicale account (no Haushalt calendar or address book
+// a box: Homes' Radicale account (no Haushalt calendar or address book
 // yet) and the notes folder
 func box(t *testing.T) (*davfake.Server, Target, string) {
 	t.Helper()
@@ -159,7 +159,7 @@ func TestImportWritesEverythingWhereItBelongs(t *testing.T) {
 		t.Fatalf("notes %+v, attachments %+v", rep.Notes, rep.Attachments)
 	}
 
-	// the calendar Haus writes to, made because it was missing
+	// the calendar Homes writes to, made because it was missing
 	if cals := dav.Calendars(); len(cals) != 1 || dav.DisplayName(cals[0]) != "Haushalt" {
 		t.Fatalf("calendars: %v", cals)
 	}
@@ -310,7 +310,7 @@ func TestDryRunAndSkippedCalendars(t *testing.T) {
 }
 
 // Radicale not answering, or refusing the account, ends the import with
-// that error rather than a line per entry; what is not Haus's to set —
+// that error rather than a line per entry; what is not Homes' to set —
 // no Radicale, no notes folder — is left out.
 func TestImportStopsWhenRadicaleDoesNot(t *testing.T) {
 	dav, target, _ := box(t)

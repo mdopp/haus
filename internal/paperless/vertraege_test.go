@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/mdopp/haus/internal/paperless/paperlessfake"
+	"github.com/mdopp/homes/internal/paperless/paperlessfake"
 )
 
 func TestKuendigenBis(t *testing.T) {

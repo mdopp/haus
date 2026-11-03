@@ -22,7 +22,7 @@ func oauthFake(t *testing.T) *httptest.Server {
 		}
 		switch r.URL.Path {
 		case "/oauth/request_token":
-			if !strings.Contains(auth, `oauth_signature="cs&"`) || !strings.Contains(auth, `oauth_callback="https%3A%2F%2Fhaus.box%2Fdiscogs%2Fzurueck"`) {
+			if !strings.Contains(auth, `oauth_signature="cs&"`) || !strings.Contains(auth, `oauth_callback="https%3A%2F%2Fhomes.box%2Fdiscogs%2Fzurueck"`) {
 				w.WriteHeader(401)
 				return
 			}
@@ -57,7 +57,7 @@ func TestVerbinden(t *testing.T) {
 	if _, ok := r.For("anna"); ok {
 		t.Fatal("connected before connecting")
 	}
-	authorize, err := r.Verbinden(ctx, "anna", "https://haus.box/discogs/zurueck")
+	authorize, err := r.Verbinden(ctx, "anna", "https://homes.box/discogs/zurueck")
 	if err != nil || authorize != "https://www.discogs.test/oauth/authorize?oauth_token=rt" {
 		t.Fatalf("%q %v", authorize, err)
 	}
@@ -67,7 +67,7 @@ func TestVerbinden(t *testing.T) {
 	if _, err := r.Fertig(ctx, "anna", "rt", "v1"); err != ErrFremd { // Ben's try used it up
 		t.Errorf("used up: %v", err)
 	}
-	r.Verbinden(ctx, "anna", "https://haus.box/discogs/zurueck")
+	r.Verbinden(ctx, "anna", "https://homes.box/discogs/zurueck")
 	name, err := r.Fertig(ctx, "anna", "rt", "v1")
 	if err != nil || name != "anna_vinyl" {
 		t.Fatalf("%q %v", name, err)

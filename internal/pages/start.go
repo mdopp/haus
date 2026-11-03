@@ -3,7 +3,7 @@ package pages
 import (
 	"context"
 	"fmt"
-	"github.com/mdopp/haus/internal/papierkorb"
+	"github.com/mdopp/homes/internal/papierkorb"
 	"math"
 	"net/http"
 	"sort"
@@ -13,28 +13,28 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/mdopp/haus/internal/ansicht"
-	"github.com/mdopp/haus/internal/bote"
-	"github.com/mdopp/haus/internal/caldav"
-	"github.com/mdopp/haus/internal/cards"
-	"github.com/mdopp/haus/internal/discogs"
-	"github.com/mdopp/haus/internal/einkauf"
-	"github.com/mdopp/haus/internal/energie"
-	"github.com/mdopp/haus/internal/favoriten"
-	"github.com/mdopp/haus/internal/gesehen"
-	"github.com/mdopp/haus/internal/ha"
-	"github.com/mdopp/haus/internal/judge"
-	"github.com/mdopp/haus/internal/laib"
-	"github.com/mdopp/haus/internal/merken"
-	"github.com/mdopp/haus/internal/napi"
-	"github.com/mdopp/haus/internal/notes"
-	"github.com/mdopp/haus/internal/paperless"
-	"github.com/mdopp/haus/internal/podcasts"
-	"github.com/mdopp/haus/internal/qmd"
-	"github.com/mdopp/haus/internal/reitti"
-	"github.com/mdopp/haus/internal/samba"
-	"github.com/mdopp/haus/internal/schalter"
-	"github.com/mdopp/haus/internal/usage"
+	"github.com/mdopp/homes/internal/ansicht"
+	"github.com/mdopp/homes/internal/bote"
+	"github.com/mdopp/homes/internal/caldav"
+	"github.com/mdopp/homes/internal/cards"
+	"github.com/mdopp/homes/internal/discogs"
+	"github.com/mdopp/homes/internal/einkauf"
+	"github.com/mdopp/homes/internal/energie"
+	"github.com/mdopp/homes/internal/favoriten"
+	"github.com/mdopp/homes/internal/gesehen"
+	"github.com/mdopp/homes/internal/ha"
+	"github.com/mdopp/homes/internal/judge"
+	"github.com/mdopp/homes/internal/laib"
+	"github.com/mdopp/homes/internal/merken"
+	"github.com/mdopp/homes/internal/napi"
+	"github.com/mdopp/homes/internal/notes"
+	"github.com/mdopp/homes/internal/paperless"
+	"github.com/mdopp/homes/internal/podcasts"
+	"github.com/mdopp/homes/internal/qmd"
+	"github.com/mdopp/homes/internal/reitti"
+	"github.com/mdopp/homes/internal/samba"
+	"github.com/mdopp/homes/internal/schalter"
+	"github.com/mdopp/homes/internal/usage"
 )
 
 // StartConfig is what the family's pages read (Start, Räume, Kalender,
@@ -66,37 +66,37 @@ type StartConfig struct {
 	Loc       *time.Location    // the house's time zone; default time.Local
 	Now       func() time.Time  // for the tests; default time.Now
 	Usage     *usage.Counter    // what the family uses, anonymously (haus#50); nil: nothing counted
-	PublicURL string            // Haus's own address, https://haus.<domain>: the apps' addresses on Willkommen (haus#56)
+	PublicURL string            // Homes' own address, https://homes.<domain>: the apps' addresses on Willkommen (haus#56)
 	Welcome   bool              // Start sends a person to Willkommen the first time a device opens it (haus#56)
 	STT       STT               // the Sprechen field's microphone, HA's speech-to-text (haus#63); no provider: no microphone
-	// HAPublicURL is Home Assistant's public address (HAUS_HA_PUBLIC_URL,
+	// HAPublicURL is Home Assistant's public address (HOMES_HA_PUBLIC_URL,
 	// https://home.<domain>): Geräte's "In Home Assistant öffnen" (haus#64); empty: no link
 	HAPublicURL string
-	// Inverted are the covers wired the wrong way round (HAUS_COVER_INVERTED,
-	// haus#64): Haus shows and sets them turned over, Hoch is HA's close
+	// Inverted are the covers wired the wrong way round (HOMES_COVER_INVERTED,
+	// haus#64): Homes shows and sets them turned over, Hoch is HA's close
 	Inverted map[string]bool
-	// RadicalePublicURL is Radicale as phones reach it (HAUS_RADICALE_PUBLIC_URL,
+	// RadicalePublicURL is Radicale as phones reach it (HOMES_RADICALE_PUBLIC_URL,
 	// https://caldav.<domain>, haus#66): its web page and each calendar's
 	// address for the phone; empty: neither
 	RadicalePublicURL string
 	Views             *ansicht.Store // each person's colours and hidden calendars on Kalender (haus#66); nil: none
-	// GesundheitURL is the Gesundheit program's address (HAUS_GESUNDHEIT_URL,
+	// GesundheitURL is the Gesundheit program's address (HOMES_GESUNDHEIT_URL,
 	// https://gesundheit.<domain>, haus#192, laib#893): one card on Mehr with
-	// „Weiter in Gesundheit“; empty: no card. No health data passes through Haus.
+	// „Weiter in Gesundheit“; empty: no card. No health data passes through Homes.
 	GesundheitURL string
 	// The Dokumente page (haus#68): the address mail is filed from
-	// (HAUS_DOCUMENTS_MAIL; empty: no mail button), the way into
-	// Paperless's inbox (HAUS_UPLOAD_DIR; nil: no upload), Paperless's
-	// public address (HAUS_PAPERLESS_PUBLIC_URL; empty: no link) and
-	// whether it opens only at home (HAUS_PAPERLESS_LAN_ONLY)
+	// (HOMES_DOCUMENTS_MAIL; empty: no mail button), the way into
+	// Paperless's inbox (HOMES_UPLOAD_DIR; nil: no upload), Paperless's
+	// public address (HOMES_PAPERLESS_PUBLIC_URL; empty: no link) and
+	// whether it opens only at home (HOMES_PAPERLESS_LAN_ONLY)
 	DocumentsMail string
 	Ablage        *napi.Uploads
-	// Sicherung is the message archives' inbox (HAUS_ARCHIV_DIR, haus#207):
+	// Sicherung is the message archives' inbox (HOMES_ARCHIV_DIR, haus#207):
 	// the page „Daten sichern“ reads the person's state from it; nil:
 	// the page says the box has no archive
 	Sicherung          *napi.Sicherung
 	Papierkorb         *papierkorb.Korb // what the family deleted, for 30 days (haus#174); nil: deletes go at once
-	BoteSignal         string           // the house's Signal number (HAUS_BOTE_SIGNAL, +49…): Willkommen's „… auf Signal“ (haus#175); "": no card
+	BoteSignal         string           // the house's Signal number (HOMES_BOTE_SIGNAL, +49…): Willkommen's „… auf Signal“ (haus#175); "": no card
 	MusicInbox         string           // laib's music inbox, which beets sorts in (haus#107); "": no Musik hinzufügen
 	PaperlessPublicURL string
 	PaperlessLANOnly   bool
@@ -539,10 +539,10 @@ func agenda(events []caldav.Event, evErr error, todos []caldav.Todo, todoErr err
 	return c
 }
 
-// saysNoSuchPage is what a path Haus does not serve says.
+// saysNoSuchPage is what a path Homes does not serve says.
 const saysNoSuchPage = "Diese Seite gibt es nicht."
 
-// Elsewhere is "/" and every page path Haus does not serve (haus#12): "/"
+// Elsewhere is "/" and every page path Homes does not serve (haus#12): "/"
 // is Start; anything else is a 404 in the house's own frame, one plain
 // line and the way to Start — never a blank error, never Start
 // pretending all is well.

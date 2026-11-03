@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/bote"
-	"github.com/mdopp/haus/internal/bote/botefake"
+	"github.com/mdopp/homes/internal/bote"
+	"github.com/mdopp/homes/internal/bote/botefake"
 )
 
 func fakeBote(t *testing.T) (*botefake.Server, *bote.Client) {
@@ -35,14 +35,14 @@ func talkPage(t *testing.T, h http.HandlerFunc, user string) (int, string, http.
 	return rec.Code, rec.Body.String(), rec.Header()
 }
 
-// say posts the Sprechen field as a browser on Haus's own page does.
+// say posts the Sprechen field as a browser on Homes' own page does.
 func say(t *testing.T, h http.HandlerFunc, user, text string, hdr map[string]string) *httptest.ResponseRecorder {
 	t.Helper()
 	return post(t, h, "/sprechen", url.Values{"nachricht": {text}}, user, hdr)
 }
 
 // haus#12: Start has the Sprechen field at the top, under the day and
-// above the cards: one plain field and Senden, posting to Haus itself, a
+// above the cards: one plain field and Senden, posting to Homes itself, a
 // plain form without script (haus#63: with it, the answer has its page). It names no assistant: its name appears where you talk to it
 // (haus#35). Without the Bote there is no field and no word about it.
 func TestStartHasTheSprechenField(t *testing.T) {
@@ -107,7 +107,7 @@ func TestSprechenRelaysAndShowsTheReply(t *testing.T) {
 		t.Fatalf("→ %d %q, want 303 /sprechen", rec.Code, rec.Header().Get("Location"))
 	}
 	seen := fake.Seen()
-	if len(seen) != 1 || seen[0].SessionKey != "haus:anna" {
+	if len(seen) != 1 || seen[0].SessionKey != "homes:anna" {
 		t.Fatalf("the Bote saw %v", seen)
 	}
 	msgs := seen[0].Messages()
@@ -146,10 +146,10 @@ func TestSprechenShowsTheReplyAsText(t *testing.T) {
 	mustNotContain(t, body, "<script>alert", "<a href=x>", "<i>", "```", "**")
 }
 
-// Only a person, only from Haus's own page (the #35 rule): no Remote-User,
+// Only a person, only from Homes' own page (the #35 rule): no Remote-User,
 // another site, or neither Sec-Fetch-Site nor Origin is refused, and the
 // Bote hears nothing. Nothing but GET, HEAD and POST.
-func TestSprechenOnlyFromHaus(t *testing.T) {
+func TestSprechenOnlyFromHomes(t *testing.T) {
 	fake, bc := fakeBote(t)
 	h := Sprechen(StartConfig{Bote: bc})
 	for _, c := range []struct {
@@ -166,8 +166,8 @@ func TestSprechenOnlyFromHaus(t *testing.T) {
 			t.Errorf("%q %v → %d, want 403", c.user, c.hdr, rec.Code)
 		}
 	}
-	if rec := say(t, h, "anna", "Hallo", map[string]string{"Sec-Fetch-Site": "", "Origin": "http://haus.box.test"}); rec.Code != http.StatusSeeOther {
-		t.Errorf("an old browser on Haus's own origin → %d", rec.Code)
+	if rec := say(t, h, "anna", "Hallo", map[string]string{"Sec-Fetch-Site": "", "Origin": "http://homes.box.test"}); rec.Code != http.StatusSeeOther {
+		t.Errorf("an old browser on Homes' own origin → %d", rec.Code)
 	}
 	for _, m := range []string{"PUT", "DELETE", "PATCH"} {
 		rec := httptest.NewRecorder()
@@ -177,7 +177,7 @@ func TestSprechenOnlyFromHaus(t *testing.T) {
 		}
 	}
 	if n := len(fake.Seen()); n != 1 {
-		t.Fatalf("the Bote heard %d messages, want only the one from Haus's own origin", n)
+		t.Fatalf("the Bote heard %d messages, want only the one from Homes' own origin", n)
 	}
 }
 
@@ -223,11 +223,11 @@ func TestSprechenSaysASlowBotePlainly(t *testing.T) {
 	}
 	_, body, _ := talkPage(t, h, "anna")
 	mustContain(t, body, "Wie wird das Wetter?", "Ada hat nach zweieinhalb Minuten noch nicht geantwortet.", "bevor du es noch einmal schickst")
-	mustNotContain(t, body, "Erledigt", ">Ada<") // Haus says it, not in the assistant's name
+	mustNotContain(t, body, "Erledigt", ">Ada<") // Homes says it, not in the assistant's name
 	mustNotLeak(t, body, "deadline", "context", "timeout", "Bote", "Hermes")
 }
 
-// A Bote that is down, refuses Haus's key or fails its run is one plain
+// A Bote that is down, refuses Homes' key or fails its run is one plain
 // line: the assistant does not answer right now. Never its error, its
 // address or its name, never a crash; the page is a 200.
 func TestSprechenSaysABoteThatDoesNotAnswerPlainly(t *testing.T) {
@@ -288,7 +288,7 @@ func TestSprechenEmptySaysWhatItIsFor(t *testing.T) {
 
 // A person who leaves the page while the Bote thinks (the phone locks,
 // the tab closes) does not stop what they asked for: Hermes runs the turn
-// on anyway, so Haus waits on for the reply and keeps it — "antwortet
+// on anyway, so Homes waits on for the reply and keeps it — "antwortet
 // nicht" would make them send it twice.
 func TestSprechenKeepsTheReplyWhenThePageIsLeft(t *testing.T) {
 	named(t, "Ada")
@@ -298,7 +298,7 @@ func TestSprechenKeepsTheReplyWhenThePageIsLeft(t *testing.T) {
 	h := Sprechen(StartConfig{Bote: bc})
 	ctx, leave := context.WithCancel(context.Background())
 	req := httptest.NewRequestWithContext(ctx, "POST", "/sprechen", strings.NewReader(url.Values{"nachricht": {"Weck mich um sieben"}}.Encode()))
-	req.Host = "haus.box.test"
+	req.Host = "homes.box.test"
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Sec-Fetch-Site", "same-origin")
 	req.Header.Set("Remote-User", "anna")
@@ -309,7 +309,7 @@ func TestSprechenKeepsTheReplyWhenThePageIsLeft(t *testing.T) {
 	mustNotContain(t, withoutScripts(body), "antwortet gerade nicht")
 }
 
-// The Bote's key is Haus's alone: never on a page, never in the log —
+// The Bote's key is Homes' alone: never on a page, never in the log —
 // not when the Bote answers, not when it refuses or is not there.
 func TestSprechenNeverShowsTheKey(t *testing.T) {
 	var logged strings.Builder

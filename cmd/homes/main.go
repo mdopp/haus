@@ -1,5 +1,5 @@
-// Command haus is the family's surface for the Laib box (laib ADR 0014):
-// pages for people, the API the Haus app's widgets speak (laib ADR 0022).
+// Command homes is the family's surface for the Laib box (laib ADR 0014):
+// pages for people, the API the Homes app's widgets speak (laib ADR 0022).
 // The Box keys come from Laib, the house from Home Assistant, the tools from
 // the Haushalt source.
 package main
@@ -7,7 +7,7 @@ package main
 import (
 	"context"
 	"errors"
-	"github.com/mdopp/haus/internal/papierkorb"
+	"github.com/mdopp/homes/internal/papierkorb"
 	"log"
 	"net/http"
 	"os"
@@ -18,30 +18,30 @@ import (
 	"time"
 	_ "time/tzdata" // the image is scratch: TZ needs the zone database inside the binary
 
-	"github.com/mdopp/haus/internal/abs"
-	"github.com/mdopp/haus/internal/ansicht"
-	"github.com/mdopp/haus/internal/assistent"
-	"github.com/mdopp/haus/internal/bote"
-	"github.com/mdopp/haus/internal/caldav"
-	"github.com/mdopp/haus/internal/cards"
-	"github.com/mdopp/haus/internal/devices"
-	"github.com/mdopp/haus/internal/discogs"
-	"github.com/mdopp/haus/internal/einkauf"
-	"github.com/mdopp/haus/internal/favoriten"
-	"github.com/mdopp/haus/internal/gesehen"
-	"github.com/mdopp/haus/internal/ha"
-	"github.com/mdopp/haus/internal/haushalt"
-	"github.com/mdopp/haus/internal/jellyfin"
-	"github.com/mdopp/haus/internal/laib"
-	"github.com/mdopp/haus/internal/musicbrainz"
-	"github.com/mdopp/haus/internal/napi"
-	"github.com/mdopp/haus/internal/pages"
-	"github.com/mdopp/haus/internal/podcasts"
-	"github.com/mdopp/haus/internal/reitti"
-	"github.com/mdopp/haus/internal/samba"
-	"github.com/mdopp/haus/internal/schalter"
-	"github.com/mdopp/haus/internal/usage"
-	"github.com/mdopp/haus/internal/werkstatt"
+	"github.com/mdopp/homes/internal/abs"
+	"github.com/mdopp/homes/internal/ansicht"
+	"github.com/mdopp/homes/internal/assistent"
+	"github.com/mdopp/homes/internal/bote"
+	"github.com/mdopp/homes/internal/caldav"
+	"github.com/mdopp/homes/internal/cards"
+	"github.com/mdopp/homes/internal/devices"
+	"github.com/mdopp/homes/internal/discogs"
+	"github.com/mdopp/homes/internal/einkauf"
+	"github.com/mdopp/homes/internal/favoriten"
+	"github.com/mdopp/homes/internal/gesehen"
+	"github.com/mdopp/homes/internal/ha"
+	"github.com/mdopp/homes/internal/haushalt"
+	"github.com/mdopp/homes/internal/jellyfin"
+	"github.com/mdopp/homes/internal/laib"
+	"github.com/mdopp/homes/internal/musicbrainz"
+	"github.com/mdopp/homes/internal/napi"
+	"github.com/mdopp/homes/internal/pages"
+	"github.com/mdopp/homes/internal/podcasts"
+	"github.com/mdopp/homes/internal/reitti"
+	"github.com/mdopp/homes/internal/samba"
+	"github.com/mdopp/homes/internal/schalter"
+	"github.com/mdopp/homes/internal/usage"
+	"github.com/mdopp/homes/internal/werkstatt"
 )
 
 var Version = "dev"
@@ -76,7 +76,7 @@ type site struct {
 	inverted    map[string]bool // haus#64: covers wired the wrong way round, shown and set turned over
 	radicale    string          // haus#66: Radicale's public address, its web page and the phones' CalDAV addresses; empty, none
 	views       *ansicht.Store  // haus#66: each person's calendar colours and hidden calendars
-	dataDir     string          // Haus's data folder (HAUS_DATA): the Papierkorb (haus#174)
+	dataDir     string          // Homes' data folder (HOMES_DATA): the Papierkorb (haus#174)
 	// haus#68: the Dokumente page's mail address, Paperless's public address and whether it is LAN-only
 	docsMail, paperlessPublic string
 	paperlessLAN              bool
@@ -84,7 +84,7 @@ type site struct {
 	gesehen                   *gesehen.Service  // haus#152: what each person watched and heard; nil, no page
 }
 
-// routes is Haus's whole surface: /napi for the app, /mcp/haushalt for the
+// routes is Homes' whole surface: /napi for the app, /mcp/haushalt for the
 // Bote, and the pages behind the proxy secret.
 func routes(s site) http.Handler {
 	mux := http.NewServeMux()
@@ -108,15 +108,15 @@ func routes(s site) http.Handler {
 	if s.hh.Wuensche != nil {
 		family.Discogs = s.hh.Wuensche.Regale
 	}
-	family.BoteSignal = strings.TrimSpace(os.Getenv("HAUS_BOTE_SIGNAL")) // haus#175: Willkommen's chat card
-	family.Papierkorb = &papierkorb.Korb{Dir: s.dataDir}                 // haus#174: family deletes, for 30 days
-	family.MusicInbox = os.Getenv("HAUS_MUSIC_INBOX")
+	family.BoteSignal = strings.TrimSpace(os.Getenv("HOMES_BOTE_SIGNAL")) // haus#175: Willkommen's chat card
+	family.Papierkorb = &papierkorb.Korb{Dir: s.dataDir}                  // haus#174: family deletes, for 30 days
+	family.MusicInbox = os.Getenv("HOMES_MUSIC_INBOX")
 	if fi, err := os.Stat(musicInboxMount); family.MusicInbox == "" && err == nil && fi.IsDir() {
-		family.MusicInbox = musicInboxMount // where laib's haus template mounts it (laib#639)
+		family.MusicInbox = musicInboxMount // where laib's homes template mounts it (laib#639)
 	}
 	if family.MusicInbox != "" { // haus#107: the music inbox beets sorts in
 		if fi, err := os.Stat(family.MusicInbox); err != nil || !fi.IsDir() {
-			log.Printf("haus: HAUS_MUSIC_INBOX %s is not a folder (yet): uploads answer 503 until it is", family.MusicInbox)
+			log.Printf("homes: HOMES_MUSIC_INBOX %s is not a folder (yet): uploads answer 503 until it is", family.MusicInbox)
 		}
 		pagesMux.HandleFunc(pages.MusikPath, pages.Musik(family))
 		pagesMux.HandleFunc(pages.MusikTeilPath, pages.Musik(family))
@@ -133,7 +133,7 @@ func routes(s site) http.Handler {
 	if s.podcasts != nil {
 		pagesMux.HandleFunc(pages.PodcastsPath, pages.Podcasts(family)) // haus#123
 	}
-	live := &pages.Live{HA: family.HA} // the pages' push: Home Assistant's changes and Haus's own
+	live := &pages.Live{HA: family.HA} // the pages' push: Home Assistant's changes and Homes' own
 	pagesMux.Handle(pages.LivePath, live)
 	if s.gesehen != nil { // haus#152: the film and book wish list, told like the other lists
 		s.gesehen.Changed = func(r caldav.ListRef) { live.Tell(pages.ListeLive(r)) }
@@ -182,8 +182,8 @@ func routes(s site) http.Handler {
 	pagesMux.HandleFunc("/willkommen", pages.Willkommen(family))                  // a new person's apps and how to set them up (haus#56)
 	pagesMux.HandleFunc("/adresse", pages.Adresse(family))                        // the household's address, admins only (laib#561)
 	pagesMux.HandleFunc("/adresse/vorschlagen", pages.AdresseVorschlagen(family)) // its form, a proposal to Laib
-	pagesMux.HandleFunc("/abmelden", pages.Abmelden(s.publicURL))                 // Authelia's logout, back to Haus (haus#61)
-	pagesMux.HandleFunc("/schrift/", pages.Font())                                // Geist, from Haus itself (haus#35)
+	pagesMux.HandleFunc("/abmelden", pages.Abmelden(s.publicURL))                 // Authelia's logout, back to Homes (haus#61)
+	pagesMux.HandleFunc("/schrift/", pages.Font())                                // Geist, from Homes itself (haus#35)
 	pagesMux.HandleFunc(pages.SymbolPath, pages.Symbol())                         // the icon and the web app manifest (owner 2026-11-02)
 	boxCfg := pages.BoxConfig{Laib: s.ops, LaibURL: s.laibURL, Tickets: s.tickets, Family: family, Voice: s.voice}
 	box := pages.BoxPage(boxCfg)
@@ -197,14 +197,14 @@ func routes(s site) http.Handler {
 	pagesMux.HandleFunc("/", pages.Elsewhere(family)) // "/" is Start; every path not served is a 404 with the way there
 	// counted behind the proxy secret: only what Caddy let through is a page view (haus#50)
 	mux.Handle("/", pages.RequireProxy(s.proxySecret, pages.Counted(s.usage, pagesMux)))
-	return mux
+	return legacyHost(s.publicURL, mux) // haus.<domain>'s pages to homes.<domain> (laib#1021)
 }
 
-// musicInboxMount is where laib's haus template mounts the music inbox
-// (laib#639); Haus takes it when HAUS_MUSIC_INBOX names none.
+// musicInboxMount is where laib's homes template mounts the music inbox
+// (laib#639); Homes takes it when HOMES_MUSIC_INBOX names none.
 const musicInboxMount = "/musik-eingang"
 
-// episodeEvery is how often Haus looks for new podcast episodes.
+// episodeEvery is how often Homes looks for new podcast episodes.
 const episodeEvery = 15 * time.Minute
 
 // tellNewEpisodes looks for new episodes every episodeEvery and tells each
@@ -219,14 +219,14 @@ func tickWishes(ctx context.Context, w *einkauf.Wuensche, l *laib.Client) {
 	defer t.Stop()
 	for {
 		if err := w.Nachsuchen(ctx); err != nil {
-			log.Printf("haus: musikwünsche: looking up again: %v", err)
+			log.Printf("homes: musikwünsche: looking up again: %v", err)
 		}
 		done, err := w.Pruefen(ctx)
 		if err != nil {
-			log.Printf("haus: musikwünsche: %v", err)
+			log.Printf("homes: musikwünsche: %v", err)
 		}
 		for _, d := range done {
-			log.Printf("haus: musikwunsch arrived for %q", d.Person)
+			log.Printf("homes: musikwunsch arrived for %q", d.Person)
 			if d.Person == "" {
 				continue
 			}
@@ -235,7 +235,7 @@ func tickWishes(ctx context.Context, w *einkauf.Wuensche, l *laib.Client) {
 			}
 			if ok, _ := l.Takes(ctx, "tell", "person"); ok {
 				if err := l.Tell(ctx, d.Person, d.Satz); err != nil {
-					log.Printf("haus: musikwunsch: telling %s: %v", d.Person, err)
+					log.Printf("homes: musikwunsch: telling %s: %v", d.Person, err)
 				}
 			}
 		}
@@ -256,20 +256,20 @@ func tellNewEpisodes(ctx context.Context, pods *podcasts.Service, l *laib.Client
 	said := false
 	for {
 		if err := pods.Nachladen(ctx); err != nil { // a subscription with no episode yet
-			log.Printf("haus: podcasts: fetching the first episodes: %v", err)
+			log.Printf("homes: podcasts: fetching the first episodes: %v", err)
 		}
 		if ok, _ := l.Takes(ctx, "tell", "person"); ok {
 			msgs, err := pods.Neue(ctx)
 			if err != nil {
-				log.Printf("haus: podcasts: looking for new episodes: %v", err)
+				log.Printf("homes: podcasts: looking for new episodes: %v", err)
 			}
 			for _, m := range msgs {
 				if err := l.Tell(ctx, m.Person, m.Text); err != nil {
-					log.Printf("haus: podcasts: telling %s: %v", m.Person, err)
+					log.Printf("homes: podcasts: telling %s: %v", m.Person, err)
 				}
 			}
 		} else if !said {
-			log.Printf("haus: podcasts: laib has no tell yet (laib#676): new episodes are not told")
+			log.Printf("homes: podcasts: laib has no tell yet (laib#676): new episodes are not told")
 			said = true
 		}
 		select {
@@ -291,10 +291,10 @@ func ensureHaushalt(ctx context.Context, c *caldav.Client) {
 			c.EnsureList(tctx, einkauf.MusikListe, einkauf.MusikName)) // and the music wish list
 		cancel()
 		if err == nil {
-			log.Printf("haus: Haushalt: calendar, address book and shopping list are there")
+			log.Printf("homes: Haushalt: calendar, address book and shopping list are there")
 			return
 		}
-		log.Printf("haus: Haushalt: making the calendar and address book: %v (again in %v)", err, wait)
+		log.Printf("homes: Haushalt: making the calendar and address book: %v (again in %v)", err, wait)
 		select {
 		case <-ctx.Done():
 			return
@@ -310,41 +310,41 @@ func main() {
 	}
 	ops := &laib.Client{URL: env("LAIB_URL", "http://host.containers.internal:5900"), Token: os.Getenv("LAIB_TOKEN")}
 	if ops.Token == "" {
-		log.Fatal("haus: LAIB_TOKEN is required (minted on laib add haus as the haus hand)")
+		log.Fatal("homes: LAIB_TOKEN is required (minted on laib add homes as the homes hand)")
 	}
-	proxySecret := os.Getenv("HAUS_PROXY_SECRET")
+	proxySecret := os.Getenv("HOMES_PROXY_SECRET")
 	if proxySecret == "" {
-		log.Fatal("haus: HAUS_PROXY_SECRET is required — Caddy sends it as X-Haus-Proxy, nothing else may reach the pages (ADR 0012 §3)")
+		log.Fatal("homes: HOMES_PROXY_SECRET is required — Caddy sends it as X-Homes-Proxy, nothing else may reach the pages (ADR 0012 §3)")
 	}
-	dataDir := env("HAUS_DATA", "/data")
+	dataDir := env("HOMES_DATA", "/data")
 	store, err := devices.Open(dataDir)
 	if err != nil {
-		log.Fatalf("haus: devices: %v", err)
+		log.Fatalf("homes: devices: %v", err)
 	}
-	assistent.Set(os.Getenv("HAUS_ASSISTANT"))                           // the name, from Laib's box.yml assistant:; "Homes" without it
+	assistent.Set(os.Getenv("HOMES_ASSISTANT"))                          // the name, from Laib's box.yml assistant:; "Homes" without it
 	cfg := napi.Config{Laib: ops, Witness: &schalter.Witness{Laib: ops}} // who switched what (haus#89)
 	cfg.Whoami = func(b string) (string, bool) {
 		d, ok := store.Lookup(b)
 		return d.UID, ok
 	}
-	// only phones paired through Haus; nothing old is carried (laib ADR 0022 §4)
+	// only phones paired through Homes; nothing old is carried (laib ADR 0022 §4)
 	cfg.Validate = func(_ context.Context, b string) bool { _, ok := store.Lookup(b); return ok }
 	// one favorites store for the pages' ☆ and the app's start screen
 	cfg.Favorites = favoriten.Open(dataDir)
 	if cfg.HA, err = ha.FromEnv(); err != nil { // the house paths and the event stream from HA; unset, 404
-		log.Fatalf("haus: %v", err)
+		log.Fatalf("homes: %v", err)
 	}
 	if cfg.Energy, err = napi.EnergyFromEnv(); err != nil {
-		log.Fatalf("haus: %v", err)
+		log.Fatalf("homes: %v", err)
 	}
 	// laib ADR 0017: the Haushalt MCP source; a tool only when its backend is set
 	hh, err := haushalt.FromEnv()
 	if err != nil {
-		log.Fatalf("haus: %v", err)
+		log.Fatalf("homes: %v", err)
 	}
 	hh.Version = Version
 	var pods *podcasts.Service
-	if c := abs.FromEnv(); c != nil { // haus#123: HAUS_ABS_URL and HAUS_ABS_TOKEN from laib (laib#676)
+	if c := abs.FromEnv(); c != nil { // haus#123: HOMES_ABS_URL and HOMES_ABS_TOKEN from laib (laib#676)
 		pods = podcasts.Open(c, dataDir)
 		hh.Podcasts = pods
 	}
@@ -362,47 +362,47 @@ func main() {
 	}
 	cfg.Haushalt = hh // haus#10: the tool widgets from the same backends; none set, 404
 	// haus#10: the camera capture into the share's Paperless consume folder; unset, 404
-	if cfg.UploadDir = os.Getenv("HAUS_UPLOAD_DIR"); cfg.UploadDir != "" {
+	if cfg.UploadDir = os.Getenv("HOMES_UPLOAD_DIR"); cfg.UploadDir != "" {
 		if fi, err := os.Stat(cfg.UploadDir); err != nil || !fi.IsDir() {
-			log.Printf("haus: HAUS_UPLOAD_DIR %s is not a folder (yet): uploads answer 503 until it is", cfg.UploadDir)
-		} else if err := napi.SweepUploads(cfg.UploadDir); err != nil { // parts a stopped Haus left staged
-			log.Printf("haus: HAUS_UPLOAD_DIR: sweeping staged parts: %v", err)
+			log.Printf("homes: HOMES_UPLOAD_DIR %s is not a folder (yet): uploads answer 503 until it is", cfg.UploadDir)
+		} else if err := napi.SweepUploads(cfg.UploadDir); err != nil { // parts a stopped Homes left staged
+			log.Printf("homes: HOMES_UPLOAD_DIR: sweeping staged parts: %v", err)
 		}
 	}
 	// haus#207, laib ADR 0029: the message archives' inbox, one folder per
 	// person, where the app's phone backups land; unset, /napi/sicherung is 503
-	if dir := os.Getenv("HAUS_ARCHIV_DIR"); dir != "" {
+	if dir := os.Getenv("HOMES_ARCHIV_DIR"); dir != "" {
 		cfg.Sicherung = napi.NewSicherung(dir, dataDir)
 		// a new phone's restore (haus#209): each person's archive for the WhatsApp media,
-		// HAUS_ARCHIV_INTERN and HAUS_ARCHIV_SECRET_<PERSON>; without them the media answer 503
+		// HOMES_ARCHIV_INTERN and HOMES_ARCHIV_SECRET_<PERSON>; without them the media answer 503
 		cfg.Sicherung.SetArchive(napi.ArchivInternFromEnv(os.Getenv))
 		if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
-			log.Printf("haus: HAUS_ARCHIV_DIR %s is not a folder (yet): backups answer 503 until it is", dir)
+			log.Printf("homes: HOMES_ARCHIV_DIR %s is not a folder (yet): backups answer 503 until it is", dir)
 		}
 		go cfg.Sicherung.Pflegen(nil) // parts untouched for a week go, now and daily
 	}
 	// the app's Standortverlauf (owner 2026-11-02): Reitti inside the box,
-	// HAUS_REITTI_URL (http://host.containers.internal:<port>); unset, /napi/standort is 503
+	// HOMES_REITTI_URL (http://host.containers.internal:<port>); unset, /napi/standort is 503
 	cfg.Reitti = reitti.FromEnv(dataDir)
-	gesundheit := pages.AppURL(pages.OnDomain(os.Getenv("HAUS_GESUNDHEIT_URL"), os.Getenv("HAUS_PUBLIC_URL"))) // haus#192
-	if gesundheit == "" && os.Getenv("HAUS_GESUNDHEIT_URL") != "" {
-		log.Printf("haus: HAUS_GESUNDHEIT_URL %q is no address on the house's domain: no Gesundheit card", os.Getenv("HAUS_GESUNDHEIT_URL"))
+	gesundheit := pages.AppURL(pages.OnDomain(os.Getenv("HOMES_GESUNDHEIT_URL"), os.Getenv("HOMES_PUBLIC_URL"))) // haus#192
+	if gesundheit == "" && os.Getenv("HOMES_GESUNDHEIT_URL") != "" {
+		log.Printf("homes: HOMES_GESUNDHEIT_URL %q is no address on the house's domain: no Gesundheit card", os.Getenv("HOMES_GESUNDHEIT_URL"))
 	}
-	haPublic := pages.AppURL(pages.OnDomain(os.Getenv("HAUS_HA_PUBLIC_URL"), os.Getenv("HAUS_PUBLIC_URL"))) // haus#64
-	if haPublic == "" && os.Getenv("HAUS_HA_PUBLIC_URL") != "" {
-		log.Printf("haus: HAUS_HA_PUBLIC_URL %q is not an http(s) address: no link to Home Assistant", os.Getenv("HAUS_HA_PUBLIC_URL"))
+	haPublic := pages.AppURL(pages.OnDomain(os.Getenv("HOMES_HA_PUBLIC_URL"), os.Getenv("HOMES_PUBLIC_URL"))) // haus#64
+	if haPublic == "" && os.Getenv("HOMES_HA_PUBLIC_URL") != "" {
+		log.Printf("homes: HOMES_HA_PUBLIC_URL %q is not an http(s) address: no link to Home Assistant", os.Getenv("HOMES_HA_PUBLIC_URL"))
 	}
-	radicalePublic := pages.AppURL(pages.OnDomain(os.Getenv("HAUS_RADICALE_PUBLIC_URL"), os.Getenv("HAUS_PUBLIC_URL"))) // haus#66
-	if radicalePublic == "" && os.Getenv("HAUS_RADICALE_PUBLIC_URL") != "" {
-		log.Printf("haus: HAUS_RADICALE_PUBLIC_URL %q is not an http(s) address: no link to Radicale, no addresses for the phone", os.Getenv("HAUS_RADICALE_PUBLIC_URL"))
+	radicalePublic := pages.AppURL(pages.OnDomain(os.Getenv("HOMES_RADICALE_PUBLIC_URL"), os.Getenv("HOMES_PUBLIC_URL"))) // haus#66
+	if radicalePublic == "" && os.Getenv("HOMES_RADICALE_PUBLIC_URL") != "" {
+		log.Printf("homes: HOMES_RADICALE_PUBLIC_URL %q is not an http(s) address: no link to Radicale, no addresses for the phone", os.Getenv("HOMES_RADICALE_PUBLIC_URL"))
 	}
 	laibURL := env("LAIB_PUBLIC_URL", "https://laib."+env("LAIB_DOMAIN", "example"))
-	docsMail := pages.MailAddress(os.Getenv("HAUS_DOCUMENTS_MAIL")) // haus#68
-	if docsMail == "" && os.Getenv("HAUS_DOCUMENTS_MAIL") != "" {
-		log.Printf("haus: HAUS_DOCUMENTS_MAIL %q is not one plain address: no mail button", os.Getenv("HAUS_DOCUMENTS_MAIL"))
+	docsMail := pages.MailAddress(os.Getenv("HOMES_DOCUMENTS_MAIL")) // haus#68
+	if docsMail == "" && os.Getenv("HOMES_DOCUMENTS_MAIL") != "" {
+		log.Printf("homes: HOMES_DOCUMENTS_MAIL %q is not one plain address: no mail button", os.Getenv("HOMES_DOCUMENTS_MAIL"))
 	}
-	paperlessPublic := pages.AppURL(pages.OnDomain(os.Getenv("HAUS_PAPERLESS_PUBLIC_URL"), os.Getenv("HAUS_PUBLIC_URL")))
-	paperlessLAN, _ := strconv.ParseBool(os.Getenv("HAUS_PAPERLESS_LAN_ONLY"))
+	paperlessPublic := pages.AppURL(pages.OnDomain(os.Getenv("HOMES_PAPERLESS_PUBLIC_URL"), os.Getenv("HOMES_PUBLIC_URL")))
+	paperlessLAN, _ := strconv.ParseBool(os.Getenv("HOMES_PAPERLESS_LAN_ONLY"))
 	b := bote.FromEnv() // the Sprechen field (haus#12): with the Bote's key only (laib#215)
 	// haus#50: counted for usage-metrics, flushed every five minutes; the voice
 	// from HA's Assist runs every minute, as HA keeps only the last ten
@@ -428,15 +428,15 @@ func main() {
 	go func() { counter.Run(counting, 5*time.Minute); close(flushed) }()
 	go voice.Run(ctx, time.Minute)
 	mux := routes(site{napi: cfg, hh: hh, store: store, ops: ops, proxySecret: proxySecret, laibURL: laibURL,
-		publicURL: os.Getenv("HAUS_PUBLIC_URL"), tickets: werkstatt.FromEnv(), favorites: cfg.Favorites, bote: b, podcasts: pods, gesehen: gs,
-		samba: samba.FromEnv(), sambaHost: os.Getenv("HAUS_SAMBA_HOST"),
+		publicURL: os.Getenv("HOMES_PUBLIC_URL"), tickets: werkstatt.FromEnv(), favorites: cfg.Favorites, bote: b, podcasts: pods, gesehen: gs,
+		samba: samba.FromEnv(), sambaHost: os.Getenv("HOMES_SAMBA_HOST"),
 		usage: counter, voice: voice, welcome: true,
-		stt:        pages.STT{Provider: os.Getenv("HAUS_STT_PROVIDER"), Language: env("HAUS_STT_LANGUAGE", "de")},
-		gesundheit: gesundheit, haPublic: haPublic, inverted: pages.InvertedFromList(os.Getenv("HAUS_COVER_INVERTED")),
+		stt:        pages.STT{Provider: os.Getenv("HOMES_STT_PROVIDER"), Language: env("HOMES_STT_LANGUAGE", "de")},
+		gesundheit: gesundheit, haPublic: haPublic, inverted: pages.InvertedFromList(os.Getenv("HOMES_COVER_INVERTED")),
 		radicale: radicalePublic, views: ansicht.Open(dataDir), dataDir: dataDir,
 		docsMail: docsMail, paperlessPublic: paperlessPublic, paperlessLAN: paperlessLAN})
-	addr := env("HAUS_LISTEN", "127.0.0.1:8650")
-	log.Printf("haus %s: listening on %s as %s, laib %s, home assistant %v, haushalt %d tools, memory library %v (tidy-up %v), uploads %q, the Bote %v, counting %v (voice %v), pages only behind the proxy secret", Version, addr, assistent.Name(), ops.URL, cfg.HA != nil, len(haushalt.Tools(hh)), hh.Library != nil, hh.Judge != nil, cfg.UploadDir, b != nil, counter != nil, voice != nil)
+	addr := env("HOMES_LISTEN", "127.0.0.1:8650")
+	log.Printf("homes %s: listening on %s as %s, laib %s, home assistant %v, haushalt %d tools, memory library %v (tidy-up %v), uploads %q, the Bote %v, counting %v (voice %v), pages only behind the proxy secret", Version, addr, assistent.Name(), ops.URL, cfg.HA != nil, len(haushalt.Tools(hh)), hh.Library != nil, hh.Judge != nil, cfg.UploadDir, b != nil, counter != nil, voice != nil)
 	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 	drained := make(chan struct{})
 	go func() {
@@ -452,12 +452,12 @@ func main() {
 	<-drained
 	stop()
 	stopCounting()
-	<-flushed // the last counts go out before Haus does
+	<-flushed // the last counts go out before Homes does
 }
 
 // gesehenFromEnv is Gesehen & Gehört's backends (haus#152): Jellyfin with
-// its API key (HAUS_JELLYFIN_KEY, laib's media template mints it), ABS with
-// Haus's key, the wish list on dav; nil when neither app is there.
+// its API key (HOMES_JELLYFIN_KEY, laib's media template mints it), ABS with
+// Homes' key, the wish list on dav; nil when neither app is there.
 func gesehenFromEnv(dav *caldav.Client) *gesehen.Service {
 	g := &gesehen.Service{DAV: dav}
 	if jf := jellyfin.KeyFromEnv(); jf != nil {

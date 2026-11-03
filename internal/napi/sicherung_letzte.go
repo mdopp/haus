@@ -30,8 +30,8 @@ import (
 //	GET /napi/sicherung/letzte/<quelle>/<pfad>  the file, with Range (a backup is several GB, a phone's line drops)
 //
 // Signal and the WhatsApp database come straight from letzte/. The media
-// only the open archive can decrypt: Haus asks the person's archive
-// (/intern/whatsapp/medien/<pfad>, ARCHIV_HAUS_SECRET in X-Archiv-Haus) and
+// only the open archive can decrypt: Homes asks the person's archive
+// (/intern/whatsapp/medien/<pfad>, ARCHIV_HOMES_SECRET in X-Archiv-Homes) and
 // passes its answer on; a closed vault is 423 with the sentence the app
 // shows. Another person's device asks its own letzte/, so their file is 404.
 
@@ -54,33 +54,33 @@ const (
 	saysArchivSchweigt  = "Dein Archiv antwortet gerade nicht. Versuch es gleich noch einmal; hilft das nicht, sag dem Admin Bescheid."
 )
 
-// ArchivIntern is the way into one person's archive: its address as Haus
-// reaches it and the secret it wants in X-Archiv-Haus.
+// ArchivIntern is the way into one person's archive: its address as Homes
+// reaches it and the secret it wants in X-Archiv-Homes.
 type ArchivIntern struct {
 	URL    string
 	Secret string
 }
 
-// ArchivInternFromEnv reads HAUS_ARCHIV_INTERN, "<person>=<url>" separated
+// ArchivInternFromEnv reads HOMES_ARCHIV_INTERN, "<person>=<url>" separated
 // by spaces (each person's archive instance as this pod reaches it), and
-// each person's secret from HAUS_ARCHIV_SECRET_<PERSON> — laib's suffix
+// each person's secret from HOMES_ARCHIV_SECRET_<PERSON> — laib's suffix
 // for a per-person secret: upper case, '-' as '_'. A person without both
 // has no media to give back.
 func ArchivInternFromEnv(getenv func(string) string) map[string]ArchivIntern {
 	out := map[string]ArchivIntern{}
-	for _, f := range strings.Fields(getenv("HAUS_ARCHIV_INTERN")) {
+	for _, f := range strings.Fields(getenv("HOMES_ARCHIV_INTERN")) {
 		person, u, ok := strings.Cut(f, "=")
 		if !ok || !validPerson(person) {
-			log.Printf("haus: HAUS_ARCHIV_INTERN: %q is no <person>=<url>", f)
+			log.Printf("homes: HOMES_ARCHIV_INTERN: %q is no <person>=<url>", f)
 			continue
 		}
 		if pu, err := url.Parse(u); err != nil || (pu.Scheme != "http" && pu.Scheme != "https") || pu.Host == "" {
-			log.Printf("haus: HAUS_ARCHIV_INTERN: %q is no http(s) address for %s", u, person)
+			log.Printf("homes: HOMES_ARCHIV_INTERN: %q is no http(s) address for %s", u, person)
 			continue
 		}
-		secret := getenv("HAUS_ARCHIV_SECRET_" + strings.ToUpper(strings.ReplaceAll(person, "-", "_")))
+		secret := getenv("HOMES_ARCHIV_SECRET_" + strings.ToUpper(strings.ReplaceAll(person, "-", "_")))
 		if secret == "" {
-			log.Printf("haus: HAUS_ARCHIV_INTERN: no secret for %s: their media cannot come back", person)
+			log.Printf("homes: HOMES_ARCHIV_INTERN: no secret for %s: their media cannot come back", person)
 			continue
 		}
 		out[person] = ArchivIntern{URL: strings.TrimRight(u, "/"), Secret: secret}
@@ -88,7 +88,7 @@ func ArchivInternFromEnv(getenv func(string) string) map[string]ArchivIntern {
 	return out
 }
 
-// SetArchive gives Haus the way into each person's archive, for the media.
+// SetArchive gives Homes the way into each person's archive, for the media.
 func (s *Sicherung) SetArchive(intern map[string]ArchivIntern) {
 	s.intern = intern
 }
@@ -161,7 +161,7 @@ func (s *Sicherung) Letzte(person string) (map[string][]LetzteDatei, error) {
 				n, err := ageKlarGroesse(f, fi.Size())
 				f.Close()
 				if err != nil {
-					log.Printf("haus: sicherung: letzte of %s: %s: %v", person, rel, err)
+					log.Printf("homes: sicherung: letzte of %s: %s: %v", person, rel, err)
 					return nil
 				}
 				e.Groesse = n
@@ -212,7 +212,7 @@ func ageKlarGroesse(r io.Reader, size int64) (int64, error) {
 func (s *Sicherung) letzteListe(w http.ResponseWriter, r *http.Request, person string) {
 	q, err := s.Letzte(person)
 	if err != nil {
-		log.Printf("haus: sicherung: letzte of %s: %v", person, err)
+		log.Printf("homes: sicherung: letzte of %s: %v", person, err)
 		fehler(w, http.StatusInternalServerError, saysStoreFailed)
 		return
 	}
@@ -272,7 +272,7 @@ func (s *Sicherung) medium(w http.ResponseWriter, r *http.Request, person, rel s
 		fehler(w, http.StatusNotFound, saysLetzteNichtDa)
 		return
 	}
-	req.Header.Set("X-Archiv-Haus", a.Secret)
+	req.Header.Set("X-Archiv-Homes", a.Secret)
 	for _, h := range []string{"Range", "If-Range"} {
 		if v := r.Header.Get(h); v != "" {
 			req.Header.Set(h, v)
@@ -280,7 +280,7 @@ func (s *Sicherung) medium(w http.ResponseWriter, r *http.Request, person, rel s
 	}
 	resp, err := archivClient.Do(req)
 	if err != nil {
-		log.Printf("haus: sicherung: archive of %s: %v", person, err)
+		log.Printf("homes: sicherung: archive of %s: %v", person, err)
 		fehler(w, http.StatusServiceUnavailable, saysArchivSchweigt)
 		return
 	}
@@ -301,7 +301,7 @@ func (s *Sicherung) medium(w http.ResponseWriter, r *http.Request, person, rel s
 	case http.StatusNotFound:
 		fehler(w, http.StatusNotFound, saysLetzteNichtDa)
 	default:
-		log.Printf("haus: sicherung: archive of %s answered %d for a medium", person, resp.StatusCode)
+		log.Printf("homes: sicherung: archive of %s answered %d for a medium", person, resp.StatusCode)
 		fehler(w, http.StatusBadGateway, saysArchivSchweigt)
 	}
 }

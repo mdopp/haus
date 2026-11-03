@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/laib"
+	"github.com/mdopp/homes/internal/laib"
 )
 
 // a Laib that answers status with the skills' last runs, and the skill
-// list or, while Haus may not list them, „unknown tool“
+// list or, while Homes may not list them, „unknown tool“
 func skillLaib(t *testing.T, list []map[string]any, mayList bool) *laib.Client {
 	t.Helper()
 	// earlier today in the page's clock (time.Local), also just after midnight: two hours back was yesterday then
@@ -64,14 +64,14 @@ func TestBoxShowsWhatTheOperatorCan(t *testing.T) {
 		"montags 08:00 · Nur ein Skript, kein Modell. · ruht gerade", "Noch nicht gelaufen",
 		"alle 10 Minuten", "Laib lässt ihn nicht laufen: das Werkzeug exec ist nicht erlaubt", "Ein eigener Skill dieser Box",
 		`<a href="https://github.com/mdopp/laib/tree/main/skills/routineblick" target=_blank rel=noopener>Der Skill auf GitHub</a>`,
-		`<a href=/box/operator aria-current=page>Operator</a>`, "Haus zeigt nur.")
+		`<a href=/box/operator aria-current=page>Operator</a>`, "Homes zeigt nur.")
 	mustNotContain(t, body, "skills/eigen", "<form", "<button")
 	if strings.Contains(getAt(BoxWith(skillLaib(t, list, true), "https://laib.box.test", nil), "/box/operator?ganz=1", "family"), "Was der Operator kann") {
 		t.Error("the family sees the skills")
 	}
 }
 
-// Haus may not list them yet: what ran shows by its name, and the page says why the rest is missing
+// Homes may not list them yet: what ran shows by its name, and the page says why the rest is missing
 func TestBoxOperatorWithoutTheGrant(t *testing.T) {
 	body := getAt(BoxWith(skillLaib(t, nil, false), "https://laib.box.test", nil), "/box/operator?ganz=1", "admins")
 	mustContain(t, body, saysSkillsNoList, "<b>Routineblick</b>", "<b>Vorfall</b>", ": übersprungen (kein roter Dienst)")

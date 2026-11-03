@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/caldav/davfake"
+	"github.com/mdopp/homes/internal/caldav/davfake"
 )
 
 // a card as DAVx⁵ or an iPhone writes it: vCard 3.0, groups, folded
@@ -139,7 +139,7 @@ func TestMkcolRace(t *testing.T) {
 	}
 }
 
-// HAUS_RADICALE_ADDRESSBOOK takes the writes, no MKCOL; it is read along
+// HOMES_RADICALE_ADDRESSBOOK takes the writes, no MKCOL; it is read along
 // with the account's own address books.
 func TestConfiguredAddressBook(t *testing.T) {
 	fake := davfake.New("bote", "pw")
@@ -282,7 +282,7 @@ func TestGoneAddressBookSkipped(t *testing.T) {
 	}
 }
 
-// The address book Haus made earlier is found by its path, whatever
+// The address book Homes made earlier is found by its path, whatever
 // someone renamed it to: no second one.
 func TestHaushaltBookFoundByPath(t *testing.T) {
 	fake := davfake.New("bote", "pw")

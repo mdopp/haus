@@ -9,9 +9,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/mdopp/haus/internal/assistent"
-	"github.com/mdopp/haus/internal/cards"
-	"github.com/mdopp/haus/internal/laib"
+	"github.com/mdopp/homes/internal/assistent"
+	"github.com/mdopp/homes/internal/cards"
+	"github.com/mdopp/homes/internal/laib"
 )
 
 // Einrichtung (haus#188; owner 2026-10-28: „es gibt häufige/regelmäßige und
@@ -19,7 +19,7 @@ import (
 // page in the menu. Mehr shows the open ones at the top, each with its
 // guided page; Start says it quietly while an important one is open;
 // Deine Aufgaben lists them all, the done ones to do again. Done is what
-// Haus sees, never a tick.
+// Homes sees, never a tick.
 const aufgabenPath = "/aufgaben"
 
 // aufgabe is one thing for one person to set up.
@@ -33,7 +33,7 @@ type aufgabe struct {
 }
 
 // mitLaib are the person's tasks with Laib's own for them (laib#878): the
-// household's and theirs; the admins' stay on Box. Laib away: Haus's own.
+// household's and theirs; the admins' stay on Box. Laib away: Homes' own.
 func mitLaib(r *http.Request, cfg StartConfig) []aufgabe {
 	as := einrichtung(r, cfg)
 	user := r.Header.Get("Remote-User")
@@ -45,7 +45,7 @@ func mitLaib(r *http.Request, cfg StartConfig) []aufgabe {
 	fetch(r, func(ctx context.Context) { la, err = cfg.Laib.MeineAufgaben(ctx, user) })
 	if err != nil {
 		if !errors.Is(err, laib.ErrNoTool) {
-			log.Printf("haus: einrichtung: laib: %v", err)
+			log.Printf("homes: einrichtung: laib: %v", err)
 		}
 		return as
 	}
@@ -103,7 +103,7 @@ func einrichtung(r *http.Request, cfg StartConfig) []aufgabe {
 	}
 	if cfg.Discogs != nil { // the household's Discogs app is there; each person connects their own
 		_, verbunden := cfg.Discogs.Konto(user)
-		out = append(out, aufgabe{titel: "Discogs verbinden", warum: "Dann weiß Haus, welche Platten du hast, und deine Wünsche kommen auf deine Wantlist.",
+		out = append(out, aufgabe{titel: "Discogs verbinden", warum: "Dann weiß Homes, welche Platten du hast, und deine Wünsche kommen auf deine Wantlist.",
 			href: DiscogsPath, erledigt: verbunden})
 	}
 	// the important first, then as they came
@@ -151,7 +151,7 @@ func einrichtungKarte(r *http.Request, cfg StartConfig) string {
 // einrichtungZeile is Start's quiet line while an important task is open.
 func einrichtungZeile(r *http.Request, cfg StartConfig) string {
 	var wichtig []string
-	for _, a := range offen(einrichtung(r, cfg)) { // Haus's own only: Start never waits for Laib (haus#67)
+	for _, a := range offen(einrichtung(r, cfg)) { // Homes' own only: Start never waits for Laib (haus#67)
 		if a.wichtig {
 			wichtig = append(wichtig, a.titel)
 		}

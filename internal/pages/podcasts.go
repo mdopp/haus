@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mdopp/haus/internal/abs"
-	"github.com/mdopp/haus/internal/cards"
-	"github.com/mdopp/haus/internal/podcasts"
+	"github.com/mdopp/homes/internal/abs"
+	"github.com/mdopp/homes/internal/cards"
+	"github.com/mdopp/homes/internal/podcasts"
 )
 
 // PodcastsPath is the family's podcasts (haus#123): subscribe by a link,
@@ -34,8 +34,8 @@ func Podcasts(cfg StartConfig) http.HandlerFunc {
 		}
 		person := r.Header.Get("Remote-User")
 		if r.Method == http.MethodPost {
-			if !fromHaus(r) {
-				http.Error(w, "Das geht nur von Haus' eigener Seite.", http.StatusForbidden)
+			if !fromHomes(r) {
+				http.Error(w, "Das geht nur von Homes' eigener Seite.", http.StatusForbidden)
 				return
 			}
 			r.ParseForm()
@@ -55,13 +55,13 @@ func Podcasts(cfg StartConfig) http.HandlerFunc {
 			}
 			if err != nil {
 				if !knownPodcastError(err) {
-					log.Printf("haus: podcasts: %s: %v", person, err)
+					log.Printf("homes: podcasts: %s: %v", person, err)
 					err = errors.New(saysPodcastsDown)
 				}
 				writePodcasts(w, r, cfg, http.StatusBadRequest, "", err.Error(), r.PostForm.Get("link"))
 				return
 			}
-			log.Printf("haus: podcasts: %s %s", person, r.PostForm.Get("tun"))
+			log.Printf("homes: podcasts: %s %s", person, r.PostForm.Get("tun"))
 			writePodcasts(w, r, cfg, http.StatusOK, said, "", "") // said on the page, never through its address
 			return
 		}
@@ -92,7 +92,7 @@ func writePodcasts(w http.ResponseWriter, r *http.Request, cfg StartConfig, code
 		`<button data-laeuft="Sucht den Feed …">Abonnieren</button></form><p class=k>` + html.EscapeString(saysPodcastsHear) + `</p></section>`)
 	mine, err := cfg.Podcasts.Meine(person)
 	if err != nil {
-		log.Printf("haus: podcasts: %v", err)
+		log.Printf("homes: podcasts: %v", err)
 	}
 	c := cards.Card{Title: "Meine Podcasts"}
 	var b2 strings.Builder
@@ -123,7 +123,7 @@ func writePodcasts(w http.ResponseWriter, r *http.Request, cfg StartConfig, code
 		}
 		f := cards.Card{Title: "Neueste Folgen"}
 		if eerr != nil {
-			log.Printf("haus: podcasts: recent: %v", eerr)
+			log.Printf("homes: podcasts: recent: %v", eerr)
 			f.Add(saysPodcastsDown, "")
 		}
 		now, loc := cfg.clock()

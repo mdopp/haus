@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mdopp/haus/internal/ha/hafake"
+	"github.com/mdopp/homes/internal/ha/hafake"
 )
 
 // a house where Music Assistant mirrors two Chromecasts (each its own

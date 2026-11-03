@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/abs/absfake"
+	"github.com/mdopp/homes/internal/abs/absfake"
 )
 
 // haus#152: a person's books, last heard first, as ABS's findOne answers

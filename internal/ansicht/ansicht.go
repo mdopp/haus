@@ -1,6 +1,6 @@
 // Package ansicht is how each person sees the calendars on Haushalt/Kalender
-// (haus#66): a colour per calendar and the ones they hid. It is Haus's own
-// view, one file in Haus's data folder, ansicht.json:
+// (haus#66): a colour per calendar and the ones they hid. It is Homes' own
+// view, one file in Homes' data folder, ansicht.json:
 // {"<Remote-User>": {"aus": ["/lea/abo-feiertage/"], "farben": {"/haus/haushalt/": "#2f6fdf"}}}.
 // The calendars themselves stay in Radicale untouched; a phone keeps its own
 // colours. A file that does not read is an error and is never written over.
@@ -19,7 +19,7 @@ import (
 	"sync"
 )
 
-// File is the store's name in Haus's data folder.
+// File is the store's name in Homes' data folder.
 const File = "ansicht.json"
 
 const maxBytes = 1 << 20

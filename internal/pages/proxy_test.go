@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mdopp/haus/internal/devices"
+	"github.com/mdopp/homes/internal/devices"
 )
 
 // haus#1: without Caddy's secret nobody reaches a page, however the
@@ -21,7 +21,7 @@ func TestPagesNeedTheProxySecret(t *testing.T) {
 		req := httptest.NewRequest("GET", "/box", nil)
 		req.Header.Set("Remote-User", "admin")
 		if c.header != "" {
-			req.Header.Set("X-Haus-Proxy", c.header)
+			req.Header.Set("X-Homes-Proxy", c.header)
 		}
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, req)
@@ -52,7 +52,7 @@ func TestBoxDecidesNothing(t *testing.T) {
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest("POST", "/box/inbox/7/approve", nil))
 	if rec.Code != http.StatusForbidden {
-		t.Fatalf("a verdict through Haus → %d, want 403", rec.Code)
+		t.Fatalf("a verdict through Homes → %d, want 403", rec.Code)
 	}
 }
 
@@ -67,7 +67,7 @@ func TestPairingPageSaysApp(t *testing.T) {
 	req.Header.Set("Remote-User", "anna")
 	req.Header.Set("Remote-Groups", "admins")
 	rec := httptest.NewRecorder()
-	Geraete(store, "https://haus.example", StartConfig{}).ServeHTTP(rec, req)
+	Geraete(store, "https://homes.example", StartConfig{}).ServeHTTP(rec, req)
 	if body := rec.Body.String(); !strings.Contains(body, "In der App") {
 		t.Fatalf("the pairing page names the app:\n%s", body)
 	}

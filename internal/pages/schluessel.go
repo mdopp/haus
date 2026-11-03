@@ -10,7 +10,7 @@ import (
 // Keys from outside (laib's „Schlüssel hinterlegen“, owner 2026-10-26: „woher
 // soll ich wissen was ich da eintragen muss und warum? … Wir sollten dahin
 // verweisen von Orten wo wir sonst solche Funktionen haben“): where a
-// feature waits for a key only the owner can get, Haus says what is
+// feature waits for a key only the owner can get, Homes says what is
 // missing and what it enables, and an admin gets a button straight to
 // laib's page for exactly that key, which comes back here afterwards.
 // The family sees that an admin has to set it up.
@@ -20,8 +20,8 @@ type ownerKey struct{ name, label string }
 
 // discogsKeys are the household's Discogs app (laib#696, haus#138).
 var discogsKeys = []ownerKey{
-	{"HAUS_DISCOGS_KEY", "Consumer Key der Discogs-App"},
-	{"HAUS_DISCOGS_SECRET", "Consumer Secret der Discogs-App"},
+	{"HOMES_DISCOGS_KEY", "Consumer Key der Discogs-App"},
+	{"HOMES_DISCOGS_SECRET", "Consumer Secret der Discogs-App"},
 }
 
 // keyLink is laib's page for one key, coming back to back.

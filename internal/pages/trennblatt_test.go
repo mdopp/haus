@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mdopp/haus/internal/code128"
+	"github.com/mdopp/homes/internal/code128"
 )
 
 func getTrennblatt(t *testing.T, method, target string) *httptest.ResponseRecorder {

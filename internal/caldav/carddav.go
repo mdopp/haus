@@ -214,7 +214,7 @@ func (cd Card) amended(add []string, note string, now string) string {
 // the caller's (haus#163).
 func (c *Client) AmendCard(ctx context.Context, cd Card, add []string, note string) error {
 	if cd.etag == "" || cd.href == "" || cd.data == "" {
-		return errors.New("Adressbuch: Radicale nennt für die Karte kein ETag; ohne schreibt Haus nicht zurück")
+		return errors.New("Adressbuch: Radicale nennt für die Karte kein ETag; ohne schreibt Homes nicht zurück")
 	}
 	u, err := c.resolve(cd.href)
 	if err != nil {

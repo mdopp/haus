@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/laib"
+	"github.com/mdopp/homes/internal/laib"
 )
 
 // a Laib with Box-Aufgaben: list, erledigt and zurueckstellen as laib#667
@@ -47,7 +47,7 @@ func (a *aufgabenLaib) client(t *testing.T) *laib.Client {
 			return
 		}
 		if a.noTool {
-			reply("haus may not aufgabe: policy.yml limits it to status, inbox", true)
+			reply("homes may not aufgabe: policy.yml limits it to status, inbox", true)
 			return
 		}
 		args := req.Params.Arguments
@@ -75,7 +75,7 @@ func (a *aufgabenLaib) client(t *testing.T) *laib.Client {
 				reply("Box-Aufgabe #"+args["id"].(string)+" gibt es nicht", true)
 				return
 			}
-			task["erledigt"] = map[string]any{"am": time.Now().Format("2006-01-02"), "von": "haus:" + args["von"].(string)}
+			task["erledigt"] = map[string]any{"am": time.Now().Format("2006-01-02"), "von": "homes:" + args["von"].(string)}
 			reply(map[string]any{"message": "Box-Aufgabe #" + args["id"].(string) + " erledigt.", "aufgabe": task}, false)
 		case "zurueckstellen":
 			task := find()
@@ -92,7 +92,7 @@ func jsonString(v any) string { b, _ := json.Marshal(v); return string(b) }
 // haus#115: the Box-Aufgaben on the Box page — the due first, each with
 // Erledigt and Später; a tick ends in the card saying laib's sentence and
 // the task among the done ones; laib's refusal said as laib says it; a
-// task laib closed itself said apart; admins only, from Haus's own page.
+// task laib closed itself said apart; admins only, from Homes' own page.
 func TestBoxAufgaben(t *testing.T) {
 	today := time.Now().Format("2006-01-02")
 	past := time.Now().AddDate(0, 0, -2).Format("2006-01-02")
@@ -104,6 +104,8 @@ func TestBoxAufgaben(t *testing.T) {
 		{"id": 5, "titel": "Netzlaufwerk einrichten", "seit": "2026-10-28", "von": "claude", "fuer": "alle", "weg": map[string]any{"seite": "/netzlaufwerk"}},
 		{"id": 6, "titel": "Signal verbinden", "seit": "2026-10-28", "von": "claude", "fuer": "person:anna"},
 		{"id": 4, "titel": "/boot aufräumen", "seit": "2026-10-20", "von": "claude", "befund": "boot", "erledigt": map[string]any{"am": today, "von": "laib", "wie": "von Laib erledigt: Befund weg"}},
+		// laib#1021: done before the rename, the actor stored as "haus:<uid>"
+		{"id": 7, "titel": "Drucker tauschen", "seit": "2026-10-19", "von": "claude", "erledigt": map[string]any{"am": today, "von": "haus:ben"}},
 	}}
 	cfg := BoxConfig{Laib: fake.client(t), LaibURL: "https://laib.box.test"}
 
@@ -114,7 +116,8 @@ func TestBoxAufgaben(t *testing.T) {
 	mustContain(t, card, "<h2>Box-Aufgaben <span class=k>· 3 offen · <span class=gelb>1 fällig</span></span></h2>",
 		"<li id=aufgabe-3><b>Voice PE flashen</b>", "fällig seit ", "erinnert am ", "Laib hakt sie selbst ab, wenn der Befund (backup offsite) weg ist",
 		`<input type=hidden name=tun value=erledigt><input type=hidden name=id value=1><button data-laeuft="Hakt ab …">Erledigt</button>`,
-		`<input type=date name=erinnern value=`+time.Now().AddDate(0, 0, 7).Format("2006-01-02"), "Zuletzt erledigt (1)", "Laib: erledigt, der Befund ist weg")
+		`<input type=date name=erinnern value=`+time.Now().AddDate(0, 0, 7).Format("2006-01-02"), "Zuletzt erledigt (2)", "Laib: erledigt, der Befund ist weg", "von ben")
+	mustNotContain(t, card, "haus:ben")
 	mustNotContain(t, card, "Netzlaufwerk einrichten", "Signal verbinden") // laib#878: the household's and a person's are under Einrichtung
 	if i3, i1, i2 := strings.Index(card, "aufgabe-3"), strings.Index(card, "aufgabe-1>"), strings.Index(card, "aufgabe-2>"); !(i3 < i1 && i1 < i2) {
 		t.Errorf("order: due %d, none %d, deferred %d", i3, i1, i2)
@@ -127,7 +130,8 @@ func TestBoxAufgaben(t *testing.T) {
 		t.Fatalf("erledigt → %d %s", rec.Code, rec.Body)
 	}
 	mustContain(t, rec.Body.String(), `<div id=box-aufgaben data-teil=aufgaben aria-busy=false>`, "<div class=gut role=status><span class=punkt></span><p>Box-Aufgabe #3 erledigt.</p>",
-		"Zuletzt erledigt (2)", "von anna")
+		"Zuletzt erledigt (3)", "von anna")
+	mustNotContain(t, rec.Body.String(), "homes:anna")
 	if got := fake.calls[len(fake.calls)-2]; got["action"] != "erledigt" || got["id"] != "3" || got["von"] != "anna" {
 		t.Errorf("laib got %v", got)
 	}

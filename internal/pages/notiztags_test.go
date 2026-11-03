@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mdopp/haus/internal/notes"
+	"github.com/mdopp/homes/internal/notes"
 )
 
 // haus#116: a note gets its kind and tags when it is made — offered tags

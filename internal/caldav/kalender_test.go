@@ -11,11 +11,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/caldav/davfake"
+	"github.com/mdopp/homes/internal/caldav/davfake"
 )
 
-// a box after laib#495: Haus's account, Lea's home with her mirrors, her
-// own calendars and one she made with Haus
+// a box after laib#495: Homes' account, Lea's home with her mirrors, her
+// own calendars and one she made with Homes
 func mirrorBox(t *testing.T) (*davfake.Server, *Client) {
 	t.Helper()
 	fake := davfake.New("haus", "pw")
@@ -27,7 +27,7 @@ func mirrorBox(t *testing.T) (*davfake.Server, *Client) {
 	fake.AddCalendar("/lea/google-familie/", "Familie")
 	fake.AddCalendar("/lea/abo-muell/", "Müllabfuhr")
 	fake.AddCalendar("/lea/privat-sport/", "Sport")
-	fake.AddCalendar("/lea/kalender/", "Leas eigener") // Radicale would not even list it to Haus
+	fake.AddCalendar("/lea/kalender/", "Leas eigener") // Radicale would not even list it to Homes
 	fake.AddAddressBook("/lea/google-kontakte/", "Takeout")
 	fake.SetSynced("/lea/google-familie/", "2026-10-14T07:55:00Z", "")
 	fake.SetSynced("/lea/abo-muell/", "2026-10-14T05:00:00Z", "Abgleich seit 3 h nicht gelungen")
@@ -68,7 +68,7 @@ func TestEventsIncludeTheMirrorsAndNotThePrivateOnes(t *testing.T) {
 	}
 }
 
-// A Radicale before laib#495 does not let Haus list the root: no mirrors, no error.
+// A Radicale before laib#495 does not let Homes list the root: no mirrors, no error.
 func TestNoRootListingIsNoMirrors(t *testing.T) {
 	fake := davfake.New("haus", "pw")
 	t.Cleanup(fake.Close)
@@ -111,7 +111,7 @@ func TestPersonCalendarsSayWhatEachIs(t *testing.T) {
 	}
 }
 
-func TestMakeAndDeleteOnlyWhatHausMakes(t *testing.T) {
+func TestMakeAndDeleteOnlyWhatHomesMakes(t *testing.T) {
 	fake, c := mirrorBox(t)
 	ctx := context.Background()
 	p, err := c.MakeCalendar(ctx, "lea", "schule", "Schule & Hort", false)

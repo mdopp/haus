@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/mdopp/haus/internal/ha"
-	"github.com/mdopp/haus/internal/ha/hafake"
+	"github.com/mdopp/homes/internal/ha"
+	"github.com/mdopp/homes/internal/ha/hafake"
 )
 
 func house(t *testing.T) (*hafake.HA, *ha.Client) {
@@ -21,12 +21,12 @@ func house(t *testing.T) (*hafake.HA, *ha.Client) {
 	return fake, &ha.Client{URL: fake.URL, Token: "ha-token"}
 }
 
-// haus#35: one rule for what Haus switches, for the widgets' /napi/ha/call
+// haus#35: one rule for what Homes switches, for the widgets' /napi/ha/call
 // and the family's pages alike. A media player pauses and goes on, and
 // steps its volume (Start's Pause, Medien's buttons, haus#12); playing a
 // URL on the speakers, setting a volume, muting, stopping, turning off
 // stay off the list.
-func TestOneRuleForWhatHausSwitches(t *testing.T) {
+func TestOneRuleForWhatHomesSwitches(t *testing.T) {
 	fake, hc := house(t)
 	for _, c := range []struct {
 		entity, service string

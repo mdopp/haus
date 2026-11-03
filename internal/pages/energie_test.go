@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mdopp/haus/internal/energie"
-	"github.com/mdopp/haus/internal/ha/hafake"
+	"github.com/mdopp/homes/internal/energie"
+	"github.com/mdopp/homes/internal/ha/hafake"
 )
 
 // a house as the fallback finds it, by friendly name: the four flow legs
@@ -127,7 +127,7 @@ func TestEnergieTodayAcrossAReset(t *testing.T) {
 	mustNotContain(t, heute, "Ins Netz", "Verbraucht")
 }
 
-// The template names the sensors (HAUS_ENERGY_*): those count, with the
+// The template names the sensors (HOMES_ENERGY_*): those count, with the
 // template's own labels for the counters, and a friendly name the
 // fallback would have taken does not; nothing is added up from labels
 // Haus cannot read.

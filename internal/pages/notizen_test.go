@@ -2,7 +2,7 @@ package pages
 
 import (
 	"fmt"
-	"github.com/mdopp/haus/internal/papierkorb"
+	"github.com/mdopp/homes/internal/papierkorb"
 	"net/http"
 	"net/url"
 	"os"
@@ -12,14 +12,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/judge"
-	"github.com/mdopp/haus/internal/judge/proxyfake"
-	"github.com/mdopp/haus/internal/library"
-	"github.com/mdopp/haus/internal/notes"
-	"github.com/mdopp/haus/internal/paperless"
-	"github.com/mdopp/haus/internal/paperless/paperlessfake"
-	"github.com/mdopp/haus/internal/qmd"
-	"github.com/mdopp/haus/internal/qmd/qmdfake"
+	"github.com/mdopp/homes/internal/judge"
+	"github.com/mdopp/homes/internal/judge/proxyfake"
+	"github.com/mdopp/homes/internal/library"
+	"github.com/mdopp/homes/internal/notes"
+	"github.com/mdopp/homes/internal/paperless"
+	"github.com/mdopp/homes/internal/paperless/paperlessfake"
+	"github.com/mdopp/homes/internal/qmd"
+	"github.com/mdopp/homes/internal/qmd/qmdfake"
 )
 
 // a notes folder as the share has it: notes at the top and in a folder,
@@ -417,7 +417,7 @@ func TestNotizenTidyUp(t *testing.T) {
 }
 
 // The household's documents in the library (haus#13): Paperless, and
-// qmd's copy of them as `haus export-documents` writes it.
+// qmd's copy of them as `homes export-documents` writes it.
 func documents13(t *testing.T, f *qmdfake.Server) *paperlessfake.Server {
 	t.Helper()
 	p := paperlessfake.New("pl-token")
@@ -431,7 +431,7 @@ func documents13(t *testing.T, f *qmdfake.Server) *paperlessfake.Server {
 
 // haus#13: with the documents in the library, the one search field finds
 // notes and documents. A document shows its date, sender and the passage
-// that matched, and leads to its page on Haus, which sends the person on
+// that matched, and leads to its page on Homes, which sends the person on
 // to Paperless; the notes stay as they were.
 func TestNotizenFindsDocuments(t *testing.T) {
 	dir, nd := shelf(t)

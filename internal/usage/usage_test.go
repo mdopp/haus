@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/usage/usagefake"
+	"github.com/mdopp/homes/internal/usage/usagefake"
 )
 
 var day1 = time.Date(2026, 10, 16, 21, 30, 0, 0, time.UTC)
@@ -89,7 +89,7 @@ func TestBadEventsNeverLeave(t *testing.T) {
 		c.Count(e)
 		c.CountIn(e, "erkannt")
 	}
-	c.CountIn("Haus", "seite.start")
+	c.CountIn("Homes", "seite.start")
 	c.Flush(context.Background())
 	if b := fake.Bodies(); len(b) != 0 {
 		t.Errorf("sent %v", b)
@@ -240,7 +240,7 @@ func TestFromEnv(t *testing.T) {
 		{"", "", false},
 		{"host:8094", "tok", false},
 	} {
-		env := map[string]string{"HAUS_USAGE_URL": c.url, "HAUS_USAGE_TOKEN": c.token}
+		env := map[string]string{"HOMES_USAGE_URL": c.url, "HOMES_USAGE_TOKEN": c.token}
 		got := FromEnv(func(k string) string { return env[k] })
 		if (got != nil) != c.want {
 			t.Errorf("FromEnv(%q, %q) = %v, want counting %v", c.url, c.token, got, c.want)

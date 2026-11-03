@@ -14,7 +14,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/mdopp/haus/internal/ha"
+	"github.com/mdopp/homes/internal/ha"
 )
 
 // Legs are the four flow legs, in the order the app draws them; Sense
@@ -53,7 +53,7 @@ type Stats struct{ Bezug, Einspeisung, Solar string }
 // Any says one is named.
 func (s Stats) Any() bool { return s.Bezug != "" || s.Einspeisung != "" || s.Solar != "" }
 
-// History is the statistic ids the history reads: HAUS_ENERGY_STATS when
+// History is the statistic ids the history reads: HOMES_ENERGY_STATS when
 // set, else the counters Pick found — the fallback's by their friendly
 // names, the template's by their labels (Bezug, Einspeisung, PV or Solar).
 func (m Map) History(counters []Counter) Stats {
@@ -85,8 +85,8 @@ type Total struct{ Label, Entity string }
 // Set says the template named the entities.
 func (m Map) Set() bool { return len(m.Flow) > 0 || len(m.Totals) > 0 }
 
-// FromEnv reads HAUS_ENERGY_FLOW (pv=sensor.x,house=…,grid=…,battery=…),
-// HAUS_ENERGY_TOTALS (Label=sensor.y,…) and HAUS_ENERGY_STATS
+// FromEnv reads HOMES_ENERGY_FLOW (pv=sensor.x,house=…,grid=…,battery=…),
+// HOMES_ENERGY_TOTALS (Label=sensor.y,…) and HOMES_ENERGY_STATS
 // (bezug=sensor.…,einspeisung=sensor.…,solar=sensor.…, haus#65). Unset: the
 // fallback.
 func FromEnv() (Map, error) {
@@ -96,32 +96,32 @@ func FromEnv() (Map, error) {
 		legs[f.Key] = true
 	}
 	legs[ChargeKey] = true // the battery's charge, in % (not a leg)
-	for _, item := range strings.Split(os.Getenv("HAUS_ENERGY_FLOW"), ",") {
+	for _, item := range strings.Split(os.Getenv("HOMES_ENERGY_FLOW"), ",") {
 		if item = strings.TrimSpace(item); item == "" {
 			continue
 		}
 		k, e, ok := strings.Cut(item, "=")
 		k, e = strings.TrimSpace(k), strings.TrimSpace(e)
 		if !ok || !legs[k] || !ha.EntityRE.MatchString(e) {
-			return Map{}, fmt.Errorf("HAUS_ENERGY_FLOW %q: want pv|house|grid|battery|soc=<entity_id>", item)
+			return Map{}, fmt.Errorf("HOMES_ENERGY_FLOW %q: want pv|house|grid|battery|soc=<entity_id>", item)
 		}
 		m.Flow[k] = e
 	}
-	for _, item := range strings.Split(os.Getenv("HAUS_ENERGY_TOTALS"), ",") {
+	for _, item := range strings.Split(os.Getenv("HOMES_ENERGY_TOTALS"), ",") {
 		if item = strings.TrimSpace(item); item == "" {
 			continue
 		}
 		i := strings.LastIndex(item, "=")
 		if i <= 0 {
-			return Map{}, fmt.Errorf("HAUS_ENERGY_TOTALS %q: want <label>=<entity_id>", item)
+			return Map{}, fmt.Errorf("HOMES_ENERGY_TOTALS %q: want <label>=<entity_id>", item)
 		}
 		l, e := strings.TrimSpace(item[:i]), strings.TrimSpace(item[i+1:])
 		if l == "" || !ha.EntityRE.MatchString(e) {
-			return Map{}, fmt.Errorf("HAUS_ENERGY_TOTALS %q: want <label>=<entity_id>", item)
+			return Map{}, fmt.Errorf("HOMES_ENERGY_TOTALS %q: want <label>=<entity_id>", item)
 		}
 		m.Totals = append(m.Totals, Total{Label: l, Entity: e})
 	}
-	for _, item := range strings.Split(os.Getenv("HAUS_ENERGY_STATS"), ",") {
+	for _, item := range strings.Split(os.Getenv("HOMES_ENERGY_STATS"), ",") {
 		if item = strings.TrimSpace(item); item == "" {
 			continue
 		}
@@ -129,7 +129,7 @@ func FromEnv() (Map, error) {
 		k, e = strings.ToLower(strings.TrimSpace(k)), strings.TrimSpace(e)
 		slot := map[string]*string{"bezug": &m.Stats.Bezug, "einspeisung": &m.Stats.Einspeisung, "solar": &m.Stats.Solar}[k]
 		if !ok || slot == nil || !ha.EntityRE.MatchString(e) {
-			return Map{}, fmt.Errorf("HAUS_ENERGY_STATS %q: want bezug|einspeisung|solar=<statistic id, sensor.…>", item)
+			return Map{}, fmt.Errorf("HOMES_ENERGY_STATS %q: want bezug|einspeisung|solar=<statistic id, sensor.…>", item)
 		}
 		*slot = e
 	}
@@ -214,7 +214,7 @@ func (m Map) Pick(states []ha.State) (flow []Leg, totals []Counter, used map[str
 	return flow, totals, used
 }
 
-// ChargeKey names the battery's charge in HAUS_ENERGY_FLOW
+// ChargeKey names the battery's charge in HOMES_ENERGY_FLOW
 // (soc=sensor.…): how full it is, in %.
 const ChargeKey = "soc"
 

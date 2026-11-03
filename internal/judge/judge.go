@@ -2,7 +2,7 @@
 // question (haus#13): the memory library's tidy-up, optional and never
 // blocking. The model is Laib's household model behind its model proxy
 // (laib ADR 0011), asked only while it is the one in place — ready in the
-// window, or the default with no window held: Haus reads the lease, never
+// window, or the default with no window held: Homes reads the lease, never
 // takes it, never asks for another
 // model, so the tidy-up never makes the card swap. One call, temperature
 // 0, the answer held to a JSON schema; anything else is an error and the
@@ -31,20 +31,20 @@ type Client struct {
 	HTTP  *http.Client
 }
 
-// FromEnv is the house model from HAUS_LLM_URL, HAUS_LLM_MODEL and
-// HAUS_LLM_KEY, or nil: a box without the model role sets none of them,
+// FromEnv is the house model from HOMES_LLM_URL, HOMES_LLM_MODEL and
+// HOMES_LLM_KEY, or nil: a box without the model role sets none of them,
 // and then there is no tidy-up. One missing, or an address that is not
 // http(s), is no tidy-up either, said in the log; never a reason not to
 // start.
 func FromEnv() *Client {
-	c := &Client{URL: strings.TrimRight(strings.TrimSpace(os.Getenv("HAUS_LLM_URL")), "/"),
-		Model: strings.TrimSpace(os.Getenv("HAUS_LLM_MODEL")), Key: strings.TrimSpace(os.Getenv("HAUS_LLM_KEY"))}
+	c := &Client{URL: strings.TrimRight(strings.TrimSpace(os.Getenv("HOMES_LLM_URL")), "/"),
+		Model: strings.TrimSpace(os.Getenv("HOMES_LLM_MODEL")), Key: strings.TrimSpace(os.Getenv("HOMES_LLM_KEY"))}
 	if c.URL == "" && c.Model == "" && c.Key == "" {
 		return nil
 	}
 	u, err := url.Parse(c.URL)
 	if c.URL == "" || c.Model == "" || c.Key == "" || err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-		log.Printf("haus: HAUS_LLM_URL, HAUS_LLM_MODEL and HAUS_LLM_KEY go together, the address as http(s)://…/v1: no tidy-up of the notes' hits")
+		log.Printf("homes: HOMES_LLM_URL, HOMES_LLM_MODEL and HOMES_LLM_KEY go together, the address as http(s)://…/v1: no tidy-up of the notes' hits")
 		return nil
 	}
 	return c

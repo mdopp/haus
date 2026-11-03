@@ -11,17 +11,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/caldav"
-	"github.com/mdopp/haus/internal/caldav/davfake"
-	"github.com/mdopp/haus/internal/haushalt"
-	"github.com/mdopp/haus/internal/laib"
-	"github.com/mdopp/haus/internal/notes"
-	"github.com/mdopp/haus/internal/paperless"
-	"github.com/mdopp/haus/internal/paperless/paperlessfake"
+	"github.com/mdopp/homes/internal/caldav"
+	"github.com/mdopp/homes/internal/caldav/davfake"
+	"github.com/mdopp/homes/internal/haushalt"
+	"github.com/mdopp/homes/internal/laib"
+	"github.com/mdopp/homes/internal/notes"
+	"github.com/mdopp/homes/internal/paperless"
+	"github.com/mdopp/homes/internal/paperless/paperlessfake"
 )
 
 // haus#10, slice 2: the tool widgets (the app's ToolDefs.kt, ToolCells.kt,
-// ToolWidgetProvider.kt). Haus lists a tool only when its Haushalt backend is
+// ToolWidgetProvider.kt). Homes lists a tool only when its Haushalt backend is
 // set; each def names the row path the app then calls; the one row action is
 // ticking a reminder off. With no backend set, the tool paths are 404.
 
@@ -166,7 +166,7 @@ func TestToolPathsWantAPairedDevice(t *testing.T) {
 
 // The catalog in the shape ToolDefs.parseCatalog reads: every def listable
 // (an api path under /napi, a title field), ids the placed widgets already
-// carry (task, contacts, doc, note), no compose or item route Haus has no page for.
+// carry (task, contacts, doc, note), no compose or item route Homes has no page for.
 func TestToolCatalog(t *testing.T) {
 	s := allTools(t)
 	code, body := raw(t, s.h, "GET", "/napi/defs/tool", "dev1", "")
@@ -203,7 +203,7 @@ func TestToolCatalog(t *testing.T) {
 		}
 		for _, k := range []string{"tool-compose-path", "tool-item-id-field"} {
 			if _, ok := d[k]; ok {
-				t.Errorf("%s: %s names a page Haus does not have", id, k)
+				t.Errorf("%s: %s names a page Homes does not have", id, k)
 			}
 		}
 		if id != "task" {
@@ -237,7 +237,7 @@ func TestToolCatalogListsOnlyWhatIsSet(t *testing.T) {
 	if code != 200 || len(defs) != 1 || defs[0].(map[string]any)["tool-id"] != "note" {
 		t.Fatalf("notes only: %d %s", code, body)
 	}
-	// one Haus does not know is 404, passed on to nobody
+	// one Homes does not know is 404, passed on to nobody
 	if code, body := raw(t, s.h, "POST", "/napi/action-callback", "dev1", `{"action_id":"task.set_status","params":{"entity_id":"x","status":"done"}}`); code != 404 || !strings.Contains(body, "unknown_action") {
 		t.Fatalf("set_status without a calendar: %d %s", code, body)
 	}
@@ -336,7 +336,7 @@ func TestContactDocumentAndNoteRows(t *testing.T) {
 	}
 }
 
-// haus#28: every row with an id names its page on Haus, which the app
+// haus#28: every row with an id names its page on Homes, which the app
 // opens on a tap: a reminder's and a contact's own page, a document's
 // (which leads on to Paperless), a note's. Each id is escaped as one path
 // part; a note's name keeps its folders.
@@ -443,9 +443,9 @@ func TestReminderActionRules(t *testing.T) {
 	}{
 		{`not json`, 400, "invalid_json", "a body that is not JSON"},
 		{`{"params":{}}`, 400, "no_action_id", "no action id"},
-		{`{"action_id":"task.add","params":{"title":"x"}}`, 404, "unknown_action", "Haus adds nothing from a row"},
+		{`{"action_id":"task.add","params":{"title":"x"}}`, 404, "unknown_action", "Homes adds nothing from a row"},
 		{`{"action_id":"doc.classify","params":{}}`, 404, "unknown_action", "nor classifies"},
-		{`{"action_id":"model.release","params":{}}`, 404, "unknown_action", "nor anything Haus does not know"},
+		{`{"action_id":"model.release","params":{}}`, 404, "unknown_action", "nor anything Homes does not know"},
 		{`{"action_id":"task.set_status","params":{"entity_id":"milch-1","status":"dismissed"}}`, 400, "bad_params", "done only"},
 		{`{"action_id":"task.set_status","params":{"entity_id":"milch-1","status":"open"}}`, 400, "bad_params", "no reopening"},
 		{`{"action_id":"task.set_status","params":{"status":"done"}}`, 400, "bad_params", "which one"},

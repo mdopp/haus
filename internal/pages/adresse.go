@@ -11,24 +11,24 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/mdopp/haus/internal/cards"
-	"github.com/mdopp/haus/internal/laib"
+	"github.com/mdopp/homes/internal/cards"
+	"github.com/mdopp/homes/internal/laib"
 )
 
 // Adresse (laib#561) is the household's address, box.yml zuhause, for
 // admins: what Laib has, and a form that proposes a change through
-// laib_zuhause. Haus decides nothing: Laib files a class-human proposal,
+// laib_zuhause. Homes decides nothing: Laib files a class-human proposal,
 // and the change applies once a person approves it in Laib's inbox. Laib
-// never geocodes, and neither does Haus: the coordinates come from this
+// never geocodes, and neither does Homes: the coordinates come from this
 // device's position (the browser asks) or from OpenStreetMap, which the
-// person opens knowingly. The address is in no URL Haus makes and no log
-// line; the page is not "Zuhause", which is Haus's own name in every title.
+// person opens knowingly. The address is in no URL Homes makes and no log
+// line; the page is not "Zuhause", which is Homes' own name in every title.
 const (
 	adressePath = "/adresse"
 	adresseSet  = "/adresse/vorschlagen"
 
 	saysAdresseFor    = "Die Box nutzt die Adresse als Standort von Home Assistant, später auch für die Solarprognose und den Müllkalender."
-	saysNoLaibZuhause = "Auf dieser Box kann Haus die Adresse noch nicht ändern: Laib kennt sie hier noch nicht, oder policy.yml gibt der Hand haus das Verb zuhause noch nicht (laib#561). Das trägt ein Admin in Laib ein."
+	saysNoLaibZuhause = "Auf dieser Box kann Homes die Adresse noch nicht ändern: Laib kennt sie hier noch nicht, oder policy.yml gibt der Hand homes das Verb zuhause noch nicht (laib#561). Das trägt ein Admin in Laib ein."
 	saysNoAdresse     = "Die Adresse lässt sich gerade nicht lesen. Später noch einmal versuchen; sonst weiß laib diag mehr."
 )
 
@@ -79,7 +79,7 @@ func Adresse(cfg StartConfig) http.HandlerFunc {
 		case errors.Is(err, laib.ErrNoTool):
 			b.WriteString("<p>" + html.EscapeString(saysNoLaibZuhause) + "</p>")
 		case err != nil:
-			log.Printf("haus: adresse page: laib zuhause show: %v", err) // show's errors are Laib's, without the address
+			log.Printf("homes: adresse page: laib zuhause show: %v", err) // show's errors are Laib's, without the address
 			b.WriteString("<p>" + saysNoAdresse + "</p>")
 		default:
 			b.WriteString(adresseNow(z))
@@ -215,8 +215,8 @@ func AdresseVorschlagen(cfg StartConfig) http.HandlerFunc {
 		if !adminOnly(w, r) {
 			return
 		}
-		if !fromHaus(r) {
-			http.Error(w, "Das geht nur von Haus' eigener Seite.", http.StatusForbidden)
+		if !fromHomes(r) {
+			http.Error(w, "Das geht nur von Homes' eigener Seite.", http.StatusForbidden)
 			return
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, 8<<10)
@@ -256,11 +256,11 @@ func AdresseVorschlagen(cfg StartConfig) http.HandlerFunc {
 		p, err := cfg.Laib.ZuhauseSet(r.Context(), fields)
 		if err != nil {
 			key := zuhauseRefusal(err)
-			log.Printf("haus: adresse: %s schlägt vor: abgelehnt (%s)", me, key) // laib's words carry the values: not logged
+			log.Printf("homes: adresse: %s schlägt vor: abgelehnt (%s)", me, key) // laib's words carry the values: not logged
 			say(key, "")
 			return
 		}
-		log.Printf("haus: adresse: %s schlägt vor: Vorschlag #%d", me, p.Proposal)
+		log.Printf("homes: adresse: %s schlägt vor: Vorschlag #%d", me, p.Proposal)
 		nr := ""
 		if p.Proposal > 0 {
 			nr = strconv.Itoa(p.Proposal)

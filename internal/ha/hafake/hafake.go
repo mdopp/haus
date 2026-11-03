@@ -1,4 +1,4 @@
-// Package hafake is a fake Home Assistant for tests: the REST calls Haus
+// Package hafake is a fake Home Assistant for tests: the REST calls Homes
 // makes (/api/states, /api/services, /api/history/period,
 // /api/camera_proxy, /api/stt) and the WebSocket
 // (/api/websocket: auth, subscribe_events, the three registries, the Assist pipelines' debug store,
@@ -425,7 +425,7 @@ func (h *HA) RegistriesDown(down bool) {
 }
 
 // ApplyCalls makes a service call change the state it names, as HA does:
-// on, off, toggle, play, pause. For the demo (cmd/hausdemo); the tests
+// on, off, toggle, play, pause. For the demo (cmd/homesdemo); the tests
 // keep the states as they set them.
 func (h *HA) ApplyCalls(on bool) {
 	h.mu.Lock()

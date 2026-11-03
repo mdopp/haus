@@ -9,7 +9,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/mdopp/haus/internal/merken"
+	"github.com/mdopp/homes/internal/merken"
 )
 
 // Found is a podcast's feed and how it was found, in the family's words

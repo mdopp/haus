@@ -3,12 +3,12 @@ RUN apk add --no-cache ca-certificates
 WORKDIR /src
 COPY go.mod ./
 COPY . .
-RUN CGO_ENABLED=0 go build -ldflags "-s -w -X main.Version=${VERSION:-dev}" -o /haus ./cmd/haus
+RUN CGO_ENABLED=0 go build -ldflags "-s -w -X main.Version=${VERSION:-dev}" -o /homes ./cmd/homes
 FROM scratch
 # the roots a page in the internet is checked against (Aus Link merken,
-# Share → Haus, the podcasts' Apple lookup): without them every https
+# Share → Homes, the podcasts' Apple lookup): without them every https
 # address was "Das Zertifikat der Seite stimmt nicht"
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
-COPY --from=build /haus /haus
+COPY --from=build /homes /homes
 EXPOSE 8650
-ENTRYPOINT ["/haus"]
+ENTRYPOINT ["/homes"]

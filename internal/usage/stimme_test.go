@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/ha"
-	"github.com/mdopp/haus/internal/ha/hafake"
-	"github.com/mdopp/haus/internal/usage/usagefake"
+	"github.com/mdopp/homes/internal/ha"
+	"github.com/mdopp/homes/internal/ha/hafake"
+	"github.com/mdopp/homes/internal/usage/usagefake"
 )
 
 func voice(t *testing.T) (*hafake.HA, *usagefake.Fake, *Counter, *Voice, *[]string) {
@@ -60,13 +60,13 @@ func TestVoiceCountsEachRunOnce(t *testing.T) {
 	for _, b := range fake.Bodies() {
 		for _, leak := range []string{"dev-kueche-satellit", "assist_satellite", "01JCONV", "01JPIPE", "r2"} {
 			if strings.Contains(b, leak) {
-				t.Errorf("%q left Haus: %s", leak, b)
+				t.Errorf("%q left Homes: %s", leak, b)
 			}
 		}
 	}
 }
 
-// A run from before Haus started is not counted (a restart does not count
+// A run from before Homes started is not counted (a restart does not count
 // the ten HA keeps again); a run still going is counted once it ends.
 func TestVoiceSinceAndOpenRuns(t *testing.T) {
 	fakeHA, fake, c, v, _ := voice(t)

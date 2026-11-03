@@ -5,12 +5,12 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/mdopp/haus/internal/devices"
+	"github.com/mdopp/homes/internal/devices"
 )
 
 // haus#58 (#35's rule on the admin pages too): the assistant's name
 // appears where you talk to it, nowhere else. Box, Geräte and the app's pairing page wear the
-// family pages' frame — the house palette, Haus's Geist, the tab bar with
+// family pages' frame — the house palette, Homes' Geist, the tab bar with
 // Box — and no assistant's name.
 func TestTheAdminPagesWearTheFamilyFrame(t *testing.T) {
 	named(t, "Ada")
@@ -23,7 +23,7 @@ func TestTheAdminPagesWearTheFamilyFrame(t *testing.T) {
 		title string
 	}{
 		{BoxPage(BoxConfig{Laib: fakeLaib(t, map[string]any{"state": "bereit"}, nil), LaibURL: "https://laib.box.test", Family: family}), "/box", "Box · Zuhause"},
-		{Geraete(store, "https://haus.example", family), "/box/geraete", "Geräte · Zuhause"},
+		{Geraete(store, "https://homes.example", family), "/box/geraete", "Geräte · Zuhause"},
 		{PairDevice(store, family), "/pair-device", "Telefon koppeln · Zuhause"},
 	} {
 		req := httptest.NewRequest("GET", p.path, nil)

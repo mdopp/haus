@@ -8,7 +8,7 @@ import (
 	"unicode"
 )
 
-// Regal is the collection as Haus looks into it: read whole at most every
+// Regal is the collection as Homes looks into it: read whole at most every
 // ten minutes (Discogs's rate), asked by artist and title.
 type Regal struct {
 	C   *Client
@@ -21,7 +21,7 @@ type Regal struct {
 
 const regalEvery = 10 * time.Minute
 
-// Vergessen makes the next look read the collection again (after Haus
+// Vergessen makes the next look read the collection again (after Homes
 // added a record).
 func (r *Regal) Vergessen() {
 	r.mu.Lock()

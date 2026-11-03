@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/ha"
-	"github.com/mdopp/haus/internal/ha/hafake"
+	"github.com/mdopp/homes/internal/ha"
+	"github.com/mdopp/homes/internal/ha/hafake"
 )
 
 // A resync reads HA's states while events keep coming: a snapshot older

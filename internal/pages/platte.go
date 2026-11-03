@@ -11,12 +11,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mdopp/haus/internal/discogs"
-	"github.com/mdopp/haus/internal/judge"
+	"github.com/mdopp/homes/internal/discogs"
+	"github.com/mdopp/homes/internal/judge"
 )
 
 // Platte erfassen (owner 2026-10-25): 1–4 photos of a record — the back
-// with its barcode, the front, the label, the spine — and Haus finds the
+// with its barcode, the front, the label, the spine — and Homes finds the
 // pressing on Discogs; the owner confirms, and it goes into the collection.
 // The phone reads the barcode itself (the browser's BarcodeDetector) and
 // makes the photos small before they go; the box's model reads the rest
@@ -26,7 +26,7 @@ const (
 	PlattePath     = "/platte"
 	PlatteBildPath = "/platte/bild"
 
-	saysPlatteHow = "Fotos der Platte: die Rückseite mit dem Barcode zuerst, dazu Vorderseite, Etikett oder Rücken. Haus sucht die Pressung bei Discogs; du bestätigst, dann kommt sie in deine Sammlung."
+	saysPlatteHow = "Fotos der Platte: die Rückseite mit dem Barcode zuerst, dazu Vorderseite, Etikett oder Rücken. Homes sucht die Pressung bei Discogs; du bestätigst, dann kommt sie in deine Sammlung."
 )
 
 // platteWait is how long reading the photos and asking Discogs may take.
@@ -63,8 +63,8 @@ func Platte(cfg StartConfig) http.HandlerFunc {
 			http.Error(w, saysDiscogsFirst, http.StatusConflict)
 			return
 		}
-		if !fromHaus(r) {
-			http.Error(w, "Das geht nur von Haus' eigener Seite.", http.StatusForbidden)
+		if !fromHomes(r) {
+			http.Error(w, "Das geht nur von Homes' eigener Seite.", http.StatusForbidden)
 			return
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, 40<<20)
@@ -92,7 +92,7 @@ func platteSuchen(ctx context.Context, w http.ResponseWriter, r *http.Request, c
 	h := discogs.Hinweise{Barcode: strings.TrimSpace(r.FormValue("barcode")), Katalognummer: strings.TrimSpace(r.FormValue("katalognummer"))}
 	var notes []string
 	if h.Barcode != "" && !discogs.EAN(h.Barcode) {
-		notes = append(notes, "Der Barcode „"+h.Barcode+"“ stimmt nicht (Prüfziffer); Haus sucht ohne ihn.")
+		notes = append(notes, "Der Barcode „"+h.Barcode+"“ stimmt nicht (Prüfziffer); Homes sucht ohne ihn.")
 		h.Barcode = ""
 	}
 	if h.Barcode == "" && r.MultipartForm != nil && len(r.MultipartForm.File["foto"]) > 0 {
@@ -115,7 +115,7 @@ func platteSuchen(ctx context.Context, w http.ResponseWriter, r *http.Request, c
 				}
 			}
 			if len(bilder) == 0 {
-				notes = append(notes, "Auf den Fotos war kein Bild, das Haus lesen kann (JPEG, PNG, WebP).")
+				notes = append(notes, "Auf den Fotos war kein Bild, das Homes lesen kann (JPEG, PNG, WebP).")
 			} else {
 				got, err := cfg.Judge.LiesPlatte(ctx, bilder)
 				var nl *judge.NotLoaded
@@ -123,13 +123,13 @@ func platteSuchen(ctx context.Context, w http.ResponseWriter, r *http.Request, c
 				case errors.As(err, &nl):
 					notes = append(notes, nl.Satz()+" Mit dem Barcode geht es trotzdem.")
 				case err != nil:
-					log.Printf("haus: platte: reading the photos: %v", err)
+					log.Printf("homes: platte: reading the photos: %v", err)
 					notes = append(notes, "Die Fotos ließen sich gerade nicht lesen. Gib den Barcode oder die Katalognummer ein.")
 				default:
 					if got.Barcode != "" && discogs.EAN(got.Barcode) {
 						h.Barcode = got.Barcode
 					} else if got.Barcode != "" {
-						notes = append(notes, "Den Barcode hat Haus auf dem Foto nicht sicher gelesen.")
+						notes = append(notes, "Den Barcode hat Homes auf dem Foto nicht sicher gelesen.")
 					}
 					if h.Katalognummer == "" {
 						h.Katalognummer = got.Katalognummer
@@ -140,7 +140,7 @@ func platteSuchen(ctx context.Context, w http.ResponseWriter, r *http.Request, c
 		}
 	}
 	if h.Barcode == "" && h.Katalognummer == "" && h.Kuenstler == "" && h.Titel == "" {
-		msg := "Haus hat nichts, wonach es suchen kann. Fotografier die Rückseite mit dem Barcode, oder gib Barcode oder Katalognummer ein."
+		msg := "Homes hat nichts, wonach es suchen kann. Fotografier die Rückseite mit dem Barcode, oder gib Barcode oder Katalognummer ein."
 		if len(notes) > 0 {
 			msg = strings.Join(notes, " ") + " " + msg
 		}
@@ -149,7 +149,7 @@ func platteSuchen(ctx context.Context, w http.ResponseWriter, r *http.Request, c
 	}
 	ts, err := rg.C.Finden(ctx, h)
 	if err != nil {
-		log.Printf("haus: platte: discogs: %v", err)
+		log.Printf("homes: platte: discogs: %v", err)
 		http.Error(w, discogsSays(err), http.StatusBadGateway)
 		return
 	}
@@ -160,7 +160,7 @@ func platteSuchen(ctx context.Context, w http.ResponseWriter, r *http.Request, c
 func discogsSays(err error) string {
 	var e *discogs.Error
 	if errors.As(err, &e) && (e.Status == 401 || e.Status == 403) {
-		return "Discogs lässt Haus nicht hinein: Die Verbindung zu deinem Konto gilt nicht mehr. Verbinde Discogs unter Mehr → Discogs neu."
+		return "Discogs lässt Homes nicht hinein: Die Verbindung zu deinem Konto gilt nicht mehr. Verbinde Discogs unter Mehr → Discogs neu."
 	}
 	if errors.As(err, &e) && e.Status == 429 {
 		return "Discogs bremst gerade (zu viele Anfragen). In einer Minute noch einmal."
@@ -177,7 +177,7 @@ func platteHinzu(ctx context.Context, w http.ResponseWriter, r *http.Request, cf
 		return
 	}
 	if err := rg.C.Hinzufuegen(ctx, id); err != nil {
-		log.Printf("haus: platte: adding %d: %v", id, err)
+		log.Printf("homes: platte: adding %d: %v", id, err)
 		http.Error(w, discogsSays(err), http.StatusBadGateway)
 		return
 	}
@@ -185,7 +185,7 @@ func platteHinzu(ctx context.Context, w http.ResponseWriter, r *http.Request, cf
 	artist, title := r.FormValue("kuenstler"), r.FormValue("titel")
 	name := strings.Trim(artist+" – "+title, " –")
 	said := "„" + name + "“ ist in deiner Discogs-Sammlung."
-	log.Printf("haus: platte: %s added %d", r.Header.Get("Remote-User"), id)
+	log.Printf("homes: platte: %s added %d", r.Header.Get("Remote-User"), id)
 	if cfg.Wuensche != nil {
 		if done, err := cfg.Wuensche.Pruefen(ctx); err == nil {
 			for _, d := range done {
@@ -203,7 +203,7 @@ func platteHinzu(ctx context.Context, w http.ResponseWriter, r *http.Request, cf
 	writePlatte(w, r, cfg, said, nil, nil, discogs.Hinweise{})
 }
 
-// platteBild is a release's cover through Haus: the phone never asks
+// platteBild is a release's cover through Homes: the phone never asks
 // Discogs itself.
 func platteBild(w http.ResponseWriter, r *http.Request, rg *discogs.Regal) {
 	id, err := strconv.Atoi(r.URL.Query().Get("r"))
@@ -310,5 +310,5 @@ var c=document.createElement('canvas');c.width=Math.round(bm.width*s);c.height=M
 return lies(bm).then(function(v){return v||lies(c)}).then(function(v){if(v&&!bc.value)bc.value=v;
 return new Promise(function(ok){c.toBlob(function(b){ok(new File([b],f.name.replace(/\.[^.]*$/,'')+'.jpg',{type:'image/jpeg'}))},'image/jpeg',0.85)})})}).catch(function(){return f})}))
 .then(function(small){try{var dt=new DataTransfer();small.forEach(function(f){dt.items.add(f)});i.files=dt.files}catch(e){}
-out.textContent=small.length+' Foto(s) bereit. '+(bc.value?'Barcode '+bc.value+' gelesen.':(det?'Auf den Fotos hat das Handy keinen Barcode gefunden; Haus liest sie selbst.':'Dieses Handy liest keinen Barcode selbst; Haus liest die Fotos.'));
+out.textContent=small.length+' Foto(s) bereit. '+(bc.value?'Barcode '+bc.value+' gelesen.':(det?'Auf den Fotos hat das Handy keinen Barcode gefunden; Homes liest sie selbst.':'Dieses Handy liest keinen Barcode selbst; Homes liest die Fotos.'));
 if(form.requestSubmit)form.requestSubmit(form.querySelector('button'));else form.submit()})})})()</script>`

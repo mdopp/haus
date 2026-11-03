@@ -10,9 +10,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mdopp/haus/internal/cards"
-	"github.com/mdopp/haus/internal/energie"
-	"github.com/mdopp/haus/internal/ha"
+	"github.com/mdopp/homes/internal/cards"
+	"github.com/mdopp/homes/internal/energie"
+	"github.com/mdopp/homes/internal/ha"
 )
 
 // What Energie says when it cannot show the house's power.

@@ -14,7 +14,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/mdopp/haus/internal/laib"
+	"github.com/mdopp/homes/internal/laib"
 )
 
 // a Laib with laib#561's tool: show answers the block, set files a
@@ -25,7 +25,7 @@ type zuhauseLaib struct {
 	block  map[string]any
 	refuse string // laib's error text for set
 	old    bool   // no laib_zuhause at all
-	denied bool   // policy.yml without zuhause for the haus hand
+	denied bool   // policy.yml without zuhause for the homes hand
 }
 
 func (f *zuhauseLaib) client(t *testing.T) *laib.Client {
@@ -47,7 +47,7 @@ func (f *zuhauseLaib) client(t *testing.T) *laib.Client {
 			text, isErr = "unknown tool "+req.Params.Name, true
 		case f.denied:
 			f.calls = append(f.calls, a)
-			text, isErr = "haus may not zuhause", true
+			text, isErr = "homes may not zuhause", true
 		case a["action"] == "show":
 			f.calls = append(f.calls, a)
 			b, _ := json.Marshal(f.block)
@@ -165,7 +165,7 @@ func TestAdresseLaibsRefusalOfAValue(t *testing.T) {
 }
 
 // An older Laib without the tool, or a policy.yml without zuhause for the
-// haus hand: the page says plainly that Haus cannot change the address
+// homes hand: the page says plainly that Homes cannot change the address
 // here, offers no form, and a POST says the same.
 func TestAdresseWhereLaibRefusesTheTool(t *testing.T) {
 	for _, how := range []string{"old", "denied"} {
@@ -175,7 +175,7 @@ func TestAdresseWhereLaibRefusesTheTool(t *testing.T) {
 		if code != 200 {
 			t.Fatalf("%s: status %d", how, code)
 		}
-		mustContain(t, body, "Auf dieser Box kann Haus die Adresse noch nicht ändern")
+		mustContain(t, body, "Auf dieser Box kann Homes die Adresse noch nicht ändern")
 		mustNotContain(t, body, "action="+adresseSet, "unknown tool", "may not")
 		rec := post(t, AdresseVorschlagen(cfg), adresseSet, url.Values{"street": {"Musterweg 12"}}, "anna", map[string]string{"Remote-Groups": "admins"})
 		if loc := rec.Header().Get("Location"); loc != adressePath+"?gesagt=kein-laib" {

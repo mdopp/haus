@@ -266,7 +266,7 @@ func (w *wsConn) result(id int, out any) error {
 	}
 }
 
-// Registry is what Haus keeps from HA's registries and config.
+// Registry is what Homes keeps from HA's registries and config.
 type Registry struct {
 	Rooms   map[string]string // entity → its room's name: its own area, else its device's; absent without one
 	Hidden  map[string]bool   // entities HA hides: hidden_by set, or entity_category config or diagnostic
@@ -502,12 +502,12 @@ func (a *registryCache) refresh(ctx context.Context, c *Client, done chan struct
 	defer a.mu.Unlock()
 	a.done = nil
 	if err != nil {
-		log.Printf("haus: HA registries: %v", err)
+		log.Printf("homes: HA registries: %v", err)
 		a.next = time.Now().Add(30 * time.Second)
 		return
 	}
 	if uerr != nil {
-		log.Printf("haus: HA config (temperature unit): %v", uerr)
+		log.Printf("homes: HA config (temperature unit): %v", uerr)
 		unit = a.reg.TempUnit
 	}
 	reg.TempUnit = unit

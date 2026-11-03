@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/mdopp/haus/internal/cards"
+	"github.com/mdopp/homes/internal/cards"
 )
 
 // mehrPath is Mehr's page.
@@ -21,7 +21,7 @@ var mehrSays = map[string]string{
 	"Discogs":          "Dein Discogs-Konto verbinden: Sammlung, Wantlist, Platte erfassen",
 	"Musik":            "Hochladen, Platten erfassen, Discogs und die Musik-Wunschliste",
 	"Netzlaufwerk":     "Dein Passwort für das Netzlaufwerk",
-	"Standortverlauf":  "Wo du unterwegs warst, von der Haus-App in deinen Reitti-Zeitstrahl",
+	"Standortverlauf":  "Wo du unterwegs warst, von der Homes-App in deinen Reitti-Zeitstrahl",
 	"Daten sichern":    "Nachrichten, Kontakte, Mails und Termine in dein Archiv",
 	"Box":              "Wie es der Box geht, für Admins",
 }
@@ -64,7 +64,7 @@ func Mehr(cfg StartConfig) http.HandlerFunc {
 }
 
 // What the Gesundheit card says (haus#192): its pages, each a link, and
-// honestly who sees what in one quiet line — Haus links and holds nothing of it.
+// honestly who sees what in one quiet line — Homes links and holds nothing of it.
 // Owner, 2026-10-30: the first row was text that looked like a link, and one
 // „Weiter in Gesundheit“ hid that Gesundheit has several pages.
 const saysGesundheitWer = "Nur du siehst deine Werte; wer die Box verwaltet (Admin), sieht die Dokumente in Paperless. Nur zu Hause im WLAN."
@@ -78,7 +78,7 @@ var gesundheitSeiten = []struct{ text, detail, path string }{
 }
 
 // gesundheitKarte is Mehr's card for the Gesundheit program (haus#192,
-// laib#893), only on a box that has it (HAUS_GESUNDHEIT_URL): an internal
+// laib#893), only on a box that has it (HOMES_GESUNDHEIT_URL): an internal
 // route, so the links open at home only, as Paperless does.
 func gesundheitKarte(cfg StartConfig) string {
 	if cfg.GesundheitURL == "" {

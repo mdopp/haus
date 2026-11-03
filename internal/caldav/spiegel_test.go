@@ -7,7 +7,7 @@ import (
 )
 
 // The phone's text is cut into its cards as they came: folded lines,
-// LF or CRLF, a nested AGENT card inside its own, Haus's own note dropped.
+// LF or CRLF, a nested AGENT card inside its own, Homes' own note dropped.
 func TestSplitCards(t *testing.T) {
 	text := "BEGIN:VCARD\nVERSION:3.0\nUID:a\nFN:Oma\n  Erna\nAGENT:\nBEGIN:VCARD\nUID:inner\nFN:Sekretär\nEND:VCARD\nX-HAUS-INHALT:alt\nEND:VCARD\n" +
 		"noise\r\nbegin:vcard\r\nUID;VALUE=text: b \r\nFN:Ben\r\nEND:VCARD\r\n"

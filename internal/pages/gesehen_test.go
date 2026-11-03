@@ -8,12 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/abs"
-	"github.com/mdopp/haus/internal/abs/absfake"
-	"github.com/mdopp/haus/internal/caldav"
-	"github.com/mdopp/haus/internal/caldav/davfake"
-	"github.com/mdopp/haus/internal/gesehen"
-	"github.com/mdopp/haus/internal/jellyfin"
+	"github.com/mdopp/homes/internal/abs"
+	"github.com/mdopp/homes/internal/abs/absfake"
+	"github.com/mdopp/homes/internal/caldav"
+	"github.com/mdopp/homes/internal/caldav/davfake"
+	"github.com/mdopp/homes/internal/gesehen"
+	"github.com/mdopp/homes/internal/jellyfin"
 )
 
 // filmeFake is Jellyfin's watch history for the page: per person, an
@@ -45,7 +45,7 @@ func (f *filmeFake) HatFilm(context.Context, string) (string, bool, error) { ret
 // episode, the year, how far; „Was als Nächstes?“ puts a title on the film
 // and book wish list and says so on the page; a missing account, an app
 // not answering or answering too late each one plain line; a wish that
-// fails keeps its title; only from Haus's own page; no backends, no page.
+// fails keeps its title; only from Homes' own page; no backends, no page.
 func TestGesehenPage(t *testing.T) {
 	now := startNow(t)
 	filme := &filmeFake{seen: map[string][]jellyfin.Gesehen{

@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/abs"
-	"github.com/mdopp/haus/internal/abs/absfake"
-	"github.com/mdopp/haus/internal/merken"
+	"github.com/mdopp/homes/internal/abs"
+	"github.com/mdopp/homes/internal/abs/absfake"
+	"github.com/mdopp/homes/internal/merken"
 )
 
 func service(t *testing.T) (*Service, *absfake.Server, string) {
@@ -98,7 +98,7 @@ func TestNeueFolgenNurAnAbonnenten(t *testing.T) {
 }
 
 // owner 2026-10-26: "Die Folgen werden nicht geladen" — ABS's own check
-// takes only episodes after the subscription, so Haus asks for the newest
+// takes only episodes after the subscription, so Homes asks for the newest
 // three at once; they are old, so nobody is told of them. A subscription
 // from before is caught up once.
 func TestErsteFolgen(t *testing.T) {
@@ -123,7 +123,7 @@ func TestErsteFolgen(t *testing.T) {
 		t.Errorf("a new one, to both: %v", got)
 	}
 
-	// a subscription from before Haus fetched the first ones: once
+	// a subscription from before Homes fetched the first ones: once
 	st, _ := s.load()
 	st.Abos[0].Geladen, st.Abos[0].Seit = false, time.Time{}
 	st.Abos = append(st.Abos, Abo{Feed: feeds + "/zeit", Item: "nix", Title: "Weg"})

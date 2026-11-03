@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/laib"
+	"github.com/mdopp/homes/internal/laib"
 )
 
 // slowLaib answers laib_status after delay, every time, and counts the asks.

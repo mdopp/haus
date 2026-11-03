@@ -1,4 +1,4 @@
-// Package devices is Haus's own pairing: a phone gets a bearer with the prefix
+// Package devices is Homes' own pairing: a phone gets a bearer with the prefix
 // the app expects (app.TokenPrefix), stored hashed in one JSON file. Pairing is a
 // page behind Authelia; the person who pairs is the device's uid.
 package devices
@@ -18,7 +18,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mdopp/haus/internal/app"
+	"github.com/mdopp/homes/internal/app"
 )
 
 // Device is one paired phone.
@@ -89,10 +89,11 @@ func (s *Store) Mint(name, uid string) (Device, string, error) {
 }
 
 // Lookup returns the device behind a bearer and notes the sighting.
-// A bearer without app.TokenPrefix is no device, whatever devices.json holds:
-// a phone paired before the new app pairs again (laib ADR 0022 §4).
+// A bearer without app.TokenPrefix is no device, whatever devices.json holds
+// (laib ADR 0022 §4) — except a token of the old Haus app
+// (app.LegacyTokenPrefix), which keeps working until every phone runs Homes.
 func (s *Store) Lookup(bearer string) (Device, bool) {
-	if !strings.HasPrefix(bearer, app.TokenPrefix) {
+	if !strings.HasPrefix(bearer, app.TokenPrefix) && !strings.HasPrefix(bearer, app.LegacyTokenPrefix) {
 		return Device{}, false
 	}
 	h := hash(bearer)

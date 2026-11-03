@@ -1,5 +1,5 @@
-// Package cards is Haus's one card: a title, rows and an optional link
-// (laib DEKONSTRUKTION, "Haus: the pages and the cards"). Pages render it
+// Package cards is Homes' one card: a title, rows and an optional link
+// (laib DEKONSTRUKTION, "Homes: the pages and the cards"). Pages render it
 // as HTML; the widgets' /napi JSON and the Bote's replies get the same
 // value later. A card shows what there is and says nothing otherwise.
 package cards

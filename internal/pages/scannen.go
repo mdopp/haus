@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mdopp/haus/internal/laib"
-	"github.com/mdopp/haus/internal/paperless"
+	"github.com/mdopp/homes/internal/laib"
+	"github.com/mdopp/homes/internal/paperless"
 )
 
 // ScannenPath is where the Dokumente page's Scannen buttons post (haus#76).
@@ -24,7 +24,7 @@ const ScannenPath = "/scannen"
 // family's words, never its error.
 const (
 	saysScanOld      = "Scannen geht auf dieser Box noch nicht: Laib kann es hier noch nicht."
-	saysScanOldAd    = "Für Admins: Haus braucht Laib ab v0.20.0 und in policy.yml beim haus-Hand das Verb scan."
+	saysScanOldAd    = "Für Admins: Homes braucht Laib ab v0.20.0 und in policy.yml beim homes-Hand das Verb scan."
 	saysScanSilent   = "Der Scanner antwortet gerade nicht."
 	saysScanNotDone  = "Das hat nicht geklappt: Der Scanner antwortet gerade nicht."
 	saysScanUnset    = "Scannen ist auf dieser Box noch nicht eingerichtet. „Scannen einrichten“ legt einen Vorschlag in die Inbox; die Box richtet den Dienst ein, sobald du ihn freigibst."
@@ -84,7 +84,7 @@ var scanPerson = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,31}$`)
 
 // Scannen is where the buttons post: one order to Laib (laib scan), then
 // back to Dokumente (303, a reload sends nothing again). Only a person,
-// only from Haus's own page; the closing message is for them. Haus orders
+// only from Homes' own page; the closing message is for them. Homes orders
 // a scan, it decides nothing about the box (haus#1).
 func Scannen(cfg StartConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -97,8 +97,8 @@ func Scannen(cfg StartConfig) http.HandlerFunc {
 			http.Redirect(w, r, DokumentePath, http.StatusSeeOther)
 			return
 		}
-		if !fromHaus(r) {
-			http.Error(w, "Scannen geht nur von Haus' eigener Seite.", http.StatusForbidden)
+		if !fromHomes(r) {
+			http.Error(w, "Scannen geht nur von Homes' eigener Seite.", http.StatusForbidden)
 			return
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, 4<<10)
@@ -131,7 +131,7 @@ func Scannen(cfg StartConfig) http.HandlerFunc {
 			fuer = person // only for them; the household's is the default and not sent
 		}
 		if _, err := cfg.Laib.ScanOrder(r.Context(), do, person, fuer); err != nil {
-			log.Printf("haus: scannen: %s: %v", do, err)
+			log.Printf("homes: scannen: %s: %v", do, err)
 			writeDokumente(w, r, cfg, http.StatusBadGateway, "", "", saysScanNotDone)
 			return
 		}
@@ -165,11 +165,11 @@ func scanEinrichten(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
 	}
 	p, err := cfg.Laib.ScanEinrichten(r.Context(), geraet)
 	if err != nil {
-		log.Printf("haus: scannen: einrichten by %s: %v", r.Header.Get("Remote-User"), err)
+		log.Printf("homes: scannen: einrichten by %s: %v", r.Header.Get("Remote-User"), err)
 		say("nicht-moeglich", "")
 		return
 	}
-	log.Printf("haus: scannen: einrichten by %s: Vorschlag #%d", r.Header.Get("Remote-User"), p.Proposal)
+	log.Printf("homes: scannen: einrichten by %s: Vorschlag #%d", r.Header.Get("Remote-User"), p.Proposal)
 	nr := ""
 	if p.Proposal > 0 {
 		nr = strconv.Itoa(p.Proposal)
@@ -404,7 +404,7 @@ func scanSection(r *http.Request, cfg StartConfig, s scanning) string {
 	var b strings.Builder
 	b.WriteString(`<section class="weg scannen" aria-live=polite><h2>Scannen</h2>`)
 	if s.err != nil {
-		log.Printf("haus: dokumente page: scan: %v", s.err)
+		log.Printf("homes: dokumente page: scan: %v", s.err)
 		b.WriteString(`<p>` + html.EscapeString(saysScanSilent) + `</p></section>`)
 		return b.String()
 	}
@@ -537,7 +537,7 @@ func scanStart(r *http.Request) string {
 // saysScanFuer is what „nur für mich“ keeps a document from, and what not.
 const saysScanFuer = "„Nur für mich“ sehen die anderen in der Familie nicht. Wer die Box verwaltet (Admin), sieht trotzdem jedes Dokument."
 
-// scanButton is one order's button, a POST to /scannen; hausScript turns
+// scanButton is one order's button, a POST to /scannen; homesScript turns
 // a setup order's into „Sucht …“ the moment it is pressed.
 func scanButton(label, do string) string {
 	runs := ""
@@ -759,9 +759,9 @@ const saysStackGone = "Davon ist nichts mehr in Paperless."
 
 // stackFoldScript keeps what a viewer opened or closed, per stack, in
 // their browser; it runs again after the page is fetched in place.
-const stackFoldScript = `<script>(function(){var k='haus.stapel.';function get(n){try{return localStorage.getItem(k+n)}catch(e){return null}}
+const stackFoldScript = `<script>(function(){var k='homes.stapel.';function get(n){try{return localStorage.getItem(k+n)}catch(e){return null}}
 document.querySelectorAll('details[data-stapel]').forEach(function(d){var v=get(d.getAttribute('data-stapel'));if(v!==null)d.open=v==='1'});
-if(window.hausStapel)return;window.hausStapel=1;document.addEventListener('toggle',function(e){var d=e.target;if(!d.getAttribute||!d.hasAttribute('data-stapel'))return;
+if(window.homesStapel)return;window.homesStapel=1;document.addEventListener('toggle',function(e){var d=e.target;if(!d.getAttribute||!d.hasAttribute('data-stapel'))return;
 try{localStorage.setItem(k+d.getAttribute('data-stapel'),d.open?'1':'0')}catch(x){}},true)})()</script>`
 
 // shownStack is a stack as the page shows it: its documents, from
@@ -920,7 +920,7 @@ func shownStacks(r *http.Request, cfg StartConfig, all []laib.Stack) []shownStac
 	defer cancel()
 	field, err := cfg.Docs.FieldID(ctx, "Stapel")
 	if err != nil {
-		log.Printf("haus: dokumente page: Paperless' field Stapel: %v", err)
+		log.Printf("homes: dokumente page: Paperless' field Stapel: %v", err)
 		return out
 	}
 	var rest []int // stacks Paperless lists nothing for by the field
@@ -932,7 +932,7 @@ func shownStacks(r *http.Request, cfg StartConfig, all []laib.Stack) []shownStac
 		}
 		docs, err := cfg.Docs.ByField(ctx, field, s.Stapel, 100)
 		if err != nil {
-			log.Printf("haus: dokumente page: stack %s in Paperless: %v", s.Stapel, err)
+			log.Printf("homes: dokumente page: stack %s in Paperless: %v", s.Stapel, err)
 			return out
 		}
 		if len(docs) == 0 {
@@ -968,7 +968,7 @@ func shownStacks(r *http.Request, cfg StartConfig, all []laib.Stack) []shownStac
 	}
 	have, err := cfg.Docs.Have(ctx, names)
 	if err != nil {
-		log.Printf("haus: dokumente page: which scans Paperless still has: %v", err)
+		log.Printf("homes: dokumente page: which scans Paperless still has: %v", err)
 		return out
 	}
 	for _, i := range rest {

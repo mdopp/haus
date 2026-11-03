@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-// FileShare is the fake. Dir is HAUS_SAMBA_DIR; Lines gets each line read.
+// FileShare is the fake. Dir is HOMES_SAMBA_DIR; Lines gets each line read.
 type FileShare struct {
 	Dir   string
 	Lines chan string

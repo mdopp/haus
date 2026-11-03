@@ -12,17 +12,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/caldav"
-	"github.com/mdopp/haus/internal/caldav/davfake"
-	"github.com/mdopp/haus/internal/favoriten"
-	"github.com/mdopp/haus/internal/ha"
-	"github.com/mdopp/haus/internal/ha/hafake"
-	"github.com/mdopp/haus/internal/haushalt"
-	"github.com/mdopp/haus/internal/napi"
-	"github.com/mdopp/haus/internal/notes"
-	"github.com/mdopp/haus/internal/pages"
-	"github.com/mdopp/haus/internal/paperless"
-	"github.com/mdopp/haus/internal/paperless/paperlessfake"
+	"github.com/mdopp/homes/internal/caldav"
+	"github.com/mdopp/homes/internal/caldav/davfake"
+	"github.com/mdopp/homes/internal/favoriten"
+	"github.com/mdopp/homes/internal/ha"
+	"github.com/mdopp/homes/internal/ha/hafake"
+	"github.com/mdopp/homes/internal/haushalt"
+	"github.com/mdopp/homes/internal/napi"
+	"github.com/mdopp/homes/internal/notes"
+	"github.com/mdopp/homes/internal/pages"
+	"github.com/mdopp/homes/internal/paperless"
+	"github.com/mdopp/homes/internal/paperless/paperlessfake"
 )
 
 // a site with every backend set, each from a fake; the HA and Radicale
@@ -66,7 +66,7 @@ func fullSite(t *testing.T) (site, *hafake.HA, *davfake.Server) {
 		t.Fatal(err)
 	}
 
-	s.hh = haushalt.Config{Token: "bote", PublicURL: "https://haus.example", Calendar: cal, Contacts: cal, Notes: nd, Loc: loc,
+	s.hh = haushalt.Config{Token: "bote", PublicURL: "https://homes.example", Calendar: cal, Contacts: cal, Notes: nd, Loc: loc,
 		Documents: &paperless.Client{URL: docs.URL, Token: "pl-token", PublicURL: "https://paperless.example"}}
 	s.napi.HA = &ha.Client{URL: fake.URL, Token: "ha-token"}
 	s.napi.Haushalt = s.hh
@@ -89,7 +89,7 @@ func napiGet(t *testing.T, h http.Handler, path string) map[string]any {
 
 func page(h http.Handler, path string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest("GET", path, nil)
-	req.Header.Set("X-Haus-Proxy", "geheim")
+	req.Header.Set("X-Homes-Proxy", "geheim")
 	req.Header.Set("Remote-User", "anna")
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
@@ -97,7 +97,7 @@ func page(h http.Handler, path string) *httptest.ResponseRecorder {
 }
 
 // haus#28: every thing and every tool row a widget shows names its page on
-// Haus (page), and that page is there: the thing's own page with its name,
+// Homes (page), and that page is there: the thing's own page with its name,
 // room and state, a reminder's, a contact's, a note's, and a document's,
 // which leads on to Paperless. The app opens page in the browser, where the
 // person's Authelia session is.
@@ -112,7 +112,7 @@ func TestEveryPageAWidgetIsHandedIsThere(t *testing.T) {
 	pageOf := func(where string, row map[string]any, says ...string) {
 		p, _ := row["page"].(string)
 		if !strings.HasPrefix(p, "/") || strings.HasPrefix(p, "/napi/") {
-			t.Errorf("%s: no page of Haus's: %v", where, row)
+			t.Errorf("%s: no page of Homes': %v", where, row)
 			return
 		}
 		got = append(got, want{p, says})
@@ -182,10 +182,10 @@ func TestAnItemPageForNothingIsA404(t *testing.T) {
 	}
 }
 
-// haus#12: a path Haus does not serve is a 404 in the house's own frame,
+// haus#12: a path Homes does not serve is a 404 in the house's own frame,
 // one plain line and the way to Start, never a blank error and never Start
 // pretending all is well; "/" alone is Start.
-func TestAPathHausDoesNotServeIsA404(t *testing.T) {
+func TestAPathHomesDoesNotServeIsA404(t *testing.T) {
 	s, _, _ := fullSite(t)
 	h := routes(s)
 	for _, p := range []string{"/unbekannt", "/download", "/p/start", "/start/x", "/index.html"} {
@@ -324,7 +324,7 @@ func TestADocumentPageWantsAnIdAndAnAddress(t *testing.T) {
 	}
 }
 
-// haus#12, laib ADR 0017: Start reads the person's favorites from Haus's
+// haus#12, laib ADR 0017: Start reads the person's favorites from Homes'
 // data folder (favoriten.json, by Remote-User), and each leads to its own
 // page, which is there.
 func TestStartShowsTheFavoritesFromTheDataFolder(t *testing.T) {
@@ -353,10 +353,10 @@ func TestStartShowsTheFavoritesFromTheDataFolder(t *testing.T) {
 }
 
 // haushalt answers the Bote with the same pages the widgets hand out
-// (haus#11, haus#28): a contact's link is its page on Haus, which shows its
-// numbers and postal address; a document's is Haus's page, which leads on
+// (haus#11, haus#28): a contact's link is its page on Homes, which shows its
+// numbers and postal address; a document's is Homes' page, which leads on
 // to Paperless.
-func TestHaushaltLinksAreHausPages(t *testing.T) {
+func TestHaushaltLinksAreHomesPages(t *testing.T) {
 	s, _, _ := fullSite(t)
 	h := routes(s)
 	tool := func(name string, args map[string]any) string {
@@ -377,11 +377,11 @@ func TestHaushaltLinksAreHausPages(t *testing.T) {
 		return out.Result.Content[0].Text
 	}
 	link := func(text string) string {
-		i := strings.Index(text, "https://haus.example/")
+		i := strings.Index(text, "https://homes.example/")
 		if i < 0 {
-			t.Fatalf("no link to Haus: %q", text)
+			t.Fatalf("no link to Homes: %q", text)
 		}
-		return strings.Fields(text[i+len("https://haus.example"):])[0]
+		return strings.Fields(text[i+len("https://homes.example"):])[0]
 	}
 	text := tool("kontakt_lesen", map[string]any{"kontakt": "Bernd"})
 	if !strings.Contains(text, "Hauptstraße 1, 70173 Stuttgart") {
@@ -402,10 +402,10 @@ func TestHaushaltLinksAreHausPages(t *testing.T) {
 	}
 }
 
-// haus#35, end to end through Haus's routes: the ☆ on a thing's page pins
+// haus#35, end to end through Homes' routes: the ☆ on a thing's page pins
 // it to the person's Start, its switch there turns it off in Home
-// Assistant, and the font comes from Haus. Each only with the proxy
-// secret, as a person, from Haus's own page.
+// Assistant, and the font comes from Homes. Each only with the proxy
+// secret, as a person, from Homes' own page.
 func TestPinAndSwitchThroughTheRoutes(t *testing.T) {
 	s, fake, _ := fullSite(t)
 	s.favorites = favoriten.Open(t.TempDir())
@@ -415,7 +415,7 @@ func TestPinAndSwitchThroughTheRoutes(t *testing.T) {
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		req.Header.Set("Sec-Fetch-Site", "same-origin")
 		if secret != "" {
-			req.Header.Set("X-Haus-Proxy", secret)
+			req.Header.Set("X-Homes-Proxy", secret)
 		}
 		req.Header.Set("Remote-User", "anna")
 		rec := httptest.NewRecorder()
@@ -448,8 +448,8 @@ func TestPinAndSwitchThroughTheRoutes(t *testing.T) {
 	}
 }
 
-// haus#12: Haus serves Energie from the same choice of sensors as the
-// widgets' energy picture (the template's HAUS_ENERGY_*).
+// haus#12: Homes serves Energie from the same choice of sensors as the
+// widgets' energy picture (the template's HOMES_ENERGY_*).
 func TestEnergiePageServedFromTheWidgetsSensors(t *testing.T) {
 	s, fake, _ := fullSite(t)
 	fake.Set("sensor.inverter", "2500", map[string]any{"friendly_name": "Inverter", "device_class": "power", "unit_of_measurement": "W"})
@@ -460,7 +460,7 @@ func TestEnergiePageServedFromTheWidgetsSensors(t *testing.T) {
 	}
 }
 
-// A path under Energie that Haus does not serve is a 404 with the way back.
+// A path under Energie that Homes does not serve is a 404 with the way back.
 func TestEnergieSubpathIsA404(t *testing.T) {
 	s, _, _ := fullSite(t)
 	if rec := page(routes(s), "/energie/heute"); rec.Code != http.StatusNotFound || !strings.Contains(rec.Body.String(), "<a href=/energie>Energie</a>") {
@@ -468,7 +468,7 @@ func TestEnergieSubpathIsA404(t *testing.T) {
 	}
 }
 
-// haus#12: Haus serves Medien.
+// haus#12: Homes serves Medien.
 func TestMedienPageServed(t *testing.T) {
 	s, fake, _ := fullSite(t)
 	fake.Set("media_player.wz", "playing", map[string]any{"friendly_name": "Sonos", "media_title": "Abbey Road", "supported_features": 1})
@@ -478,7 +478,7 @@ func TestMedienPageServed(t *testing.T) {
 	}
 }
 
-// A path under Medien that Haus does not serve is a 404 with the way back,
+// A path under Medien that Homes does not serve is a 404 with the way back,
 // in the house's frame and never repeating the path (#48's contract); a
 // path that only starts like Medien is Elsewhere's 404, the way to Start.
 func TestMedienSubpathIsA404(t *testing.T) {

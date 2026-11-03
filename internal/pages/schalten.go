@@ -8,9 +8,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/mdopp/haus/internal/cards"
-	"github.com/mdopp/haus/internal/ha"
-	"github.com/mdopp/haus/internal/schalter"
+	"github.com/mdopp/homes/internal/cards"
+	"github.com/mdopp/homes/internal/ha"
+	"github.com/mdopp/homes/internal/schalter"
 )
 
 // pageDoes is what a family page may ask Home Assistant to do (haus#35):
@@ -40,7 +40,7 @@ const (
 // Schalten is where a family page's switch posts (cards.SwitchPath): one
 // thing, one service of pageDoes, through package schalter's rule — the
 // widgets' own — and back to the page it came from (303, so a reload
-// sends nothing again). Only a person, only from Haus's own page; the
+// sends nothing again). Only a person, only from Homes' own page; the
 // form's other fields go nowhere. It decides nothing about the box
 // (haus#1): it switches the house.
 func Schalten(cfg StartConfig) http.HandlerFunc {
@@ -54,8 +54,8 @@ func Schalten(cfg StartConfig) http.HandlerFunc {
 			http.Redirect(w, r, "/start", http.StatusSeeOther)
 			return
 		}
-		if !fromHaus(r) {
-			http.Error(w, "Schalten geht nur von Haus' eigener Seite.", http.StatusForbidden)
+		if !fromHomes(r) {
+			http.Error(w, "Schalten geht nur von Homes' eigener Seite.", http.StatusForbidden)
 			return
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, 4<<10)
@@ -116,7 +116,7 @@ func Schalten(cfg StartConfig) http.HandlerFunc {
 			http.Redirect(w, r, back, http.StatusSeeOther)
 			return
 		}
-		log.Printf("haus: schalten %q on %q: %v", do, id, err)
+		log.Printf("homes: schalten %q on %q: %v", do, id, err)
 		m := missing{http.StatusOK, saysSwitchFailed, "Zuhause", back, "Zurück"}
 		switch {
 		case back == medienPath:
@@ -132,7 +132,7 @@ func Schalten(cfg StartConfig) http.HandlerFunc {
 		case errors.As(err, &refused) && refused.Status == http.StatusInternalServerError && strings.HasPrefix(id, "media_player."):
 			m.say = saysPlayerNo // HA answered, the player did not take it (haus#83)
 		}
-		if r.Header.Get("X-Haus-Skript") != "" { // the page stays; the sentence is shown on it
+		if r.Header.Get("X-Homes-Skript") != "" { // the page stays; the sentence is shown on it
 			code := m.code
 			if code == http.StatusOK {
 				code = http.StatusBadGateway

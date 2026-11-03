@@ -1,6 +1,6 @@
 // Package notes keeps the household's notes as Markdown files in one
 // directory of the file share (laib ADR 0017): every phone and laptop that
-// syncs the share sees and edits them. Haus holds no index; a search reads
+// syncs the share sees and edits them. Homes holds no index; a search reads
 // the files, within caps. Every access goes through os.Root, so no name —
 // "..", an absolute path, a symlink — reaches outside the directory, and
 // hidden files and folders (Syncthing's, the temp files) are never notes.
@@ -30,7 +30,7 @@ type Dir struct {
 	path string
 }
 
-// Open checks that path is a directory Haus can use.
+// Open checks that path is a directory Homes can use.
 func Open(p string) (*Dir, error) {
 	st, err := os.Stat(p)
 	if err != nil {
@@ -136,7 +136,7 @@ func (d *Dir) CreateWith(title, text string, k Kopf) (string, error) {
 	content := []byte(k.With("# " + title + "\n\n" + strings.TrimSpace(strings.ReplaceAll(text, "\r\n", "\n")) + "\n"))
 	rnd := make([]byte, 8)
 	rand.Read(rnd)
-	tmp := ".haus-" + hex.EncodeToString(rnd) + ".tmp"
+	tmp := ".homes-" + hex.EncodeToString(rnd) + ".tmp"
 	f, err := root.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 	if err != nil {
 		return "", err
@@ -193,7 +193,7 @@ func (d *Dir) PutNew(name string, content []byte) (bool, error) {
 	}
 	rnd := make([]byte, 8)
 	rand.Read(rnd)
-	tmp := path.Join(dir, ".haus-"+hex.EncodeToString(rnd)+".tmp")
+	tmp := path.Join(dir, ".homes-"+hex.EncodeToString(rnd)+".tmp")
 	f, err := root.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 	if err != nil {
 		return false, err
@@ -296,7 +296,7 @@ func (d *Dir) Update(name, text string, was time.Time) error {
 	}
 	rnd := make([]byte, 8)
 	rand.Read(rnd)
-	tmp := path.Join(path.Dir(clean), ".haus-"+hex.EncodeToString(rnd)+".tmp")
+	tmp := path.Join(path.Dir(clean), ".homes-"+hex.EncodeToString(rnd)+".tmp")
 	f, err := root.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, st.Mode().Perm())
 	if err != nil {
 		return err

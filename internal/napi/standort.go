@@ -8,20 +8,20 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/mdopp/haus/internal/reitti"
+	"github.com/mdopp/homes/internal/reitti"
 )
 
-// Standortverlauf (owner 2026-11-02): the Haus app records where its
-// person was and sends the points here in batches; Haus passes them on,
+// Standortverlauf (owner 2026-11-02): the Homes app records where its
+// person was and sends the points here in batches; Homes passes them on,
 // inside the box, to Reitti's Overland ingest with that person's own
 // device token (package reitti). The person is the device's (Whoami),
 // never the request's, and so is the token.
 //
-// No point is lost silently: Haus answers 200 only once Reitti said yes.
+// No point is lost silently: Homes answers 200 only once Reitti said yes.
 // Without a token (409, grund kein_schluessel), with a token Reitti
 // refuses (409, schluessel_abgelehnt), or with Reitti not taking them now
 // (503, reitti_weg), the app keeps the batch and sends it again. A point
-// Haus cannot read is not passed on; the reply counts it (verworfen).
+// Homes cannot read is not passed on; the reply counts it (verworfen).
 
 var (
 	standortMaxBody   int64 = 2 << 20 // one batch
@@ -30,11 +30,11 @@ var (
 
 const (
 	saysNoReitti        = "Der Standortverlauf (Reitti) ist auf dieser Box nicht eingerichtet."
-	saysReittiNoToken   = "Verbinde zuerst Reitti: füge in Haus unter Mehr → Standortverlauf einmal deinen Reitti-Schlüssel ein."
-	saysReittiRefused   = "Reitti kennt deinen Schlüssel nicht mehr: füge in Haus unter Mehr → Standortverlauf einen neuen ein."
-	saysReittiDown      = "Reitti nimmt gerade nichts an. Die Haus-App behält die Punkte und schickt sie später noch einmal."
-	saysStandortBroken  = "Die Punkte waren nicht lesbar. Aktualisiere die Haus-App."
-	saysStandortTooMany = "Zu viele Punkte auf einmal: höchstens 1000 je Anfrage. Aktualisiere die Haus-App."
+	saysReittiNoToken   = "Verbinde zuerst Reitti: füge in Homes unter Mehr → Standortverlauf einmal deinen Reitti-Schlüssel ein."
+	saysReittiRefused   = "Reitti kennt deinen Schlüssel nicht mehr: füge in Homes unter Mehr → Standortverlauf einen neuen ein."
+	saysReittiDown      = "Reitti nimmt gerade nichts an. Die Homes-App behält die Punkte und schickt sie später noch einmal."
+	saysStandortBroken  = "Die Punkte waren nicht lesbar. Aktualisiere die Homes-App."
+	saysStandortTooMany = "Zu viele Punkte auf einmal: höchstens 1000 je Anfrage. Aktualisiere die Homes-App."
 )
 
 // What the app reads in a refusal besides the sentence: why, as a word.
@@ -159,19 +159,19 @@ func (s *standort) post(w http.ResponseWriter, r *http.Request, person string) {
 	if len(ps) > 0 {
 		err := s.r.Send(r.Context(), k.Token, ps)
 		if errors.Is(err, reitti.ErrToken) {
-			log.Printf("haus: standort: reitti refused %s's token; %d points stay on the phone", person, len(ps))
+			log.Printf("homes: standort: reitti refused %s's token; %d points stay on the phone", person, len(ps))
 			standortFehler(w, http.StatusConflict, grundAbgelehnt, saysReittiRefused)
 			return
 		}
 		if err != nil {
-			log.Printf("haus: standort: %s: %d points not taken: %v", person, len(ps), err)
+			log.Printf("homes: standort: %s: %d points not taken: %v", person, len(ps), err)
 			w.Header().Set("Retry-After", "300")
 			standortFehler(w, http.StatusServiceUnavailable, grundReittiWeg, saysReittiDown)
 			return
 		}
 	}
 	if verworfen > 0 {
-		log.Printf("haus: standort: %s: %d points to reitti, %d unreadable left out", person, len(ps), verworfen)
+		log.Printf("homes: standort: %s: %d points to reitti, %d unreadable left out", person, len(ps), verworfen)
 	}
 	answer(w, http.StatusOK, map[string]any{"angenommen": len(ps), "verworfen": verworfen})
 }

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mdopp/haus/internal/devices"
+	"github.com/mdopp/homes/internal/devices"
 )
 
 // postFormRE finds the rendered POST forms' opening tags.
@@ -27,7 +27,7 @@ func formsWithoutAction(body string) []string {
 // a phone and removing a lost one failed. The script now posts to the page itself then, and the
 // forms that pair and remove phones name theirs; pairing goes as a whole page (it ends in the app).
 func TestPostFormsGoSomewhere(t *testing.T) {
-	if !strings.Contains(hausScript, "fetch(or(f.getAttribute('action'),location.pathname+location.search)") {
+	if !strings.Contains(homesScript, "fetch(or(f.getAttribute('action'),location.pathname+location.search)") {
 		t.Error("the script posts to null without an action")
 	}
 	store, err := devices.Open(t.TempDir())
@@ -41,7 +41,7 @@ func TestPostFormsGoSomewhere(t *testing.T) {
 	}{
 		{"pair", func() string { return getAt(PairDevice(store, StartConfig{}), "/pair-device", "family") }},
 		{"geraete", func() string {
-			return getAt(Geraete(store, "https://haus.box.test", StartConfig{}), "/box/geraete", "admins")
+			return getAt(Geraete(store, "https://homes.box.test", StartConfig{}), "/box/geraete", "admins")
 		}},
 	} {
 		body := c.h()
@@ -68,7 +68,7 @@ func TestFamilySentence(t *testing.T) {
 			t.Errorf("%q → %q", in, got)
 		}
 	}
-	if s := hausScript; strings.Contains(s, "HTMLFormElement.prototype.submit") || strings.Contains(s, "7*sec") || !strings.Contains(s, "AbortController") {
+	if s := homesScript; strings.Contains(s, "HTMLFormElement.prototype.submit") || strings.Contains(s, "7*sec") || !strings.Contains(s, "AbortController") {
 		t.Error("the script resubmits natively, hides its sentence by itself, or has no limit")
 	}
 }

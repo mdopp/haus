@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mdopp/haus/internal/merken"
-	"github.com/mdopp/haus/internal/notes"
+	"github.com/mdopp/homes/internal/merken"
+	"github.com/mdopp/homes/internal/notes"
 )
 
 // haus#117: „Aus Link merken“ on Notizen keeps a page as a note and opens

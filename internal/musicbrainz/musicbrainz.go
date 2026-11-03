@@ -4,7 +4,7 @@
 // the album a song is on, when it comes out, its label, and the shops and
 // pages the band, the album and the label name — Bandcamp above all, where
 // a record usually comes with its download at once. Shops are never asked
-// themselves: Bandcamp lets no program in, and Haus does not get round
+// themselves: Bandcamp lets no program in, and Homes does not get round
 // that. At most one request a second, as MusicBrainz asks.
 package musicbrainz
 
@@ -19,8 +19,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mdopp/haus/internal/jellyfin"
-	"github.com/mdopp/haus/internal/merken"
+	"github.com/mdopp/homes/internal/jellyfin"
+	"github.com/mdopp/homes/internal/merken"
 )
 
 // Client is MusicBrainz's web service.
@@ -278,7 +278,7 @@ func classify(kind, u, owner string) (Link, bool) {
 		}
 		return Link{"Bandcamp", "Platte und Download, meist sofort", u}, true
 	case "purchase for download":
-		if wo == owner || wo == host { // a shop Haus does not know: rather none than a stranger
+		if wo == owner || wo == host { // a shop Homes does not know: rather none than a stranger
 			return Link{}, false
 		}
 		return Link{wo, "Download", u}, true

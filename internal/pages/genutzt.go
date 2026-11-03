@@ -11,12 +11,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mdopp/haus/internal/assistent"
-	"github.com/mdopp/haus/internal/cards"
-	"github.com/mdopp/haus/internal/usage"
+	"github.com/mdopp/homes/internal/assistent"
+	"github.com/mdopp/homes/internal/cards"
+	"github.com/mdopp/homes/internal/usage"
 )
 
-// What the family uses (haus#50, owner decision 2026-10-16): Haus counts
+// What the family uses (haus#50, owner decision 2026-10-16): Homes counts
 // per event and UTC day, never who — no person, no device, no address, no
 // content — and the Box page shows the last 30 days to admins. The counts
 // go to usage-metrics (internal/usage); this file names the events and
@@ -24,7 +24,7 @@ import (
 
 // pagePaths are the pages a view is counted for, by path; the prefixes
 // are an item's own page. Anything else (the font, the icon, /healthz, a
-// path Haus does not serve) is no page view.
+// path Homes does not serve) is no page view.
 var pagePaths = map[string]string{"/start": "start", "/raeume": "raeume", "/energie": "energie", "/medien": "medien",
 	"/kalender": "kalender", "/notizen": "notizen", "/sprechen": "sprechen", "/box": "box", "/box/geraete": "geraete",
 	"/pair-device": "koppeln", cards.SwitchPath: "schalten", "/mehr": "mehr"}
@@ -83,8 +83,8 @@ func lineSays(key string) string {
 	return ""
 }
 
-// widgetKinds are the Haus app's widgets whose tap opens a page with
-// ?von=widget.<kind> (haus-android#181), in the admin's words; any other
+// widgetKinds are the Homes app's widgets whose tap opens a page with
+// ?von=widget.<kind> (homes-android#181), in the admin's words; any other
 // value is no source tag and counts nothing.
 var widgetKinds = map[string]string{"device": "Gerät", "devices": "Geräte", "active": "Was ist an", "energy": "Energie jetzt",
 	"energy-stats": "Energie-Verlauf", "energy-totals": "Energie-Summen", "box-overview": "Box", "box-services": "Dienste", "tool": "Werkzeug"}
@@ -170,7 +170,7 @@ func (s *seenPage) Write(p []byte) (int, error) {
 	return s.ResponseWriter.Write(p)
 }
 
-// feature is something of Haus the card can call unused: its event, what
+// feature is something of Homes the card can call unused: its event, what
 // it is in the admin's words, and whether this box has it at all.
 type feature struct {
 	event, says string
@@ -235,7 +235,7 @@ var pageIn = map[string]string{"start": "auf Start", "raeume": "in Räume", "din
 	"dokument": "bei einem Dokument", "notizen": "in Notizen", "notiz": "bei einer Notiz", "sprechen": "im Sprechen-Feld",
 	"schalten": "beim Schalten", "mehr": "in Mehr", "box": "auf der Box-Seite", "geraete": "bei den Geräten", "koppeln": "beim Koppeln"}
 
-// eventSays is a Haus event in words, "" when the card does not show it.
+// eventSays is a Homes event in words, "" when the card does not show it.
 func eventSays(event string) string {
 	if s := says[event]; s != "" {
 		return s
@@ -320,18 +320,18 @@ func usageCard(ctx context.Context, family StartConfig, voice *usage.Voice) stri
 	}
 	b.WriteString("<p class=leise>Die letzten 30 Tage. Gezählt wird nur, wie oft etwas benutzt wird — nie, wer.</p>")
 	if voice.Refused() {
-		b.WriteString("<p class=achtung>Sprachbefehle werden nicht gezählt: Home Assistant zeigt Haus die Sprachverläufe nicht. " +
-			"Dafür braucht der Benutzer hinter Haus' Home-Assistant-Token Administrator-Rechte.</p>")
+		b.WriteString("<p class=achtung>Sprachbefehle werden nicht gezählt: Home Assistant zeigt Homes die Sprachverläufe nicht. " +
+			"Dafür braucht der Benutzer hinter Homes' Home-Assistant-Token Administrator-Rechte.</p>")
 	}
 	if sum.Total == 0 && len(miss.Misses) == 0 {
-		fmt.Fprintf(&b, "<p>Noch nichts gezählt. Haus zählt seit %s Uhr; was die Familie tut, steht nach ein paar Minuten hier.</p></section>",
+		fmt.Fprintf(&b, "<p>Noch nichts gezählt. Homes zählt seit %s Uhr; was die Familie tut, steht nach ein paar Minuten hier.</p></section>",
 			c.Started.In(familyLoc(family)).Format("02.01. um 15:04"))
 		return b.String()
 	}
-	haus := sum.Events(usage.App)
-	b.WriteString(mostUsed(haus))
-	b.WriteString(leastUsed(haus, family))
-	b.WriteString(degradedSeen(haus))
+	own := sum.Events(usage.App)
+	b.WriteString(mostUsed(own))
+	b.WriteString(leastUsed(own, family))
+	b.WriteString(degradedSeen(own))
 	b.WriteString(boteAndVoice(sum))
 	if missErr == nil {
 		b.WriteString(unanswered(miss))
@@ -361,9 +361,9 @@ func rows(b *strings.Builder, rs []row) {
 }
 
 // mostUsed is the five most counted things the card has words for.
-func mostUsed(haus map[string]int64) string {
+func mostUsed(own map[string]int64) string {
 	var rs []row
-	for e, n := range haus {
+	for e, n := range own {
 		if s := eventSays(e); s != "" && n > 0 {
 			rs = append(rs, row{s, n})
 		}
@@ -383,11 +383,11 @@ func mostUsed(haus map[string]int64) string {
 
 // leastUsed is what this box has and nobody or hardly anybody used: the
 // features with the fewest counts, at most five, at most 2 each.
-func leastUsed(haus map[string]int64, family StartConfig) string {
+func leastUsed(own map[string]int64, family StartConfig) string {
 	var rs []row
 	for _, f := range features {
-		if f.has(family) && haus[f.event] <= 2 {
-			rs = append(rs, row{f.says, haus[f.event]})
+		if f.has(family) && own[f.event] <= 2 {
+			rs = append(rs, row{f.says, own[f.event]})
 		}
 	}
 	if len(rs) == 0 {
@@ -411,9 +411,9 @@ func leastUsed(haus map[string]int64, family StartConfig) string {
 }
 
 // degradedSeen is which plain line the family saw where, and how often.
-func degradedSeen(haus map[string]int64) string {
+func degradedSeen(own map[string]int64) string {
 	var rs []row
-	for e, n := range haus {
+	for e, n := range own {
 		rest, ok := strings.CutPrefix(e, "gestoert.")
 		if !ok {
 			continue

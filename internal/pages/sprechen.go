@@ -13,8 +13,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/mdopp/haus/internal/assistent"
-	"github.com/mdopp/haus/internal/bote"
+	"github.com/mdopp/homes/internal/assistent"
+	"github.com/mdopp/homes/internal/bote"
 )
 
 // boteWait is how long Sprechen waits for the Bote's first word (haus#63):
@@ -58,7 +58,7 @@ const saysTooLong = "Das ist zu lang: höchstens 1000 Zeichen."
 var errSlow = errors.New("sprechen: no first word within boteWait")
 
 // sprechenField is the field (haus#12): one line and Senden, posting to
-// Haus itself, and the microphone when Haus can hear (haus#63). Without
+// Homes itself, and the microphone when Homes can hear (haus#63). Without
 // script it is a plain form; with it, the post goes in the background and
 // the answer comes in pieces on /sprechen (sprechenScript). On Start it
 // carries its name and hands the sentence on to /sprechen; on its own page
@@ -115,9 +115,9 @@ func (t *talks) set(person string, e exchange) {
 // Sprechen is where the field posts, and the page its reply comes back on
 // (haus#12, laib ADR 0016): the sentence goes to the Bote as the person
 // Authelia names, the reply is shown as text under the assistant's name.
-// Only a person, only from Haus's own page (fromHaus). Haus relays and
+// Only a person, only from Homes' own page (fromHomes). Homes relays and
 // decides nothing (haus#1): what needs a yes goes to Laib's inbox through
-// the Bote, never through Haus. A post that accepts text/event-stream (the
+// the Bote, never through Homes. A post that accepts text/event-stream (the
 // page's script) gets the reply in pieces as they come (haus#63); a plain
 // form post waits for the whole and is sent back to the page (303).
 func Sprechen(cfg StartConfig) http.HandlerFunc {
@@ -127,7 +127,7 @@ func Sprechen(cfg StartConfig) http.HandlerFunc {
 		switch r.Method {
 		case http.MethodGet, http.MethodHead:
 			if cfg.Bote == nil {
-				notSet{"Sprechen geht hier noch nicht: " + assistent.Name() + " ist noch nicht eingerichtet.", "Für Admins: der Bote läuft nicht (laib add bote, mit einem Kanal; Haus bekommt BOTE_API_KEY)."}.write(w, r, cfg, "Sprechen")
+				notSet{"Sprechen geht hier noch nicht: " + assistent.Name() + " ist noch nicht eingerichtet.", "Für Admins: der Bote läuft nicht (laib add bote, mit einem Kanal; Homes bekommt BOTE_API_KEY)."}.write(w, r, cfg, "Sprechen")
 				return
 			}
 			e, ok := t.get(person)
@@ -141,8 +141,8 @@ func Sprechen(cfg StartConfig) http.HandlerFunc {
 			b.WriteString(wakeLine(lookWake(r, cfg))) // and at the speaker: its wake word (owner 2026-10-30)
 			writePage(w, http.StatusOK, b)
 		case http.MethodPost:
-			if !fromHaus(r) {
-				http.Error(w, "Sprechen geht nur von Haus' eigener Seite.", http.StatusForbidden)
+			if !fromHomes(r) {
+				http.Error(w, "Sprechen geht nur von Homes' eigener Seite.", http.StatusForbidden)
 				return
 			}
 			r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
@@ -177,7 +177,7 @@ func Sprechen(cfg StartConfig) http.HandlerFunc {
 }
 
 // turn is one sentence to the Bote and what came back. Leaving the page
-// does not stop the turn (Hermes runs it on): Haus waits on for the reply
+// does not stop the turn (Hermes runs it on): Homes waits on for the reply
 // and keeps it; only boteWait without a first word, or boteTurn in all,
 // ends the wait. piece sees each part of the reply as it comes.
 func turn(r *http.Request, cfg StartConfig, person, text string, piece func(string)) exchange {
@@ -195,7 +195,7 @@ func turn(r *http.Request, cfg StartConfig, person, text string, piece func(stri
 	})
 	e := exchange{said: text, reply: reply}
 	if err != nil {
-		log.Printf("haus: sprechen as %q: %v", person, err)
+		log.Printf("homes: sprechen as %q: %v", person, err)
 		switch {
 		case reply != "":
 			e.line = saysCut(assistent.Name())
@@ -255,7 +255,7 @@ func streamTurn(w http.ResponseWriter, r *http.Request, cfg StartConfig, t *talk
 }
 
 // html is the exchange: the person's words, then the assistant's reply
-// under its name, and Haus's line why there is none (or why it stops) —
+// under its name, and Homes' line why there is none (or why it stops) —
 // not in the assistant's name, it did not say it.
 func (e exchange) html() string {
 	var b strings.Builder

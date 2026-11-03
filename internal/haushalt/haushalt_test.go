@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/mdopp/haus/internal/einkauf"
+	"github.com/mdopp/homes/internal/einkauf"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,20 +14,20 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/abs"
-	"github.com/mdopp/haus/internal/abs/absfake"
-	"github.com/mdopp/haus/internal/caldav"
-	"github.com/mdopp/haus/internal/caldav/davfake"
-	"github.com/mdopp/haus/internal/judge"
-	"github.com/mdopp/haus/internal/judge/proxyfake"
-	"github.com/mdopp/haus/internal/library"
-	"github.com/mdopp/haus/internal/merken"
-	"github.com/mdopp/haus/internal/notes"
-	"github.com/mdopp/haus/internal/paperless"
-	"github.com/mdopp/haus/internal/paperless/paperlessfake"
-	"github.com/mdopp/haus/internal/podcasts"
-	"github.com/mdopp/haus/internal/qmd"
-	"github.com/mdopp/haus/internal/qmd/qmdfake"
+	"github.com/mdopp/homes/internal/abs"
+	"github.com/mdopp/homes/internal/abs/absfake"
+	"github.com/mdopp/homes/internal/caldav"
+	"github.com/mdopp/homes/internal/caldav/davfake"
+	"github.com/mdopp/homes/internal/judge"
+	"github.com/mdopp/homes/internal/judge/proxyfake"
+	"github.com/mdopp/homes/internal/library"
+	"github.com/mdopp/homes/internal/merken"
+	"github.com/mdopp/homes/internal/notes"
+	"github.com/mdopp/homes/internal/paperless"
+	"github.com/mdopp/homes/internal/paperless/paperlessfake"
+	"github.com/mdopp/homes/internal/podcasts"
+	"github.com/mdopp/homes/internal/qmd"
+	"github.com/mdopp/homes/internal/qmd/qmdfake"
 )
 
 const tok = "bote-token"
@@ -53,22 +53,22 @@ type setup struct {
 // want says which backends a setup has.
 type want struct {
 	cal, notes, contacts, docs bool
-	library                    bool   // HAUS_QMD_URL: the memory library (haus#13)
-	llm                        bool   // HAUS_LLM_*: the house model tidies its hits (haus#13)
-	documents                  bool   // HAUS_QMD_DOCUMENTS: Paperless's documents in the library (haus#13)
-	country                    string // HAUS_PHONE_COUNTRY; "" the default
-	noPublic                   bool   // no HAUS_PUBLIC_URL: no links to Haus's pages
-	noPaperlessPublic          bool   // no HAUS_PAPERLESS_PUBLIC_URL: Haus's document page is a 404
+	library                    bool   // HOMES_QMD_URL: the memory library (haus#13)
+	llm                        bool   // HOMES_LLM_*: the house model tidies its hits (haus#13)
+	documents                  bool   // HOMES_QMD_DOCUMENTS: Paperless's documents in the library (haus#13)
+	country                    string // HOMES_PHONE_COUNTRY; "" the default
+	noPublic                   bool   // no HOMES_PUBLIC_URL: no links to Homes' pages
+	noPaperlessPublic          bool   // no HOMES_PAPERLESS_PUBLIC_URL: Homes' document page is a 404
 }
 
-const hausPublic = "https://haus.example"
+const homesPublic = "https://homes.example"
 
 const plToken = "pl-geheim-123"
 
 func newSetup(t *testing.T, w want) setup {
 	t.Helper()
 	s := setup{}
-	cfg := Config{Token: tok, Loc: berlin(t), Version: "test", PhoneCountry: w.country, PublicURL: hausPublic, Fetcher: merken.Fetcher{AllowPrivate: true}}
+	cfg := Config{Token: tok, Loc: berlin(t), Version: "test", PhoneCountry: w.country, PublicURL: homesPublic, Fetcher: merken.Fetcher{AllowPrivate: true}}
 	if w.noPublic {
 		cfg.PublicURL = ""
 	}
@@ -287,8 +287,8 @@ func TestToolsOnlyWhatWorks(t *testing.T) {
 }
 
 func TestFromEnv(t *testing.T) {
-	for _, k := range []string{"HAUS_HAUSHALT_TOKEN", "HAUS_RADICALE_URL", "HAUS_RADICALE_USER", "HAUS_RADICALE_PASSWORD", "HAUS_RADICALE_CALENDAR",
-		"HAUS_RADICALE_ADDRESSBOOK", "HAUS_NOTES_DIR", "HAUS_PAPERLESS_URL", "HAUS_PAPERLESS_TOKEN", "HAUS_PAPERLESS_PUBLIC_URL"} {
+	for _, k := range []string{"HOMES_HAUSHALT_TOKEN", "HOMES_RADICALE_URL", "HOMES_RADICALE_USER", "HOMES_RADICALE_PASSWORD", "HOMES_RADICALE_CALENDAR",
+		"HOMES_RADICALE_ADDRESSBOOK", "HOMES_NOTES_DIR", "HOMES_PAPERLESS_URL", "HOMES_PAPERLESS_TOKEN", "HOMES_PAPERLESS_PUBLIC_URL"} {
 		t.Setenv(k, "")
 	}
 	t.Setenv("TZ", "Europe/Berlin")
@@ -296,19 +296,19 @@ func TestFromEnv(t *testing.T) {
 	if err != nil || cfg.Calendar != nil || cfg.Contacts != nil || cfg.Documents != nil || cfg.Notes != nil || cfg.Token != "" || cfg.Loc.String() != "Europe/Berlin" {
 		t.Fatalf("unset: %+v %v", cfg, err)
 	}
-	t.Setenv("HAUS_RADICALE_URL", "radicale:5232")
+	t.Setenv("HOMES_RADICALE_URL", "radicale:5232")
 	if _, err := FromEnv(); err == nil {
 		t.Fatal("a malformed Radicale address refuses to start")
 	}
-	t.Setenv("HAUS_RADICALE_URL", "http://host.containers.internal:5232/")
+	t.Setenv("HOMES_RADICALE_URL", "http://host.containers.internal:5232/")
 	if cfg, err := FromEnv(); err != nil || cfg.Calendar != nil || cfg.Contacts != nil {
 		t.Fatalf("an address without the account is off, not an error: %+v %v", cfg, err)
 	}
-	t.Setenv("HAUS_RADICALE_USER", "bote")
-	t.Setenv("HAUS_RADICALE_PASSWORD", "pw")
-	t.Setenv("HAUS_RADICALE_CALENDAR", "/familie/kalender/")
-	t.Setenv("HAUS_RADICALE_ADDRESSBOOK", "/familie/kontakte/")
-	t.Setenv("HAUS_NOTES_DIR", filepath.Join(t.TempDir(), "fehlt"))
+	t.Setenv("HOMES_RADICALE_USER", "bote")
+	t.Setenv("HOMES_RADICALE_PASSWORD", "pw")
+	t.Setenv("HOMES_RADICALE_CALENDAR", "/familie/kalender/")
+	t.Setenv("HOMES_RADICALE_ADDRESSBOOK", "/familie/kontakte/")
+	t.Setenv("HOMES_NOTES_DIR", filepath.Join(t.TempDir(), "fehlt"))
 	cfg, err = FromEnv()
 	if err != nil || cfg.Calendar == nil || cfg.Calendar.URL != "http://host.containers.internal:5232" || cfg.Calendar.User != "bote" || cfg.Calendar.Calendar != "/familie/kalender/" {
 		t.Fatalf("calendar: %+v %v", cfg.Calendar, err)
@@ -319,8 +319,8 @@ func TestFromEnv(t *testing.T) {
 	if cfg.Notes != nil {
 		t.Fatal("a notes dir that is not there leaves the note tools out")
 	}
-	t.Setenv("HAUS_NOTES_DIR", t.TempDir())
-	t.Setenv("HAUS_HAUSHALT_TOKEN", tok)
+	t.Setenv("HOMES_NOTES_DIR", t.TempDir())
+	t.Setenv("HOMES_HAUSHALT_TOKEN", tok)
 	if cfg, _ := FromEnv(); cfg.Notes == nil || cfg.Token != tok {
 		t.Fatalf("notes and token: %+v", cfg)
 	}
@@ -511,23 +511,23 @@ func TestLengthCaps(t *testing.T) {
 // Paperless: the address and the token switch the document tool on; a
 // malformed address refuses to start; the public address only makes links.
 func TestFromEnvPaperless(t *testing.T) {
-	for _, k := range []string{"HAUS_RADICALE_URL", "HAUS_NOTES_DIR", "HAUS_PAPERLESS_URL", "HAUS_PAPERLESS_TOKEN", "HAUS_PAPERLESS_PUBLIC_URL"} {
+	for _, k := range []string{"HOMES_RADICALE_URL", "HOMES_NOTES_DIR", "HOMES_PAPERLESS_URL", "HOMES_PAPERLESS_TOKEN", "HOMES_PAPERLESS_PUBLIC_URL"} {
 		t.Setenv(k, "")
 	}
-	t.Setenv("HAUS_PAPERLESS_URL", "http://host.containers.internal:8000/")
+	t.Setenv("HOMES_PAPERLESS_URL", "http://host.containers.internal:8000/")
 	if cfg, err := FromEnv(); err != nil || cfg.Documents != nil {
 		t.Fatalf("no token, no documents: %+v %v", cfg.Documents, err)
 	}
-	t.Setenv("HAUS_PAPERLESS_TOKEN", plToken)
+	t.Setenv("HOMES_PAPERLESS_TOKEN", plToken)
 	cfg, err := FromEnv()
 	if err != nil || cfg.Documents == nil || cfg.Documents.URL != "http://host.containers.internal:8000" || cfg.Documents.Token != plToken || cfg.Documents.PublicURL != "" {
 		t.Fatalf("documents: %+v %v", cfg.Documents, err)
 	}
-	t.Setenv("HAUS_PAPERLESS_PUBLIC_URL", "https://paperless.example.org/")
+	t.Setenv("HOMES_PAPERLESS_PUBLIC_URL", "https://paperless.example.org/")
 	if cfg, _ := FromEnv(); cfg.Documents == nil || cfg.Documents.PublicURL != "https://paperless.example.org" {
 		t.Fatalf("public: %+v", cfg.Documents)
 	}
-	for k, v := range map[string]string{"HAUS_PAPERLESS_URL": "paperless:8000", "HAUS_PAPERLESS_PUBLIC_URL": "javascript:alert(1)"} {
+	for k, v := range map[string]string{"HOMES_PAPERLESS_URL": "paperless:8000", "HOMES_PAPERLESS_PUBLIC_URL": "javascript:alert(1)"} {
 		t.Run(k, func(t *testing.T) {
 			t.Setenv(k, v)
 			if _, err := FromEnv(); err == nil {
@@ -639,7 +639,7 @@ func TestContactSearchSmall(t *testing.T) {
 	}
 }
 
-// Documents: date, correspondent, title, tags and a link to Haus's own
+// Documents: date, correspondent, title, tags and a link to Homes' own
 // page for it (haus#28: /dokumente/<id>, which sends the person on to
 // Paperless); at most 20; read-only; a Paperless failure is a tool error
 // without the token.
@@ -650,7 +650,7 @@ func TestDocumentTools(t *testing.T) {
 	s.docs.Tag(2, "Strom")
 	s.docs.Add(paperlessfake.Doc{ID: 12, Title: "Rechnung März", Correspondent: 3, Created: "2025-03-14", Tags: []int{1, 2}})
 	text, isErr := call(t, s.h, "dokumente_suchen", map[string]any{"text": "rechnung"})
-	if isErr || text != "14.03.2025 · Stadtwerke · Rechnung März · Schlagworte: Rechnung, Strom — https://haus.example/dokumente/12" {
+	if isErr || text != "14.03.2025 · Stadtwerke · Rechnung März · Schlagworte: Rechnung, Strom — https://homes.example/dokumente/12" {
 		t.Fatalf("dokumente_suchen: %q %v", text, isErr)
 	}
 	if text, _ := call(t, s.h, "dokumente_suchen", map[string]any{"text": "steuer"}); !strings.HasPrefix(text, "Kein Dokument") {
@@ -684,7 +684,7 @@ func TestDocumentTools(t *testing.T) {
 }
 
 // A number is found however either side writes it: national, +49 or
-// 0049, spaces, dashes, slashes; the country is HAUS_PHONE_COUNTRY.
+// 0049, spaces, dashes, slashes; the country is HOMES_PHONE_COUNTRY.
 func TestPhoneSearchBothWays(t *testing.T) {
 	s := newSetup(t, want{contacts: true})
 	s.fake.Put("/bote/kontakte/a.vcf", "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:a\r\nFN:Anna National\r\nTEL:0170 1234567\r\nEND:VCARD\r\n")
@@ -716,24 +716,24 @@ func TestPhoneSearchBothWays(t *testing.T) {
 	at := newSetup(t, want{contacts: true, country: "43"})
 	at.fake.Put("/bote/kontakte/d.vcf", "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:d\r\nFN:Dora Wien\r\nTEL:0660 1234567\r\nEND:VCARD\r\n")
 	if text, _ := call(t, at.h, "kontakte_suchen", map[string]any{"text": "+43 660 1234567"}); !strings.Contains(text, "Dora") {
-		t.Fatalf("HAUS_PHONE_COUNTRY=43: %q", text)
+		t.Fatalf("HOMES_PHONE_COUNTRY=43: %q", text)
 	}
 }
 
 func TestFromEnvPhoneCountry(t *testing.T) {
-	t.Setenv("HAUS_RADICALE_URL", "")
-	t.Setenv("HAUS_NOTES_DIR", "")
-	t.Setenv("HAUS_PAPERLESS_URL", "")
-	t.Setenv("HAUS_PHONE_COUNTRY", "")
+	t.Setenv("HOMES_RADICALE_URL", "")
+	t.Setenv("HOMES_NOTES_DIR", "")
+	t.Setenv("HOMES_PAPERLESS_URL", "")
+	t.Setenv("HOMES_PHONE_COUNTRY", "")
 	if cfg, err := FromEnv(); err != nil || cfg.PhoneCountry != "49" {
 		t.Fatalf("default: %q %v", cfg.PhoneCountry, err)
 	}
-	t.Setenv("HAUS_PHONE_COUNTRY", "+43")
+	t.Setenv("HOMES_PHONE_COUNTRY", "+43")
 	if cfg, err := FromEnv(); err != nil || cfg.PhoneCountry != "43" {
 		t.Fatalf("+43: %q %v", cfg.PhoneCountry, err)
 	}
 	for _, bad := range []string{"Österreich", "0043", "12345"} {
-		t.Setenv("HAUS_PHONE_COUNTRY", bad)
+		t.Setenv("HOMES_PHONE_COUNTRY", bad)
 		if _, err := FromEnv(); err == nil {
 			t.Fatalf("%q refuses to start", bad)
 		}
@@ -757,7 +757,7 @@ const annaCard = "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:urn:uuid:anna-1\r\nFN:Anna S
 	"ADR;TYPE=HOME:;;Hauptstraße 1;Stuttgart;;70173;Deutschland\r\nitem2.ADR:;;Industriestr. 5;Esslingen;;73728;\r\nEND:VCARD\r\n"
 
 // One contact read whole: every number, every email, the birthday, the
-// postal addresses and its page on Haus. It is found by its name (any
+// postal addresses and its page on Homes. It is found by its name (any
 // case), by its id, or by a search only it matches; when several match,
 // the answer names them with their ids and shows none whole.
 func TestContactRead(t *testing.T) {
@@ -766,7 +766,7 @@ func TestContactRead(t *testing.T) {
 	s.fake.Put("/bote/kontakte/berg.vcf", "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:berg\r\nFN:Anna Berg\r\nTEL:0170 999999\r\nEND:VCARD\r\n")
 	full := []string{"Anna Schmidt", "Anni", "Stadtwerke, Kundendienst", "+49 170 1111111", "0711 222222", "0711 333333", "0711 444444",
 		"anna@example.org", "anna.schmidt@firma.example", "12.04.1985", "Hauptstraße 1, 70173 Stuttgart, Deutschland",
-		"Industriestr. 5, 73728 Esslingen", hausPublic + "/kontakte/urn:uuid:anna-1"}
+		"Industriestr. 5, 73728 Esslingen", homesPublic + "/kontakte/urn:uuid:anna-1"}
 	for _, q := range []string{"Anna Schmidt", "anna schmidt", "  Anna   Schmidt ", "urn:uuid:anna-1", "anni", "0170 1111111", "firma.example", "schmidt"} {
 		text, isErr := call(t, s.h, "kontakt_lesen", map[string]any{"kontakt": q})
 		if isErr {
@@ -869,7 +869,7 @@ func TestContactReadIsBounded(t *testing.T) {
 	}
 }
 
-// Without Haus's public address an answer has no link (never an internal
+// Without Homes' public address an answer has no link (never an internal
 // one); a card without an id has none either.
 func TestContactReadWithoutLinks(t *testing.T) {
 	s := newSetup(t, want{contacts: true, noPublic: true})
@@ -884,8 +884,8 @@ func TestContactReadWithoutLinks(t *testing.T) {
 	}
 }
 
-// A document's link is Haus's page only where that page leads somewhere:
-// Haus's own address and Paperless's public one both set. Never
+// A document's link is Homes' page only where that page leads somewhere:
+// Homes' own address and Paperless's public one both set. Never
 // Paperless's internal address.
 func TestDocumentLinks(t *testing.T) {
 	for _, c := range []struct {
@@ -902,7 +902,7 @@ func TestDocumentLinks(t *testing.T) {
 		if isErr || strings.Contains(text, s.docs.URL) || strings.Contains(text, "paperless.example") {
 			t.Fatalf("%+v: %q %v", c.w, text, isErr)
 		}
-		if got := strings.Contains(text, " — "+hausPublic+"/dokumente/12"); got != c.link {
+		if got := strings.Contains(text, " — "+homesPublic+"/dokumente/12"); got != c.link {
 			t.Fatalf("%+v: link %v: %q", c.w, got, text)
 		}
 		if !c.link && text != "Rechnung März" {
@@ -922,14 +922,14 @@ func TestDocumentTagsBounded(t *testing.T) {
 	s.docs.Tag(1, "Eins\nZwei")
 	s.docs.Add(paperlessfake.Doc{ID: 5, Title: "Brief", Tags: ids})
 	text, _ := call(t, s.h, "dokumente_suchen", map[string]any{"text": "brief"})
-	if text != "Brief · Schlagworte: Eins Zwei, T2, T3, T4, T5 (+3) — "+hausPublic+"/dokumente/5" {
+	if text != "Brief · Schlagworte: Eins Zwei, T2, T3, T4, T5 (+3) — "+homesPublic+"/dokumente/5" {
 		t.Fatalf("%q", text)
 	}
 }
 
 // A backend that does not answer is a plain tool error, never a crash:
 // which one, and to try again later; never the password, the token, an
-// internal address or the transport's words (those go to Haus's log).
+// internal address or the transport's words (those go to Homes' log).
 func TestBackendDown(t *testing.T) {
 	s := newSetup(t, want{cal: true, contacts: true, docs: true})
 	s.fake.Close()
@@ -955,7 +955,7 @@ func TestBackendDown(t *testing.T) {
 			}
 		}
 	}
-	// an answer Haus did not expect stays as plain as before
+	// an answer Homes did not expect stays as plain as before
 	s = newSetup(t, want{docs: true})
 	s.docs.Status = http.StatusInternalServerError
 	if text, _ := call(t, s.h, "dokumente_suchen", map[string]any{"text": "x"}); text != "Paperless antwortet HTTP 500" {
@@ -964,12 +964,12 @@ func TestBackendDown(t *testing.T) {
 }
 
 func TestFromEnvPublicURL(t *testing.T) {
-	for _, k := range []string{"HAUS_RADICALE_URL", "HAUS_NOTES_DIR", "HAUS_PAPERLESS_URL"} {
+	for _, k := range []string{"HOMES_RADICALE_URL", "HOMES_NOTES_DIR", "HOMES_PAPERLESS_URL"} {
 		t.Setenv(k, "")
 	}
-	for v, want := range map[string]string{"": "", "https://haus.example.org/": "https://haus.example.org", "http://haus.lan:8650": "http://haus.lan:8650",
-		"haus.example.org": "", "javascript:alert(1)": ""} {
-		t.Setenv("HAUS_PUBLIC_URL", v)
+	for v, want := range map[string]string{"": "", "https://homes.example.org/": "https://homes.example.org", "http://haus.lan:8650": "http://haus.lan:8650",
+		"homes.example.org": "", "javascript:alert(1)": ""} {
+		t.Setenv("HOMES_PUBLIC_URL", v)
 		if cfg, err := FromEnv(); err != nil || cfg.PublicURL != want {
 			t.Fatalf("%q: %q %v", v, cfg.PublicURL, err)
 		}
@@ -1013,14 +1013,14 @@ func TestContactLinkIsTheExactUID(t *testing.T) {
 	s := newSetup(t, want{contacts: true})
 	s.fake.Put("/bote/kontakte/p.vcf", "BEGIN:VCARD\r\nVERSION:4.0\r\nUID: ab  cd \r\nFN:Paula\r\nEND:VCARD\r\n")
 	text, _ := call(t, s.h, "kontakt_lesen", map[string]any{"kontakt": "ab cd"})
-	if !strings.Contains(text, "Paula") || !strings.Contains(text, hausPublic+"/kontakte/%20ab%20%20cd%20") {
+	if !strings.Contains(text, "Paula") || !strings.Contains(text, homesPublic+"/kontakte/%20ab%20%20cd%20") {
 		t.Fatalf("%q", text)
 	}
 }
 
 // haus#13: notizen_finden searches the notes by meaning through the memory
 // library: a note found by a word it does not contain, each with its
-// title, its file, a short passage and its page on Haus. The answer names
+// title, its file, a short passage and its page on Homes. The answer names
 // no tool and nothing technical (laib ADR 0021); nothing hidden or outside
 // the folder.
 func TestFindNotesByMeaning(t *testing.T) {
@@ -1039,7 +1039,7 @@ func TestFindNotesByMeaning(t *testing.T) {
 		t.Fatalf("%q", text)
 	}
 	for _, w := range []string{"## Kaminkehrer (kaminkehrer.md)", "Herr Brandl kommt einmal im Jahr im Oktober.",
-		hausPublic + "/notizen/kaminkehrer.md", "## Größen (rezepte/Größen & Maße.md)", hausPublic + "/notizen/rezepte/Gr%C3%B6%C3%9Fen%20&%20Ma%C3%9Fe.md"} {
+		homesPublic + "/notizen/kaminkehrer.md", "## Größen (rezepte/Größen & Maße.md)", homesPublic + "/notizen/rezepte/Gr%C3%B6%C3%9Fen%20&%20Ma%C3%9Fe.md"} {
 		if !strings.Contains(text, w) {
 			t.Fatalf("lacks %q:\n%s", w, text)
 		}
@@ -1052,7 +1052,7 @@ func TestFindNotesByMeaning(t *testing.T) {
 			t.Fatalf("says %q:\n%s", never, text)
 		}
 	}
-	// without Haus's address: no link, the file still named
+	// without Homes' address: no link, the file still named
 	s2 := newSetup(t, want{notes: true, library: true, noPublic: true})
 	os.WriteFile(filepath.Join(s2.notes, "kaminkehrer.md"), []byte("# Kaminkehrer\n\nHerr Brandl\n"), 0o644)
 	s2.qmd.Add(qmdfake.Doc{Path: "kaminkehrer.md", Title: "Kaminkehrer", Body: "# Kaminkehrer\n\nHerr Brandl\n", Means: []string{"schornsteinfeger"}})
@@ -1080,7 +1080,7 @@ func TestFindNotesReduced(t *testing.T) {
 		set(s.qmd)
 		text, isErr := call(t, s.h, "notizen_finden", map[string]any{"text": "Brandl"})
 		if isErr || !strings.HasPrefix(text, reducedNote) || !strings.Contains(text, "## Kaminkehrer (kaminkehrer.md)") ||
-			!strings.Contains(text, hausPublic+"/notizen/kaminkehrer.md") {
+			!strings.Contains(text, homesPublic+"/notizen/kaminkehrer.md") {
 			t.Fatalf("%q %v", text, isErr)
 		}
 		text, isErr = call(t, s.h, "notizen_finden", map[string]any{"text": "Schornsteinfeger"})
@@ -1096,40 +1096,40 @@ func TestFindNotesReduced(t *testing.T) {
 }
 
 func TestFromEnvLibrary(t *testing.T) {
-	for _, k := range []string{"HAUS_RADICALE_URL", "HAUS_PAPERLESS_URL", "HAUS_QMD_URL", "HAUS_QMD_COLLECTION", "HAUS_LLM_URL", "HAUS_LLM_MODEL", "HAUS_LLM_KEY"} {
+	for _, k := range []string{"HOMES_RADICALE_URL", "HOMES_PAPERLESS_URL", "HOMES_QMD_URL", "HOMES_QMD_COLLECTION", "HOMES_LLM_URL", "HOMES_LLM_MODEL", "HOMES_LLM_KEY"} {
 		t.Setenv(k, "")
 	}
-	t.Setenv("HAUS_NOTES_DIR", t.TempDir())
+	t.Setenv("HOMES_NOTES_DIR", t.TempDir())
 	if cfg, err := FromEnv(); err != nil || cfg.Library != nil {
 		t.Fatalf("unset: %+v %v", cfg.Library, err)
 	}
-	t.Setenv("HAUS_QMD_URL", "127.0.0.1:8181")
+	t.Setenv("HOMES_QMD_URL", "127.0.0.1:8181")
 	if _, err := FromEnv(); err == nil {
 		t.Fatal("a malformed library address refuses to start")
 	}
-	t.Setenv("HAUS_QMD_URL", "http://127.0.0.1:8181/")
+	t.Setenv("HOMES_QMD_URL", "http://127.0.0.1:8181/")
 	cfg, err := FromEnv()
 	if err != nil || cfg.Library == nil || cfg.Library.URL != "http://127.0.0.1:8181" || cfg.Library.Collection != "notizen" {
 		t.Fatalf("set: %+v %v", cfg.Library, err)
 	}
-	t.Setenv("HAUS_QMD_COLLECTION", "haus-notizen")
-	if cfg, _ := FromEnv(); cfg.Library == nil || cfg.Library.Collection != "haus-notizen" || cfg.Judge != nil {
+	t.Setenv("HOMES_QMD_COLLECTION", "homes-notizen")
+	if cfg, _ := FromEnv(); cfg.Library == nil || cfg.Library.Collection != "homes-notizen" || cfg.Judge != nil {
 		t.Fatalf("collection: %+v %+v", cfg.Library, cfg.Judge)
 	}
 	// the house model, when the box has the model role
-	t.Setenv("HAUS_LLM_URL", "http://host.containers.internal:11435/v1")
-	t.Setenv("HAUS_LLM_MODEL", "gemma-4-e4b")
-	t.Setenv("HAUS_LLM_KEY", "model-key")
+	t.Setenv("HOMES_LLM_URL", "http://host.containers.internal:11435/v1")
+	t.Setenv("HOMES_LLM_MODEL", "gemma-4-e4b")
+	t.Setenv("HOMES_LLM_KEY", "model-key")
 	if cfg, err := FromEnv(); err != nil || cfg.Judge == nil || cfg.Judge.Model != "gemma-4-e4b" {
 		t.Fatalf("house model: %+v %v", cfg.Judge, err)
 	}
-	// one of the three missing: no tidy-up, and Haus still starts
-	t.Setenv("HAUS_LLM_KEY", "")
+	// one of the three missing: no tidy-up, and Homes still starts
+	t.Setenv("HOMES_LLM_KEY", "")
 	if cfg, err := FromEnv(); err != nil || cfg.Judge != nil || cfg.Library == nil {
 		t.Fatalf("no key: %+v %v", cfg.Judge, err)
 	}
 	// the library maps its hits to the notes folder: without one, no library
-	t.Setenv("HAUS_NOTES_DIR", "")
+	t.Setenv("HOMES_NOTES_DIR", "")
 	if cfg, err := FromEnv(); err != nil || cfg.Library != nil {
 		t.Fatalf("no notes: %+v %v", cfg.Library, err)
 	}
@@ -1226,7 +1226,7 @@ func TestFindNotesNothingClose(t *testing.T) {
 // haus#13: with the documents in the library, notizen_finden finds notes
 // and documents in one search: a document with its title, date and
 // sender as Paperless has them, the passage that matched, and its page on
-// Haus. The tool says it covers documents.
+// Homes. The tool says it covers documents.
 func TestFindNotesAndDocuments(t *testing.T) {
 	s := newSetup(t, want{notes: true, library: true, docs: true, documents: true})
 	os.WriteFile(filepath.Join(s.notes, "kaminkehrer.md"), []byte("# Kaminkehrer\n\nHerr Brandl kommt im Oktober.\n"), 0o644)
@@ -1236,8 +1236,8 @@ func TestFindNotesAndDocuments(t *testing.T) {
 	s.docs.Correspondent(3, "Stadtwerke Musterstadt")
 	s.docs.Add(paperlessfake.Doc{ID: 7, Title: "Stromvertrag", Content: "Vertragslaufzeit bis 31.12.2027.", Correspondent: 3, Created: "2025-03-14"})
 	text, isErr := call(t, s.h, "notizen_finden", map[string]any{"text": "Termin"})
-	want := "## Kaminkehrer (kaminkehrer.md)\nHerr Brandl kommt im Oktober.\nhttps://haus.example/notizen/kaminkehrer.md\n\n" +
-		"## Dokument: Stromvertrag (14.03.2025, Stadtwerke Musterstadt)\nVertragslaufzeit bis 31.12.2027.\nhttps://haus.example/dokumente/7"
+	want := "## Kaminkehrer (kaminkehrer.md)\nHerr Brandl kommt im Oktober.\nhttps://homes.example/notizen/kaminkehrer.md\n\n" +
+		"## Dokument: Stromvertrag (14.03.2025, Stadtwerke Musterstadt)\nVertragslaufzeit bis 31.12.2027.\nhttps://homes.example/dokumente/7"
 	if isErr || text != want {
 		t.Fatalf("%q\nwant\n%q", text, want)
 	}
@@ -1260,21 +1260,21 @@ func TestFindNotesAndDocuments(t *testing.T) {
 	}
 }
 
-// HAUS_QMD_DOCUMENTS names the documents' collection; it counts only with
+// HOMES_QMD_DOCUMENTS names the documents' collection; it counts only with
 // Paperless set, and it is never the notes' own.
 func TestFromEnvDocumentsCollection(t *testing.T) {
-	t.Setenv("HAUS_NOTES_DIR", t.TempDir())
-	t.Setenv("HAUS_QMD_URL", "http://127.0.0.1:8181")
-	t.Setenv("HAUS_QMD_DOCUMENTS", "dokumente")
+	t.Setenv("HOMES_NOTES_DIR", t.TempDir())
+	t.Setenv("HOMES_QMD_URL", "http://127.0.0.1:8181")
+	t.Setenv("HOMES_QMD_DOCUMENTS", "dokumente")
 	if cfg, err := FromEnv(); err != nil || cfg.Library == nil || cfg.Library.Documents != "" {
 		t.Fatalf("without Paperless: %+v %v", cfg.Library, err)
 	}
-	t.Setenv("HAUS_PAPERLESS_URL", "http://host.containers.internal:8000")
-	t.Setenv("HAUS_PAPERLESS_TOKEN", "pl")
+	t.Setenv("HOMES_PAPERLESS_URL", "http://host.containers.internal:8000")
+	t.Setenv("HOMES_PAPERLESS_TOKEN", "pl")
 	if cfg, err := FromEnv(); err != nil || cfg.Library == nil || cfg.Library.Documents != "dokumente" {
 		t.Fatalf("with Paperless: %+v %v", cfg.Library, err)
 	}
-	t.Setenv("HAUS_QMD_DOCUMENTS", "notizen")
+	t.Setenv("HOMES_QMD_DOCUMENTS", "notizen")
 	if _, err := FromEnv(); err == nil {
 		t.Fatal("the notes' collection taken for the documents'")
 	}
@@ -1308,7 +1308,7 @@ func TestNoteToolsWithTags(t *testing.T) {
 }
 
 // haus#117: a link sent to the Bote becomes a note: what was kept in a
-// line, and the note's page in Haus; the same link again is said so.
+// line, and the note's page in Homes; the same link again is said so.
 func TestNotizAusLink(t *testing.T) {
 	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
@@ -1317,7 +1317,7 @@ func TestNotizAusLink(t *testing.T) {
 	defer site.Close()
 	s := newSetup(t, want{notes: true})
 	text, isErr := call(t, s.h, "notiz_aus_link", map[string]any{"link": site.URL + "/kuchen", "hinweis": "#sonntag"})
-	if isErr || !strings.Contains(text, "Rezept gemerkt: Apfelkuchen, 1 Zutat, 1 Schritt.") || !strings.Contains(text, "In Haus: "+hausPublic+"/notizen/apfelkuchen.md") {
+	if isErr || !strings.Contains(text, "Rezept gemerkt: Apfelkuchen, 1 Zutat, 1 Schritt.") || !strings.Contains(text, "In Homes: "+homesPublic+"/notizen/apfelkuchen.md") {
 		t.Fatalf("%q", text)
 	}
 	if text, _ := call(t, s.h, "notiz_aus_link", map[string]any{"link": site.URL + "/kuchen"}); !strings.Contains(text, "schon gemerkt") {

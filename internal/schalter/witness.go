@@ -9,14 +9,14 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/mdopp/haus/internal/laib"
+	"github.com/mdopp/homes/internal/laib"
 )
 
-// Witness says who switched what (haus#82, haus#89): one line in Haus's
+// Witness says who switched what (haus#82, haus#89): one line in Homes'
 // log, and a note in Laib's journal (kind watch) with HA's context id, so
-// HA's logbook ("Haus") and the journal together name the person. It is
+// HA's logbook ("Homes") and the journal together name the person. It is
 // never in the switch's way: the note goes on its own, a failed one is a
-// warning, and Laib refusing notes to the haus hand (until the owner
+// warning, and Laib refusing notes to the homes hand (until the owner
 // approves the verb) is said once. A nil Witness only logs.
 type Witness struct {
 	Laib *laib.Client
@@ -38,7 +38,7 @@ func (w *Witness) Saw(person, service, entity, contextID string) {
 		person = "?"
 	}
 	line := "ha person=" + person + " service=" + service + " entity=" + entity + " context=" + contextID
-	log.Printf("haus: %s", line)
+	log.Printf("homes: %s", line)
 	if w == nil || w.Laib == nil {
 		return
 	}
@@ -52,10 +52,10 @@ func (w *Witness) Saw(person, service, entity, contextID string) {
 		case err == nil:
 		case errors.Is(err, laib.ErrNoTool):
 			if !w.refused.Swap(true) {
-				log.Printf("haus: laib takes no notes from the haus hand yet (policy note): who switched stays in this log only: %v", err)
+				log.Printf("homes: laib takes no notes from the homes hand yet (policy note): who switched stays in this log only: %v", err)
 			}
 		default:
-			log.Printf("haus: warning: note for %s on %s: %v", service, entity, err)
+			log.Printf("homes: warning: note for %s on %s: %v", service, entity, err)
 		}
 	}()
 }

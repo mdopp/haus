@@ -1,7 +1,7 @@
 // Package favoriten is each person's favorites on Start (laib ADR 0017:
-// favorites go to Haus). The store is one file in Haus's data folder,
+// favorites go to Homes). The store is one file in Homes' data folder,
 // favoriten.json: {"<Remote-User>": ["light.buero", "cover.wohnzimmer"]},
-// each list in the person's order. Haus reads it on each ask, so a change
+// each list in the person's order. Homes reads it on each ask, so a change
 // shows on the next page load; the ☆ on a thing's own page writes it
 // (haus#35), the person's own list only.
 package favoriten
@@ -16,13 +16,13 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/mdopp/haus/internal/ha"
+	"github.com/mdopp/homes/internal/ha"
 )
 
-// File is the store's name in Haus's data folder.
+// File is the store's name in Homes' data folder.
 const File = "favoriten.json"
 
-// maxBytes is the most of the file Haus reads; a family's favorites are a
+// maxBytes is the most of the file Homes reads; a family's favorites are a
 // few kilobytes.
 const maxBytes = 1 << 20
 
@@ -33,7 +33,7 @@ const MaxPerPerson = 50
 // ErrFull is a pin past MaxPerPerson.
 var ErrFull = errors.New("the list is full")
 
-// Store is the favorites file in Haus's data folder.
+// Store is the favorites file in Homes' data folder.
 type Store struct {
 	path string
 	mu   sync.Mutex // one write at a time; a read needs none (a write replaces the file whole)

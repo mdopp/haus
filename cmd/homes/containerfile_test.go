@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// The image is scratch: what Haus needs from a system must be put in. The
+// The image is scratch: what Homes needs from a system must be put in. The
 // owner's shared Chefkoch recipe came back "Das Zertifikat der Seite stimmt
 // nicht" (2026-10-25) because the image had no roots to check any https
 // page against.

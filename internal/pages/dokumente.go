@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/mdopp/haus/internal/assistent"
+	"github.com/mdopp/homes/internal/assistent"
 )
 
 // DokumentePath is the Dokumente page (haus#68); a document's own page is
@@ -54,7 +54,7 @@ var uploadSays = map[string]string{
 const saysUploadFailed = "Das Ablegen hat nicht geklappt. Später noch einmal versuchen."
 
 // Dokumente is the family's way into the archive (haus#68): put a document
-// in by mail (a mailto to HAUS_DOCUMENTS_MAIL) or right here (a file or
+// in by mail (a mailto to HOMES_DOCUMENTS_MAIL) or right here (a file or
 // the camera, into Paperless's inbox like the app's, haus#10), open
 // Paperless itself ("Weiter in", haus#64), and in a line what happens to
 // a document. Each part only when its config is set; none set, the page
@@ -94,13 +94,13 @@ func Dokumente(cfg StartConfig) http.HandlerFunc {
 				http.Error(w, "Ablegen geht hier nicht.", http.StatusNotFound)
 				return
 			}
-			if !fromHaus(r) {
-				http.Error(w, "Das geht nur von Haus' eigener Seite.", http.StatusForbidden)
+			if !fromHomes(r) {
+				http.Error(w, "Das geht nur von Homes' eigener Seite.", http.StatusForbidden)
 				return
 			}
 			placed, code, why := cfg.Ablage.Store(w, r)
 			if code != 0 {
-				log.Printf("haus: dokumente: upload by %s refused: %d %s", r.Header.Get("Remote-User"), code, why)
+				log.Printf("homes: dokumente: upload by %s refused: %d %s", r.Header.Get("Remote-User"), code, why)
 				http.Redirect(w, r, DokumentePath+"?fehler="+url.QueryEscape(why), http.StatusSeeOther)
 				return
 			}
@@ -116,7 +116,7 @@ func Dokumente(cfg StartConfig) http.HandlerFunc {
 	}
 }
 
-var notSetDocuments = notSet{"Die Dokumente sind hier noch nicht eingerichtet.", "Für Admins: Haus kennt weder die Adresse für Mails (HAUS_DOCUMENTS_MAIL) noch Paperless' Einwurf-Ordner (HAUS_UPLOAD_DIR) oder Adresse (HAUS_PAPERLESS_PUBLIC_URL)."}
+var notSetDocuments = notSet{"Die Dokumente sind hier noch nicht eingerichtet.", "Für Admins: Homes kennt weder die Adresse für Mails (HOMES_DOCUMENTS_MAIL) noch Paperless' Einwurf-Ordner (HOMES_UPLOAD_DIR) oder Adresse (HOMES_PAPERLESS_PUBLIC_URL)."}
 
 // hasDocs says the Dokumente page has at least one way in.
 func (cfg StartConfig) hasDocs() bool {
@@ -169,7 +169,7 @@ func (cfg StartConfig) paperlessOpens(r *http.Request) bool {
 }
 
 // seeFiled is the link under "Liegt in Paperless": one file with its mark,
-// Haus's /dokumente/abgelegt/<mark> (the document once Paperless has read
+// Homes' /dokumente/abgelegt/<mark> (the document once Paperless has read
 // it); otherwise Paperless's newest. "" where Paperless does not open.
 func (cfg StartConfig) seeFiled(r *http.Request, n int, mark string) string {
 	if !cfg.paperlessOpens(r) {

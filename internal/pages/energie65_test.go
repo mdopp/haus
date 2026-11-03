@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/energie"
-	"github.com/mdopp/haus/internal/ha/hafake"
+	"github.com/mdopp/homes/internal/energie"
+	"github.com/mdopp/homes/internal/ha/hafake"
 )
 
 // statDays gives a statistic one value a day, noon in Berlin, on the days
@@ -161,7 +161,7 @@ func TestEnergieComparesWithLastYear(t *testing.T) {
 
 // HA's statistics not answering is one plain line where the history
 // would be; Jetzt and Heute stay. No statistics yet says so. Without
-// HAUS_ENERGY_STATS the fallback's counters are the history's.
+// HOMES_ENERGY_STATS the fallback's counters are the history's.
 func TestEnergieHistorySaysPlainlyWhatIsMissing(t *testing.T) {
 	fake, hc := house(t)
 	energyHouse(t, fake)

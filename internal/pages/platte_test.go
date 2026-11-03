@@ -14,11 +14,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mdopp/haus/internal/discogs"
-	"github.com/mdopp/haus/internal/einkauf"
-	"github.com/mdopp/haus/internal/judge"
-	"github.com/mdopp/haus/internal/merken"
-	"github.com/mdopp/haus/internal/musicbrainz"
+	"github.com/mdopp/homes/internal/discogs"
+	"github.com/mdopp/homes/internal/einkauf"
+	"github.com/mdopp/homes/internal/judge"
+	"github.com/mdopp/homes/internal/merken"
+	"github.com/mdopp/homes/internal/musicbrainz"
 )
 
 // a Discogs that knows Wanda's Amore by barcode and by catalogue number,
@@ -143,7 +143,7 @@ func TestPlatteErfassen(t *testing.T) {
 	}
 	// no barcode: the model reads the photo; its unsure barcode is dropped
 	rec = plattePost(t, h, map[string]string{"tun": "suchen"}, true)
-	mustContain(t, rec.Body.String(), "Den Barcode hat Haus auf dem Foto nicht sicher gelesen.", "Gelesen: Katalognummer PB 011 · Label Problembär · Wanda – Amore",
+	mustContain(t, rec.Body.String(), "Den Barcode hat Homes auf dem Foto nicht sicher gelesen.", "Gelesen: Katalognummer PB 011 · Label Problembär · Wanda – Amore",
 		"<span class=grund>Katalognummer stimmt</span>")
 	// the model busy: who has the card, and the way without it
 	busy := Platte(StartConfig{Discogs: dc, Judge: modelFake(t, true)})
@@ -185,7 +185,7 @@ func TestPlatteErfassen(t *testing.T) {
 func TestDiscogsVerbinden(t *testing.T) {
 	dc, _ := discogsFake(t)
 	os.Remove(filepath.Join(dc.Dir, "discogs-konten.json"))
-	cfg := StartConfig{Discogs: dc, PublicURL: "https://haus.box"}
+	cfg := StartConfig{Discogs: dc, PublicURL: "https://homes.box"}
 	h := Discogs(cfg)
 	_, body, _ := familyPage(t, Discogs, cfg, "GET", DiscogsPath, "family")
 	mustContain(t, body, "<h1>Discogs</h1>", "Nicht verbunden", `<form method=post action=/discogs data-ganz><input type=hidden name=tun value=verbinden>`)
@@ -197,7 +197,7 @@ func TestDiscogsVerbinden(t *testing.T) {
 	mustContain(t, body, discogs.ErrFremd.Error())
 	post(t, h, DiscogsPath, url.Values{"tun": {"verbinden"}}, "anna", nil)
 	_, body, _ = familyPageAs(t, Discogs, cfg, "GET", DiscogsZurueckPath+"?oauth_token=rt&oauth_verifier=v", "anna", "family")
-	mustContain(t, body, "Verbunden: Haus nutzt jetzt dein Discogs-Konto „mdopp“.", "Verbunden mit „mdopp“ seit", ">Trennen</button>")
+	mustContain(t, body, "Verbunden: Homes nutzt jetzt dein Discogs-Konto „mdopp“.", "Verbunden mit „mdopp“ seit", ">Trennen</button>")
 	if _, ok := dc.For("anna"); !ok {
 		t.Fatal("not kept")
 	}

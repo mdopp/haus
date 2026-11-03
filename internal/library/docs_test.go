@@ -9,14 +9,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/paperless"
-	"github.com/mdopp/haus/internal/paperless/paperlessfake"
-	"github.com/mdopp/haus/internal/qmd"
-	"github.com/mdopp/haus/internal/qmd/qmdfake"
+	"github.com/mdopp/homes/internal/paperless"
+	"github.com/mdopp/homes/internal/paperless/paperlessfake"
+	"github.com/mdopp/homes/internal/qmd"
+	"github.com/mdopp/homes/internal/qmd/qmdfake"
 )
 
 // the household's documents: in Paperless, and qmd's copy of them, the
-// collection "dokumente" of <id>.md as `haus export-documents` writes it
+// collection "dokumente" of <id>.md as `homes export-documents` writes it
 func archive(t *testing.T, f *qmdfake.Server) *paperlessfake.Server {
 	t.Helper()
 	p := paperlessfake.New("pl-token")
@@ -107,7 +107,7 @@ func TestFindsDocumentsByMeaning(t *testing.T) {
 	}
 }
 
-// A document deleted in Paperless since qmd's last refresh, or one Haus's
+// A document deleted in Paperless since qmd's last refresh, or one Homes'
 // user may not see, is not shown — and does not set the cut's bar: it is
 // closer to the question than the note, and the note is still shown.
 func TestDocumentsGoneFromPaperlessAreLeftOut(t *testing.T) {

@@ -1,6 +1,6 @@
-// Package library is Haus's memory library (haus#13, laib ADR 0017 §3):
-// the one search over the household's notes, by meaning, that Haus's
-// pages and the Haushalt both use. qmd holds the index (laib#195); Haus
+// Package library is Homes' memory library (haus#13, laib ADR 0017 §3):
+// the one search over the household's notes, by meaning, that Homes'
+// pages and the Haushalt both use. qmd holds the index (laib#195); Homes
 // holds none. What qmd names is checked against the notes folder, so a
 // hit is a note the family can open, nothing else.
 //
@@ -24,11 +24,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mdopp/haus/internal/dokumente"
-	"github.com/mdopp/haus/internal/judge"
-	"github.com/mdopp/haus/internal/notes"
-	"github.com/mdopp/haus/internal/paperless"
-	"github.com/mdopp/haus/internal/qmd"
+	"github.com/mdopp/homes/internal/dokumente"
+	"github.com/mdopp/homes/internal/judge"
+	"github.com/mdopp/homes/internal/notes"
+	"github.com/mdopp/homes/internal/paperless"
+	"github.com/mdopp/homes/internal/qmd"
 )
 
 // Wait is qmd's share of a search, at most two thirds of the caller's
@@ -141,7 +141,7 @@ func Find(ctx context.Context, c *qmd.Client, t Tidy, d *notes.Dir, pl *paperles
 		}
 		nothingClose := errors.Is(err, errNothingClose)
 		if !nothingClose {
-			log.Printf("haus: library: search by words only: %v", err)
+			log.Printf("homes: library: search by words only: %v", err)
 		}
 		f, err = byWords(ctx, d, pl, docs, q, max)
 		if err != nil {
@@ -182,7 +182,7 @@ func byWords(ctx context.Context, d *notes.Dir, pl *paperless.Client, docs bool,
 	f := Found{Result: res}
 	if docs {
 		if derr != nil {
-			log.Printf("haus: library: the documents by words: %v", derr)
+			log.Printf("homes: library: the documents by words: %v", derr)
 			f.DocsDown = true
 		} else {
 			f.Docs = make([]Doc, 0, len(found))
@@ -289,7 +289,7 @@ func byMeaning(ctx context.Context, c *qmd.Client, t Tidy, d *notes.Dir, pl *pap
 		got, err := pl.ByIDs(pctx, ids)
 		pcancel()
 		if err != nil {
-			log.Printf("haus: library: the documents left out: %v", err)
+			log.Printf("homes: library: the documents left out: %v", err)
 			out.DocsDown = true
 		}
 		for _, x := range got {
@@ -302,7 +302,7 @@ func byMeaning(ctx context.Context, c *qmd.Client, t Tidy, d *notes.Dir, pl *pap
 			id, _ := dokumente.ID(f.hit.Path)
 			x, ok := known[id]
 			if !ok {
-				continue // deleted in Paperless since the last refresh, or not Haus's to see
+				continue // deleted in Paperless since the last refresh, or not Homes' to see
 			}
 			f.doc = x
 		}
@@ -387,11 +387,11 @@ func tidy(ctx context.Context, t Tidy, q string, n int, items []judge.Item) []in
 	defer cancel()
 	ids, err := t.Judge.Pick(jctx, q, items)
 	if err != nil {
-		log.Printf("haus: library: the hits as the cut left them: %v", err)
+		log.Printf("homes: library: the hits as the cut left them: %v", err)
 		return all
 	}
 	if len(ids) == 0 {
-		log.Printf("haus: library: the house model kept none of %d hits; the cut's stand", n)
+		log.Printf("homes: library: the house model kept none of %d hits; the cut's stand", n)
 		return all
 	}
 	return ids

@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/mdopp/haus/internal/notes"
+	"github.com/mdopp/homes/internal/notes"
 )
 
 // Rezept is what the list needs of a recipe note: its title, the portions

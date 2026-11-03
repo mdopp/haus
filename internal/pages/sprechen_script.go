@@ -13,7 +13,7 @@ import (
 // silence, the line that nobody answers. On Start it hands the sentence to
 // /sprechen (sessionStorage), where the answer has its page. The
 // microphone records in the browser (Web Audio, no browser speech service),
-// makes a 16 kHz mono WAV and sends it to Haus (HoerenPath), which asks the
+// makes a 16 kHz mono WAV and sends it to Homes (HoerenPath), which asks the
 // box's speech-to-text; the words then go like typed ones. At most 30 s.
 // Its words are not lines the page shows (Counted leaves scripts out).
 var sprechenScript = strings.Replace(sprechenScriptSrc, "STUMM", jsString(saysDown("")), 1)
@@ -21,7 +21,7 @@ var sprechenScript = strings.Replace(sprechenScriptSrc, "STUMM", jsString(saysDo
 const sprechenScriptSrc = `<script>(function(){
 var f=document.currentScript&&document.currentScript.previousElementSibling,me=document.currentScript;
 if(!f||!window.fetch||!window.TextDecoder||!window.JSON)return;
-var i=f.querySelector('input[name=nachricht]'),send=f.querySelector('.senden'),mic=f.querySelector('.mikro'),note=f.querySelector('.hinweis'),here=f.hasAttribute('data-hier'),KEY='haus.sprechen';
+var i=f.querySelector('input[name=nachricht]'),send=f.querySelector('.senden'),mic=f.querySelector('.mikro'),note=f.querySelector('.hinweis'),here=f.hasAttribute('data-hier'),KEY='homes.sprechen';
 function say(t){note.textContent=t||''}
 function busy(on){i.disabled=on;send.disabled=on;if(mic)mic.disabled=on}
 function keep(v){try{if(v==null)sessionStorage.removeItem(KEY);else sessionStorage.setItem(KEY,v);return true}catch(e){return false}}

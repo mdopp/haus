@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mdopp/haus/internal/ha"
-	"github.com/mdopp/haus/internal/ha/hafake"
+	"github.com/mdopp/homes/internal/ha"
+	"github.com/mdopp/homes/internal/ha/hafake"
 )
 
 // a Voice PE in the kitchen as HA lists it: its wake-word select (translation
@@ -31,7 +31,7 @@ func talkWithHA(t *testing.T, cfg StartConfig) string {
 	return body
 }
 
-// owner 2026-10-30: „Kannst du auf Haus darstellen, was das aktuelle Wakeword
+// owner 2026-10-30: „Kannst du auf Homes darstellen, was das aktuelle Wakeword
 // ist“ — the word the device reports comes first; „Hey Mycroft“, which the
 // device offers and Laib selects, is said as still to be chosen, with what
 // works until then.
@@ -107,8 +107,8 @@ func TestWakeWordWhenTheDevicesDoNotTell(t *testing.T) {
 }
 
 // HA not answering costs the device's word, not the page: „Hey Mycroft“ as
-// set, and that Haus cannot see the rest. Without HA there is no page and
-// no line: no speaker Haus could know of.
+// set, and that Homes cannot see the rest. Without HA there is no page and
+// no line: no speaker Homes could know of.
 func TestWakeWordWithoutHomeAssistant(t *testing.T) {
 	fake, hc := house(t)
 	voicePE(fake, "Okay Nabu")
@@ -118,7 +118,7 @@ func TestWakeWordWithoutHomeAssistant(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("HA down → %d", code)
 	}
-	mustContain(t, body, "„Hey Mycroft“ <span class=k>So ist es eingestellt. Was der Lautsprecher gerade hört, kann Haus im Moment nicht sehen.</span>")
+	mustContain(t, body, "„Hey Mycroft“ <span class=k>So ist es eingestellt. Was der Lautsprecher gerade hört, kann Homes im Moment nicht sehen.</span>")
 	if strings.Contains(body, "Okay Nabu") {
 		t.Errorf("nothing heard from HA:\n%s", body)
 	}

@@ -56,7 +56,7 @@ func New(model string) *Server {
 	return s
 }
 
-// Base is the OpenAI base, as HAUS_LLM_URL has it.
+// Base is the OpenAI base, as HOMES_LLM_URL has it.
 func (s *Server) Base() string { return s.URL + "/v1" }
 
 // Seen returns the requests so far.

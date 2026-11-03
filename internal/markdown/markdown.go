@@ -1,4 +1,4 @@
-// Package markdown renders a note's Markdown as HTML for Haus's pages
+// Package markdown renders a note's Markdown as HTML for Homes' pages
 // (haus#182): no framework, the part notes use — headings, paragraphs,
 // lists with tasks, quotes, code, rules, bold, italic, inline code and
 // links. Everything is escaped first; HTML in a note stays text. A link

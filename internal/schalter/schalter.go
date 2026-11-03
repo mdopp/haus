@@ -1,4 +1,4 @@
-// Package schalter is the one rule for what Haus switches in Home
+// Package schalter is the one rule for what Homes switches in Home
 // Assistant (haus#10, haus#35): the widgets' /napi/ha/call and the
 // family's pages both call Do, so neither can be wider than the other.
 // Only actuator domains; a call names its one entity; sensitive actions
@@ -13,7 +13,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/mdopp/haus/internal/ha"
+	"github.com/mdopp/homes/internal/ha"
 )
 
 var (

@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/laib"
+	"github.com/mdopp/homes/internal/laib"
 )
 
 // haus#15: the Operator's morning report (laib ADR 0013) is a card on the
-// Box page. It is the newest journal note of kind report; the haus hand
+// Box page. It is the newest journal note of kind report; the homes hand
 // may read the journal, so nothing new is asked of Laib.
 func TestBoxShowsTheMorningReport(t *testing.T) {
 	ready := map[string]any{"state": "bereit", "services": 1, "green": 1, "operator": "läuft"}

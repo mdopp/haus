@@ -15,19 +15,19 @@ import (
 	"time"
 )
 
-// haus#207, laib ADR 0029: the Haus app brings a person's WhatsApp, Signal
+// haus#207, laib ADR 0029: the Homes app brings a person's WhatsApp, Signal
 // backups into archiv-eingang/<person>/<quelle>/<pfad>, resumably;
 // the person is the device's, never the request's.
 
 type archiv struct {
 	t    *testing.T
-	dir  string // HAUS_ARCHIV_DIR
-	data string // HAUS_DATA
+	dir  string // HOMES_ARCHIV_DIR
+	data string // HOMES_DATA
 	s    *Sicherung
 	h    http.Handler
 }
 
-// newArchiv is Haus with the inbox; anna1 is Anna's phone, ben1 Ben's,
+// newArchiv is Homes with the inbox; anna1 is Anna's phone, ben1 Ben's,
 // waise1 a device of nobody. The disk has 100 GB free unless a test says else.
 func newArchiv(t *testing.T) *archiv {
 	t.Helper()
@@ -357,7 +357,7 @@ func TestSicherungIsThePersonOfTheDevice(t *testing.T) {
 	}
 }
 
-// The importer deletes what it took: what arrived is Haus's ledger's to say.
+// The importer deletes what it took: what arrived is Homes' ledger's to say.
 func TestSicherungFehlendFromTheLedger(t *testing.T) {
 	a := newArchiv(t)
 	put := func(pfad, content string) {
@@ -386,7 +386,7 @@ func TestSicherungFehlendFromTheLedger(t *testing.T) {
 	if got := a.fehlend("anna1", "signal", ask[0]); len(got) != 1 {
 		t.Errorf("a WhatsApp file counts for Signal: %v", got)
 	}
-	// a restarted Haus reads the ledger from its data folder
+	// a restarted Homes reads the ledger from its data folder
 	again := &archiv{t: t, dir: a.dir, data: a.data, s: NewSicherung(a.dir, a.data)}
 	again.h = archivHandler(again.s)
 	if got := strings.Join(again.fehlend("anna1", "whatsapp", ask...), ","); got != want {
@@ -400,7 +400,7 @@ func TestSicherungFehlendFromTheLedger(t *testing.T) {
 		t.Errorf("Discord is gone (owner, 2026-11-03): %+v", st.Quellen)
 	}
 	if _, err := os.Stat(filepath.Join(a.data, "sicherung", "anna", "whatsapp.jsonl")); err != nil {
-		t.Errorf("the ledger is not in HAUS_DATA: %v", err)
+		t.Errorf("the ledger is not in HOMES_DATA: %v", err)
 	}
 	many := make([]datei, sicherungMaxListe+1)
 	for i := range many {

@@ -11,13 +11,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mdopp/haus/internal/cards"
-	"github.com/mdopp/haus/internal/favoriten"
-	"github.com/mdopp/haus/internal/ha"
-	"github.com/mdopp/haus/internal/schalter"
+	"github.com/mdopp/homes/internal/cards"
+	"github.com/mdopp/homes/internal/favoriten"
+	"github.com/mdopp/homes/internal/ha"
+	"github.com/mdopp/homes/internal/schalter"
 )
 
-// The house paths (haus#10), served from Home Assistant once HAUS_HA_URL is
+// The house paths (haus#10), served from Home Assistant once HOMES_HA_URL is
 // set. The shapes are the app's (data/ApiClient.kt); what /napi/ha/call
 // may switch is package schalter's one rule, the family's pages' too
 // (haus#35).
@@ -97,7 +97,7 @@ func (h *homeAPI) call(w http.ResponseWriter, r *http.Request) {
 	case errors.As(err, &no):
 		refuse(w, no.Code, no.Reason)
 	default:
-		log.Printf("haus: ha/call %s on %s: %v", body.Service, body.EntityID, err) // HA's detail stays here
+		log.Printf("homes: ha/call %s on %s: %v", body.Service, body.EntityID, err) // HA's detail stays here
 		var he *ha.Error
 		if errors.As(err, &he) && he.Status == http.StatusBadRequest {
 			refuse(w, http.StatusBadRequest, "ha_rejected")
@@ -108,7 +108,7 @@ func (h *homeAPI) call(w http.ResponseWriter, r *http.Request) {
 }
 
 // card is one entity as the app's widgets draw it (ApiClient.parseCardJson),
-// with its own page on Haus for a tap (haus#28). An absent value is left
+// with its own page on Homes for a tap (haus#28). An absent value is left
 // out, never null: Android's optString reads a JSON null as the string
 // "null".
 func card(s ha.State) map[string]any {
@@ -200,7 +200,7 @@ func (h *homeAPI) history(w http.ResponseWriter, r *http.Request) {
 // GET /napi/portal/favorites → {ok, favorites:[card]}: the things the
 // device's person pinned with ☆ (haus#35), in their order, as the app's
 // start screen shows them first. A pinned thing HA no longer has, or one
-// Haus draws no card for, is left out; a person with none, or no store, is
+// Homes draws no card for, is left out; a person with none, or no store, is
 // an empty list. A store that does not read is a 500, never "none".
 func (h *homeAPI) favorites(w http.ResponseWriter, r *http.Request) {
 	person := ""
@@ -214,7 +214,7 @@ func (h *homeAPI) favorites(w http.ResponseWriter, r *http.Request) {
 	}
 	ids, err := h.favs.For(person)
 	if err != nil {
-		log.Printf("haus: favorites of %s: %v", person, err)
+		log.Printf("homes: favorites of %s: %v", person, err)
 		refuse(w, http.StatusInternalServerError, "favorites_unreadable")
 		return
 	}

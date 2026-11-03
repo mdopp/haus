@@ -11,17 +11,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mdopp/haus/internal/caldav"
-	"github.com/mdopp/haus/internal/cards"
-	"github.com/mdopp/haus/internal/haushalt"
+	"github.com/mdopp/homes/internal/caldav"
+	"github.com/mdopp/homes/internal/cards"
+	"github.com/mdopp/homes/internal/haushalt"
 )
 
 // The tool widgets (haus#10): the app's generic list widget reads a catalog
 // (GET /napi/defs/tool), fetches each tool's rows from the path the def
 // names, maps them through the def's cell schema, and sends a row's action
 // to POST /napi/action-callback (the app's ToolDefs.kt, ToolCells.kt).
-// Haus's catalog is the Haushalt source's backends that are set: reminders,
-// contacts, documents, notes. Haus has no page for creating or opening an
+// Homes' catalog is the Haushalt source's backends that are set: reminders,
+// contacts, documents, notes. Homes has no page for creating or opening an
 // item, so no def names one (tool-compose-path, tool-item-id-field): a
 // guessed route would be a 404.
 
@@ -49,7 +49,7 @@ func newTools(hh haushalt.Config) *toolsAPI {
 
 func (t *toolsAPI) routes(mux *http.ServeMux, auth func(http.HandlerFunc) http.HandlerFunc) {
 	mux.HandleFunc("GET /napi/defs/tool", auth(t.defs))
-	// Haus answers the actions it knows; any other is 404 unknown_action.
+	// Homes answers the actions it knows; any other is 404 unknown_action.
 	mux.HandleFunc("POST /napi/action-callback", auth(t.action))
 	if t.hh.Calendar != nil {
 		mux.HandleFunc("GET /napi/portal/tasks", auth(t.tasks))
@@ -103,7 +103,7 @@ func (t *toolsAPI) defs(w http.ResponseWriter, r *http.Request) {
 
 // rowsFailed: the widget keeps its last good rows; the detail stays in the log.
 func rowsFailed(w http.ResponseWriter, what string, err error) {
-	log.Printf("haus: tool rows %s: %v", what, err)
+	log.Printf("homes: tool rows %s: %v", what, err)
 	answer(w, http.StatusBadGateway, map[string]any{"ok": false, "error": "backend_unavailable"})
 }
 
@@ -219,7 +219,7 @@ func (t *toolsAPI) contacts(w http.ResponseWriter, r *http.Request) {
 
 // GET /napi/portal/documents → {ok, documents:[{id, title, created?, correspondent?, link?, page?}]}:
 // the newest in Paperless, what its token's user may see. A page only when
-// Paperless's public address is known: Haus's page sends the tap on there.
+// Paperless's public address is known: Homes' page sends the tap on there.
 func (t *toolsAPI) documents(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), rowsTimeout)
 	defer cancel()
@@ -264,7 +264,7 @@ func (t *toolsAPI) notes(w http.ResponseWriter, r *http.Request) {
 	answer(w, http.StatusOK, map[string]any{"ok": true, "notes": out})
 }
 
-// actionDone ticks a reminder off: the one row action Haus has. It is not
+// actionDone ticks a reminder off: the one row action Homes has. It is not
 // destructive (the phone unticks it), so it needs no confirmed; there is
 // no action here that would.
 const actionDone = "task.set_status"
@@ -330,7 +330,7 @@ func (t *toolsAPI) action(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, caldav.ErrChanged):
 		refuseAction(w, http.StatusConflict, "changed")
 	default:
-		log.Printf("haus: action %s: %v", id, err)
+		log.Printf("homes: action %s: %v", id, err)
 		refuseAction(w, http.StatusBadGateway, "calendar_unavailable")
 	}
 }
