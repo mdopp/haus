@@ -19,18 +19,27 @@ import (
 // now; how full the battery is as a ring around its pill. Only the ways
 // the power takes now are drawn, from the source's border to the
 // destination's, as thick as they carry, the arrowhead at the
-// destination pointing in. The same as a table for a screen reader.
+// destination pointing in. The same as a table for a screen reader. The
+// history draws its span the same way, in kWh (owner, 2026-11-03): every
+// way with a total, no battery ring (a charge is a moment, not a span),
+// and the span's Autarkie under it.
 
 // flussKnoten are the picture's nodes in the order its words name them.
 var flussKnoten = []struct{ key, name string }{{"solar", "Solar"}, {"haus", "Haus"}, {"netz", "Netz"}, {"akku", "Akku"}}
 
 // fluss is what the picture draws: which nodes the house has (da), which
-// of them are known now, why one is not, and the power now in W.
+// of them are known, why one is not, and the amounts — power in W now,
+// or energy in kWh over a span.
 type fluss struct {
+	title                                      string
+	spanne                                     bool
 	da                                         map[string]bool
 	known                                      map[string]bool
 	off                                        map[string]string // why a node is not known: "nicht erreichbar"
 	solar, haus, bezug, einsp, laden, entladen float64
+	// over a span the grid has both ways; hasBezug/hasEinsp say which the
+	// history reads
+	hasBezug, hasEinsp bool
 	// how full the battery is now, in %: a ring around the Akku pill
 	fuell    float64
 	hasFuell bool
@@ -42,7 +51,7 @@ type kanten struct{ solarHaus, solarAkku, solarNetz, netzHaus, netzAkku, akkuHau
 // flussJetzt is the power now, from the flow legs: grid +W drawn −W fed
 // in, battery +W charging −W discharging; under a watt is resting.
 func flussJetzt(legs []energie.Leg) fluss {
-	f := fluss{da: map[string]bool{}, known: map[string]bool{}, off: map[string]string{}}
+	f := fluss{title: "Jetzt", da: map[string]bool{}, known: map[string]bool{}, off: map[string]string{}}
 	node := map[string]string{"pv": "solar", "house": "haus", "grid": "netz", "battery": "akku"}
 	for _, l := range legs {
 		k := node[l.Key]
@@ -84,10 +93,61 @@ func flussJetzt(legs []energie.Leg) fluss {
 	return f
 }
 
-// kanten are the ways, when every node the house has is known: the sun
-// into the house first, then into the battery, then into the grid; what
-// the house needs beyond it from the battery, then from the grid, and a
-// battery charging beyond the sun from the grid.
+// flussSpanne is a span's amounts from its bars: what the sun made, what
+// came from the grid and went into it; the house used Solar − Ins Netz +
+// Netzbezug. The history reads no battery. A series the history has but
+// this span has no value for is "keine Werte", and the house then is not
+// known either.
+func flussSpanne(title string, bs []bucket, daily, hourly amounts) fluss {
+	f := fluss{title: title, spanne: true, da: map[string]bool{}, known: map[string]bool{}, off: map[string]string{}}
+	sum := map[string]float64{}
+	has := map[string]bool{}
+	for _, x := range bs {
+		for k, v := range x.v {
+			sum[k] += v
+			has[k] = true
+		}
+	}
+	named := func(k string) bool { return daily[k] != nil || hourly[k] != nil }
+	f.hasBezug, f.hasEinsp = named("bezug"), named("einsp")
+	f.da["solar"], f.da["netz"] = named("solar"), f.hasBezug || f.hasEinsp
+	f.da["haus"] = f.da["solar"] || f.da["netz"]
+	f.known["solar"] = has["solar"]
+	f.known["netz"] = (!f.hasBezug || has["bezug"]) && (!f.hasEinsp || has["einsp"])
+	f.known["haus"] = (!f.da["solar"] || f.known["solar"]) && (!f.da["netz"] || f.known["netz"])
+	for _, k := range []string{"solar", "netz", "haus"} {
+		if f.da[k] && !f.known[k] {
+			f.off[k] = "keine Werte"
+		}
+	}
+	f.solar, f.bezug, f.einsp = sum["solar"], sum["bezug"], sum["einsp"]
+	f.haus = math.Max(0, f.solar-f.einsp+f.bezug)
+	return f
+}
+
+// least is the smallest amount the picture draws: a watt now, 50 Wh over
+// a span (it reads "0,1 kWh").
+func (f fluss) least() float64 {
+	if f.spanne {
+		return 0.05
+	}
+	return 1
+}
+
+// words is an amount the picture's way: W/kW now, kWh over a span.
+func (f fluss) words(v float64) string {
+	if f.spanne {
+		return energyWords(v)
+	}
+	return powerWords(v)
+}
+
+// kanten are the ways, when every node the house has is known: now, the
+// sun into the house first, then into the battery, then into the grid;
+// what the house needs beyond it from the battery, then from the grid,
+// and a battery charging beyond the sun from the grid. Over a span the
+// counters say it: what went into the grid came from the sun, the rest
+// of the sun stayed, the grid's Bezug went into the house.
 func (f fluss) kanten() (kanten, bool) {
 	if !f.da["haus"] {
 		return kanten{}, false
@@ -98,6 +158,12 @@ func (f fluss) kanten() (kanten, bool) {
 		}
 	}
 	var k kanten
+	if f.spanne {
+		k.solarNetz = math.Min(f.solar, f.einsp)
+		k.solarHaus = f.solar - k.solarNetz
+		k.netzHaus = f.bezug
+		return k, true
+	}
 	rest := f.solar
 	k.solarHaus = math.Min(rest, f.haus)
 	rest -= k.solarHaus
@@ -120,7 +186,10 @@ type satz struct{ vor, name, nach string }
 func (s satz) String() string { return s.vor + s.name + s.nach }
 
 // knotenText is a pill's number and sentence; a node not known has no
-// number, only its reason.
+// number, only its reason. The words read for a moment and for a span
+// alike: "Solar erzeugt", "Haus verbraucht", "ins Netz"; over a span the
+// grid's both ways are its number and the second number under the pill
+// (zweit).
 func (f fluss) knotenText(key, name string) (zahl string, s satz) {
 	s.name = name
 	if !f.known[key] {
@@ -128,27 +197,42 @@ func (f fluss) knotenText(key, name string) (zahl string, s satz) {
 	}
 	switch key {
 	case "solar":
-		return powerWords(f.solar), satz{"", name, " erzeugt"}
+		return f.words(f.solar), satz{"", name, " erzeugt"}
 	case "haus":
-		return powerWords(f.haus), satz{"", name, " verbraucht"}
+		return f.words(f.haus), satz{"", name, " verbraucht"}
 	case "netz":
 		switch {
-		case f.einsp > 0:
-			return powerWords(f.einsp), satz{"ins ", name, ""}
+		case f.spanne && f.hasBezug:
+			return f.words(f.bezug), satz{"aus dem ", name, ""}
+		case f.spanne, f.einsp > 0:
+			return f.words(f.einsp), satz{"ins ", name, ""}
 		case f.bezug > 0:
-			return powerWords(f.bezug), satz{"aus dem ", name, ""}
+			return f.words(f.bezug), satz{"aus dem ", name, ""}
 		}
-		return powerWords(0), satz{"", name, " ruht"}
+		return f.words(0), satz{"", name, " ruht"}
 	case "akku":
 		switch {
+		case f.spanne && f.laden > 0:
+			return f.words(f.laden), satz{"", name, " geladen"}
+		case f.spanne && f.entladen > 0:
+			return f.words(f.entladen), satz{"", name, " entladen"}
 		case f.laden > 0:
-			return powerWords(f.laden), satz{"", name, " lädt"}
+			return f.words(f.laden), satz{"", name, " lädt"}
 		case f.entladen > 0:
-			return powerWords(f.entladen), satz{"", name, " entlädt"}
+			return f.words(f.entladen), satz{"", name, " entlädt"}
 		}
-		return powerWords(0), satz{"", name, " ruht"}
+		return f.words(0), satz{"", name, " ruht"}
 	}
 	return "", s
+}
+
+// zweit is the grid's other way over a span, under its pill: what went
+// into it when the pill says what came from it; "" otherwise.
+func (f fluss) zweit() string {
+	if f.spanne && f.known["netz"] && f.hasBezug && f.hasEinsp {
+		return f.words(f.einsp) + " ins Netz"
+	}
+	return ""
 }
 
 // The picture's geometry, in the SVG's units (about a phone's pixels):
@@ -165,12 +249,17 @@ type punkt struct{ x, y float64 }
 
 // flussLage is where the pills sit: Solar on top, Netz at the left edge,
 // Akku at the right edge, Haus below; without a battery a triangle,
-// Netz below left, Haus below right.
-func flussLage(akku bool) (w, h int, at map[string]punkt) {
-	if akku {
-		return 396, 270, map[string]punkt{"solar": {198, 40}, "netz": {70, 135}, "akku": {324, 135}, "haus": {198, 230}}
+// Netz below left, Haus below right; zweit leaves room for a line under
+// the pills.
+func flussLage(akku, zweit bool) (w, h int, at map[string]punkt) {
+	extra := 0
+	if zweit {
+		extra = 22
 	}
-	return 396, 200, map[string]punkt{"solar": {198, 40}, "netz": {92, 160}, "haus": {304, 160}}
+	if akku {
+		return 396, 270 + extra, map[string]punkt{"solar": {198, 40}, "netz": {70, 135}, "akku": {324, 135}, "haus": {198, 230}}
+	}
+	return 396, 200 + extra, map[string]punkt{"solar": {198, 40}, "netz": {92, 160}, "haus": {304, 160}}
 }
 
 // reach is from a pill's centre to its border in the direction (ux, uy),
@@ -246,8 +335,9 @@ func flussWege(k kanten) []struct {
 	}
 }
 
-// flussHTML is Jetzt as a card: the picture, a line when a node is not
-// reachable, and the same as a table.
+// flussHTML is the picture as a card — Jetzt, or a span of the history:
+// the picture, a line when a node is not reachable, over a span its
+// Autarkie, and the same as a table.
 func flussHTML(f fluss) string {
 	any := false
 	for _, da := range f.da {
@@ -261,9 +351,9 @@ func flussHTML(f fluss) string {
 	for _, n := range flussKnoten {
 		nameOf[n.key] = n.name
 	}
-	id := cards.Card{Title: "Jetzt"}.ID()
+	id := cards.Card{Title: f.title}.ID()
 	var b strings.Builder
-	b.WriteString(`<section class="karte fluss" aria-labelledby=` + id + `><h2 id=` + id + `>Jetzt</h2>`)
+	b.WriteString(`<section class="karte fluss" aria-labelledby=` + id + `><h2 id=` + id + `>` + html.EscapeString(f.title) + `</h2>`)
 	for _, n := range flussKnoten {
 		if f.da[n.key] && f.off[n.key] == "nicht erreichbar" {
 			b.WriteString("<p class=hinweis>" + n.name + " nicht erreichbar: wohin der Strom fließt, zeigt das Bild wieder, sobald " +
@@ -287,6 +377,10 @@ func flussHTML(f fluss) string {
 		}
 		zeilen = append(zeilen, zeile{s.String(), zahl})
 		said = append(said, s.String()+" "+zahl)
+		if n.key == "netz" && f.zweit() != "" {
+			zeilen = append(zeilen, zeile{"ins Netz", f.words(f.einsp)})
+			said = append(said, "ins Netz "+f.words(f.einsp))
+		}
 		if n.key == "akku" && f.hasFuell {
 			zeilen = append(zeilen, zeile{"Akku Füllstand", percent0(f.fuell)})
 			said = append(said, "Akku "+percent0(f.fuell)+" voll")
@@ -301,20 +395,20 @@ func flussHTML(f fluss) string {
 	big := 0.0
 	if ok {
 		for _, w := range flussWege(k) {
-			if w.v >= 1 && f.da[w.von] && f.da[w.nach] {
+			if w.v >= f.least() && f.da[w.von] && f.da[w.nach] {
 				s := nameOf[w.von] + " → " + nameOf[w.nach]
-				zeilen = append(zeilen, zeile{s, powerWords(w.v)})
-				wege = append(wege, s+" "+powerWords(w.v))
+				zeilen = append(zeilen, zeile{s, f.words(w.v)})
+				wege = append(wege, s+" "+f.words(w.v))
 				aktive = append(aktive, aktiv{w.von, w.nach, w.v})
 				big = math.Max(big, w.v)
 			}
 		}
 	}
-	label := "Jetzt: " + strings.Join(said, ", ") + "."
+	label := f.title + ": " + strings.Join(said, ", ") + "."
 	if len(wege) > 0 {
 		label += " " + strings.Join(wege, ", ") + "."
 	}
-	vw, vh, at := flussLage(f.da["akku"])
+	vw, vh, at := flussLage(f.da["akku"], f.zweit() != "")
 	b.WriteString(`<div class=fluss-bild><svg viewBox="0 0 ` + strconv.Itoa(vw) + " " + strconv.Itoa(vh) + `" role=img aria-label="` + html.EscapeString(label) + `">`)
 	n := func(v float64) string { return strconv.FormatFloat(math.Round(v*10)/10, 'f', -1, 64) }
 	// only the ways the power takes now, in the source's colour
@@ -328,7 +422,7 @@ func flussHTML(f fluss) string {
 		e := punkt{a.x + (z.x-a.x)*t, a.y + (z.y-a.y)*t}
 		d := `d="M` + n(a.x) + " " + n(a.y) + "L" + n(e.x) + " " + n(e.y) + `"`
 		h := pfeil(a, z, width)
-		b.WriteString(`<g class="kante ` + w.von + "-" + w.nach + ` von-` + w.von + `"><title>` + nameOf[w.von] + " → " + nameOf[w.nach] + ": " + powerWords(w.v) + "</title>")
+		b.WriteString(`<g class="kante ` + w.von + "-" + w.nach + ` von-` + w.von + `"><title>` + nameOf[w.von] + " → " + nameOf[w.nach] + ": " + f.words(w.v) + "</title>")
 		b.WriteString(`<path class=weg ` + d + ` stroke-width=` + n(width) + `></path>`)
 		b.WriteString(`<path class=lauf ` + d + ` stroke-width=` + n(math.Max(1.5, width*0.4)) + `></path>`)
 		b.WriteString(`<path class=pfeil d="M` + n(h[0].x) + " " + n(h[0].y) + "L" + n(h[1].x) + " " + n(h[1].y) + "L" + n(h[2].x) + " " + n(h[2].y) + `Z"></path></g>`)
@@ -361,10 +455,20 @@ func flussHTML(f fluss) string {
 			b.WriteString(`<text class=zahl x=` + n(p.x) + ` y=` + n(p.y-1) + ` text-anchor=middle>` + html.EscapeString(zahl) + `</text>`)
 			b.WriteString(`<text class=wort x=` + n(p.x) + ` y=` + n(p.y+16) + ` text-anchor=middle>` + html.EscapeString(s.vor) +
 				`<tspan class=nm>` + s.name + `</tspan>` + html.EscapeString(s.nach) + `</text>`)
+			if z := f.zweit(); kn.key == "netz" && z != "" {
+				b.WriteString(`<text class=zweit x=` + n(p.x) + ` y=` + n(p.y+pillH/2+18) + ` text-anchor=middle>` + html.EscapeString(z) + `</text>`)
+			}
 		}
 		b.WriteString("</g>")
 	}
-	b.WriteString("</svg></div><details><summary>Als Tabelle</summary><table><tbody>")
+	b.WriteString("</svg>")
+	if f.spanne && ok && f.da["solar"] && f.da["netz"] {
+		// the span's Autarkie: of what the house used, the share not from the grid
+		if in := k.solarHaus + k.akkuHaus + k.netzHaus; in >= f.least() {
+			b.WriteString("<p class=autarkie><b>" + share((k.solarHaus+k.akkuHaus)/in) + "</b> Autarkie</p>")
+		}
+	}
+	b.WriteString("</div><details><summary>Als Tabelle</summary><table><tbody>")
 	for _, z := range zeilen {
 		b.WriteString("<tr><th scope=row>" + html.EscapeString(z.th) + "</th><td>" + html.EscapeString(z.td) + "</td></tr>")
 	}

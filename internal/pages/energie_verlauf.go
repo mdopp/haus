@@ -201,8 +201,7 @@ func buckets(view string, now time.Time, loc *time.Location, daily, hourly amoun
 }
 
 // verlaufHTML is the history: the spans to choose, the span's totals as
-// Heute's number column (not in Tag: Heute says it), its chart, the chart
-// as a table; then the comparisons and the year-end forecast (under the
+// Jetzt's flow picture in kWh, its chart, the chart as a table; then the comparisons and the year-end forecast (under the
 // Jahr chart, else last).
 func verlaufHTML(view string, now time.Time, loc *time.Location, daily, hourly amounts, err error) string {
 	var b strings.Builder
@@ -232,19 +231,14 @@ func verlaufHTML(view string, now time.Time, loc *time.Location, daily, hourly a
 		b.WriteString("<p class=k>" + saysNothingInSpan + "</p>")
 	} else {
 		// the span's own numbers are what was; the chart adds the estimate
-		if view != "tag" {
-			spanTitle := title + " bis heute"
-			if view == "woche" {
-				spanTitle = title
-			}
-			m := mengen{}
-			for _, x := range bs {
-				for k, v := range x.v {
-					m[k] += v
-				}
-			}
-			b.WriteString(spalteHTML(spanTitle, spaltenZeilen(m, 0, true), ""))
+		flowTitle := title + " bis heute"
+		switch view {
+		case "tag":
+			flowTitle = "Heute bis jetzt" // the hours HA has summed so far
+		case "woche":
+			flowTitle = title
 		}
+		b.WriteString(flussHTML(flussSpanne(flowTitle, bs, daily, hourly)))
 		heute := schaetze(view, now, loc, daily, bs)
 		rest := map[string]string{"jahr": "der Rest des Jahres", "monat": "der Rest des Monats"}[view]
 		b.WriteString(energyChart(title, bs, heute, rest))
@@ -729,7 +723,8 @@ const verlaufStyle = `<style>:root{--e-bezug:#4f8ff7;--e-einsp:#1fa592;--e-solar
 .knoten .fuell-schild{fill:var(--e-karte);stroke:var(--c);stroke-width:1.5}.knoten .fuell-zahl{fill:var(--c);font-size:11px;font-weight:800;font-variant-numeric:tabular-nums}
 .knoten .zahl{fill:var(--ink);font-size:22px;font-weight:800;font-variant-numeric:tabular-nums}
 .knoten .wort{fill:var(--e-wort);font-size:12px;font-weight:700}.knoten .nm{fill:var(--c);font-weight:800}.knoten.aus .nm{fill:var(--faint)}
-.knoten .grund{fill:var(--faint);font-size:11px;font-weight:600}
+.knoten .grund{fill:var(--faint);font-size:11px;font-weight:600}.knoten .zweit{fill:var(--e-wort);font-size:12px;font-weight:700;font-variant-numeric:tabular-nums}
+.fluss .autarkie{margin:4px 0 2px;text-align:center;font-size:1.05rem;font-weight:600;color:var(--e-wort)}.fluss .autarkie b{color:var(--ink);font-weight:800;font-variant-numeric:tabular-nums}
 .spalte table{width:100%;border-collapse:collapse;background:var(--e-karte);border-radius:18px;padding:6px 0;font-variant-numeric:tabular-nums}
 .spalte h2{text-align:center}.spalte td,.spalte th{width:50%;padding:7px 0;font-size:1.3rem;line-height:1.25;border:0}
 .spalte td{text-align:right;padding-right:9px;font-weight:800;color:var(--ink);white-space:nowrap}.spalte th{text-align:left;padding-left:9px;font-weight:600;color:var(--e-wort);overflow-wrap:anywhere}

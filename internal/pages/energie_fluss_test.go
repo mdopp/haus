@@ -252,39 +252,60 @@ func TestEnergieJetztWithoutALeg(t *testing.T) {
 	mustNotContain(t, jetzt, "Akku", "knoten akku")
 }
 
-// The chosen span's totals (haus#65) as Heute's number column, not a
-// second flow picture: Woche, Monat and Jahr each Erzeugt, Ins Netz,
-// Netzbezug and Autarkie; Tag none, Heute says it. Today so far from HA's
-// statistics is Heute itself when the house has no counters — Solar 3,
-// Einspeisung 1, Bezug 2: the house used 4, 2 of it from the grid.
-func TestEnergieSpanAsAColumn(t *testing.T) {
+// The chosen span's totals (haus#65) as Jetzt's picture, in kWh (owner,
+// 2026-11-03: the history keeps its flow graphic, drawn like Jetzt): the
+// stadium pills, the words that read for a span — "Solar erzeugt", "aus
+// dem Netz" with what went "ins Netz" under the grid's pill, "Haus
+// verbraucht" — every way with a total, its arrowhead at the destination,
+// no battery ring, and the span's Autarkie. Tag too: today so far from
+// HA's statistics — Solar 3, Einspeisung 1, Bezug 2: the house used 4,
+// 2 of it from the sun, 2 from the grid. No number column for a span:
+// the picture says it.
+func TestEnergieSpanAsAFlow(t *testing.T) {
 	fake, hc := house(t)
 	cfg := senecSince2June(t, fake)
 	cfg.HA = hc
 	_, body, _ := familyPage(t, Energie, cfg, "GET", "/energie", "family")
-	heute := section(t, body, "karte-heute")
-	mustContain(t, heute, `<tr><td class="zahl solar">3 kWh</td><th scope=row>Erzeugt</th></tr>`, `<tr><td class="zahl einsp">1 kWh</td><th scope=row>Ins Netz</th></tr>`,
-		`<tr><td class="zahl bezug">2 kWh</td><th scope=row>Netzbezug</th></tr>`, "<tr><td class=zahl>50\u00a0%</td><th scope=row>Autarkie</th></tr>")
-	mustNotContain(t, body, "karte-heute-bis-jetzt", `class="karte fluss"`)
-	_, body, _ = familyPage(t, Energie, cfg, "GET", "/energie?zeitraum=monat", "family")
-	mustContain(t, body, `<section class="karte spalte" aria-labelledby=karte-oktober-2026-bis-heute>`)
-	// Oktober: Solar 13×10+3, Einspeisung 13×6+1, Bezug 13×3+2; used 133 − 79 + 41 = 95, 54 of it not from the grid
-	mustContain(t, section(t, body, "karte-oktober-2026-bis-heute"), `<td class="zahl solar">133 kWh</td>`, `<td class="zahl einsp">79 kWh</td>`,
-		`<td class="zahl bezug">41 kWh</td>`, "<td class=zahl>57\u00a0%</td><th scope=row>Autarkie</th>")
-	before(t, body, "karte-oktober-2026-bis-heute", "<figure class=verlauf>")
+	mustContain(t, body, `<section class="karte fluss" aria-labelledby=karte-heute-bis-jetzt>`)
+	tag := section(t, body, "karte-heute-bis-jetzt")
+	mustContain(t, tag, "<tr><th scope=row>Solar erzeugt</th><td>3 kWh</td></tr>", "<tr><th scope=row>aus dem Netz</th><td>2 kWh</td></tr>",
+		"<tr><th scope=row>ins Netz</th><td>1 kWh</td></tr>", "<tr><th scope=row>Haus verbraucht</th><td>4 kWh</td></tr>",
+		"<tr><th scope=row>Solar → Haus</th><td>2 kWh</td></tr>", "<tr><th scope=row>Solar → Netz</th><td>1 kWh</td></tr>",
+		"<tr><th scope=row>Netz → Haus</th><td>2 kWh</td></tr>",
+		"aus dem <tspan class=nm>Netz</tspan></text><text class=zweit x=92 y=212 text-anchor=middle>1 kWh ins Netz</text>",
+		`viewBox="0 0 396 222"`, `<g class="knoten solar"><rect class=pill `, "<p class=autarkie><b>50\u00a0%</b> Autarkie</p>",
+		`aria-label="Heute bis jetzt: Solar erzeugt 3 kWh, Haus verbraucht 4 kWh, aus dem Netz 2 kWh, ins Netz 1 kWh. Solar → Haus 2 kWh, Solar → Netz 1 kWh, Netz → Haus 2 kWh."`)
+	mustNotContain(t, tag, "knoten akku", "class=fuell", "<ellipse") // the history reads no battery, and a span has no charge
+	if got := arrowsPointIn(t, tag); strings.Join(got, " ") != "solar-haus solar-netz netz-haus" {
+		t.Fatalf("ways drawn %v", got)
+	}
+	// Heute's column stays with Jetzt, from the statistics here
+	mustContain(t, section(t, body, "karte-heute"), `<tr><td class="zahl solar">3 kWh</td><th scope=row>Erzeugt</th></tr>`)
+	before(t, body, "karte-heute-bis-jetzt", "<figure class=verlauf>")
 
-	// the house's counters: Heute from them, the history's Tag adds no column
-	fake2, hc2 := house(t)
-	energyHouse(t, fake2)
-	loc := berlin(t)
-	for _, id := range []string{"sensor.pv_total", "sensor.einsp_total", "sensor.bezug_total"} {
-		statDays(t, fake2, id, time.Date(2026, 10, 1, 0, 0, 0, 0, loc), time.Date(2026, 10, 14, 0, 0, 0, 0, loc), func(time.Time) float64 { return 2 }, todayHours(t, 0.1))
-	}
-	_, body, _ = familyPage(t, Energie, StartConfig{HA: hc2}, "GET", "/energie", "family")
-	mustContain(t, section(t, body, "karte-heute"), `<td class="zahl solar">12,4 kWh</td>`)
+	// Monat: Solar 13×10+3, Einspeisung 13×6+1, Bezug 13×3+2; the house used 133 − 79 + 41 = 95, 54 of it from the sun
+	_, body, _ = familyPage(t, Energie, cfg, "GET", "/energie?zeitraum=monat", "family")
+	mon := section(t, body, "karte-oktober-2026-bis-heute")
+	mustContain(t, mon, "<tr><th scope=row>Solar erzeugt</th><td>133 kWh</td></tr>", "<tr><th scope=row>ins Netz</th><td>79 kWh</td></tr>",
+		"<tr><th scope=row>aus dem Netz</th><td>41 kWh</td></tr>", "<tr><th scope=row>Haus verbraucht</th><td>95 kWh</td></tr>",
+		"<p class=autarkie><b>57\u00a0%</b> Autarkie</p>")
+	arrowsPointIn(t, mon)
 	if n := strings.Count(body, `class="karte spalte"`); n != 1 {
-		t.Fatalf("%d number columns on Tag, want Heute's alone", n)
+		t.Fatalf("%d number columns, want Heute's alone", n)
 	}
+	// the arrow's width says how much: 54 into the house is wider than 41 from the grid
+	if s, g := strokeOf(t, mon, "solar-haus"), strokeOf(t, mon, "netz-haus"); s <= g {
+		t.Fatalf("widths Solar → Haus %v, Netz → Haus %v", s, g)
+	}
+
+	// only Bezug in the history: the grid into the house, no Autarkie without the sun
+	fake2, hc2 := house(t)
+	loc := berlin(t)
+	statDays(t, fake2, "sensor.bezug", time.Date(2026, 10, 1, 0, 0, 0, 0, loc), time.Date(2026, 10, 14, 0, 0, 0, 0, loc), func(time.Time) float64 { return 2 }, nil)
+	_, body, _ = familyPage(t, Energie, StartConfig{HA: hc2, Energy: energie.Map{Stats: energie.Stats{Bezug: "sensor.bezug"}}}, "GET", "/energie?zeitraum=woche", "family")
+	week := section(t, body, "karte-die-letzten-sieben-tage")
+	mustContain(t, week, "<tr><th scope=row>aus dem Netz</th><td>12 kWh</td></tr>", "<tr><th scope=row>Netz → Haus</th><td>12 kWh</td></tr>")
+	mustNotContain(t, week, "Autarkie", "class=zweit", "Solar")
 }
 
 // The owner (2026-11-03): "'Dieser Monat und der letzte' … ein Vergleich
@@ -390,7 +411,7 @@ func TestEnergieYearChartCarriesTheForecast(t *testing.T) {
 		t.Fatalf("%d hatched Bezug bars, want October, November and December", n)
 	}
 	// the span's own numbers are measured only, and say so
-	mustContain(t, section(t, body, "karte-das-jahr-2026-bis-heute"), `<td class="zahl bezug">283 kWh</td><th scope=row>Netzbezug</th>`)
+	mustContain(t, section(t, body, "karte-das-jahr-2026-bis-heute"), "<tr><th scope=row>aus dem Netz</th><td>283 kWh</td></tr>")
 	// the year-end figures: the chart's headline, right under it, no switch
 	f := section(t, body, "karte-prognose-bis-jahresende-2026-geschaetzt")
 	mustContain(t, f, "<li><span class=name>Netzbezug</span> <b class=zahl>etwa 447 kWh</b> <span class=k>bisher 281 kWh</span></li>",

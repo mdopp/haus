@@ -90,14 +90,14 @@ func TestEnergieHistoryByDayWeekMonthYear(t *testing.T) {
 	// the week: 8 to 14 October, by day — six days of 3 and today's 2
 	_, body, _ = familyPage(t, Energie, cfg, "GET", "/energie?zeitraum=woche", "family")
 	week := section(t, body, "karte-die-letzten-sieben-tage")
-	mustContain(t, week, `<td class="zahl bezug">20 kWh</td>`, `<td class="zahl solar">63 kWh</td>`) // Bezug 6×3+2, Solar 6×10+3
+	mustContain(t, week, "<tr><th scope=row>aus dem Netz</th><td>20 kWh</td></tr>", "<tr><th scope=row>Solar erzeugt</th><td>63 kWh</td></tr>") // Bezug 6×3+2, Solar 6×10+3
 	mustContain(t, body, "<title>Mittwoch, 14. Oktober: Erzeugt 3 kWh")
 	// the month and the year
 	_, body, _ = familyPage(t, Energie, cfg, "GET", "/energie?zeitraum=monat", "family")
-	mustContain(t, section(t, body, "karte-oktober-2026-bis-heute"), `<td class="zahl bezug">41 kWh</td>`) // Bezug 13×3+2
+	mustContain(t, section(t, body, "karte-oktober-2026-bis-heute"), "<tr><th scope=row>aus dem Netz</th><td>41 kWh</td></tr>") // Bezug 13×3+2
 	_, body, _ = familyPage(t, Energie, cfg, "GET", "/energie?zeitraum=jahr", "family")
 	year := section(t, body, "karte-das-jahr-2026-bis-heute")
-	mustContain(t, year, `<td class="zahl bezug">283 kWh</td>`) // Bezug 121×2 + 13×3 + 2
+	mustContain(t, year, "<tr><th scope=row>aus dem Netz</th><td>283 kWh</td></tr>") // Bezug 121×2 + 13×3 + 2
 	mustContain(t, body, "<th scope=row>Juni 2026</th>", "<title>Januar 2026</title>")
 	mustNotContain(t, body, "<th scope=row>Januar 2026</th>") // no row for a month without values
 }
