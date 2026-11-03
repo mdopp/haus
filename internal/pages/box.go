@@ -32,7 +32,7 @@ func adminHead(r *http.Request, cfg StartConfig, title string) *strings.Builder 
 // adminStyle is the admin cards in the house palette: tables as cards,
 // section labels, the states' colours, Box's sub-links as pills.
 const adminStyle = `<style>.unter{display:flex;gap:8px;margin:18px 0 0;overflow-x:auto;padding-bottom:4px}.unter a{flex:none}.unter a{display:inline-flex;align-items:center;min-height:40px;padding:0 16px;border-radius:999px;background:var(--card);border:1px solid var(--edge);color:var(--ink);text-decoration:none;font-size:.85rem}.unter a[aria-current]{color:var(--accent);border-color:var(--accent)}
-h2{font-size:.72rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:26px 2px 8px}
+h2{font-size:.95rem;font-weight:700;color:var(--muted);margin:26px 2px 8px}
 table{width:100%;border-collapse:separate;border-spacing:0;background:var(--card);border:1px solid var(--edge);border-radius:14px;overflow:hidden}
 td,th{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top;overflow-wrap:break-word}tr:last-child td{border-bottom:0}
 .gruen{color:var(--ok)}.gelb{color:var(--warn)}.rot{color:var(--danger)}.k{font-variant-numeric:tabular-nums}

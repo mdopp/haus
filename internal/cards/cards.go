@@ -336,7 +336,7 @@ func (p *Pin) form() string {
 var colorRE = regexp.MustCompile(`^#[0-9a-f]{6}$`)
 
 const Style = `<style>.farbe{display:inline-block;width:.65em;height:.65em;border-radius:50%;margin-right:.45em;vertical-align:.05em}.karte{margin:22px 0 0}
-.karte h2{font-size:.72rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:0 0 8px}
+.karte h2{font-size:.95rem;font-weight:700;color:var(--ink);margin:0 0 8px}
 .karte ul{list-style:none;margin:0;padding:0;background:var(--card);border:1px solid var(--edge);border-radius:14px}
 .karte li{position:relative;padding:11px 14px;border-top:1px solid var(--line);overflow-wrap:anywhere;min-height:44px}.karte li:first-child{border-top:0}
 .karte li a{display:block;color:inherit;text-decoration:none}.karte li a::after{content:"";position:absolute;inset:0}

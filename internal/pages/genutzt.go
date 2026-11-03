@@ -512,7 +512,7 @@ const usageStyle = `<style>.genutzt{--ink:#0f172a;--muted:#64748b;--faint:#94a3b
 --danger:#dc2626;--card:#fff;--panel:#fff;--bg:#f1f5f9;color-scheme:light;
 margin:1.4rem 0;padding:16px;background:var(--card);color:var(--ink);border:1px solid var(--edge);border-radius:14px;font-family:Geist,system-ui,sans-serif}
 .genutzt h2{margin:0 0 4px;color:var(--ink);text-transform:none;letter-spacing:0;font-size:1.1rem}
-.genutzt h3{margin:18px 0 6px;font-size:.72rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.genutzt h3{margin:18px 0 6px;font-size:.95rem;font-weight:700;color:var(--muted)}
 .genutzt p{margin:6px 0}.genutzt .leise{color:var(--muted);font-size:.85rem}
 .genutzt .achtung{padding:10px 12px;background:var(--warn-soft);border:1px solid var(--warn);border-radius:10px}
 .genutzt .zeilen{list-style:none;margin:0;padding:0}

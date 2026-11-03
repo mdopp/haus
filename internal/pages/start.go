@@ -127,7 +127,16 @@ const (
 // marke is Start's head, the app's start screen in words and mark: the
 // icon, the name and the claim, so the page and the app are recognised as
 // one (owner 2026-11-03).
-const marke = "<header class=marke><img src=/symbol/favicon.svg alt=\"\" width=52 height=52><div><h1>Homes</h1><p class=claim>Dein Zuhause, klar im Blick.</p></div></header>"
+var marke = func() string {
+	svg, err := symbole.ReadFile("symbol/favicon.svg") // inline: no request, no login in the way
+	if err != nil {
+		panic(err)
+	}
+	s := strings.Replace(string(svg), `width="72" height="72"`, `width="52" height="52" aria-hidden="true"`, 1)
+	s = strings.ReplaceAll(s, `"clip"`, `"marke-clip"`)
+	s = strings.ReplaceAll(s, "url(#clip)", "url(#marke-clip)")
+	return "<header class=marke>" + s + "<div><h1>Homes</h1><p class=claim>Dein Zuhause, klar im Blick.</p></div></header>"
+}()
 
 // Start is the family's page (haus#12, haus#35): Homes' mark, name and claim (as in the app, owner 2026-11-03) and the day,
 // then each part answering one question a family member has — who is
