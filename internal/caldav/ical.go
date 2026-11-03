@@ -258,9 +258,12 @@ type Event struct {
 	UID      string
 	Summary  string
 	Location string
-	Start    time.Time
-	End      time.Time
-	AllDay   bool
+	// Description is the DESCRIPTION text (the phones' Haus account
+	// shows it, haus#218)
+	Description string
+	Start       time.Time
+	End         time.Time
+	AllDay      bool
 	// the calendar it is in, as Events found it (haus#66: hidden, coloured)
 	Calendar, CalendarName string
 }
@@ -273,6 +276,7 @@ type Todo struct {
 	DueAllDay bool      // due on a day (DUE;VALUE=DATE), not at a time: Due is that day's midnight
 	Status    string
 	Completed time.Time // when it was ticked off; zero: not, or unknown
+	RRule     string    // how it repeats (RRULE, as written); "" for once
 }
 
 // Open is a reminder nobody has ticked off.
@@ -338,7 +342,8 @@ func Events(root *Component, loc *time.Location) []Event {
 		if err != nil {
 			return
 		}
-		e := Event{UID: c.Text("UID"), Summary: c.Text("SUMMARY"), Location: c.Text("LOCATION"), Start: start, End: start, AllDay: allDay}
+		e := Event{UID: c.Text("UID"), Summary: c.Text("SUMMARY"), Location: c.Text("LOCATION"), Description: c.Text("DESCRIPTION"),
+			Start: start, End: start, AllDay: allDay}
 		if de, ok := c.Get("DTEND"); ok {
 			if end, _, err := When(de, loc); err == nil {
 				e.End = end
@@ -363,6 +368,9 @@ func Todos(root *Component, loc *time.Location) []Todo {
 			return
 		}
 		t := Todo{UID: c.Text("UID"), Summary: c.Text("SUMMARY"), Status: c.Text("STATUS")}
+		if r, ok := c.Get("RRULE"); ok {
+			t.RRule = strings.TrimSpace(r.Value)
+		}
 		if p, done := c.Get("COMPLETED"); done { // ticked off, whatever STATUS still says
 			t.Status = "COMPLETED"
 			t.Completed, _, _ = When(p, loc)

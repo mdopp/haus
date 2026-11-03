@@ -5,7 +5,8 @@
 // Assistant (home.go, live.go, camera.go), the tool widgets from the
 // Haushalt source (tools.go), the capture upload (upload.go), the phone's
 // message backups (sicherung.go), the phone's contacts mirrored
-// (kontakte.go), its positions passed on to Reitti (standort.go), a link shared
+// (kontakte.go), the household's shared contacts and calendars for the
+// phone's Haus account (gemeinsam.go), its positions passed on to Reitti (standort.go), a link shared
 // to the app kept as a note (merken.go) and the assistant's name. Every other /napi path is a JSON 404 (noSuchPath).
 package napi
 
@@ -236,6 +237,8 @@ func Handler(c Config) http.Handler {
 	// the phone's contacts, mirrored into the person's Handy-Kontakte (laib ADR 0029)
 	k := &kontakte{dav: c.Haushalt.Contacts, whoami: c.Whoami, busy: map[string]bool{}}
 	mux.HandleFunc("POST /napi/kontakte", auth(k.post))
+	// the household's shared contacts and calendars for the phone's Haus account (haus#218)
+	(&gemeinsam{dav: c.Haushalt.Calendar, whoami: c.Whoami, loc: c.Haushalt.Loc, now: c.Now}).routes(mux, auth)
 	// the phone's positions, passed on to the person's Reitti (owner 2026-11-02)
 	(&standort{r: c.Reitti, whoami: c.Whoami}).routes(mux, auth)
 	mux.HandleFunc("/napi/", auth(noSuchPath))
