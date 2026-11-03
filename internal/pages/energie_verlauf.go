@@ -713,7 +713,7 @@ const verlaufStyle = `<style>:root{--e-bezug:#4f8ff7;--e-einsp:#1fa592;--e-solar
 .verlauf .achse{fill:var(--muted);font-size:12px;font-weight:600;font-variant-numeric:tabular-nums}
 .legende{list-style:none;margin:8px 4px 0;padding:0;display:flex;flex-wrap:wrap;gap:4px 14px;font-size:.82rem;font-weight:600;color:var(--ink)}
 .legende i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}.legende .solar{background:var(--e-solar)}.legende .bezug{background:var(--e-bezug)}.legende .einsp{background:var(--e-einsp)}
-.verlauf details,.fluss details{margin:8px 4px 0;font-size:.82rem}.verlauf summary,.fluss summary{cursor:pointer;color:var(--accent);min-height:44px;display:flex;align-items:center}
+.verlauf details,.fluss details{margin:8px 4px 0;font-size:.82rem;overflow-x:auto}.verlauf summary,.fluss summary{cursor:pointer;color:var(--accent);min-height:44px;display:flex;align-items:center}
 .verlauf table,.fluss table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
 .verlauf th,.verlauf td,.fluss th,.fluss td{padding:4px 6px;border-top:1px solid var(--line);text-align:right;font-weight:400}
 .verlauf th[scope=row],.verlauf thead th:first-child,.fluss th{text-align:left}.verlauf thead th{color:var(--muted)}
