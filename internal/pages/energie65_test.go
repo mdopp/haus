@@ -67,8 +67,8 @@ func TestEnergieHistoryByDayWeekMonthYear(t *testing.T) {
 	}
 	mustContain(t, body, "<h2 class=abschnitt>Verlauf</h2>", `<a href="/energie?zeitraum=tag#verlauf" aria-current=page>Tag</a>`,
 		`<a href="/energie?zeitraum=woche#verlauf">Woche</a>`, `<a href="/energie?zeitraum=jahr#verlauf">Jahr</a>`)
-	mustContain(t, section(t, body, "karte-heute"), `<td class="zahl solar">3 kWh</td><th scope=row>Erzeugt</th>`,
-		`<td class="zahl einsp">1 kWh</td><th scope=row>Ins Netz</th>`, `<td class="zahl bezug">2 kWh</td><th scope=row>Netzbezug</th>`)
+	mustContain(t, section(t, body, "karte-heute-bis-jetzt"), "<tr><th scope=row>Solar erzeugt</th><td>3 kWh</td></tr>",
+		"<tr><th scope=row>ins Netz</th><td>1 kWh</td></tr>", "<tr><th scope=row>aus dem Netz</th><td>2 kWh</td></tr>")
 	mustContain(t, body, "<figure class=verlauf><svg", `role=img aria-label="Heute, Stunde für Stunde als Balken; die Zahlen stehen in der Tabelle darunter"`,
 		"<title>09 Uhr: Erzeugt 0,3 kWh · Ins Netz 0,1 kWh · Netzbezug 0,2 kWh</title>",
 		"<rect class=solar", "<rect class=bezug", "<rect class=einsp",

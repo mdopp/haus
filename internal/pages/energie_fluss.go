@@ -480,64 +480,6 @@ func flussHTML(f fluss) string {
 	return b.String()
 }
 
-// spaltenZeile is one row of a number column: the number, what it is, and
-// the series colour it is drawn in ("" the ink's).
-type spaltenZeile struct{ zahl, name, farbe string }
-
-// spalteHTML is a number column as a card, the widget's (owner,
-// 2026-11-03): the title centred above, each row its number first and its
-// name second, on one vertical axis — the numbers end on it, the names
-// start from it. note is one plain line instead of the rows.
-func spalteHTML(title string, rows []spaltenZeile, note string) string {
-	if len(rows) == 0 && note == "" {
-		return ""
-	}
-	id := cards.Card{Title: title}.ID()
-	var b strings.Builder
-	b.WriteString(`<section class="karte spalte" aria-labelledby=` + id + `><h2 id=` + id + `>` + html.EscapeString(title) + `</h2>`)
-	if note != "" {
-		b.WriteString("<p class=k>" + html.EscapeString(note) + "</p></section>")
-		return b.String()
-	}
-	b.WriteString("<table><tbody>")
-	for _, r := range rows {
-		class := "zahl"
-		if r.farbe != "" {
-			class = `"zahl ` + r.farbe + `"`
-		}
-		b.WriteString("<tr><td class=" + class + ">" + html.EscapeString(r.zahl) + "</td><th scope=row>" + html.EscapeString(r.name) + "</th></tr>")
-	}
-	b.WriteString("</tbody></table></section>")
-	return b.String()
-}
-
-// mengen are amounts over a span in kWh by series (solar, einsp, bezug),
-// only those read.
-type mengen map[string]float64
-
-// spaltenZeilen are a span's rows: Erzeugt, Ins Netz, Netzbezug, each when
-// read, and Autarkie when sure is set and all three are read — the share
-// of what the house used (made − fed in + drawn, + from the battery −
-// into it, when the house has battery counters) that did not come from
-// the grid.
-func spaltenZeilen(m mengen, akku float64, sure bool) []spaltenZeile {
-	var rows []spaltenZeile
-	for _, s := range energySeries {
-		if v, ok := m[s.key]; ok {
-			rows = append(rows, spaltenZeile{energyWords(v), s.name, s.key})
-		}
-	}
-	solar, ok1 := m["solar"]
-	einsp, ok2 := m["einsp"]
-	bezug, ok3 := m["bezug"]
-	if sure && ok1 && ok2 && ok3 {
-		if used := solar - einsp + bezug + akku; used >= 0.05 {
-			rows = append(rows, spaltenZeile{share(math.Min(1, math.Max(0, (used-bezug)/used))), "Autarkie", ""})
-		}
-	}
-	return rows
-}
-
 // percent0 is a percent value as a whole number: "74 %".
 func percent0(v float64) string { return strconv.Itoa(int(math.Round(v))) + " %" }
 

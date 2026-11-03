@@ -725,12 +725,6 @@ const verlaufStyle = `<style>:root{--e-bezug:#4f8ff7;--e-einsp:#1fa592;--e-solar
 .knoten .wort{fill:var(--e-wort);font-size:12px;font-weight:700}.knoten .nm{fill:var(--c);font-weight:800}.knoten.aus .nm{fill:var(--faint)}
 .knoten .grund{fill:var(--faint);font-size:11px;font-weight:600}.knoten .zweit{fill:var(--e-wort);font-size:12px;font-weight:700;font-variant-numeric:tabular-nums}
 .fluss .autarkie{margin:4px 0 2px;text-align:center;font-size:1.05rem;font-weight:600;color:var(--e-wort)}.fluss .autarkie b{color:var(--ink);font-weight:800;font-variant-numeric:tabular-nums}
-.spalte table{width:100%;border-collapse:collapse;background:var(--e-karte);border-radius:18px;padding:6px 0;font-variant-numeric:tabular-nums}
-.spalte h2{text-align:center}.spalte td,.spalte th{width:50%;padding:7px 0;font-size:1.3rem;line-height:1.25;border:0}
-.spalte td{text-align:right;padding-right:9px;font-weight:800;color:var(--ink);white-space:nowrap}.spalte th{text-align:left;padding-left:9px;font-weight:600;color:var(--e-wort);overflow-wrap:anywhere}
-.spalte tr:first-child>*{padding-top:14px}.spalte tr:last-child>*{padding-bottom:14px}
-.spalte .solar{color:var(--e-solar)}.spalte .einsp{color:var(--e-einsp)}.spalte .bezug{color:var(--e-bezug)}
-@media (max-width:380px){.spalte td,.spalte th{font-size:1.1rem}}
 .karte ul.zahlen{background:none;border:0;border-radius:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:8px}
 .karte .zahlen li,.karte .zahlen li:first-child{background:var(--e-karte);border:0;border-radius:18px;padding:11px 13px 12px;display:flex;flex-direction:column;align-items:flex-start;gap:3px}
 .karte ul.legende{background:none;border:0;border-radius:0}.karte .legende li{padding:0;border:0;min-height:0}.zahlen .name{font-size:.85rem;font-weight:700;color:var(--e-wort)}

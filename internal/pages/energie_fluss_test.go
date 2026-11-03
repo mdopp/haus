@@ -259,8 +259,8 @@ func TestEnergieJetztWithoutALeg(t *testing.T) {
 // verbraucht" — every way with a total, its arrowhead at the destination,
 // no battery ring, and the span's Autarkie. Tag too: today so far from
 // HA's statistics — Solar 3, Einspeisung 1, Bezug 2: the house used 4,
-// 2 of it from the sun, 2 from the grid. No number column for a span:
-// the picture says it.
+// 2 of it from the sun, 2 from the grid. No number column and no Heute
+// block (owner, 2026-11-03): the picture says it.
 func TestEnergieSpanAsAFlow(t *testing.T) {
 	fake, hc := house(t)
 	cfg := senecSince2June(t, fake)
@@ -279,8 +279,8 @@ func TestEnergieSpanAsAFlow(t *testing.T) {
 	if got := arrowsPointIn(t, tag); strings.Join(got, " ") != "solar-haus solar-netz netz-haus" {
 		t.Fatalf("ways drawn %v", got)
 	}
-	// Heute's column stays with Jetzt, from the statistics here
-	mustContain(t, section(t, body, "karte-heute"), `<tr><td class="zahl solar">3 kWh</td><th scope=row>Erzeugt</th></tr>`)
+	// no Heute block besides it: the Tag picture is today
+	mustNotContain(t, body, "aria-labelledby=karte-heute>", `class="karte spalte"`)
 	before(t, body, "karte-heute-bis-jetzt", "<figure class=verlauf>")
 
 	// Monat: Solar 13×10+3, Einspeisung 13×6+1, Bezug 13×3+2; the house used 133 − 79 + 41 = 95, 54 of it from the sun
@@ -294,9 +294,7 @@ func TestEnergieSpanAsAFlow(t *testing.T) {
 	mustContain(t, section(t, body, "karte-das-jahr-2026-bis-heute"), `<text class="zahl lang" x=198 y=39 text-anchor=middle>1.343 kWh</text>`)
 	_, body, _ = familyPage(t, Energie, cfg, "GET", "/energie?zeitraum=monat", "family")
 	arrowsPointIn(t, mon)
-	if n := strings.Count(body, `class="karte spalte"`); n != 1 {
-		t.Fatalf("%d number columns, want Heute's alone", n)
-	}
+	mustNotContain(t, body, `class="karte spalte"`)
 	// the arrow's width says how much: 54 into the house is wider than 41 from the grid
 	if s, g := strokeOf(t, mon, "solar-haus"), strokeOf(t, mon, "netz-haus"); s <= g {
 		t.Fatalf("widths Solar → Haus %v, Netz → Haus %v", s, g)
@@ -327,7 +325,8 @@ func TestEnergieRemovedSectionsAreGone(t *testing.T) {
 	}
 	for _, z := range []string{"tag", "woche", "monat", "jahr"} {
 		_, body, _ := familyPage(t, Energie, StartConfig{HA: hc}, "GET", "/energie?zeitraum="+z, "family")
-		mustContain(t, body, "karte-jetzt", "karte-heute", "<figure class=verlauf>")
+		mustContain(t, body, "karte-jetzt", "<figure class=verlauf>")
+		mustNotContain(t, body, "<h2 id=karte-heute>", `class="karte spalte"`)
 		mustNotContain(t, body, "Dieser Monat und der letzte", "karte-dieser-monat-und-der-letzte", "Vormonat",
 			"Eigenverbrauch", "eigenverbrauch", "class=eigen", "--e-eigen", "schraffur-eigen",
 			"In den Akku", "Aus dem Akku", "Verbraucht<", "class=spur", "kennzahlen")
