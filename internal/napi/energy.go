@@ -13,10 +13,12 @@ import (
 )
 
 // The energy picture (GET /napi/portal/energy → {ok, energy:{flow, totals,
-// circuits}}): the "now" flow from current-power sensors (W), the lifetime
+// circuits, charge}}): the "now" flow from current-power sensors (W), the lifetime
 // counters (kWh) as totals, each with what it added since the house's
 // midnight (`today`, kWh, as the Energie page's Heute; left out when HA's
-// history does not say), every other power sensor as a circuit. Which
+// history does not say), every other power sensor as a circuit, and how
+// full the battery is (`charge`, its sensor in %, as the Energie page's Akku
+// ring; left out without a battery leg or a number from 0 to 100). Which
 // sensors those are is package energie's choice, the Energie page's too.
 
 // EnergyMap names the energy entities (package energie).
@@ -68,6 +70,10 @@ func (h *homeAPI) energy(w http.ResponseWriter, r *http.Request) {
 		}
 		totals = append(totals, m)
 	}
+	energy := map[string]any{"flow": flow, "totals": totals}
+	if charge, ok := h.charge(legs, states); ok {
+		energy["charge"] = charge
+	}
 	circuits := []map[string]any{}
 	for _, s := range states {
 		if strings.HasPrefix(s.EntityID, "sensor.") && deviceClass(s) == "power" && !used[s.EntityID] {
@@ -77,7 +83,27 @@ func (h *homeAPI) energy(w http.ResponseWriter, r *http.Request) {
 	sort.SliceStable(circuits, func(i, j int) bool {
 		return strings.ToLower(circuits[i]["name"].(string)) < strings.ToLower(circuits[j]["name"].(string))
 	})
-	answer(w, http.StatusOK, map[string]any{"ok": true, "energy": map[string]any{"flow": flow, "totals": totals, "circuits": circuits}})
+	energy["circuits"] = circuits
+	answer(w, http.StatusOK, map[string]any{"ok": true, "energy": energy})
+}
+
+// charge is the battery's charge as a meter (its state the percent), when
+// the flow has a battery leg and the sensor says a number from 0 to 100 —
+// the same sensor the Energie page rings its Akku node with
+// (energie.Map.Charge).
+func (h *homeAPI) charge(legs []energie.Leg, states []ha.State) (map[string]any, bool) {
+	for _, l := range legs {
+		if l.Key != "battery" {
+			continue
+		}
+		if _, s, ok := h.sources.Charge(states); ok {
+			m := meter(s)
+			m["label"] = "Akku-Füllstand"
+			return m, true
+		}
+		return nil, false
+	}
+	return nil, false
 }
 
 // historyWait is how long the energy picture waits for today's history; a
