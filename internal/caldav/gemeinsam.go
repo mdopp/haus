@@ -1,9 +1,14 @@
 package caldav
 
 import (
+	"cmp"
 	"context"
+	"encoding/xml"
+	"fmt"
+	"net/http"
 	"net/url"
 	"path"
+	"sort"
 	"strings"
 	"time"
 )
@@ -190,4 +195,74 @@ func (c *Client) FamilyCards(ctx context.Context) (cards []string, partial bool,
 		cards = append(cards, cd.Contact.VCF(c.now())) // one of a file of several cards
 	}
 	return cards, partial, nil
+}
+
+// versionBody asks a home for its collections' kind and version.
+const versionBody = `<?xml version="1.0" encoding="utf-8"?>
+<D:propfind xmlns:D="DAV:" xmlns:CS="http://calendarserver.org/ns/">
+  <D:prop><D:resourcetype/><CS:getctag/><D:sync-token/></D:prop>
+</D:propfind>`
+
+// FamilyVersions is a cheap fingerprint of what the phones' Haus account
+// holds (haus#223): one PROPFIND of Haus's home for each collection's
+// getctag (its sync-token where it has none), which Radicale changes with
+// every write into it — Haus's own, a phone's over DAVx⁵, laib's kalender
+// mirroring an abo-*. kontakte covers the address books, kalender the
+// calendars, the reminders in them included; the lists stay out, as they
+// do from the feed. Equal strings: nothing the phones show changed.
+func (c *Client) FamilyVersions(ctx context.Context) (kontakte, kalender string, err error) {
+	home, err := c.home()
+	if err != nil {
+		return "", "", err
+	}
+	var books, cals []string
+	add := func(href string, ps multistatusProp) {
+		v := cmp.Or(ps.CTag, ps.SyncToken)
+		switch {
+		case ps.ResourceType.AddressBook != nil:
+			books = append(books, href+"="+v)
+		case ps.ResourceType.Calendar != nil && !isList(href):
+			cals = append(cals, href+"="+v)
+		}
+	}
+	read := func(u, depth string) error {
+		code, raw, err := c.do(ctx, "PROPFIND", u, depth, versionBody, nil)
+		if err != nil {
+			return err
+		}
+		if code == http.StatusNotFound {
+			return nil
+		}
+		if code != http.StatusMultiStatus {
+			return &ErrStatus{"PROPFIND", code}
+		}
+		var ms multistatus
+		if err := xml.Unmarshal(raw, &ms); err != nil {
+			return fmt.Errorf("Radicale: PROPFIND unlesbar: %w", err)
+		}
+		for _, r := range ms.Responses {
+			for _, ps := range r.Propstat {
+				add(r.Href, ps.Prop)
+			}
+		}
+		return nil
+	}
+	if err := read(home, "1"); err != nil {
+		return "", "", err
+	}
+	for _, conf := range []string{c.Calendar, c.AddressBook} {
+		if conf == "" {
+			continue
+		}
+		u, err := c.resolve(strings.TrimRight(conf, "/") + "/")
+		if err != nil {
+			return "", "", err
+		}
+		if err := read(u, "0"); err != nil {
+			return "", "", err
+		}
+	}
+	sort.Strings(books)
+	sort.Strings(cals)
+	return strings.Join(books, "\n"), strings.Join(cals, "\n"), nil
 }

@@ -60,6 +60,9 @@ type Config struct {
 	// app's points on with the person's token (standort.go, HAUS_REITTI_URL);
 	// nil = /napi/standort answers 503 in words
 	Reitti *reitti.Reitti
+	// SharedEvery: how often the live stream looks whether the household's
+	// shared contacts and calendars changed (haus#223); 0 = 30 s
+	SharedEvery time.Duration
 	// Usage counts each paired phone's request by path (haus#50): which
 	// widgets refresh how often, never which phone; nil counts nothing
 	Usage *usage.Counter
@@ -222,7 +225,11 @@ func Handler(c Config) http.Handler {
 	})
 	if c.HA != nil { // the house paths and the event stream, from Home Assistant
 		(&homeAPI{ha: c.HA, sources: c.Energy, witness: c.Witness, whoami: c.Whoami, favs: c.Favorites, loc: c.Haushalt.Loc, now: c.Now}).routes(mux, auth)
-		newLive(c.HA, c.Ping, c.SensorEvery).routes(mux, auth)
+		lv := newLive(c.HA, c.Ping, c.SensorEvery)
+		if dav := c.Haushalt.Calendar; dav != nil {
+			lv.shared, lv.sharedEvery = dav.FamilyVersions, c.SharedEvery
+		}
+		lv.routes(mux, auth)
 	}
 	if t := newTools(c.Haushalt); t != nil { // the tool widgets from the Haushalt source
 		t.routes(mux, auth)

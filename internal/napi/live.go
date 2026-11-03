@@ -53,6 +53,12 @@ type live struct {
 	ping  time.Duration
 	every time.Duration // sensor interval
 
+	// the household's shared data (haus#223): while anyone listens, its
+	// version is read every sharedEvery and a change goes to every stream as
+	// a gemeinsam frame; nil: no such frames
+	shared      sharedVersions
+	sharedEvery time.Duration
+
 	mu      sync.Mutex
 	watches map[string]watchSet // device → entities
 	subs    map[*listener]bool
@@ -144,7 +150,8 @@ func (l *live) watch(w http.ResponseWriter, r *http.Request) {
 	answer(w, http.StatusOK, map[string]any{"ok": true})
 }
 
-// GET /napi/portal/events: text/event-stream, card_state frames and ': ping'.
+// GET /napi/portal/events: text/event-stream, card_state frames, gemeinsam
+// frames when the household's shared data changed (haus#223) and ': ping'.
 // The stream joins before it answers: a device that has the 200 listens, and
 // the resync of a subscription it started or raced into reaches it (haus#39).
 func (l *live) events(w http.ResponseWriter, r *http.Request) {
@@ -207,7 +214,12 @@ func (l *live) join(me *listener) {
 	if l.stop == nil {
 		ctx, cancel := context.WithCancel(context.Background())
 		l.stop = cancel
-		go l.run(ctx)
+		if l.ha != nil {
+			go l.run(ctx)
+		}
+		if l.shared != nil {
+			go l.watchShared(ctx)
+		}
 	}
 }
 
@@ -435,6 +447,69 @@ func (l *live) send(entity string, c map[string]any) {
 	data, _ := json.Marshal(map[string]any{"entity_id": entity, "card": c})
 	frame := []byte("event: card_state\ndata: " + string(data) + "\n\n")
 	for _, me := range l.watchers(entity) {
+		select {
+		case me.ch <- frame:
+		default:
+		}
+	}
+}
+
+// sharedVersions is caldav.Client.FamilyVersions: a fingerprint per part.
+type sharedVersions func(ctx context.Context) (kontakte, kalender string, err error)
+
+// defaultSharedEvery: how often Haus looks whether the shared data changed
+// while a phone listens. One PROPFIND of Haus's Radicale home; a phone's
+// sync after the frame is what costs, and it comes once per change.
+const defaultSharedEvery = 30 * time.Second
+
+// watchShared reads the shared data's versions while anyone listens
+// (haus#223): the first read is the baseline, every later change of a part
+// is one gemeinsam frame {"teil": "kontakte"|"kalender"} to every open
+// stream. The frame carries no data: the app syncs its Haus account, which
+// fetches /napi/gemeinsam/… with its ETag. Radicale not answering keeps the
+// baseline; nothing is sent until it answers again.
+func (l *live) watchShared(ctx context.Context) {
+	every := l.sharedEvery
+	if every <= 0 {
+		every = defaultSharedEvery
+	}
+	var kontakte, kalender string
+	known := false
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		k, c, err := l.shared(ctx)
+		switch {
+		case ctx.Err() != nil:
+			return
+		case err != nil:
+			log.Printf("haus: shared versions: %v", err)
+		case !known:
+			kontakte, kalender, known = k, c, true
+		default:
+			if k != kontakte {
+				l.sharedOut("kontakte")
+			}
+			if c != kalender {
+				l.sharedOut("kalender")
+			}
+			kontakte, kalender = k, c
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+	}
+}
+
+// sharedOut sends one gemeinsam frame to every open stream; one too slow to take it loses it.
+func (l *live) sharedOut(teil string) {
+	data, _ := json.Marshal(map[string]string{"teil": teil})
+	frame := []byte("event: gemeinsam\ndata: " + string(data) + "\n\n")
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for me := range l.subs {
 		select {
 		case me.ch <- frame:
 		default:
