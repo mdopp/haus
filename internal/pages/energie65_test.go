@@ -55,9 +55,8 @@ func senecSince2June(t *testing.T, fake *hafake.HA) StartConfig {
 
 // haus#65: Energie's history from HA's long-term statistics — the day by
 // the hour, the week, the month and the year by day and by month — with
-// Bezug, Einspeisung, Solar and Eigenverbrauch (Solar − Einspeisung), as
-// sums and as a chart drawn by Haus itself (SVG, no script, a legend, the
-// numbers as a table).
+// Erzeugt, Ins Netz and Netzbezug, as sums and as a chart drawn by Homes
+// itself (SVG, no script, a legend, the numbers as a table).
 func TestEnergieHistoryByDayWeekMonthYear(t *testing.T) {
 	fake, hc := house(t)
 	cfg := senecSince2June(t, fake)
@@ -68,14 +67,13 @@ func TestEnergieHistoryByDayWeekMonthYear(t *testing.T) {
 	}
 	mustContain(t, body, "<h2 class=abschnitt>Verlauf</h2>", `<a href="/energie?zeitraum=tag#verlauf" aria-current=page>Tag</a>`,
 		`<a href="/energie?zeitraum=woche#verlauf">Woche</a>`, `<a href="/energie?zeitraum=jahr#verlauf">Jahr</a>`)
-	tag := section(t, body, "karte-heute-bis-jetzt")
-	mustContain(t, tag, "<tr><th scope=row>Solar erzeugt</th><td>3 kWh</td></tr>", "<tr><th scope=row>Solar → Haus</th><td>2 kWh</td></tr>",
-		"<tr><th scope=row>Netz bezogen</th><td>2 kWh</td></tr>", "<tr><th scope=row>Netz eingespeist</th><td>1 kWh</td></tr>")
+	mustContain(t, section(t, body, "karte-heute-bis-jetzt"), "<tr><th scope=row>Solar erzeugt</th><td>3 kWh</td></tr>",
+		"<tr><th scope=row>ins Netz</th><td>1 kWh</td></tr>", "<tr><th scope=row>aus dem Netz</th><td>2 kWh</td></tr>")
 	mustContain(t, body, "<figure class=verlauf><svg", `role=img aria-label="Heute, Stunde für Stunde als Balken; die Zahlen stehen in der Tabelle darunter"`,
-		"<title>09 Uhr: Solar 0,3 kWh · Eigenverbrauch 0,2 kWh · Bezug 0,2 kWh · Einspeisung 0,1 kWh</title>",
-		"<rect class=eigen", "<rect class=bezug", "<rect class=einsp",
-		"<li><i class=eigen></i>Eigenverbrauch (von der Sonne)</li>", "<summary>Als Tabelle</summary>", "<th scope=row>09 Uhr</th>",
-		"--e-eigen:#c27c0e", "prefers-color-scheme:light")
+		"<title>09 Uhr: Erzeugt 0,3 kWh · Ins Netz 0,1 kWh · Netzbezug 0,2 kWh</title>",
+		"<rect class=solar", "<rect class=bezug", "<rect class=einsp",
+		"<li><i class=solar></i>Erzeugt</li>", "<li><i class=bezug></i>Netzbezug</li>", "<li><i class=einsp></i>Ins Netz</li>",
+		"<summary>Als Tabelle</summary>", "<th scope=row>09 Uhr</th>", "--e-solar:#e3b341", "prefers-color-scheme:light")
 	mustNotContain(t, body, "<script>alert", "sensor.senec", "Home Assistant")
 	asked := fake.StatisticsAsked()
 	periods := map[string]bool{}
@@ -92,20 +90,21 @@ func TestEnergieHistoryByDayWeekMonthYear(t *testing.T) {
 	// the week: 8 to 14 October, by day — six days of 3 and today's 2
 	_, body, _ = familyPage(t, Energie, cfg, "GET", "/energie?zeitraum=woche", "family")
 	week := section(t, body, "karte-die-letzten-sieben-tage")
-	mustContain(t, week, "<tr><th scope=row>Netz bezogen</th><td>20 kWh</td></tr>", "<tr><th scope=row>Solar erzeugt</th><td>63 kWh</td></tr>") // Bezug 6×3+2, Solar 6×10+3
-	mustContain(t, body, "<title>Mittwoch, 14. Oktober: Solar 3 kWh")
+	mustContain(t, week, "<tr><th scope=row>aus dem Netz</th><td>20 kWh</td></tr>", "<tr><th scope=row>Solar erzeugt</th><td>63 kWh</td></tr>") // Bezug 6×3+2, Solar 6×10+3
+	mustContain(t, body, "<title>Mittwoch, 14. Oktober: Erzeugt 3 kWh")
 	// the month and the year
 	_, body, _ = familyPage(t, Energie, cfg, "GET", "/energie?zeitraum=monat", "family")
-	mustContain(t, section(t, body, "karte-oktober-2026-bis-heute"), "<tr><th scope=row>Netz bezogen</th><td>41 kWh</td></tr>") // Bezug 13×3+2
+	mustContain(t, section(t, body, "karte-oktober-2026-bis-heute"), "<tr><th scope=row>aus dem Netz</th><td>41 kWh</td></tr>") // Bezug 13×3+2
 	_, body, _ = familyPage(t, Energie, cfg, "GET", "/energie?zeitraum=jahr", "family")
 	year := section(t, body, "karte-das-jahr-2026-bis-heute")
-	mustContain(t, year, "<tr><th scope=row>Netz bezogen</th><td>283 kWh</td></tr>") // Bezug 121×2 + 13×3 + 2
+	mustContain(t, year, "<tr><th scope=row>aus dem Netz</th><td>283 kWh</td></tr>") // Bezug 121×2 + 13×3 + 2
 	mustContain(t, body, "<th scope=row>Juni 2026</th>", "<title>Januar 2026</title>")
 	mustNotContain(t, body, "<th scope=row>Januar 2026</th>") // no row for a month without values
 }
 
-// haus#65: the comparisons — this month against the last and against the
-// same month last year, the year so far against last year's — each a
+// haus#65: the comparisons — this month against the same month last
+// year, the year so far against last year's (not against the month
+// before: owner, 2026-11-03) — each a
 // headline number with its delta (arrow, sign, word, coloured by what it
 // means for the household), count
 // whole days only, and say from when they can be made when HA does not
@@ -117,11 +116,7 @@ func TestEnergieComparesWhatItHas(t *testing.T) {
 	cfg := senecSince2June(t, fake)
 	cfg.HA = hc
 	_, body, _ := familyPage(t, Energie, cfg, "GET", "/energie?zeitraum=monat", "family")
-	last := section(t, body, "karte-dieser-monat-und-der-letzte")
-	mustContain(t, last, "<p class=hinweis>Verglichen mit September bis zum 13.</p>",
-		`<span class=name>Bezug</span> <b class=zahl>39 kWh</b> <span class="delta schlecht"><span aria-hidden=true>▲</span> +50 % · schlechter</span> <span class=k>Vormonat 26 kWh</span>`,
-		`<span class=name>Solar</span> <b class=zahl>130 kWh</b> <span class="delta gleich"><span aria-hidden=true>=</span> ±0 % · gleich</span> <span class=k>Vormonat 130 kWh</span>`,
-		`<span class=name>Eigenverbrauch</span> <b class=zahl>52 kWh</b>`)
+	mustNotContain(t, body, "Dieser Monat und der letzte", "Vormonat")
 	prev := section(t, body, "karte-dieser-monat-und-der-im-vorjahr")
 	// nothing to compare yet: one line for the card, not four tiles saying it
 	mustContain(t, prev, "Vergleich ab Juni 2027 <span class=k>HA hat die Werte ab dem 2. Juni 2026.</span>")
@@ -133,7 +128,7 @@ func TestEnergieComparesWhatItHas(t *testing.T) {
 	mustContain(t, ytd, "Vergleich ab Juni 2027")
 	f := section(t, body, "karte-prognose-bis-jahresende-2026-geschaetzt")
 	// Bezug: 281 kWh in 134 days, the 79 left at that mean: 446,7
-	mustContain(t, f, "<span class=name>Bezug</span> <b class=zahl>etwa 447 kWh</b> <span class=k>bisher 281 kWh</span>",
+	mustContain(t, f, "<span class=name>Netzbezug</span> <b class=zahl>etwa 447 kWh</b> <span class=k>bisher 281 kWh</span>",
 		"der Rest geschätzt nach dem Tagesmittel bisher · gezählt ab dem 2. Juni", "<b class=zahl>etwa 2.130 kWh</b>")
 }
 
@@ -152,11 +147,11 @@ func TestEnergieComparesWithLastYear(t *testing.T) {
 		`<b class=zahl>572 kWh</b> <span class="delta schlecht"><span aria-hidden=true>▲</span> +100 % · schlechter</span> <span class=k>Vorjahr 286 kWh</span>`)
 	f := section(t, body, "karte-prognose-bis-jahresende-2026-geschaetzt")
 	// 572 so far, the rest as last year's 79 days; last year 365: +78 %
-	mustContain(t, f, `<span class=name>Bezug</span> <b class=zahl>etwa 651 kWh</b> <span class="delta schlecht"><span aria-hidden=true>▲</span> +78 % · schlechter</span> <span class=k>bisher 572 kWh · 2025: 365 kWh</span>`,
+	mustContain(t, f, `<span class=name>Netzbezug</span> <b class=zahl>etwa 651 kWh</b> <span class="delta schlecht"><span aria-hidden=true>▲</span> +78 % · schlechter</span> <span class=k>bisher 572 kWh · 2025: 365 kWh</span>`,
 		"<p class=hinweis>Bis gestern gemessen, der Rest geschätzt wie im Vorjahr</p>")
 	mustNotContain(t, f, "gezählt ab", "Vergleich mit dem Vorjahr ab")
-	// only Bezug named: no other series, no Eigenverbrauch without Solar and Einspeisung
-	mustNotContain(t, body, "Solar", "Eigenverbrauch")
+	// only Bezug named: no other series, and no Autarkie without them
+	mustNotContain(t, body, "Erzeugt", "Ins Netz", "Autarkie")
 }
 
 // HA's statistics not answering is one plain line where the history

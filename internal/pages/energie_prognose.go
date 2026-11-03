@@ -84,8 +84,8 @@ func prognoseReihe(today, yearStart time.Time, loc *time.Location, key, name str
 
 // schaetze puts the estimate into the Jahr and Monat chart's bars: each
 // series' rest of its period from today on, today's part already measured
-// taken off; and last year's same period — what the house used
-// (Eigenverbrauch + Bezug) and what went into the grid — when HA has all
+// taken off; and last year's same period — what came in (Erzeugt +
+// Netzbezug) and what went into the grid — when HA has all
 // of it. heute is where now falls, in bars from
 // the left; −1 for a span without an estimate.
 func schaetze(view string, now time.Time, loc *time.Location, daily amounts, bs []bucket) (heute float64) {
@@ -143,7 +143,7 @@ func schaetze(view string, now time.Time, loc *time.Location, daily amounts, bs 
 			}
 			return sum, any && all
 		}
-		bs[i].vorjahr, bs[i].hasVorjahr = lastYear("eigen", "bezug")
+		bs[i].vorjahr, bs[i].hasVorjahr = lastYear("solar", "bezug")
 		bs[i].vorjahrEinsp, bs[i].hasVorjahrEins = lastYear("einsp")
 	}
 	return heute

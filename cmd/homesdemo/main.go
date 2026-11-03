@@ -18,6 +18,7 @@ import (
 	"github.com/mdopp/homes/internal/discogs"
 	"github.com/mdopp/homes/internal/napi"
 	"log"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -74,6 +75,7 @@ func main() {
 	fake.Set("sensor.netz", "-1600", power("Aktuelle Netz Leistung"))
 	fake.Set("sensor.akku", "800", power("Aktuelle Akku Leistung"))
 	fake.Set("sensor.akku_soc", "74", map[string]any{"friendly_name": "Akku-Füllstand in Prozent", "device_class": "battery", "unit_of_measurement": "%"})
+	demoEnergyCounters(fake, time.Now())
 	fake.Set("media_player.wz", "playing", map[string]any{"friendly_name": "Wohnzimmer", "media_title": "Abbey Road", "media_artist": "The Beatles",
 		"volume_level": 0.3, "supported_features": 1.0 + 4 + 1024 + 16384})
 
@@ -220,4 +222,46 @@ func (demoFilme) Geschaut(context.Context, string, int) ([]jellyfin.Gesehen, err
 
 func (demoFilme) HatFilm(_ context.Context, name string) (string, bool, error) {
 	return "Dune", jellyfin.Plain(name) == "dune", nil
+}
+
+// demoEnergyCounters gives Energie its counters, as the fallback finds
+// them by friendly name: what each added since local midnight (Heute),
+// and HA's long-term statistics from last January on (the history), the
+// sun by the season.
+func demoEnergyCounters(fake *hafake.HA, now time.Time) {
+	kwh := func(name string) map[string]any {
+		return map[string]any{"friendly_name": name, "device_class": "energy", "unit_of_measurement": "kWh", "state_class": "total_increasing"}
+	}
+	y, m, d := now.Date()
+	midnight := time.Date(y, m, d, 0, 0, 0, 0, now.Location())
+	for _, c := range []struct {
+		id, name     string
+		total, today float64
+		perDay       func(time.Time) float64
+	}{
+		{"sensor.pv_total", "PV Erzeugung", 5012.4, 8.2, func(t time.Time) float64 { return 2 + 14*sunOf(t) }},
+		{"sensor.einsp_total", "Netzeinspeisung", 2306, 0.3, func(t time.Time) float64 { return 9 * sunOf(t) }},
+		{"sensor.bezug_total", "Netzbezug", 1803.1, 2.0, func(t time.Time) float64 { return 5 - 4*sunOf(t) }},
+		{"sensor.akku_laden", "Batterie laden", 700.5, 3.1, nil},
+		{"sensor.akku_entladen", "Batterie entladen", 650.2, 2.4, nil},
+	} {
+		fake.Set(c.id, strconv.FormatFloat(c.total, 'f', 1, 64), kwh(c.name))
+		fake.SetHistory(c.id, []map[string]any{{"state": strconv.FormatFloat(c.total-c.today, 'f', 1, 64), "last_changed": midnight.UTC().Format(time.RFC3339)}})
+		if c.perDay == nil {
+			continue
+		}
+		var pts []hafake.Stat
+		for t := time.Date(y-1, time.January, 1, 0, 0, 0, 0, now.Location()); t.Before(midnight); t = t.AddDate(0, 0, 1) {
+			pts = append(pts, hafake.Stat{Start: t.Add(12 * time.Hour), Change: c.perDay(t)})
+		}
+		for h := 0; h < now.Hour(); h++ {
+			pts = append(pts, hafake.Stat{Start: midnight.Add(time.Duration(h) * time.Hour), Change: c.today / float64(max(1, now.Hour()))})
+		}
+		fake.SetStatistics(c.id, pts)
+	}
+}
+
+// sunOf is how much the sun gives on a day, 0 in midwinter to 1 in midsummer.
+func sunOf(t time.Time) float64 {
+	return (1 - math.Cos(2*math.Pi*float64(t.YearDay()-10)/365)) / 2
 }

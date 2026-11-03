@@ -15,11 +15,12 @@ import (
 	"github.com/mdopp/homes/internal/ha"
 )
 
-// The history (haus#65): what came from the grid, went into it, what the
-// sun made and what the house used of that itself, by hour, day or month,
-// from HA's long-term statistics; and the comparisons a family asks
-// about — this month against the last and against last year's, the year
-// so far against last year's, and where the year will end.
+// The history (haus#65): what the sun made, what went into the grid and
+// came from it, by hour, day or month, from HA's long-term statistics;
+// and the comparisons a family asks about — this month against last
+// year's, the year so far against last year's, and where the year will
+// end. Not this month against the last: the sun makes that a comparison
+// of seasons (owner, 2026-11-03: "bringt bei PV nicht viel").
 
 // What the history says when it cannot show something.
 const (
@@ -30,11 +31,11 @@ const (
 	saysYearJustBegun   = "Das Jahr hat gerade erst angefangen; die Zahlen kommen morgen."
 )
 
-// energySeries are the history's four amounts, in the order the page
-// names them: what the sun made, what the house used of it, what came
-// from the grid, what went into it. Eigenverbrauch is Solar − Einspeisung.
+// energySeries are the history's three amounts, in the order the page
+// names them: what the sun made, what went into the grid, what came from
+// it.
 var energySeries = []struct{ key, name string }{
-	{"solar", "Solar"}, {"eigen", "Eigenverbrauch"}, {"bezug", "Bezug"}, {"einsp", "Einspeisung"},
+	{"solar", "Erzeugt"}, {"einsp", "Ins Netz"}, {"bezug", "Netzbezug"},
 }
 
 // views are the history's spans: today by the hour, the last seven days,
@@ -47,7 +48,7 @@ type amounts map[string]map[int64]float64
 
 // statsFor reads what HA's long-term statistics say for the history's
 // ids between from and to, by period, each period by its local start;
-// Eigenverbrauch for each period that has both Solar and Einspeisung.
+// nothing derived.
 func statsFor(ctx context.Context, c *ha.Client, st energie.Stats, from, to time.Time, period string, loc *time.Location) (amounts, error) {
 	slots := map[string]string{"solar": st.Solar, "bezug": st.Bezug, "einsp": st.Einspeisung}
 	var ids []string
@@ -79,15 +80,6 @@ func statsFor(ctx context.Context, c *ha.Client, st energie.Stats, from, to time
 			m[at.Unix()] += s.Change
 		}
 		out[key] = m
-	}
-	if solar, einsp := out["solar"], out["einsp"]; solar != nil && einsp != nil {
-		eigen := map[int64]float64{}
-		for at, v := range solar {
-			if e, ok := einsp[at]; ok {
-				eigen[at] = math.Max(0, v-e)
-			}
-		}
-		out["eigen"] = eigen
 	}
 	return out, nil
 }
@@ -145,7 +137,7 @@ type bucket struct {
 	label, long string
 	v           map[string]float64
 	// est is the estimate for the rest of the bar's period (Jahr, Monat:
-	// schaetze); vorjahr last year's use in it (Eigenverbrauch + Bezug),
+	// schaetze); vorjahr what came in last year (Erzeugt + Netzbezug),
 	// vorjahrEinsp what went into the grid, each when HA has all of it
 	est                        map[string]float64
 	vorjahr, vorjahrEinsp      float64
@@ -209,8 +201,8 @@ func buckets(view string, now time.Time, loc *time.Location, daily, hourly amoun
 }
 
 // verlaufHTML is the history: the spans to choose, the span's totals as
-// the flow picture, its chart, the chart as a table; then the
-// comparisons and the year-end forecast (under the Jahr chart, else last).
+// Jetzt's flow picture in kWh, its chart, the chart as a table; then the comparisons and the year-end forecast (under the
+// Jahr chart, else last).
 func verlaufHTML(view string, now time.Time, loc *time.Location, daily, hourly amounts, err error) string {
 	var b strings.Builder
 	b.WriteString("<h2 class=abschnitt>Verlauf</h2><nav class=zeitraum aria-label=Zeitraum>")
@@ -263,8 +255,8 @@ func verlaufHTML(view string, now time.Time, loc *time.Location, daily, hourly a
 }
 
 // vergleiche are the comparison cards (haus#65), from the days HA has:
-// this month so far against the same days of the last, and of the same
-// month last year; the year so far against last year's. Only complete
+// this month so far against the same days of the same month last year;
+// the year so far against last year's. Only complete
 // days count (today is not over). Each series is a headline number and,
 // when the earlier days are there, its delta (deltaChip). A comparison
 // whose earlier days HA does not have yet says from when it can be made,
@@ -284,9 +276,6 @@ func vergleiche(now time.Time, loc *time.Location, daily amounts) string {
 		empty         string
 	}
 	cmps := []cmp{
-		{"Dieser Monat und der letzte", monthStart, 0, 1, func() string {
-			return months[back(today, 0, 1, false).Month()-1] + " " + upTo
-		}, "Vormonat", saysMonthJustBegun},
 		{"Dieser Monat und der im Vorjahr", monthStart, 1, 0, func() string {
 			return months[today.Month()-1] + " " + strconv.Itoa(today.Year()-1) + " " + upTo
 		}, "Vorjahr", saysMonthJustBegun},
@@ -364,9 +353,9 @@ func zahlItem(name, zahl, chip, detail string) string {
 }
 
 // goodWhenMore is which way is good for the household, by series: more
-// sun and more of it kept is good, more from the grid bad; more fed in is
-// neither — more paid for it, but less of the sun kept.
-var goodWhenMore = map[string]int{"solar": 1, "eigen": 1, "bezug": -1, "einsp": 0}
+// sun is good, more from the grid bad; more fed in is neither — more paid
+// for it, but less of the sun kept.
+var goodWhenMore = map[string]int{"solar": 1, "bezug": -1, "einsp": 0}
 
 // deltaChip is now against then the way a report says it: an arrow, the
 // signed change in whole percent and, when the change is good or bad for
@@ -413,9 +402,9 @@ const (
 	chartMinVisible = 0.5 // a segment under half a unit is drawn as nothing
 )
 
-// energyChart draws the span (haus#65): one bar a period, what the house
-// used above the line — what it took from the sun (Eigenverbrauch) and
-// from the grid (Bezug) — and what went into the grid below it. A bar
+// energyChart draws the span (haus#65): one bar a period, what came in
+// above the line — what the sun made (Erzeugt) and what came from the
+// grid (Netzbezug) — and what went into the grid below it. A bar
 // with an estimate (Jahr, Monat: schaetze) carries it hatched on top of
 // what was, in the same series' colours, heute a dashed line at where now
 // falls (in bars; −1 none), last year a stroke. Each bar names its
@@ -425,7 +414,7 @@ func energyChart(title string, bs []bucket, heute float64, rest string) string {
 	var up, down float64
 	anyEst, anyVorjahr, anyVorjahrEins := false, false, false
 	for _, b := range bs {
-		up = math.Max(up, b.v["eigen"]+b.v["bezug"]+b.est["eigen"]+b.est["bezug"])
+		up = math.Max(up, b.v["solar"]+b.v["bezug"]+b.est["solar"]+b.est["bezug"])
 		down = math.Max(down, b.v["einsp"]+b.est["einsp"])
 		if b.hasVorjahrEins {
 			down, anyVorjahrEins = math.Max(down, b.vorjahrEinsp), true
@@ -454,7 +443,7 @@ func energyChart(title string, bs []bucket, heute float64, rest string) string {
 		html.EscapeString(label+"; die Zahlen stehen in der Tabelle darunter") + `">`)
 	if anyEst {
 		b.WriteString("<defs>")
-		for _, k := range []string{"eigen", "bezug", "einsp"} {
+		for _, k := range []string{"solar", "bezug", "einsp"} {
 			b.WriteString(`<pattern id=schraffur-` + k + ` width=5 height=5 patternUnits=userSpaceOnUse patternTransform="rotate(45)"><rect class=` + k + ` width=2 height=5></rect></pattern>`)
 		}
 		b.WriteString("</defs>")
@@ -515,7 +504,7 @@ func energyChart(title string, bs []bucket, heute float64, rest string) string {
 			key string
 			v   float64
 			est bool
-		}{{"eigen", x.v["eigen"], false}, {"bezug", x.v["bezug"], false}, {"eigen", x.est["eigen"], true}, {"bezug", x.est["bezug"], true}} {
+		}{{"solar", x.v["solar"], false}, {"bezug", x.v["bezug"], false}, {"solar", x.est["solar"], true}, {"bezug", x.est["bezug"], true}} {
 			h := seg.v * scale
 			if h < chartMinVisible {
 				continue
@@ -558,7 +547,7 @@ func energyChart(title string, bs []bucket, heute float64, rest string) string {
 		b.WriteString("</g>")
 	}
 	b.WriteString(`<line class=nulllinie x1=` + strconv.Itoa(chartL) + ` x2=` + strconv.Itoa(chartW-chartR) + ` y1=` + f(base) + ` y2=` + f(base) + `></line>`)
-	// last year as lines across the bars: the use above the line, what went
+	// last year as lines across the bars: what came in above the line, what went
 	// into the grid below it; a gap where HA does not have the whole period
 	line := func(class string, has func(bucket) (float64, bool), sign float64) {
 		var d strings.Builder
@@ -592,7 +581,7 @@ func energyChart(title string, bs []bucket, heute float64, rest string) string {
 			b.WriteString(`<path class="vorjahr ` + class + `" d="` + d.String() + `"></path>`)
 		}
 	}
-	line("verbrauch", func(x bucket) (float64, bool) { return x.vorjahr, x.hasVorjahr }, 1)
+	line("rein", func(x bucket) (float64, bool) { return x.vorjahr, x.hasVorjahr }, 1)
 	line("einsp", func(x bucket) (float64, bool) { return x.vorjahrEinsp, x.hasVorjahrEins }, -1)
 	// the legend and the table: only the series this span has
 	has := map[string]bool{}
@@ -605,7 +594,7 @@ func energyChart(title string, bs []bucket, heute float64, rest string) string {
 		}
 	}
 	b.WriteString("</svg><figcaption><ul class=legende>")
-	for _, l := range []struct{ key, says string }{{"eigen", "Eigenverbrauch (von der Sonne)"}, {"bezug", "Bezug (aus dem Netz)"}, {"einsp", "Einspeisung (ins Netz)"}} {
+	for _, l := range []struct{ key, says string }{{"solar", "Erzeugt"}, {"bezug", "Netzbezug"}, {"einsp", "Ins Netz"}} {
 		if has[l.key] {
 			b.WriteString("<li><i class=" + l.key + "></i>" + l.says + "</li>")
 		}
@@ -697,59 +686,60 @@ func shortKWh(v float64) string {
 
 // verlaufStyle is the Energie page's look, the house palette's tokens
 // and its own: the series colours (checked for colour blindness and
-// contrast on both grounds, dark first, light when the phone is), and the
-// report's two (haus#65, the owner: "als ob ich einen Geschäftsbericht
-// lese"): --e-gut a blue-ish green, --e-schlecht an orange-red, AA as
-// text on the card and on their own chip (dark 8,9:1 and 7,2:1, light
-// 5,2:1 and 5,4:1), apart for red-green colour blindness too — and never
-// alone: the arrow, the sign and the word say it as well.
-const verlaufStyle = `<style>:root{--e-eigen:#c27c0e;--e-bezug:#4f8ff7;--e-einsp:#1fa592;--e-solar:#e3b341;--e-akku:#a78bfa;
+// contrast on both grounds, dark first, light when the phone is) — Solar
+// yellow, Netz blue, Ins Netz green, Akku purple, Haus the accent's
+// orange — and the report's two (haus#65): --e-gut a blue-ish green,
+// --e-schlecht an orange-red, never alone: the arrow, the sign and the
+// word say it as well. The cards are the Android widget's (owner,
+// 2026-11-03): black without a border in the dark, heavy type; in the
+// light the page's white, also without a border.
+const verlaufStyle = `<style>:root{--e-bezug:#4f8ff7;--e-einsp:#1fa592;--e-solar:#e3b341;--e-akku:#a78bfa;--e-karte:#000;--e-wort:#c9cdd6;
 --e-gut:#40c8c0;--e-schlecht:#ff7a5c;--e-gut-soft:rgba(64,200,192,.10);--e-schlecht-soft:rgba(255,122,92,.10)}
-@media (prefers-color-scheme:light){:root{--e-eigen:#c27c0e;--e-bezug:#2f6fd6;--e-einsp:#0f8a78;--e-solar:#b07d00;--e-akku:#7c4ddb;
+@media (prefers-color-scheme:light){:root{--e-bezug:#2f6fd6;--e-einsp:#0f8a78;--e-solar:#b07d00;--e-akku:#7c4ddb;--e-karte:var(--card);--e-wort:#334155;
 --e-gut:#00788a;--e-schlecht:#c4352b;--e-gut-soft:rgba(0,120,138,.08);--e-schlecht-soft:rgba(196,53,43,.08)}}
 .abschnitt{font-size:1.15rem;margin:34px 0 0}.zeitraum{display:flex;gap:6px;margin:12px 0 0;flex-wrap:wrap}
 .zeitraum a{min-height:44px;display:inline-flex;align-items:center;padding:0 16px;border-radius:999px;background:var(--card);border:1px solid var(--edge);color:var(--ink);text-decoration:none;font-size:.88rem}
 .zeitraum a[aria-current]{background:var(--accent-soft);border-color:transparent;color:var(--accent);font-weight:600}
-.verlauf{margin:12px 0 0;padding:12px 10px 10px;background:var(--card);border:1px solid var(--edge);border-radius:14px}
-.verlauf svg{display:block;width:100%;height:auto}.verlauf .eigen{fill:var(--e-eigen)}.verlauf .bezug{fill:var(--e-bezug)}.verlauf .einsp{fill:var(--e-einsp)}
+.verlauf{margin:12px 0 0;padding:12px 10px 10px;background:var(--e-karte);border:0;border-radius:18px}
+.verlauf svg{display:block;width:100%;height:auto}.verlauf .solar{fill:var(--e-solar)}.verlauf .bezug{fill:var(--e-bezug)}.verlauf .einsp{fill:var(--e-einsp)}
 .verlauf .treffer{fill:transparent}.verlauf g:hover .treffer{fill:var(--line)}
 .verlauf .gitter{stroke:var(--line)}.verlauf .nulllinie{stroke:var(--faint)}
-.verlauf .achse{fill:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
-.legende{list-style:none;margin:8px 4px 0;padding:0;display:flex;flex-wrap:wrap;gap:4px 14px;font-size:.8rem;color:var(--ink)}
-.legende i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}.legende .eigen{background:var(--e-eigen)}.legende .bezug{background:var(--e-bezug)}.legende .einsp{background:var(--e-einsp)}
-.verlauf details,.fluss details{margin:8px 4px 0;font-size:.82rem}.verlauf summary,.fluss summary{cursor:pointer;color:var(--accent);min-height:44px;display:flex;align-items:center}
+.verlauf .achse{fill:var(--muted);font-size:12px;font-weight:600;font-variant-numeric:tabular-nums}
+.legende{list-style:none;margin:8px 4px 0;padding:0;display:flex;flex-wrap:wrap;gap:4px 14px;font-size:.82rem;font-weight:600;color:var(--ink)}
+.legende i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}.legende .solar{background:var(--e-solar)}.legende .bezug{background:var(--e-bezug)}.legende .einsp{background:var(--e-einsp)}
+.verlauf details,.fluss details{margin:8px 4px 0;font-size:.82rem;overflow-x:auto}.verlauf summary,.fluss summary{cursor:pointer;color:var(--accent);min-height:44px;display:flex;align-items:center}
 .verlauf table,.fluss table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
 .verlauf th,.verlauf td,.fluss th,.fluss td{padding:4px 6px;border-top:1px solid var(--line);text-align:right;font-weight:400}
 .verlauf th[scope=row],.verlauf thead th:first-child,.fluss th{text-align:left}.verlauf thead th{color:var(--muted)}
-.fluss-bild{background:var(--card);border:1px solid var(--edge);border-radius:14px;padding:6px 8px 12px}
-.fluss svg{display:block;width:100%;max-width:380px;height:auto;margin:0 auto}
-.fluss .spur{fill:none;stroke:var(--track);stroke-width:1.5;stroke-dasharray:2 5}
-.fluss .eigen{--c:var(--e-eigen)}.fluss .einsp{--c:var(--e-einsp)}.fluss .bezug{--c:var(--e-bezug)}.fluss .akku{--c:var(--e-akku)}
-.fluss .weg{fill:none;stroke:var(--c);stroke-linecap:round;opacity:.38}.fluss .pfeil{fill:var(--c)}
-.fluss .lauf{fill:none;stroke:var(--c);stroke-linecap:round;stroke-dasharray:1 11;animation:fliesst 1.6s linear infinite}
+.fluss-bild{background:var(--e-karte);border-radius:18px;padding:10px 6px}
+.fluss svg{display:block;width:100%;max-width:440px;height:auto;margin:0 auto;font-family:inherit}
+.fluss .kante{--c:var(--e-solar)}.fluss .von-netz{--c:var(--e-bezug)}.fluss .von-akku{--c:var(--e-akku)}
+.fluss .weg{fill:none;stroke:var(--c);stroke-linecap:round;opacity:.7}.fluss .pfeil{fill:var(--c)}
+.fluss .lauf{fill:none;stroke:var(--e-karte);stroke-linecap:round;stroke-dasharray:1 11;opacity:.55;animation:fliesst 1.6s linear infinite}
 @keyframes fliesst{to{stroke-dashoffset:-12}}@media (prefers-reduced-motion:reduce){.fluss .lauf{animation:none}}
 .knoten.solar{--c:var(--e-solar)}.knoten.netz{--c:var(--e-bezug)}.knoten.akku{--c:var(--e-akku)}.knoten.haus{--c:var(--accent)}
-.knoten circle{fill:var(--card);stroke:var(--c);stroke-width:3}.knoten circle.fuell{fill:none;stroke:var(--c);stroke-width:5;stroke-linecap:round;opacity:.55}.knoten.aus circle{stroke:var(--faint);stroke-dasharray:4 4;stroke-width:2}
-.knoten .name{fill:var(--muted);font-size:11px;font-weight:600}
-.knoten .zahl{fill:var(--ink);font-size:17px;font-weight:700;font-variant-numeric:tabular-nums}.knoten .zahl.leer{fill:var(--faint)}.knoten .zahl.lang{font-size:13.5px}
-.knoten .wort{fill:var(--muted);font-size:11.5px}.knoten .zweit{fill:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
-.kennzahlen{display:grid;grid-template-columns:1fr 1fr;gap:0 12px;margin:6px 6px 0;padding:10px 0 0;border-top:1px solid var(--line)}
-.kennzahlen div{min-width:0}.kennzahlen dt{font-size:.82rem;font-weight:600;color:var(--muted);overflow-wrap:anywhere}
-.kennzahlen dd{margin:0}.kennzahlen .zahl{font-size:2rem;font-weight:700;line-height:1.15;font-variant-numeric:tabular-nums;color:var(--ink)}.kennzahlen .k{font-size:.8rem}
+.knoten .pill{fill:var(--c);fill-opacity:.18;stroke:var(--c);stroke-width:2.6}.knoten.aus .pill{fill:none;stroke:var(--faint);stroke-dasharray:5 4;stroke-width:2}
+.knoten .fuell-spur,.knoten .fuell{fill:none;stroke:var(--c);stroke-width:3.5}.knoten .fuell-spur{opacity:.25}.knoten .fuell{stroke-linecap:round}
+.knoten .fuell-schild{fill:var(--e-karte);stroke:var(--c);stroke-width:1.5}.knoten .fuell-zahl{fill:var(--c);font-size:11px;font-weight:800;font-variant-numeric:tabular-nums}
+.knoten .zahl{fill:var(--ink);font-size:22px;font-weight:800;font-variant-numeric:tabular-nums}.knoten .zahl.lang{font-size:17px}
+.knoten .wort{fill:var(--e-wort);font-size:12px;font-weight:700}.knoten .nm{fill:var(--c);font-weight:800}.knoten.aus .nm{fill:var(--faint)}
+.knoten .grund{fill:var(--faint);font-size:11px;font-weight:600}.knoten .zweit{fill:var(--e-wort);font-size:12px;font-weight:700;font-variant-numeric:tabular-nums}
+.fluss .autarkie{margin:4px 0 2px;text-align:center;font-size:1.05rem;font-weight:600;color:var(--e-wort)}.fluss .autarkie b{color:var(--ink);font-weight:800;font-variant-numeric:tabular-nums}
 .karte ul.zahlen{background:none;border:0;border-radius:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:8px}
-.karte .zahlen li,.karte .zahlen li:first-child{background:var(--card);border:1px solid var(--edge);border-radius:14px;padding:11px 13px 12px;display:flex;flex-direction:column;align-items:flex-start;gap:3px}
-.karte ul.legende{background:none;border:0;border-radius:0}.karte .legende li{padding:0;border:0;min-height:0}.zahlen .name{font-size:.85rem;font-weight:600;color:var(--muted)}
-.zahlen .zahl{font-size:1.45rem;font-weight:700;line-height:1.2;font-variant-numeric:tabular-nums;color:var(--ink)}.karte .zahlen .k{font-size:.78rem;margin:0}
-.delta{display:inline-flex;align-items:center;gap:4px;padding:1px 8px;border-radius:999px;font-size:.78rem;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.karte .zahlen li,.karte .zahlen li:first-child{background:var(--e-karte);border:0;border-radius:18px;padding:11px 13px 12px;display:flex;flex-direction:column;align-items:flex-start;gap:3px}
+.karte ul.legende{background:none;border:0;border-radius:0}.karte .legende li{padding:0;border:0;min-height:0}.zahlen .name{font-size:.85rem;font-weight:700;color:var(--e-wort)}
+.zahlen .zahl{font-size:1.45rem;font-weight:800;line-height:1.2;font-variant-numeric:tabular-nums;color:var(--ink)}.karte .zahlen .k{font-size:.78rem;margin:0}
+.karte>ul{background:var(--e-karte);border:0}
+.delta{display:inline-flex;align-items:center;gap:4px;padding:1px 8px;border-radius:999px;font-size:.78rem;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
 .delta.gut{color:var(--e-gut);background:var(--e-gut-soft)}.delta.schlecht{color:var(--e-schlecht);background:var(--e-schlecht-soft)}.delta.neutral,.delta.gleich{color:var(--muted);background:var(--line)}
-.verlauf .schaetzung.eigen{fill:url(#schraffur-eigen);stroke:var(--e-eigen)}.verlauf .schaetzung.bezug{fill:url(#schraffur-bezug);stroke:var(--e-bezug)}.verlauf .schaetzung.einsp{fill:url(#schraffur-einsp);stroke:var(--e-einsp)}.verlauf .schaetzung{stroke-width:1}
+.verlauf .schaetzung.solar{fill:url(#schraffur-solar);stroke:var(--e-solar)}.verlauf .schaetzung.bezug{fill:url(#schraffur-bezug);stroke:var(--e-bezug)}.verlauf .schaetzung.einsp{fill:url(#schraffur-einsp);stroke:var(--e-einsp)}.verlauf .schaetzung{stroke-width:1}
 .verlauf .vorjahr{fill:none;stroke:var(--ink);stroke-width:1.6;stroke-dasharray:5 3;stroke-linejoin:round}.verlauf .vorjahr.einsp{stroke:var(--muted)}.verlauf .heute{stroke:var(--accent);stroke-width:1.2;stroke-dasharray:3 3}
-.verlauf .heute-text{fill:var(--accent);font-size:11px;font-weight:600}
+.verlauf .heute-text{fill:var(--accent);font-size:11px;font-weight:700}
 .legende .schaetzung{background:repeating-linear-gradient(45deg,var(--muted) 0 2px,transparent 2px 5px);box-shadow:inset 0 0 0 1px var(--muted)}
 .legende .vorjahr{width:16px;height:2px;vertical-align:3px;border-radius:0;background:repeating-linear-gradient(90deg,var(--ink) 0 5px,transparent 5px 8px)}
 @media (min-width:900px){body>.zeitraum,body>.abschnitt,body>.prognose,body>.vergleich{grid-column:1/-1}body>.verlauf{grid-column:auto;margin-top:46px;align-self:start}
-.vergleich ul.zahlen{grid-template-columns:repeat(4,minmax(0,1fr))}
-.prognose ul.zahlen{grid-template-columns:repeat(4,minmax(0,1fr))}}</style>`
+.vergleich ul.zahlen{grid-template-columns:repeat(3,minmax(0,1fr))}
+.prognose ul.zahlen{grid-template-columns:repeat(3,minmax(0,1fr))}}</style>`
 
 // zeitraumOf is the span the page asks for (?zeitraum=…); the day when
 // it names none it knows.

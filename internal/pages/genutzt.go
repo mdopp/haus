@@ -56,7 +56,7 @@ var degradedLines = func() []struct{ key, says string } {
 	ls := []struct{ key, says string }{
 		{"schalten", saysSwitchFailed}, {"licht", saysNoHouse}, {"raeume", saysNoRooms}, {"kalender", saysNoCalendar},
 		{"kontakte", saysNoContacts}, {"notizen", saysNoNotes}, {"bedeutung", saysWordsOnly}, {"dokumente", saysNoDocuments},
-		{"favoriten", saysNoFavorites}, {"favoriten-verdeckt", saysFavsUnseen}, {"strom", saysNoEnergy}, {"strom-heute", saysNoEnergyToday}, {"verlauf", saysNoEnergyHistory},
+		{"favoriten", saysNoFavorites}, {"favoriten-verdeckt", saysFavsUnseen}, {"strom", saysNoEnergy}, {"verlauf", saysNoEnergyHistory},
 		{"lautsprecher", saysNoPlayers}, {"bote", saysDown("")}, {"bote-langsam", saysSlow("")},
 		{"box", "Wie es der Box geht, lässt sich gerade nicht sagen."}, {"laib", "Laib antwortet nicht"},
 		{"github", "GitHub ist gerade nicht erreichbar."}, {"dienste", " gerade nicht erreichbar."},
