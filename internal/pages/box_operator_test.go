@@ -15,7 +15,9 @@ import (
 // list or, while Haus may not list them, „unknown tool“
 func skillLaib(t *testing.T, list []map[string]any, mayList bool) *laib.Client {
 	t.Helper()
-	ran := time.Now().Add(-2 * time.Hour).UTC().Format(time.RFC3339)
+	// earlier today in the page's clock (time.Local), also just after midnight: two hours back was yesterday then
+	now := time.Now()
+	ran := now.Add(-now.Sub(time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)) / 2).UTC().Format(time.RFC3339)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			Params struct {
