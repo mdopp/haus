@@ -346,6 +346,7 @@ func TestEveryNapiRouteWantsADevice(t *testing.T) {
 		"HEAD /napi/sicherung/uploads/{id}": true, "PATCH /napi/sicherung/uploads/{id}": true,
 		"GET /napi/sicherung/schluessel": true, "POST /napi/kontakte": true,
 		"GET /napi/sicherung/letzte": true, "GET /napi/sicherung/letzte/{quelle}/{pfad...}": true,
+		"GET /napi/gemeinsam/kontakte": true, "GET /napi/gemeinsam/kalender": true,
 		"GET /napi/standort": true, "POST /napi/standort": true,
 	}
 	// what the source registers: "METHOD /napi/…" and "METHOD "+prefix+"/…" (prefix is /napi/box)
