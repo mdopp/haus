@@ -31,7 +31,7 @@ var pagePaths = map[string]string{"/start": "start", "/raeume": "raeume", "/ener
 
 // fragmentPaths are parts of a page fetched after it (haus#67): the plain
 // lines they show count for their page, a view does not.
-var fragmentPaths = map[string]string{StartBoxPath: "start"}
+var fragmentPaths = map[string]string{StartBoxPath: "start", MehrAufgabenPath: "mehr"}
 
 var pagePrefixes = []struct{ prefix, page string }{
 	{cards.ReminderPages, "erinnerung"}, {cards.ThingPages, "ding"}, {cards.ContactPages, "kontakt"},

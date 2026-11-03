@@ -149,7 +149,7 @@ var marke = func() string {
 func Start(cfg StartConfig) http.HandlerFunc {
 	var box *boxStatus
 	if cfg.Laib != nil {
-		box = &boxStatus{laib: cfg.Laib}
+		box = boxStatusFor(cfg.Laib)
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {

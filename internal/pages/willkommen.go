@@ -1,7 +1,6 @@
 package pages
 
 import (
-	"context"
 	"html"
 	"log"
 	"net"
@@ -114,14 +113,17 @@ func Willkommen(cfg StartConfig) http.HandlerFunc {
 			laibErr  error
 		)
 		if cfg.Laib != nil {
-			fetch(r, func(ctx context.Context) {
-				_, rows, err := cfg.Laib.Status(ctx)
-				laibErr = err
+			// the status Start keeps (statusKeep); waited for only when none is
+			_, rows, err, ok := boxStatusFor(cfg.Laib).read(backendWait)
+			if !ok && err == nil {
+				err = errLaibSilent
+			}
+			if laibErr = err; err == nil {
 				services = map[string]bool{}
 				for _, s := range rows {
 					services[s.Name] = true
 				}
-			})
+			}
 		}
 		if laibErr != nil {
 			log.Printf("homes: willkommen: laib: %v", laibErr)

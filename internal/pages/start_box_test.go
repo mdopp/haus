@@ -54,7 +54,7 @@ func TestStartDoesNotWaitForLaib(t *testing.T) {
 
 	start := time.Now()
 	rec := ask(h, "/start")
-	if d := time.Since(start); d > 600*time.Millisecond {
+	if d := time.Since(start); d > 150*time.Millisecond { // owner 2026-11-03: not even briefly
 		t.Fatalf("Start waited %s for laib", d)
 	}
 	body := rec.Body.String()
@@ -96,14 +96,29 @@ func TestStartDoesNotWaitForLaib(t *testing.T) {
 		t.Fatalf("laib was asked %d times", n)
 	}
 
-	// kept only statusFresh: then laib is asked again
+	// fresh only statusFresh: then the kept status is shown at once and
+	// laib is asked again behind the page
 	fresh := statusFresh
 	statusFresh = 0
 	defer func() { statusFresh = fresh }()
-	ask(h, "/start")
+	start = time.Now()
+	body = ask(h, "/start").Body.String()
+	if d := time.Since(start); d > 150*time.Millisecond {
+		t.Fatalf("Start with a stale status took %s", d)
+	}
+	mustContain(t, body, "Alles in Ordnung")
+	for deadline := time.Now().Add(2 * time.Second); asked.Load() < 2 && time.Now().Before(deadline); {
+		time.Sleep(10 * time.Millisecond)
+	}
 	if n := asked.Load(); n != 2 {
 		t.Fatalf("laib was asked %d times after the status went stale", n)
 	}
+
+	// kept only statusKeep: past it, the page has the place again
+	keep := statusKeep
+	statusKeep = 0
+	defer func() { statusKeep = keep }()
+	mustContain(t, ask(h, "/start").Body.String(), "<div id=box-unten>")
 }
 
 // The box line fetched later says plainly what laib not answering means,

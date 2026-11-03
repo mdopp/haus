@@ -102,3 +102,16 @@ func (c *Client) forgetAufgaben() {
 	defer c.aufgabenMu.Unlock()
 	c.aufgaben = nil
 }
+
+// PeekAufgaben is the kept list without waiting: ok false while none is
+// kept. Like KeptAufgaben it starts a refresh when the list is old or
+// missing, which goes on after the caller has moved on.
+func (c *Client) PeekAufgaben(von string) (Aufgaben, bool) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	list, ok, _ := c.KeptAufgaben(ctx, von)
+	return list, ok
+}
+
+// ForgetAufgaben drops every kept list, as a tick through Homes does.
+func (c *Client) ForgetAufgaben() { c.forgetAufgaben() }
