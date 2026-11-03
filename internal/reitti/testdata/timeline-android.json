@@ -1,0 +1,28 @@
+{
+  "rawSignals": [
+    {"position": {"LatLng": "47.1000000°, 8.1000000°", "accuracyMeters": 5, "timestamp": "2020-05-01T09:00:00.000+02:00"}},
+    {"wifiScan": {"deliveryTime": "2020-05-01T09:01:00.000+02:00", "devicesRecords": [{"mac": 1, "rawRssi": -50}]}}
+  ],
+  "semanticSegments": [
+    {
+      "startTime": "2020-05-01T08:00:00.000+02:00",
+      "endTime": "2020-05-01T09:30:00.000+02:00",
+      "visit": {"hierarchyLevel": 0, "probability": 0.9, "topCandidate": {"placeId": "synthetisch", "semanticType": "HOME", "probability": 0.9, "placeLocation": {"latLng": "47.1000000°, 8.1000000°"}}}
+    },
+    {
+      "startTime": "2020-05-01T09:30:00.000+02:00",
+      "endTime": "2020-05-01T10:00:00.000+02:00",
+      "timelinePath": [
+        {"point": "47.1100000°, 8.1100000°", "time": "2020-05-01T09:35:00.000+02:00"},
+        {"point": "47.1200000°, 8.1200000°", "time": "2020-05-01T09:45:00.000+02:00"},
+        {"point": "kein Ort", "time": "2020-05-01T09:50:00.000+02:00"}
+      ]
+    },
+    {
+      "startTime": "2020-05-01T10:00:00.000+02:00",
+      "endTime": "2020-05-01T10:30:00.000+02:00",
+      "activity": {"start": {"latLng": "47.1200000°, 8.1200000°"}, "end": {"latLng": "47.1300000°, 8.1300000°"}, "topCandidate": {"type": "WALKING"}}
+    }
+  ],
+  "userLocationProfile": {"frequentPlaces": [{"placeId": "synthetisch", "placeLocation": "47.1000000°, 8.1000000°", "label": "HOME"}]}
+}

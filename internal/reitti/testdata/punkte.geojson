@@ -1,0 +1,10 @@
+{
+  "type": "FeatureCollection",
+  "name": "synthetisch",
+  "features": [
+    {"type": "Feature", "geometry": {"type": "Point", "coordinates": [8.3, 47.3, 410]}, "properties": {"timestamp": "2022-01-05T10:00:00Z", "accuracy": 7}},
+    {"type": "Feature", "geometry": {"type": "Point", "coordinates": [8.31, 47.31]}, "properties": {"time": 1641380400}},
+    {"type": "Feature", "geometry": {"type": "LineString", "coordinates": [[8.3, 47.3], [8.4, 47.4]]}, "properties": {"timestamp": "2022-01-05T12:00:00Z"}},
+    {"type": "Feature", "geometry": {"type": "Point", "coordinates": [8.32, 47.32]}, "properties": {"name": "ohne Zeit"}}
+  ]
+}

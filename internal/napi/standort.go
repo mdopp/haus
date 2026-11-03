@@ -6,6 +6,7 @@ import (
 	"log"
 	"math"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/mdopp/homes/internal/reitti"
@@ -78,11 +79,15 @@ func (p punkt) lesbar() (reitti.Punkt, bool) {
 type standort struct {
 	r      *reitti.Reitti
 	whoami func(string) (string, bool)
+
+	once sync.Once
+	imp  *importer // the shared histories (standort_import.go), made on first use
 }
 
 func (s *standort) routes(mux *http.ServeMux, auth func(http.HandlerFunc) http.HandlerFunc) {
 	mux.HandleFunc("GET /napi/standort", auth(s.person(s.get)))
 	mux.HandleFunc("POST /napi/standort", auth(s.person(s.post)))
+	s.importRoutes(mux, auth)
 }
 
 func standortFehler(w http.ResponseWriter, code int, grund, say string) {

@@ -1,0 +1,4 @@
+{
+  "locations": [
+    {"latitudeE7": 470000000, "longitudeE7": 80000000, "accuracy": 12, "altitude": 400, "source": "WIFI", "timestamp": "2014-03-02T08:00:00.000Z"},
+    {"latitudeE7": 470010000, "lo

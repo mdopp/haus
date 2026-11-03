@@ -670,6 +670,37 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   (Reitti says yes only to a token it knows with a device attached), keeps
   it in `HOMES_DATA/reitti-konten.json` (0600) for that person alone, never
   logs or shows it (*Verbunden seit …* and Trennen).
+- An old location history, shared to the app (owner 2026-11-03,
+  *In den Standortverlauf übernehmen*): Google Maps' on-device export
+  (`Timeline.json`, Android `{semanticSegments}` and the iPhone's array),
+  Google Takeout's `Records.json` (`{locations}`), GPX (`<trkpt>`) and
+  GeoJSON (a FeatureCollection of Points with a time). Reitti reads the
+  Google formats only on its logged-in settings page (`/settings/import/…`,
+  session and CSRF; its token filter covers `/api/` only), so Homes reads
+  each file itself, point by point as Reitti's own importers do (v5.9.0:
+  the same points — a visit is its place at start and end, a path its
+  points; the same default accuracies; `rawSignals` and activities are not
+  points there either) and hands them in batches of 25,000 to Reitti's
+  token import `POST <HOMES_REITTI_URL>/api/v1/geojson/import` (multipart
+  `file`, a FeatureCollection) with the person's token. Reitti files them
+  into the timeline after its grace time (5 min); a point it has (same
+  device, same second) is kept once, so an import sent again adds nothing
+  twice. The file comes like a backup: `POST /napi/standort/import {name,
+  groesse}` → 201 `{id, offset}` (the same name and size again resume; 409
+  `{fehler, grund: "kein_schluessel"}` before the person connected Reitti;
+  413 over 5 GB; 507 without room), `HEAD /napi/standort/import/{id}` →
+  `Upload-Offset`, `PATCH /napi/standort/import/{id}` with `Upload-Offset`
+  and `application/offset+octet-stream` (≤ 16 MB a piece) → `{offset,
+  fertig}`; the piece that makes the file whole starts the import. `GET
+  /napi/standort/import/{id}` → `{stand: hochladen|laeuft|fertig|fehler,
+  name, groesse, gelesen, format, punkte, besuche, von?, bis?, text?,
+  fehler?, grund?}`: `text` is the end in one sentence („12.345 Orte von
+  März 2014 bis Dezember 2024 übernommen …“), `fehler` why not (`grund`
+  `format`, `keine_orte`, `schluessel_abgelehnt`, `reitti_weg`,
+  `kein_schluessel`). One import runs at a time; a Homes restarted
+  mid-import goes on at the next GET. The file
+  (`HOMES_DATA/standort-import/<person>/<id>.teil`) is deleted when the
+  import ends, however; its state is forgotten after seven days.
 
 - The Haushalt MCP source (laib ADR 0017, haus#11): `POST /mcp/haushalt`,
   laib's MCP shape (JSON-RPC over POST: `initialize`, `tools/list`,

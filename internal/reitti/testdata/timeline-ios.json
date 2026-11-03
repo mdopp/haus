@@ -1,0 +1,20 @@
+[
+  {
+    "startTime": "2021-07-10T12:00:00.000+02:00",
+    "endTime": "2021-07-10T13:00:00.000+02:00",
+    "visit": {"hierarchyLevel": "0", "topCandidate": {"probability": "0.8", "semanticType": "Unknown", "placeID": "synthetisch", "placeLocation": "geo:47.200000,8.200000"}, "probability": "0.8"}
+  },
+  {
+    "startTime": "2021-07-10T13:00:00.000+02:00",
+    "endTime": "2021-07-10T14:00:00.000+02:00",
+    "activity": {"start": "geo:47.200000,8.200000", "end": "geo:47.250000,8.250000", "topCandidate": {"type": "walking"}}
+  },
+  {
+    "startTime": "2021-07-10T13:00:00.000+02:00",
+    "endTime": "2021-07-10T15:00:00.000+02:00",
+    "timelinePath": [
+      {"point": "geo:47.210000,8.210000", "durationMinutesOffsetFromStartTime": "10"},
+      {"point": "geo:47.220000,8.220000", "durationMinutesOffsetFromStartTime": "70"}
+    ]
+  }
+]

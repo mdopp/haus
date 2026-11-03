@@ -758,6 +758,7 @@ func (s *Sicherung) patch(w http.ResponseWriter, r *http.Request, person string)
 type idleReader struct {
 	r       io.Reader
 	rc      *http.ResponseController
+	idle    time.Duration // 0: sicherungIdle
 	mu      sync.Mutex
 	stopped bool
 }
@@ -770,7 +771,11 @@ func (i *idleReader) Read(p []byte) (int, error) {
 		i.mu.Unlock()
 		return 0, errTakenOver
 	}
-	i.rc.SetReadDeadline(time.Now().Add(sicherungIdle))
+	idle := i.idle
+	if idle == 0 {
+		idle = sicherungIdle
+	}
+	i.rc.SetReadDeadline(time.Now().Add(idle))
 	i.mu.Unlock()
 	return i.r.Read(p)
 }
