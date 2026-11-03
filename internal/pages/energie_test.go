@@ -39,9 +39,10 @@ func energyHouse(t *testing.T, fake *hafake.HA) {
 
 // haus#12: Energie says what the house uses and makes now, and what came
 // together today, in the family's words: the flow legs as a picture of
-// where the power goes (never a sign to decode: "eingespeist", "lädt"),
-// the same as a table; today's counters since
-// midnight, and what the house used today from them.
+// where the power goes (never a sign to decode: "ins Netz", "lädt"), the
+// same as a table; Heute as the widget's number column (owner,
+// 2026-11-03): Erzeugt, Ins Netz, Netzbezug, Autarkie — not what went
+// into the battery or came out of it, not what the house used.
 func TestEnergieNowAndToday(t *testing.T) {
 	fake, hc := house(t)
 	energyHouse(t, fake)
@@ -50,30 +51,27 @@ func TestEnergieNowAndToday(t *testing.T) {
 		t.Fatalf("status %d", code)
 	}
 	mustContain(t, body, "<title>Energie · Homes</title>", "<h1>Energie</h1>")
-	mustContain(t, body, `<section class="karte fluss" aria-labelledby=karte-jetzt>`, `<section class="karte kacheln" aria-labelledby=karte-heute>`)
+	mustContain(t, body, `<section class="karte fluss" aria-labelledby=karte-jetzt>`, `<section class="karte spalte" aria-labelledby=karte-heute>`)
 	jetzt := section(t, body, "karte-jetzt")
 	mustContain(t, jetzt,
 		"<tr><th scope=row>Haus verbraucht</th><td>1,2 kW</td></tr>", "<tr><th scope=row>Solar erzeugt</th><td>3,4 kW</td></tr>",
-		"<tr><th scope=row>Netz eingespeist</th><td>1,8 kW</td></tr>", "<tr><th scope=row>Akku lädt</th><td>400 W</td></tr>",
+		"<tr><th scope=row>ins Netz</th><td>1,8 kW</td></tr>", "<tr><th scope=row>Akku lädt</th><td>400 W</td></tr>",
 		"<tr><th scope=row>Solar → Haus</th><td>1,2 kW</td></tr>", "<tr><th scope=row>Solar → Akku</th><td>400 W</td></tr>",
 		"<tr><th scope=row>Solar → Netz</th><td>1,8 kW</td></tr>")
 	heute := section(t, body, "karte-heute")
-	// verbraucht = 12,4 + 3,1 − 6 + 2,2 − 2,5 = 9,2
-	mustContain(t, heute,
-		"<span>Verbraucht</span>", "<b class=zustand>9,2 kWh</b>",
-		"<span>Erzeugt</span>", "<b class=zustand>12,4 kWh</b>",
-		"<span>Aus dem Netz</span>", "<b class=zustand>3,1 kWh</b>",
-		"<span>Ins Netz</span>", "<b class=zustand>6 kWh</b>",
-		"<span>In den Akku</span>", "<b class=zustand>2,5 kWh</b>",
-		"<span>Aus dem Akku</span>", "<b class=zustand>2,2 kWh</b>")
-	before(t, heute, "Verbraucht", "Erzeugt")
-	before(t, heute, "Erzeugt", "Aus dem Netz")
-	before(t, heute, "Aus dem Netz", "Ins Netz")
-	before(t, heute, "Ins Netz", "In den Akku")
-	before(t, heute, "In den Akku", "Aus dem Akku")
+	// the house used 12,4 − 6 + 3,1 + 2,2 − 2,5 = 9,2, of it 3,1 from the grid
+	mustContain(t, heute, "<h2 id=karte-heute>Heute</h2><table><tbody>",
+		`<tr><td class="zahl solar">12,4 kWh</td><th scope=row>Erzeugt</th></tr>`,
+		`<tr><td class="zahl einsp">6 kWh</td><th scope=row>Ins Netz</th></tr>`,
+		`<tr><td class="zahl bezug">3,1 kWh</td><th scope=row>Netzbezug</th></tr>`,
+		"<tr><td class=zahl>66\u00a0%</td><th scope=row>Autarkie</th></tr>")
+	before(t, heute, "Erzeugt", "Ins Netz")
+	before(t, heute, "Ins Netz", "Netzbezug")
+	before(t, heute, "Netzbezug", "Autarkie")
+	mustNotContain(t, heute, "Akku", "Verbraucht", "Aus dem Netz", "2,5 kWh", "2,2 kWh", "9,2 kWh")
 	before(t, body, "karte-jetzt", "karte-heute")
 	// no sensor's name, entity or unit word the family does not use
-	mustNotContain(t, body, "sensor.", "PV-Strom", "Hausverbrauch", "Netz Leistung", "Netzbezug", "Batterie", "Kühlschrank", "-1840", "−")
+	mustNotContain(t, body, "sensor.", "PV-Strom", "Hausverbrauch", "Netz Leistung", "Batterie", "Kühlschrank", "-1840", "−")
 	// today is since midnight in the house's time zone, one history read a counter
 	starts, _ := fake.HistoryQueries()
 	if len(starts) != 5 {
@@ -101,9 +99,9 @@ func TestEnergieSaysEachLegInWords(t *testing.T) {
 	jetzt := section(t, body, "karte-jetzt")
 	mustContain(t, jetzt, "<tr><th scope=row>Haus verbraucht</th><td>2,5 kW</td></tr>",
 		"<tr><th scope=row>Solar erzeugt</th><td>0 W</td></tr>",
-		"<tr><th scope=row>Netz bezogen</th><td>950 W</td></tr>",
+		"<tr><th scope=row>aus dem Netz</th><td>950 W</td></tr>",
 		"<tr><th scope=row>Akku</th><td>nicht erreichbar</td></tr>")
-	mustContain(t, section(t, body, "karte-heute"), "<span>Erzeugt</span>", "<b class=zustand>12,4 kWh</b>")
+	mustContain(t, section(t, body, "karte-heute"), `<tr><td class="zahl solar">12,4 kWh</td><th scope=row>Erzeugt</th></tr>`)
 
 	fake.Set("sensor.akku", "-1250", map[string]any{"friendly_name": "Aktuelle Akku Leistung", "device_class": "power", "unit_of_measurement": "W"})
 	fake.Set("sensor.netz", "0", map[string]any{"friendly_name": "Aktuelle Netz Leistung", "device_class": "power", "unit_of_measurement": "W"})
@@ -113,7 +111,7 @@ func TestEnergieSaysEachLegInWords(t *testing.T) {
 
 // A counter that started over today (a new meter, a reset) counts from
 // zero, not below; a counter HA has no history for today is left out of
-// Heute, and so is what the house used, which needs it.
+// Heute, and so is the Autarkie, which needs it.
 func TestEnergieTodayAcrossAReset(t *testing.T) {
 	fake, hc := house(t)
 	energyHouse(t, fake)
@@ -123,14 +121,14 @@ func TestEnergieTodayAcrossAReset(t *testing.T) {
 	fake.SetHistory("sensor.einsp_total", nil)
 	_, body, _ := familyPage(t, Energie, StartConfig{HA: hc}, "GET", "/energie", "family")
 	heute := section(t, body, "karte-heute")
-	mustContain(t, heute, "<span>Aus dem Netz</span>", "<b class=zustand>3,5 kWh</b>", "<span>Erzeugt</span>")
-	mustNotContain(t, heute, "Ins Netz", "Verbraucht")
+	mustContain(t, heute, `<tr><td class="zahl bezug">3,5 kWh</td><th scope=row>Netzbezug</th></tr>`, "Erzeugt")
+	mustNotContain(t, heute, "Ins Netz", "Autarkie")
 }
 
 // The template names the sensors (HOMES_ENERGY_*): those count, with the
 // template's own labels for the counters, and a friendly name the
-// fallback would have taken does not; nothing is added up from labels
-// Haus cannot read.
+// fallback would have taken does not; no Autarkie from labels Homes
+// cannot read.
 func TestEnergieFromTheTemplatesSensors(t *testing.T) {
 	fake, hc := house(t)
 	energyHouse(t, fake)
@@ -141,8 +139,8 @@ func TestEnergieFromTheTemplatesSensors(t *testing.T) {
 		Totals: []energie.Total{{Label: "Sonnenstrom <heute>", Entity: "sensor.pv_kwh"}}}}
 	_, body, _ := familyPage(t, Energie, cfg, "GET", "/energie", "family")
 	mustContain(t, section(t, body, "karte-jetzt"), "<tr><th scope=row>Solar erzeugt</th><td>2,5 kW</td></tr>")
-	mustContain(t, section(t, body, "karte-heute"), "<span>Sonnenstrom &lt;heute&gt;</span>", "<b class=zustand>9 kWh</b>")
-	mustNotContain(t, body, "knoten haus", "knoten netz", "Verbraucht", "12,4 kWh", "Sonnenstrom <heute>")
+	mustContain(t, section(t, body, "karte-heute"), "<tr><td class=zahl>9 kWh</td><th scope=row>Sonnenstrom &lt;heute&gt;</th></tr>")
+	mustNotContain(t, body, "knoten haus", "knoten netz", "Autarkie", "12,4 kWh", "Sonnenstrom <heute>")
 }
 
 // No energy sensors at all: one plain line, never a blank page.
@@ -222,13 +220,13 @@ func TestEnergieTodayTellsANewMeterFromNoise(t *testing.T) {
 		at("2301.9", "2026-10-14T04:00:00Z")}) // +2, a dip, +1
 	_, body, _ := familyPage(t, Energie, StartConfig{HA: hc}, "GET", "/energie", "family")
 	heute := section(t, body, "karte-heute")
-	mustContain(t, heute, "<span>Aus dem Netz</span></div><p><b class=zustand>3,5 kWh</b>", "<span>Ins Netz</span></div><p><b class=zustand>3 kWh</b>")
+	mustContain(t, heute, `<td class="zahl bezug">3,5 kWh</td><th scope=row>Netzbezug</th>`, `<td class="zahl einsp">3 kWh</td><th scope=row>Ins Netz</th>`)
 	mustNotContain(t, heute, "230")
 }
 
-// What the house used needs every counter the house has: both battery
-// counters without today's history leave Verbraucht out, never a sum
-// that forgets the battery. A counter whose history holds no reading at
+// The Autarkie needs every counter the house has: both battery counters
+// without today's history leave it out, never a share that forgets the
+// battery. A counter whose history holds no reading at
 // all is not "0 kWh" today; it is left out.
 func TestEnergieUsedNeedsEveryCounter(t *testing.T) {
 	fake, hc := house(t)
@@ -237,22 +235,22 @@ func TestEnergieUsedNeedsEveryCounter(t *testing.T) {
 	fake.SetHistory("sensor.akku_entladen", nil)
 	_, body, _ := familyPage(t, Energie, StartConfig{HA: hc}, "GET", "/energie", "family")
 	heute := section(t, body, "karte-heute")
-	mustContain(t, heute, "<span>Erzeugt</span>")
-	mustNotContain(t, heute, "Verbraucht", "Akku")
+	mustContain(t, heute, "Erzeugt")
+	mustNotContain(t, heute, "Autarkie", "Akku")
 
 	fake2, hc2 := house(t)
 	energyHouse(t, fake2)
 	fake2.SetHistory("sensor.pv_total", []map[string]any{{"state": "unavailable", "last_changed": "2026-10-13T22:00:00Z"}})
 	_, body, _ = familyPage(t, Energie, StartConfig{HA: hc2}, "GET", "/energie", "family")
 	heute = section(t, body, "karte-heute")
-	mustContain(t, heute, "<span>Aus dem Netz</span>")
-	mustNotContain(t, heute, "Erzeugt", "Verbraucht", "0 kWh")
+	mustContain(t, heute, "Netzbezug")
+	mustNotContain(t, heute, "Erzeugt", "Autarkie", "0 kWh")
 }
 
 // The edges of the words: MW and MWh as HA may send them, the kilowatt
 // line, under a watt is resting either way, a reading that is no number
 // (Inf) is not a size; a day whose counters do not add up has no
-// Verbraucht; a fall to 80 % is a new meter (HA's 10 % line).
+// Autarkie; a fall to 80 % is a new meter (HA's 10 % line).
 func TestEnergieEdgesOfTheWords(t *testing.T) {
 	fake, hc := house(t)
 	energyHouse(t, fake)
@@ -274,8 +272,8 @@ func TestEnergieEdgesOfTheWords(t *testing.T) {
 	mustContain(t, jetzt, "<tr><th scope=row>Solar</th><td>unbekannt</td></tr>", "<tr><th scope=row>Haus verbraucht</th><td>1,2 kW</td></tr>",
 		"<tr><th scope=row>Netz ruht</th><td>0 W</td></tr>", "<tr><th scope=row>Akku lädt</th><td>1 kW</td></tr>")
 	heute := section(t, body, "karte-heute")
-	mustContain(t, heute, "<span>Erzeugt</span></div><p><b class=zustand>12,4 kWh</b>", "<span>In den Akku</span></div><p><b class=zustand>801 kWh</b>")
-	mustNotContain(t, heute, "Verbraucht")
+	mustContain(t, heute, `<td class="zahl solar">12,4 kWh</td><th scope=row>Erzeugt</th>`)
+	mustNotContain(t, heute, "Autarkie", "801 kWh")
 	// the history reaches up to now, not short of it
 	_, qs := fake.HistoryQueries()
 	for _, q := range qs {
@@ -295,13 +293,13 @@ func TestEnergieCountersWithoutFlow(t *testing.T) {
 	fake.Set("sensor.pv_total", "5012.4", map[string]any{"friendly_name": "PV Erzeugung", "device_class": "energy", "unit_of_measurement": "kWh"})
 	fake.SetHistory("sensor.pv_total", []map[string]any{{"state": "5000", "last_changed": "2026-10-13T22:00:00Z"}})
 	_, body, _ := familyPage(t, Energie, StartConfig{HA: hc}, "GET", "/energie", "family")
-	mustContain(t, section(t, body, "karte-heute"), "<span>Erzeugt</span>", "12,4 kWh")
+	mustContain(t, section(t, body, "karte-heute"), "Erzeugt", "12,4 kWh")
 	mustNotContain(t, body, "karte-jetzt", "eingerichtet")
 }
 
-// Verbraucht only when the house's counters make its meaning certain:
-// one battery counter without the other, or no Einspeisung counter, is
-// no sum.
+// Autarkie only when the house's counters make its meaning certain: one
+// battery counter without the other, or no Einspeisung counter, is no
+// share.
 func TestEnergieUsedOnlyWhenItsMeaningIsCertain(t *testing.T) {
 	for _, gone := range []string{"sensor.akku_entladen", "sensor.einsp_total"} {
 		fake, hc := house(t)
@@ -309,7 +307,7 @@ func TestEnergieUsedOnlyWhenItsMeaningIsCertain(t *testing.T) {
 		fake.Set(gone, "1", map[string]any{"friendly_name": "Etwas anderes", "device_class": "energy", "unit_of_measurement": "kWh"})
 		_, body, _ := familyPage(t, Energie, StartConfig{HA: hc}, "GET", "/energie", "family")
 		heute := section(t, body, "karte-heute")
-		mustContain(t, heute, "<span>Erzeugt</span>")
-		mustNotContain(t, heute, "Verbraucht")
+		mustContain(t, heute, "Erzeugt")
+		mustNotContain(t, heute, "Autarkie")
 	}
 }

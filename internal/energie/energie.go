@@ -46,8 +46,7 @@ type Map struct {
 
 // Stats are the statistic ids of HA's long-term statistics the history
 // reads (haus#65): what came from the grid, went into it, and what the sun
-// made, each a total_increasing energy sensor's id. Eigenverbrauch is
-// Solar − Einspeisung.
+// made, each a total_increasing energy sensor's id.
 type Stats struct{ Bezug, Einspeisung, Solar string }
 
 // Any says one is named.

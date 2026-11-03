@@ -280,7 +280,7 @@ test('Aktivierungswort shows the wake word the speaker listens for', async ({ pa
 // Felder geprüft?"): with every fold open, the page is no wider than the
 // screen, a field to type in has room, a button is big enough for a
 // finger, and no text runs out of its box.
-const PAGES = ['/start', '/raeume', '/raeume/light.kueche', '/medien', '/energie', '/kalender', '/kalender/verwalten',
+const PAGES = ['/start', '/raeume', '/raeume/light.kueche', '/medien', '/energie', '/energie?zeitraum=jahr', '/kalender', '/kalender/verwalten',
   '/notizen', '/notizen?tag=kochen', '/notizen/einkaufsliste.md', '/notizen/markdown.md', '/notizen/einkaufsliste.md?bearbeiten=1', '/mehr', '/musik', '/platte', '/discogs', '/aktivierungswort', '/aufgaben', '/dokumente', '/willkommen', '/box/geraete', '/pair-device', '/podcasts', '/gesehen',
   '/einkauf', '/einkauf?liste=liste-baumarkt', '/einkauf?liste=liste-musik', '/einkauf/rezepte', '/einkauf/rezepte?n=rezepte%2Flasagne.md', '/notizen/rezepte/lasagne.md'];
 for (const path of PAGES) {
@@ -329,3 +329,17 @@ for (const path of ['/start', '/raeume', '/medien', '/energie', '/notizen', '/me
     await page.screenshot({ path: info.outputPath(path.slice(1) + '.png'), fullPage: true });
   });
 }
+
+// Energie in the widget's look (owner, 2026-11-03), for the owner to see
+// before it merges: the Jahr span, and the page in the light.
+test('picture of /energie in Jahr', async ({ page }, info) => {
+  await page.goto('/energie?zeitraum=jahr');
+  await page.screenshot({ path: info.outputPath('energie-jahr.png'), fullPage: true });
+});
+test.describe('light', () => {
+  test.use({ colorScheme: 'light' });
+  test('picture of /energie in the light', async ({ page }, info) => {
+    await page.goto('/energie');
+    await page.screenshot({ path: info.outputPath('energie-hell.png'), fullPage: true });
+  });
+});
