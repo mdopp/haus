@@ -1,7 +1,7 @@
 {
-  "name": "haus-e2e",
+  "name": "homes-e2e",
   "private": true,
-  "description": "Haus's family pages in a real browser, against cmd/hausdemo's fakes",
+  "description": "Homes' family pages in a real browser, against cmd/homesdemo's fakes",
   "scripts": {
     "test": "playwright test"
   },

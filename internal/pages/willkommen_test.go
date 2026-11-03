@@ -6,14 +6,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mdopp/haus/internal/samba"
-	"github.com/mdopp/haus/internal/samba/sambafake"
+	"github.com/mdopp/homes/internal/samba"
+	"github.com/mdopp/homes/internal/samba/sambafake"
 )
 
 func welcomePage(t *testing.T, cfg StartConfig) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest("GET", "/willkommen", nil)
-	req.Host = "haus.box.test"
+	req.Host = "homes.box.test"
 	req.Header.Set("Remote-User", "anna")
 	req.Header.Set("Remote-Name", "Anna Müller")
 	rec := httptest.NewRecorder()
@@ -25,7 +25,7 @@ func welcomePage(t *testing.T, cfg StartConfig) *httptest.ResponseRecorder {
 // its steps and its server address, in the family's words.
 func TestWillkommenShowsOnlyTheInstalledApps(t *testing.T) {
 	rows := []map[string]any{{"name": "immich", "state": "grün"}, {"name": "vaultwarden", "state": "grün"}, {"name": "auth", "state": "grün"}}
-	rec := welcomePage(t, StartConfig{Laib: fakeLaib(t, allGreen(t), rows), PublicURL: "https://haus.dopp.example"})
+	rec := welcomePage(t, StartConfig{Laib: fakeLaib(t, allGreen(t), rows), PublicURL: "https://homes.dopp.example"})
 	page := rec.Body.String()
 	for _, w := range []string{"<h1>Willkommen, Anna</h1>", saysWelcomeLead, ">anna<", "<h2>Fotos</h2>", "„Immich“", "https://photos.dopp.example", "Mit Familienkonto anmelden",
 		"<h2>Passwörter</h2>", "„Bitwarden“", "https://vault.dopp.example", "Master-Passwort", "auch kein Admin", "Apps einrichten", "href=/start"} {
@@ -52,7 +52,7 @@ func TestWillkommenShowsOnlyTheInstalledApps(t *testing.T) {
 func TestWillkommenAllAppsAndTheDrive(t *testing.T) {
 	fs := sambafake.New(t, map[string]int64{"anna": 0}, true)
 	rows := []map[string]any{{"name": "immich"}, {"name": "media"}, {"name": "radicale"}, {"name": "vaultwarden"}}
-	// no public address: the domain is the host's, after haus.
+	// no public address: the domain is the host's, after homes.
 	page := welcomePage(t, StartConfig{Laib: fakeLaib(t, allGreen(t), rows), Samba: &samba.Dir{Path: fs.Dir}}).Body.String()
 	for _, w := range []string{"Fotos", "Filme und Musik", "„Jellyfin“", "https://media.box.test", "Kalender und Kontakte", "„DAVx⁵“", "CalDAV-Account", "https://caldav.box.test",
 		"Passwörter", "https://vault.box.test", "Dateien am Computer", "href=/netzlaufwerk"} {
@@ -70,19 +70,19 @@ func TestWillkommenSaysWhenItCannotLook(t *testing.T) {
 	if !strings.Contains(page, saysAppsUnknown) || strings.Contains(page, "500") || strings.Contains(page, saysNoAppsYet) {
 		t.Fatalf("%s", page)
 	}
-	// nothing else installed: the Haus app is there all the same (haus#175)
-	page = welcomePage(t, StartConfig{Laib: fakeLaib(t, allGreen(t), nil), PublicURL: "https://haus.dopp.example"}).Body.String()
-	if !strings.Contains(page, "<h2>Die Haus-App</h2>") || strings.Contains(page, saysNoAppsYet) {
+	// nothing else installed: the Homes app is there all the same (haus#175)
+	page = welcomePage(t, StartConfig{Laib: fakeLaib(t, allGreen(t), nil), PublicURL: "https://homes.dopp.example"}).Body.String()
+	if !strings.Contains(page, "<h2>Die Homes-App</h2>") || strings.Contains(page, saysNoAppsYet) {
 		t.Fatalf("nothing else installed:\n%s", page)
 	}
 }
 
-// haus#175: the Haus app (Android installs it, an iPhone puts the page on its
+// haus#175: the Homes app (Android installs it, an iPhone puts the page on its
 // home screen), the house on Signal when the box has a number, one printable page
-func TestWillkommenHausAppSignalAndPaper(t *testing.T) {
-	cfg := StartConfig{Laib: fakeLaib(t, allGreen(t), nil), PublicURL: "https://haus.dopp.example"}
+func TestWillkommenHomesAppSignalAndPaper(t *testing.T) {
+	cfg := StartConfig{Laib: fakeLaib(t, allGreen(t), nil), PublicURL: "https://homes.dopp.example"}
 	page := welcomePage(t, cfg).Body.String()
-	for _, w := range []string{"<h2>Die Haus-App</h2>", `href="` + hausAppAPK + `">Haus-App laden</a>`, "https://haus.dopp.example", "Zum Home-Bildschirm",
+	for _, w := range []string{"<h2>Die Homes-App</h2>", `href="` + homesAppAPK + `">Homes-App laden</a>`, "https://homes.dopp.example", "Zum Home-Bildschirm",
 		`<button type=button onclick="print()">Diese Seite drucken</button>`, "@media print{"} {
 		if !strings.Contains(page, w) {
 			t.Errorf("the page lacks %q", w)

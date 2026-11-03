@@ -21,7 +21,7 @@ func store(t *testing.T, content string) *Store {
 	return Open(dir)
 }
 
-// laib ADR 0017: favorites go to Haus, one list per person (Authelia's
+// laib ADR 0017: favorites go to Homes, one list per person (Authelia's
 // Remote-User), in the person's order; another person's list is not theirs.
 func TestForIsThePersonsListInOrder(t *testing.T) {
 	s := store(t, `{"anna": ["cover.wohnzimmer", "light.buero", "switch.kaffee"], "ben": ["light.flur"]}`)
@@ -52,7 +52,7 @@ func TestNoFileIsNoFavorites(t *testing.T) {
 }
 
 // Only entity ids are favorites; the rest of a hand-edited file is left
-// out (a padded id too: Haus does not guess), each id once.
+// out (a padded id too: Homes does not guess), each id once.
 func TestForKeepsOnlyEntityIDsOnce(t *testing.T) {
 	s := store(t, `{"anna": ["light.buero", " light.bad ", "light.buero", "light.flur", "Light.Bad", "light", ".x", "light.a b", "", "../etc/passwd", "light.büro", "cover.tor"]}`)
 	got, err := s.For("anna")

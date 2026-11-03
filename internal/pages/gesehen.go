@@ -10,11 +10,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mdopp/haus/internal/abs"
-	"github.com/mdopp/haus/internal/caldav"
-	"github.com/mdopp/haus/internal/cards"
-	"github.com/mdopp/haus/internal/gesehen"
-	"github.com/mdopp/haus/internal/jellyfin"
+	"github.com/mdopp/homes/internal/abs"
+	"github.com/mdopp/homes/internal/caldav"
+	"github.com/mdopp/homes/internal/cards"
+	"github.com/mdopp/homes/internal/gesehen"
+	"github.com/mdopp/homes/internal/jellyfin"
 )
 
 // GesehenPath is Gesehen & Gehört (haus#152): what the person signed in
@@ -45,8 +45,8 @@ func Gesehen(cfg StartConfig) http.HandlerFunc {
 			return
 		}
 		if r.Method == http.MethodPost {
-			if !fromHaus(r) {
-				http.Error(w, "Das geht nur von Haus' eigener Seite.", http.StatusForbidden)
+			if !fromHomes(r) {
+				http.Error(w, "Das geht nur von Homes' eigener Seite.", http.StatusForbidden)
 				return
 			}
 			r.ParseForm()
@@ -61,13 +61,13 @@ func Gesehen(cfg StartConfig) http.HandlerFunc {
 			res, err := cfg.Gesehen.Wuenschen(ctx, person, titel, art)
 			if err != nil {
 				if !errors.Is(err, gesehen.ErrNoTitle) {
-					log.Printf("haus: gesehen: wish %s: %v", person, err)
+					log.Printf("homes: gesehen: wish %s: %v", person, err)
 					err = errors.New(saysWunschDown)
 				}
 				writeGesehen(w, r, cfg, http.StatusBadRequest, gesehenForm{problem: err.Error(), titel: titel, art: art})
 				return
 			}
-			log.Printf("haus: gesehen: %s wished a %s (on the list: %v)", person, art, res.Dazu)
+			log.Printf("homes: gesehen: %s wished a %s (on the list: %v)", person, art, res.Dazu)
 			writeGesehen(w, r, cfg, http.StatusOK, gesehenForm{done: res.Satz, art: art})
 			return
 		}
@@ -125,7 +125,7 @@ func writeGesehen(w http.ResponseWriter, r *http.Request, cfg StartConfig, code 
 		case errors.Is(fErr, jellyfin.ErrNoUser):
 			c.Add(saysJellyfinNoUser, "")
 		case fErr != nil:
-			log.Printf("haus: gesehen: jellyfin: %v", fErr)
+			log.Printf("homes: gesehen: jellyfin: %v", fErr)
 			c.Add(saysJellyfinDown, "")
 		case len(filme) == 0:
 			c.Add(saysJellyfinNone, "")
@@ -141,7 +141,7 @@ func writeGesehen(w http.ResponseWriter, r *http.Request, cfg StartConfig, code 
 		case errors.Is(bErr, abs.ErrNoUser):
 			c.Add(saysABSNoUser, "")
 		case bErr != nil:
-			log.Printf("haus: gesehen: audiobookshelf: %v", bErr)
+			log.Printf("homes: gesehen: audiobookshelf: %v", bErr)
 			c.Add(saysABSDown, "")
 		case len(buecher) == 0:
 			c.Add(saysABSNone, "")
@@ -165,7 +165,7 @@ func writeGesehen(w http.ResponseWriter, r *http.Request, cfg StartConfig, code 
 		b.WriteString(`</fieldset><button data-laeuft="Schaut nach …">Auf die Wunschliste</button></form><p class=k>` + html.EscapeString(saysNaechstesHow) + `</p></section>`)
 		c := cards.Card{Title: "Wunschliste " + gesehen.ListName}
 		if wE != nil {
-			log.Printf("haus: gesehen: list: %v", wE)
+			log.Printf("homes: gesehen: list: %v", wE)
 			c.Add(saysWunschDown, "")
 		} else if len(wuensche) == 0 {
 			c.Add("Noch nichts gewünscht", "")

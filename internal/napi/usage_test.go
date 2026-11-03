@@ -6,13 +6,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mdopp/haus/internal/usage"
-	"github.com/mdopp/haus/internal/usage/usagefake"
+	"github.com/mdopp/homes/internal/usage"
+	"github.com/mdopp/homes/internal/usage/usagefake"
 )
 
 // #50: a widget's refresh is counted per /napi path it reads, only from a
 // paired phone; a 401 and an unknown path count nothing, and neither the
-// device token nor the entity in the path leaves Haus.
+// device token nor the entity in the path leaves Homes.
 func TestWidgetRefreshesAreCounted(t *testing.T) {
 	fake := usagefake.New("um")
 	t.Cleanup(fake.Close)
@@ -45,7 +45,7 @@ func TestWidgetRefreshesAreCounted(t *testing.T) {
 	for _, b := range fake.Bodies() {
 		for _, leak := range []string{"dev1", "dev2", "kueche", "fremd"} {
 			if strings.Contains(b, leak) {
-				t.Errorf("%q left Haus: %s", leak, b)
+				t.Errorf("%q left Homes: %s", leak, b)
 			}
 		}
 	}

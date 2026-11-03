@@ -6,12 +6,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mdopp/haus/internal/devices"
+	"github.com/mdopp/homes/internal/devices"
 )
 
 // haus#6: the app opens <server>/pair-device in a Custom Tab after the person
 // enters the address; Authelia logs them in, they confirm, and the redirect
-// to cloud.dopp.haus://pair#token=haus_device_… hands the token to the app
+// to cloud.dopp.homes://pair#token=homes_device_… hands the token to the app
 // (the new app's scheme and prefix, haus#26). A GET mints nothing.
 func TestPairDeviceFromThePhone(t *testing.T) {
 	store, err := devices.Open(t.TempDir())
@@ -32,14 +32,14 @@ func TestPairDeviceFromThePhone(t *testing.T) {
 	rec = httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	loc := rec.Header().Get("Location")
-	if rec.Code != 302 || !strings.HasPrefix(loc, "cloud.dopp.haus://pair#token=haus_device_") || !strings.Contains(loc, "&id=") {
+	if rec.Code != 302 || !strings.HasPrefix(loc, "cloud.dopp.homes://pair#token=homes_device_") || !strings.Contains(loc, "&id=") {
 		t.Fatalf("POST redirects to the app with the token in the fragment: %d %q", rec.Code, loc)
 	}
 	list := store.List()
 	if len(list) != 1 || list[0].UID != "anna" || list[0].Name != "Pixel" {
 		t.Fatalf("one device for anna: %+v", list)
 	}
-	tok := strings.SplitN(strings.TrimPrefix(loc, "cloud.dopp.haus://pair#token="), "&", 2)[0]
+	tok := strings.SplitN(strings.TrimPrefix(loc, "cloud.dopp.homes://pair#token="), "&", 2)[0]
 	if d, ok := store.Lookup(tok); !ok || d.UID != "anna" {
 		t.Fatal("the token in the redirect is the device's")
 	}
@@ -62,15 +62,15 @@ func TestGeraeteOffersWhatWorks(t *testing.T) {
 	req.Header.Set("Remote-User", "anna")
 	req.Header.Set("Remote-Groups", "admins")
 	rec := httptest.NewRecorder()
-	Geraete(store, "https://haus.example", StartConfig{}).ServeHTTP(rec, req)
+	Geraete(store, "https://homes.example", StartConfig{}).ServeHTTP(rec, req)
 	body := rec.Body.String()
-	if !strings.Contains(body, "cloud.dopp.haus://setup?server="+url.QueryEscape("https://haus.example")+"&amp;token=haus_device_") {
+	if !strings.Contains(body, "cloud.dopp.homes://setup?server="+url.QueryEscape("https://homes.example")+"&amp;token=homes_device_") {
 		t.Fatalf("the QR content is the new app's setup URI:\n%s", body)
 	}
-	if strings.Contains(body, `href="cloud.dopp.haus://setup`) {
+	if strings.Contains(body, `href="cloud.dopp.homes://setup`) {
 		t.Fatalf("the setup URI is a link the app does not open:\n%s", body)
 	}
-	if !strings.Contains(body, "https://haus.example") || !strings.Contains(body, "QR") {
+	if !strings.Contains(body, "https://homes.example") || !strings.Contains(body, "QR") {
 		t.Fatalf("the page names the address for the app and the QR content:\n%s", body)
 	}
 }

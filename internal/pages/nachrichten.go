@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mdopp/haus/internal/napi"
+	"github.com/mdopp/homes/internal/napi"
 )
 
 // DatenPath is the page „Daten sichern“ (haus#207, laib ADR 0029; owner
@@ -30,7 +30,7 @@ const (
 )
 
 var notSetArchiv = notSet{"Das Archiv ist auf dieser Box nicht eingerichtet.",
-	"Für Admins: Haus hat keinen Archiv-Eingang (HAUS_ARCHIV_DIR; laibs haus-Template hängt ${DATA_DIR}/archiv-eingang als /archiv-eingang ein)."}
+	"Für Admins: Homes hat keinen Archiv-Eingang (HOMES_ARCHIV_DIR; laibs homes-Template hängt ${DATA_DIR}/archiv-eingang als /archiv-eingang ein)."}
 
 // quelleName is how the page names a quelle.
 var quelleName = map[string]string{"whatsapp": "WhatsApp", "signal": "Signal", "sms": "SMS und Anrufe"}
@@ -44,34 +44,34 @@ var datenAnleitung = []struct {
 	{"Signal", []string{
 		"In Signal: Einstellungen → Chats → Chat-Backups (je nach Version: Backups → Auf dem Gerät) einschalten und einen Ordner wählen, zum Beispiel „Signal-Backups“.",
 		"Die 30-stellige Passphrase in Vaultwarden ablegen. Signal zeigt sie nur dieses eine Mal.",
-		"In der Haus-App: Mehr → Daten sichern → bei Signal den Ordner freigeben, den du gewählt hast.",
+		"In der Homes-App: Mehr → Daten sichern → bei Signal den Ordner freigeben, den du gewählt hast.",
 		"In deinem Archiv die Passphrase eingeben.",
 	}, "Signal legt jede Nacht eine Sicherung an, die App bringt sie auf die Box. Gelesen wird sie, während dein Archiv offen ist."},
 	{"WhatsApp", []string{
 		"In WhatsApp: Einstellungen → Chats → Chat-Backup → „Ende-zu-Ende-verschlüsseltes Backup“ einschalten.",
 		"„64-stelligen Schlüssel verwenden“ wählen, nicht Passwort und nicht Passkey: aus einem Passkey lässt sich der Schlüssel nicht auslesen. Nutzt WhatsApp schon einen Passkey: das Backup aus- und gleich wieder einschalten, diesmal mit dem 64-stelligen Schlüssel.",
 		"Den Schlüssel in Vaultwarden ablegen.",
-		"In der Haus-App: Mehr → Daten sichern → bei WhatsApp den Ordner freigeben (Android → media → com.whatsapp → WhatsApp).",
+		"In der Homes-App: Mehr → Daten sichern → bei WhatsApp den Ordner freigeben (Android → media → com.whatsapp → WhatsApp).",
 		"In deinem Archiv den Schlüssel eingeben.",
 	}, "Die Nachrichten kommen ins Archiv, sobald es offen ist. Fotos und Videos bringt die App verschlüsselt mit auf die Box; durchsuchen kannst du im Archiv vorerst die Nachrichten."},
 	{"SMS und Anrufe", []string{
-		"In der Haus-App: Mehr → Daten sichern → „SMS und Anrufe übertragen“ einschalten.",
+		"In der Homes-App: Mehr → Daten sichern → „SMS und Anrufe übertragen“ einschalten.",
 	}, "Die App verschlüsselt sie schon auf dem Handy. Ins Archiv kommen sie, während es offen ist."},
 	{"Kontakte", []string{
-		"In der Haus-App: Mehr → Daten sichern → „Kontakte übertragen“ einschalten.",
+		"In der Homes-App: Mehr → Daten sichern → „Kontakte übertragen“ einschalten.",
 	}, "Die Kontakte kommen in dein Adressbuch „Handy-Kontakte“ auf der Box und von dort ins Archiv, während es offen ist. Löschst du einen Kontakt auf dem Handy, bleibt er im Archiv."},
 	{"E-Mail", []string{
 		"In deinem Archiv den Zugang zu deinem Postfach eintragen: Server, Benutzername und ein App-Passwort.",
 	}, "Das Archiv holt jede Stunde neue Mails ab, auch wenn es zu ist. Im Postfach ändert es nichts."},
 	{"Kalender", []string{
-		"In Haus unter Kalender deine Google-Kalender verbinden; eigene private Kalender legst du dort auch an.",
+		"In Homes unter Kalender deine Google-Kalender verbinden; eigene private Kalender legst du dort auch an.",
 	}, "Das Archiv übernimmt jeden Termin, während es offen ist. Gelöschte Termine bleiben im Archiv."},
 }
 
-// the phone change (haus#209, haus-android#197): three steps, the app's words
+// the phone change (haus#209, homes-android#197): three steps, the app's words
 var neuesHandy = []string{
-	"Auf dem neuen Handy die Haus-App installieren und mit deinem Namen koppeln.",
-	"In der Haus-App: Mehr → Daten sichern → „Sicherung zurückholen“. Für Signal einen Ordner wählen, etwa „Dokumente/Signal“. WhatsApp vorher installieren, aber noch nicht öffnen, und den Ordner „Android/media/com.whatsapp/WhatsApp“ freigeben (gibt es ihn noch nicht: „Android/media“).",
+	"Auf dem neuen Handy die Homes-App installieren und mit deinem Namen koppeln.",
+	"In der Homes-App: Mehr → Daten sichern → „Sicherung zurückholen“. Für Signal einen Ordner wählen, etwa „Dokumente/Signal“. WhatsApp vorher installieren, aber noch nicht öffnen, und den Ordner „Android/media/com.whatsapp/WhatsApp“ freigeben (gibt es ihn noch nicht: „Android/media“).",
 	"Signal neu installieren, bei der Einrichtung „Aus Sicherung wiederherstellen“ wählen, die Datei auswählen und die 30-stellige Passphrase aus Vaultwarden eingeben. WhatsApp öffnen, mit derselben Nummer anmelden und „Wiederherstellen“ wählen.",
 }
 
@@ -146,7 +146,7 @@ func nachrichtenStand(cfg StartConfig, person string) string {
 	c := cardsList("Dein Stand")
 	st, err := cfg.Sicherung.Stand(person)
 	if err != nil {
-		log.Printf("haus: nachrichten: stand of %s: %v", person, err)
+		log.Printf("homes: nachrichten: stand of %s: %v", person, err)
 		c.row(saysStandFehlt, "", false)
 		return c.html()
 	}
@@ -184,7 +184,7 @@ func nachrichtenZurueck(cfg StartConfig, person string) string {
 	c := cardsList("Für ein neues Handy")
 	letzte, err := cfg.Sicherung.Letzte(person)
 	if err != nil {
-		log.Printf("haus: nachrichten: letzte of %s: %v", person, err)
+		log.Printf("homes: nachrichten: letzte of %s: %v", person, err)
 		c.row(saysStandFehlt, "", false)
 	} else {
 		_, loc := cfg.clock()

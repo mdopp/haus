@@ -9,7 +9,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/mdopp/haus/internal/assistent"
+	"github.com/mdopp/homes/internal/assistent"
 )
 
 // What the Willkommen page says (haus#56): for someone who has never seen
@@ -17,7 +17,7 @@ import (
 // the apps this box has.
 const (
 	willkommenPath   = "/willkommen"
-	welcomeCookie    = "haus_willkommen"
+	welcomeCookie    = "homes_willkommen"
 	saysWelcomeLead  = "Hier steht, was es auf dieser Box für dich gibt und wie du es auf dem Handy und am Computer einrichtest. Du meldest dich überall mit deinem Familienkonto an: deinem Benutzernamen und deinem Passwort."
 	saysWelcomeAgain = "Du findest diese Seite jederzeit wieder: auf der Startseite ganz unten, „Apps einrichten“."
 	saysAppsUnknown  = "Welche Apps es auf der Box gibt, lässt sich gerade nicht nachsehen. Später noch einmal versuchen."
@@ -74,17 +74,17 @@ var welcomeApps = []welcomeApp{
 	}},
 }
 
-// hausAppAPK is the Haus app's newest stable release (mdopp/haus-android).
-const hausAppAPK = "https://github.com/mdopp/haus-android/releases/latest/download/app-release.apk"
+// homesAppAPK is the Homes app's newest stable release (mdopp/homes-android).
+const homesAppAPK = "https://github.com/mdopp/homes-android/releases/latest/download/app-release.apk"
 
-// hausAppSteps are the Haus app's steps (haus#175): Android installs it,
+// homesAppSteps are the Homes app's steps (haus#175): Android installs it,
 // an iPhone puts the page on its home screen.
-func hausAppSteps(dom string) []string {
+func homesAppSteps(dom string) []string {
 	return []string{
-		`Android: Lade die Haus-App herunter: <a href="` + hausAppAPK + `">Haus-App laden</a>. Beim ersten Mal fragt das Handy, ob dein Browser Apps installieren darf: Erlauben.`,
-		"Öffne die App und trag als Adresse ein: " + address("haus", dom),
+		`Android: Lade die Homes-App herunter: <a href="` + homesAppAPK + `">Homes-App laden</a>. Beim ersten Mal fragt das Handy, ob dein Browser Apps installieren darf: Erlauben.`,
+		"Öffne die App und trag als Adresse ein: " + address("homes", dom),
 		"Melde dich mit deinem Benutzernamen und Passwort an. Die App richtet sich dann selbst ein.",
-		"iPhone: Öffne " + address("haus", dom) + " in Safari, tippe auf „Teilen“ und dann auf „Zum Home-Bildschirm“.",
+		"iPhone: Öffne " + address("homes", dom) + " in Safari, tippe auf „Teilen“ und dann auf „Zum Home-Bildschirm“.",
 	}
 }
 
@@ -124,7 +124,7 @@ func Willkommen(cfg StartConfig) http.HandlerFunc {
 			})
 		}
 		if laibErr != nil {
-			log.Printf("haus: willkommen: laib: %v", laibErr)
+			log.Printf("homes: willkommen: laib: %v", laibErr)
 		}
 		http.SetCookie(w, &http.Cookie{Name: welcomeCookie, Value: "gesehen", Path: "/", MaxAge: 5 * 365 * 24 * 3600, HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode})
 		b := familyHead(r, cfg, "Willkommen", "")
@@ -150,7 +150,7 @@ func Willkommen(cfg StartConfig) http.HandlerFunc {
 			b.WriteString("</ol></section>")
 		}
 		if dom != "" { // haus#175: the house's own app first, then its chat
-			steps("Die Haus-App", hausAppSteps(dom))
+			steps("Die Homes-App", homesAppSteps(dom))
 		}
 		if cfg.BoteSignal != "" {
 			steps(assistent.Name()+" auf Signal", signalSteps(cfg.BoteSignal))
@@ -188,7 +188,7 @@ func Willkommen(cfg StartConfig) http.HandlerFunc {
 	}
 }
 
-// boxDomain is the box's domain, the part after haus.: from Haus's own
+// boxDomain is the box's domain, the part after homes.: from Homes' own
 // public address, else from the host the page was asked on.
 func boxDomain(r *http.Request, cfg StartConfig) string {
 	host := r.Host
@@ -205,7 +205,7 @@ func boxDomain(r *http.Request, cfg StartConfig) string {
 }
 
 // firstVisit is Start sending a person to the Willkommen page the first
-// time this device opens Haus (haus#56).
+// time this device opens Homes (haus#56).
 func firstVisit(w http.ResponseWriter, r *http.Request, cfg StartConfig) bool {
 	if !cfg.Welcome || r.Header.Get("Remote-User") == "" || r.URL.RawQuery != "" {
 		return false

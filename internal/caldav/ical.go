@@ -258,7 +258,7 @@ type Event struct {
 	UID      string
 	Summary  string
 	Location string
-	// Description is the DESCRIPTION text (the phones' Haus account
+	// Description is the DESCRIPTION text (the phones' Homes account
 	// shows it, haus#218)
 	Description string
 	Start       time.Time
@@ -285,6 +285,7 @@ func (t Todo) Open() bool {
 	return s != "COMPLETED" && s != "CANCELLED"
 }
 
+// prodID keeps the old name: stored data, on every entry already in Radicale (laib#1021).
 const prodID = "-//mdopp//Haus Haushalt//DE"
 
 // ICS renders the event as a calendar object; times in UTC, a whole day as DATE.

@@ -4,9 +4,9 @@ import (
 	"math"
 	"strings"
 
-	"github.com/mdopp/haus/internal/cards"
-	"github.com/mdopp/haus/internal/ha"
-	"github.com/mdopp/haus/internal/schalter"
+	"github.com/mdopp/homes/internal/cards"
+	"github.com/mdopp/homes/internal/ha"
+	"github.com/mdopp/homes/internal/schalter"
 )
 
 // What a cover can do, by HA's supported_features (CoverEntityFeature).
@@ -90,10 +90,10 @@ func coverSlider(s ha.State, back string) *cards.Slider {
 		Value: max(0, min(100, int(math.Round(v))))}
 }
 
-// saysCoverInHA is a cover's page when Haus does not open it.
+// saysCoverInHA is a cover's page when Homes does not open it.
 const (
-	saysGateInHA  = "Tore und Türen öffnet Haus nicht; das geht in Home Assistant."
-	saysCoverWhat = "Home Assistant sagt nicht, ob das ein Rollladen oder ein Tor ist; darum öffnet Haus es nicht. In Home Assistant beim Gerät unter „Anzeigen als“ einstellen, dann geht es hier."
+	saysGateInHA  = "Tore und Türen öffnet Homes nicht; das geht in Home Assistant."
+	saysCoverWhat = "Home Assistant sagt nicht, ob das ein Rollladen oder ein Tor ist; darum öffnet Homes es nicht. In Home Assistant beim Gerät unter „Anzeigen als“ einstellen, dann geht es hier."
 )
 
 // asSeen is a state as the family sees it (haus#64): a cover wired the
@@ -154,7 +154,7 @@ func (cfg StartConfig) asHA(id, do string, wert int) (string, int) {
 	return do, wert
 }
 
-// InvertedFromList reads HAUS_COVER_INVERTED: cover entity ids,
+// InvertedFromList reads HOMES_COVER_INVERTED: cover entity ids,
 // comma-separated; anything not a cover's id is left out.
 func InvertedFromList(list string) map[string]bool {
 	out := map[string]bool{}

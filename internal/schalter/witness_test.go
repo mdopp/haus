@@ -10,11 +10,11 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/mdopp/haus/internal/laib"
+	"github.com/mdopp/homes/internal/laib"
 )
 
 // noteLaib is a Laib that keeps laib_note's arguments, or refuses the
-// verb to the haus hand as a Laib before the owner's approval does.
+// verb to the homes hand as a Laib before the owner's approval does.
 type noteLaib struct {
 	mu     sync.Mutex
 	notes  []map[string]any
@@ -36,7 +36,7 @@ func (f *noteLaib) client(t *testing.T) *laib.Client {
 		case req.Params.Name != "laib_note":
 			text = "[]"
 		case f.refuse:
-			text, isErr = "haus may not note: policy.yml limits it to status, inbox, journal", true
+			text, isErr = "homes may not note: policy.yml limits it to status, inbox, journal", true
 		default:
 			f.mu.Lock()
 			f.notes = append(f.notes, req.Params.Args)
@@ -60,7 +60,7 @@ func logged(t *testing.T, fn func()) string {
 	return buf.String()
 }
 
-// haus#82, haus#89: every switch names its person — a line in Haus's log
+// haus#82, haus#89: every switch names its person — a line in Homes' log
 // and a watch note in Laib's journal with HA's context id; a name that
 // could write into the line is "?"; Laib refusing the verb is said once
 // and the switch goes on; no Laib, the log only.
@@ -74,7 +74,7 @@ func TestWitnessNamesThePerson(t *testing.T) {
 		w.wait()
 	})
 	line := "ha person=anna service=light.turn_off entity=light.flur context=01HCTX"
-	if !strings.Contains(out, "haus: "+line+"\n") || strings.Contains(out, "person=ben") {
+	if !strings.Contains(out, "homes: "+line+"\n") || strings.Contains(out, "person=ben") {
 		t.Errorf("log:\n%s", out)
 	}
 	if len(f.notes) != 2 || f.notes[0]["kind"] != "watch" || f.notes[0]["text"] != line {

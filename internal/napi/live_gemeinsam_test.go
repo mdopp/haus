@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/caldav"
-	"github.com/mdopp/haus/internal/caldav/davfake"
+	"github.com/mdopp/homes/internal/caldav"
+	"github.com/mdopp/homes/internal/caldav/davfake"
 )
 
 // haus#223: a change of the household's shared contacts or calendars goes
@@ -88,7 +88,7 @@ func TestSharedChangesBecomeOneFrameOfTheirPart(t *testing.T) {
 	}
 }
 
-// Nobody listening, Haus asks Radicale nothing; the first stream starts the
+// Nobody listening, Homes asks Radicale nothing; the first stream starts the
 // look, the last one leaving stops it.
 func TestSharedIsReadOnlyWhileSomeoneListens(t *testing.T) {
 	fake := davfake.New("haus", "pw")

@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/mdopp/haus/internal/caldav"
-	"github.com/mdopp/haus/internal/cards"
+	"github.com/mdopp/homes/internal/caldav"
+	"github.com/mdopp/homes/internal/cards"
 )
 
 // Erinnerung is one reminder's own page (haus#28), the page a reminders
@@ -31,7 +31,7 @@ func Erinnerung(cfg StartConfig) http.HandlerFunc {
 			fetch(r, func(ctx context.Context) { todos, err = cfg.Calendar.Todos(ctx) })
 		}
 		if err != nil {
-			log.Printf("haus: erinnerung page: %q: %v", uid, err)
+			log.Printf("homes: erinnerung page: %q: %v", uid, err)
 			missing{http.StatusOK, saysNoCalendar, "Kalender", "/kalender", "Kalender"}.write(w, r, cfg)
 			return
 		}

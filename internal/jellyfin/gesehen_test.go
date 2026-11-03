@@ -16,7 +16,7 @@ import (
 func TestGeschaut(t *testing.T) {
 	var q map[string]string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != `MediaBrowser Token="key", Client="Haus"` {
+		if r.Header.Get("Authorization") != `MediaBrowser Token="key", Client="Homes"` {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}

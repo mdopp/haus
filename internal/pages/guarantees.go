@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mdopp/haus/internal/laib"
+	"github.com/mdopp/homes/internal/laib"
 )
 
 // saysNurImHaus is the owner's sentence (2026-10-28) for a backup with one place only.
@@ -29,7 +29,7 @@ func familyLabel(s laib.Service) string {
 // guarantees renders the three lines the family sees first (haus#2):
 // everything runs (or what does not, and that someone is on it), the last
 // backup and where it is, the last change in plain words — Rückgängig only
-// for admins, and on Laib's page (Haus decides nothing).
+// for admins, and on Laib's page (Homes decides nothing).
 func guarantees(ready laib.Readiness, rows []laib.Service, admin bool, laibURL string) string {
 	var b strings.Builder
 	b.WriteString("<section class=guarantees>")

@@ -1,7 +1,7 @@
 // Package haushalt is the "Haushalt" MCP source (laib ADR 0017 §2): the one
 // way the Bote and Claude reach the household's own data — appointments,
 // reminders and contacts in Radicale, notes as Markdown in the file share,
-// documents in Paperless. Haus keeps none of it: the Bote remembers about
+// documents in Paperless. Homes keeps none of it: the Bote remembers about
 // you, never for you (§3), so a note becomes a file, a reminder a calendar
 // entry and a contact a card, where people see them. A tool is listed only
 // when its backend is configured.
@@ -24,22 +24,22 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/mdopp/haus/internal/caldav"
-	"github.com/mdopp/haus/internal/cards"
-	"github.com/mdopp/haus/internal/einkauf"
-	"github.com/mdopp/haus/internal/judge"
-	"github.com/mdopp/haus/internal/library"
-	"github.com/mdopp/haus/internal/mcpserver"
-	"github.com/mdopp/haus/internal/merken"
-	"github.com/mdopp/haus/internal/notes"
-	"github.com/mdopp/haus/internal/paperless"
-	"github.com/mdopp/haus/internal/podcasts"
-	"github.com/mdopp/haus/internal/qmd"
+	"github.com/mdopp/homes/internal/caldav"
+	"github.com/mdopp/homes/internal/cards"
+	"github.com/mdopp/homes/internal/einkauf"
+	"github.com/mdopp/homes/internal/judge"
+	"github.com/mdopp/homes/internal/library"
+	"github.com/mdopp/homes/internal/mcpserver"
+	"github.com/mdopp/homes/internal/merken"
+	"github.com/mdopp/homes/internal/notes"
+	"github.com/mdopp/homes/internal/paperless"
+	"github.com/mdopp/homes/internal/podcasts"
+	"github.com/mdopp/homes/internal/qmd"
 )
 
 // Config is what the endpoint serves.
 type Config struct {
-	Token     string            // HAUS_HAUSHALT_TOKEN, the Bote's bearer
+	Token     string            // HOMES_HAUSHALT_TOKEN, the Bote's bearer
 	Calendar  *caldav.Client    // nil: no calendar or reminder tools
 	Fetcher   merken.Fetcher    // how notiz_aus_link fetches a page (haus#117); the tests' allows 127.0.0.1
 	Podcasts  *podcasts.Service // the family's podcasts (haus#123); nil: no podcast tool
@@ -51,11 +51,11 @@ type Config struct {
 	Judge     *judge.Client     // the house model's tidy-up of its hits (haus#13); nil: none
 	Documents *paperless.Client // nil: no document tool
 	Loc       *time.Location    // the house's time zone
-	// PhoneCountry is the house's calling code (HAUS_PHONE_COUNTRY, default
+	// PhoneCountry is the house's calling code (HOMES_PHONE_COUNTRY, default
 	// 49): a national number 0170 … is +49 170 … when numbers are compared.
 	PhoneCountry string
-	// PublicURL is Haus's own origin (HAUS_PUBLIC_URL): an answer links a
-	// contact or a document to its page on Haus; "": no links.
+	// PublicURL is Homes' own origin (HOMES_PUBLIC_URL): an answer links a
+	// contact or a document to its page on Homes; "": no links.
 	PublicURL string
 	Version   string
 }
@@ -73,26 +73,26 @@ func httpURL(u string) bool {
 	return err == nil && (p.Scheme == "http" || p.Scheme == "https") && p.Host != ""
 }
 
-// FromEnv reads HAUS_HAUSHALT_TOKEN, HAUS_RADICALE_URL (+ _USER,
-// _PASSWORD, optional _CALENDAR and _ADDRESSBOOK), HAUS_NOTES_DIR,
-// HAUS_QMD_URL (+ optional _COLLECTION, default notizen, and _DOCUMENTS,
+// FromEnv reads HOMES_HAUSHALT_TOKEN, HOMES_RADICALE_URL (+ _USER,
+// _PASSWORD, optional _CALENDAR and _ADDRESSBOOK), HOMES_NOTES_DIR,
+// HOMES_QMD_URL (+ optional _COLLECTION, default notizen, and _DOCUMENTS,
 // the documents' collection),
-// HAUS_PAPERLESS_URL (+ _TOKEN, optional _PUBLIC_URL), HAUS_PHONE_COUNTRY,
-// HAUS_PUBLIC_URL and TZ. A malformed backend address or country code
-// refuses to start; a missing backend only leaves its tools out. Haus's own
+// HOMES_PAPERLESS_URL (+ _TOKEN, optional _PUBLIC_URL), HOMES_PHONE_COUNTRY,
+// HOMES_PUBLIC_URL and TZ. A malformed backend address or country code
+// refuses to start; a missing backend only leaves its tools out. Homes' own
 // address is the setup link's too, so a malformed one only drops the links.
 func FromEnv() (Config, error) {
-	cfg := Config{Token: os.Getenv("HAUS_HAUSHALT_TOKEN"), Loc: time.Local, PhoneCountry: defaultCountry}
-	if pub := strings.TrimRight(os.Getenv("HAUS_PUBLIC_URL"), "/"); pub != "" {
+	cfg := Config{Token: os.Getenv("HOMES_HAUSHALT_TOKEN"), Loc: time.Local, PhoneCountry: defaultCountry}
+	if pub := strings.TrimRight(os.Getenv("HOMES_PUBLIC_URL"), "/"); pub != "" {
 		if httpURL(pub) {
 			cfg.PublicURL = pub
 		} else {
-			log.Printf("haus: HAUS_PUBLIC_URL %q is not http(s)://host: the Haushalt's answers carry no links", pub)
+			log.Printf("homes: HOMES_PUBLIC_URL %q is not http(s)://host: the Haushalt's answers carry no links", pub)
 		}
 	}
-	if cc := strings.TrimPrefix(strings.TrimSpace(os.Getenv("HAUS_PHONE_COUNTRY")), "+"); cc != "" {
+	if cc := strings.TrimPrefix(strings.TrimSpace(os.Getenv("HOMES_PHONE_COUNTRY")), "+"); cc != "" {
 		if !countryRE.MatchString(cc) {
-			return cfg, fmt.Errorf("HAUS_PHONE_COUNTRY %q: want a calling code like 49", cc)
+			return cfg, fmt.Errorf("HOMES_PHONE_COUNTRY %q: want a calling code like 49", cc)
 		}
 		cfg.PhoneCountry = cc
 	}
@@ -102,64 +102,64 @@ func FromEnv() (Config, error) {
 		}
 	}
 	if cfg.Token == "" {
-		log.Printf("haus: HAUS_HAUSHALT_TOKEN is not set: /mcp/haushalt refuses everyone")
+		log.Printf("homes: HOMES_HAUSHALT_TOKEN is not set: /mcp/haushalt refuses everyone")
 	}
-	if u := strings.TrimRight(os.Getenv("HAUS_RADICALE_URL"), "/"); u != "" {
+	if u := strings.TrimRight(os.Getenv("HOMES_RADICALE_URL"), "/"); u != "" {
 		if !httpURL(u) {
-			return cfg, fmt.Errorf("HAUS_RADICALE_URL %q: want http(s)://host[:port]", u)
+			return cfg, fmt.Errorf("HOMES_RADICALE_URL %q: want http(s)://host[:port]", u)
 		}
-		user, pw := os.Getenv("HAUS_RADICALE_USER"), os.Getenv("HAUS_RADICALE_PASSWORD")
+		user, pw := os.Getenv("HOMES_RADICALE_USER"), os.Getenv("HOMES_RADICALE_PASSWORD")
 		if user == "" || pw == "" {
-			log.Printf("haus: HAUS_RADICALE_USER/HAUS_RADICALE_PASSWORD not set: no calendar or contact tools")
+			log.Printf("homes: HOMES_RADICALE_USER/HOMES_RADICALE_PASSWORD not set: no calendar or contact tools")
 		} else {
-			cfg.Calendar = &caldav.Client{URL: u, User: user, Password: pw, Calendar: os.Getenv("HAUS_RADICALE_CALENDAR"),
-				AddressBook: os.Getenv("HAUS_RADICALE_ADDRESSBOOK"), Loc: cfg.Loc}
+			cfg.Calendar = &caldav.Client{URL: u, User: user, Password: pw, Calendar: os.Getenv("HOMES_RADICALE_CALENDAR"),
+				AddressBook: os.Getenv("HOMES_RADICALE_ADDRESSBOOK"), Loc: cfg.Loc}
 			cfg.Contacts = cfg.Calendar
 		}
 	}
-	if u := strings.TrimRight(os.Getenv("HAUS_PAPERLESS_URL"), "/"); u != "" {
+	if u := strings.TrimRight(os.Getenv("HOMES_PAPERLESS_URL"), "/"); u != "" {
 		if !httpURL(u) {
-			return cfg, fmt.Errorf("HAUS_PAPERLESS_URL %q: want http(s)://host[:port]", u)
+			return cfg, fmt.Errorf("HOMES_PAPERLESS_URL %q: want http(s)://host[:port]", u)
 		}
-		pub := strings.TrimRight(os.Getenv("HAUS_PAPERLESS_PUBLIC_URL"), "/")
+		pub := strings.TrimRight(os.Getenv("HOMES_PAPERLESS_PUBLIC_URL"), "/")
 		if pub != "" && !httpURL(pub) {
-			return cfg, fmt.Errorf("HAUS_PAPERLESS_PUBLIC_URL %q: want http(s)://host", pub)
+			return cfg, fmt.Errorf("HOMES_PAPERLESS_PUBLIC_URL %q: want http(s)://host", pub)
 		}
-		if tok := os.Getenv("HAUS_PAPERLESS_TOKEN"); tok == "" {
-			log.Printf("haus: HAUS_PAPERLESS_TOKEN not set: no document tool")
+		if tok := os.Getenv("HOMES_PAPERLESS_TOKEN"); tok == "" {
+			log.Printf("homes: HOMES_PAPERLESS_TOKEN not set: no document tool")
 		} else {
 			cfg.Documents = &paperless.Client{URL: u, Token: tok, PublicURL: pub}
 		}
 	}
-	if d := os.Getenv("HAUS_NOTES_DIR"); d != "" {
+	if d := os.Getenv("HOMES_NOTES_DIR"); d != "" {
 		n, err := notes.Open(d)
 		if err != nil {
-			log.Printf("haus: HAUS_NOTES_DIR: %v: no note tools", err)
+			log.Printf("homes: HOMES_NOTES_DIR: %v: no note tools", err)
 		} else {
 			cfg.Notes = n
 		}
 	}
-	// haus#13: qmd, in Haus's pod on loopback (laib#195); its hits are note files
-	if u := strings.TrimRight(os.Getenv("HAUS_QMD_URL"), "/"); u != "" {
+	// haus#13: qmd, in Homes' pod on loopback (laib#195); its hits are note files
+	if u := strings.TrimRight(os.Getenv("HOMES_QMD_URL"), "/"); u != "" {
 		if !httpURL(u) {
-			return cfg, fmt.Errorf("HAUS_QMD_URL %q: want http://127.0.0.1:<port>", u)
+			return cfg, fmt.Errorf("HOMES_QMD_URL %q: want http://127.0.0.1:<port>", u)
 		}
-		coll := strings.TrimSpace(os.Getenv("HAUS_QMD_COLLECTION"))
+		coll := strings.TrimSpace(os.Getenv("HOMES_QMD_COLLECTION"))
 		if coll == "" {
 			coll = defaultCollection
 		}
 		if cfg.Notes == nil {
-			log.Printf("haus: HAUS_QMD_URL is set but there is no notes folder: no memory library")
+			log.Printf("homes: HOMES_QMD_URL is set but there is no notes folder: no memory library")
 		} else {
 			cfg.Library = &qmd.Client{URL: u, Collection: coll}
 			cfg.Judge = judge.FromEnv() // optional: a box without the model role has none
-			// haus#13: Paperless's documents, mirrored by `haus export-documents`
-			if docs := strings.TrimSpace(os.Getenv("HAUS_QMD_DOCUMENTS")); docs != "" {
+			// haus#13: Paperless's documents, mirrored by `homes export-documents`
+			if docs := strings.TrimSpace(os.Getenv("HOMES_QMD_DOCUMENTS")); docs != "" {
 				switch {
 				case docs == coll:
-					return cfg, fmt.Errorf("HAUS_QMD_DOCUMENTS %q: the notes' collection, not the documents'", docs)
+					return cfg, fmt.Errorf("HOMES_QMD_DOCUMENTS %q: the notes' collection, not the documents'", docs)
 				case cfg.Documents == nil:
-					log.Printf("haus: HAUS_QMD_DOCUMENTS is set but Paperless is not: the library holds no documents")
+					log.Printf("homes: HOMES_QMD_DOCUMENTS is set but Paperless is not: the library holds no documents")
 				default:
 					cfg.Library.Documents = docs
 				}
@@ -179,7 +179,7 @@ func Handler(cfg Config) http.Handler {
 		Version: cfg.Version,
 		Instructions: "Der Haushalt: Kalender, Erinnerungen, Notizen, Kontakte und Dokumente der Familie. Was du hier anlegst, " +
 			"sieht die Familie in ihren eigenen Apps (Kalender und Adressbuch auf dem Telefon, Notizen im Dateiordner, " +
-			"Dokumente in Paperless, die du nur liest); Haus merkt sich nichts selbst. Zeiten sind Ortszeit (" + cfg.Loc.String() + "), " +
+			"Dokumente in Paperless, die du nur liest); Homes merkt sich nichts selbst. Zeiten sind Ortszeit (" + cfg.Loc.String() + "), " +
 			"Datum JJJJ-MM-TT, Uhrzeit JJJJ-MM-TTTHH:MM.",
 		Token: cfg.Token,
 		Tools: Tools(cfg),
@@ -456,14 +456,14 @@ func Tools(cfg Config) []mcpserver.Tool {
 
 // plainWhenDown answers a backend that cannot be reached (refused, timed
 // out, no such host) in a plain sentence: which one, and to try again
-// later. The transport's words and the internal address go to Haus's log,
+// later. The transport's words and the internal address go to Homes' log,
 // not to the person. Any other error stays as it is.
 func plainWhenDown(backend, tool string, call func(context.Context, map[string]any) (string, error)) func(context.Context, map[string]any) (string, error) {
 	return func(ctx context.Context, a map[string]any) (string, error) {
 		out, err := call(ctx, a)
 		var ue *url.Error
 		if err != nil && errors.As(err, &ue) {
-			log.Printf("haus: haushalt %s: %v", tool, err)
+			log.Printf("homes: haushalt %s: %v", tool, err)
 			return "", fmt.Errorf("%s antwortet gerade nicht; später noch einmal versuchen", backend)
 		}
 		return out, err
@@ -702,7 +702,7 @@ const reducedNote = "Die Suche nach Bedeutung geht gerade nicht; gesucht wurde n
 const docsDownNote = "Die Dokumente antworten gerade nicht; gesucht wurde nur in den Notizen."
 
 // notizenFinden is the memory library's search: for a note its title,
-// file, a passage and, with Haus's address, its page; for a document its
+// file, a passage and, with Homes' address, its page; for a document its
 // title, date, sender, a passage and its page (haus#13).
 func notizenFinden(ctx context.Context, lib *qmd.Client, j *judge.Client, n *notes.Dir, pl *paperless.Client, pub string, a map[string]any) (string, error) {
 	q := mcpserver.Str(a, "text")
@@ -766,7 +766,7 @@ func notizenFinden(ctx context.Context, lib *qmd.Client, j *judge.Client, n *not
 		for _, l := range d.Lines {
 			b.WriteString(l + "\n")
 		}
-		// Haus's page sends the person on to Paperless (haus#28)
+		// Homes' page sends the person on to Paperless (haus#28)
 		if pub != "" && d.Link != "" {
 			b.WriteString(pub + cards.DocumentPage(d.ID) + "\n")
 		}
@@ -999,8 +999,8 @@ func listAll(vs []string, n int, sep string) string {
 // maxOfAKind is how many numbers, emails or addresses one contact shows.
 const maxOfAKind = 10
 
-// contactCard is one contact whole, a line a kind, and its page on Haus
-// when Haus's address is known.
+// contactCard is one contact whole, a line a kind, and its page on Homes
+// when Homes' address is known.
 func contactCard(ct caldav.Contact, pub string) string {
 	head := orDash(ct.Name)
 	if nick := oneLine(ct.Nickname); nick != "" {
@@ -1136,7 +1136,7 @@ func dokumenteSuchen(ctx context.Context, d *paperless.Client, pub string, a map
 			parts = append(parts, "Schlagworte: "+t)
 		}
 		line := strings.Join(parts, " · ")
-		// Haus's page sends the person on to Paperless (haus#28); it leads
+		// Homes' page sends the person on to Paperless (haus#28); it leads
 		// somewhere only when Paperless's public address is set
 		if pub != "" && doc.Link != "" {
 			line += " — " + pub + cards.DocumentPage(doc.ID)
@@ -1228,7 +1228,7 @@ func notizenMitTag(ctx context.Context, n *notes.Dir, a map[string]any) (string,
 }
 
 // notizAusLink keeps a page someone sent as a note (haus#117) and says
-// what was kept, with the note's page in Haus.
+// what was kept, with the note's page in Homes.
 func notizAusLink(ctx context.Context, cfg Config, n *notes.Dir, a map[string]any) (string, error) {
 	if res, ok, err := cfg.Podcasts.AusLink(ctx, mcpserver.Str(a, "person"), mcpserver.Str(a, "link")); ok {
 		return res.Satz, err
@@ -1242,7 +1242,7 @@ func notizAusLink(ctx context.Context, cfg Config, n *notes.Dir, a map[string]an
 	}
 	out := got.Kurz
 	if pub := strings.TrimRight(cfg.PublicURL, "/"); pub != "" {
-		out += "\nIn Haus: " + pub + cards.NotePage(got.Name)
+		out += "\nIn Homes: " + pub + cards.NotePage(got.Name)
 	}
 	return out, nil
 }
@@ -1319,7 +1319,7 @@ func einkaufDazu(ctx context.Context, l *einkauf.Liste, d *notes.Dir, a map[stri
 func vertraegeFinden(ctx context.Context, d *paperless.Client, a map[string]any) (string, error) {
 	frage := mcpserver.Str(a, "frage")
 	var arten []string
-	for _, x := range strings.Split(os.Getenv("HAUS_VERTRAG_ARTEN"), ",") {
+	for _, x := range strings.Split(os.Getenv("HOMES_VERTRAG_ARTEN"), ",") {
 		if x = strings.TrimSpace(x); x != "" {
 			arten = append(arten, x)
 		}
@@ -1362,7 +1362,7 @@ func vertraegeFinden(ctx context.Context, d *paperless.Client, a map[string]any)
 				b.WriteString("Keine Vertragsdaten eingetragen; Paperless liest im Dokument: " + answer + "\n")
 			default:
 				if err != nil && !errors.Is(err, paperless.ErrNoChat) {
-					log.Printf("haus: vertraege: chat %d: %v", v.ID, err)
+					log.Printf("homes: vertraege: chat %d: %v", v.ID, err)
 				}
 				b.WriteString("Zu diesem Dokument sind keine Vertragsdaten eingetragen; die Antwort steht nur im Dokument selbst.\n")
 			}

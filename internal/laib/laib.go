@@ -1,5 +1,5 @@
-// Package laib is Haus's client for the box: Laib's MCP endpoint, one tool
-// call per verb, JSON back. Haus holds the haus hand's token only; it
+// Package laib is Homes' client for the box: Laib's MCP endpoint, one tool
+// call per verb, JSON back. Homes holds the homes hand's token only; it
 // never decides (ADR 0012, haus#1): verdicts are given on Laib's page.
 package laib
 
@@ -92,7 +92,7 @@ type Skill struct {
 	Refused string   `json:"refused"`
 }
 
-// Skills are the Operator's skills; ErrNoTool while Haus's hand may not list them.
+// Skills are the Operator's skills; ErrNoTool while Homes' hand may not list them.
 func (c *Client) Skills(ctx context.Context) ([]Skill, error) {
 	var out []Skill
 	text, err := c.CallTyped(ctx, "skill", map[string]any{"action": "list"})
@@ -109,7 +109,7 @@ type Service struct {
 	Units  map[string]string `json:"units"`
 	Detail string            `json:"detail,omitempty"`
 	// Title and Beschreibung are the service as Laib's own page names it
-	// (laib v0.43.0: media → „Jellyfin“, „Filme, Serien, Musik“); Haus
+	// (laib v0.43.0: media → „Jellyfin“, „Filme, Serien, Musik“); Homes
 	// names a service only by them, so both pages read the same
 	Title        string `json:"title,omitempty"`
 	Beschreibung string `json:"beschreibung,omitempty"`
@@ -148,10 +148,10 @@ type Entry struct {
 	Detail  string    `json:"detail,omitempty"`
 }
 
-// ErrNoTool is a tool this Laib does not have, or does not give the haus
+// ErrNoTool is a tool this Laib does not have, or does not give the homes
 // hand: an older Laib, or a policy.yml without the grant. A page says so
 // plainly instead of failing.
-var ErrNoTool = errors.New("laib: no such tool for haus")
+var ErrNoTool = errors.New("laib: no such tool for homes")
 
 // Call runs one tool and returns its text; a tool error is an error.
 func (c *Client) Call(ctx context.Context, verb, args string) (string, error) {
@@ -223,7 +223,7 @@ func (c *Client) call(ctx context.Context, verb string, arguments any) (string, 
 }
 
 // noTool is Laib's answer for a tool it does not know ("unknown tool
-// laib_x") or does not give this hand ("haus may not x").
+// laib_x") or does not give this hand ("homes may not x").
 func noTool(text string) bool {
 	text = strings.TrimSpace(text)
 	return strings.HasPrefix(text, "unknown tool ") || strings.Contains(text, " may not ")
@@ -313,7 +313,7 @@ func (c *Client) JournalLatest(ctx context.Context, n int, kind string) ([]Entry
 	return out, err
 }
 
-// Restart passes the action on. There is no Approve or Reject: the haus
+// Restart passes the action on. There is no Approve or Reject: the homes
 // hand may not decide, deciding is Laib's page's (ADR 0012, haus#157).
 func (c *Client) Restart(ctx context.Context, service string) (string, error) {
 	return c.Call(ctx, "restart", service)
@@ -327,7 +327,7 @@ type Invite struct {
 	First  string
 	Last   string
 	Email  string
-	Group  string // family (Laib refuses admins from the haus hand, laib#362); empty on a resend
+	Group  string // family (Laib refuses admins from the homes hand, laib#362); empty on a resend
 	Resend bool
 	Signal string // the person's Signal number, E.164 (laib#596); "" for none
 }
@@ -735,8 +735,8 @@ func scanErr(err error) error {
 }
 
 // Note writes a note into Laib's journal (laib_note): kind watch,
-// incident or report, text one line. Haus notes who switched what
-// (haus#89); a Laib that does not give haus the verb answers ErrNoTool.
+// incident or report, text one line. Homes notes who switched what
+// (haus#89); a Laib that does not give homes the verb answers ErrNoTool.
 func (c *Client) Note(ctx context.Context, kind, text string) error {
 	_, err := c.CallTyped(ctx, "note", map[string]any{"kind": kind, "text": text})
 	return err
@@ -790,7 +790,7 @@ type Aufgabe struct {
 	Erinnern string `json:"erinnern,omitempty"`
 	Befund   string `json:"befund,omitempty"` // an older Laib's name of FertigWenn
 	// laib#878: for whom (admins, alle, person:<login>), the way through it
-	// (a Haus page, or a conversation with the Bote), and the finding whose
+	// (a Homes page, or a conversation with the Bote), and the finding whose
 	// going closes it ("<probe> [<topic>]")
 	Fuer string `json:"fuer,omitempty"`
 	Weg  *struct {
@@ -822,7 +822,7 @@ type Aufgaben struct {
 
 // BoxAufgaben lists the Box-Aufgaben, the done ones too (haus#115).
 // MeineAufgaben are the tasks a person sees (laib#878): the admins', the
-// household's and their own, open and done; Haus decides who sees the admins'.
+// household's and their own, open and done; Homes decides who sees the admins'.
 func (c *Client) MeineAufgaben(ctx context.Context, von string) (Aufgaben, error) {
 	var out Aufgaben
 	text, err := c.CallTyped(ctx, "aufgabe", map[string]any{"action": "list", "alle": true, "von": von})
@@ -841,7 +841,7 @@ func (c *Client) BoxAufgaben(ctx context.Context) (Aufgaben, error) {
 	return out, decodeJSON("aufgabe", text, &out)
 }
 
-// AufgabeErledigt ticks one off for von (laib records haus:<von>); it
+// AufgabeErledigt ticks one off for von (laib records homes:<von>); it
 // answers laib's sentence.
 func (c *Client) AufgabeErledigt(ctx context.Context, id int, von string) (string, error) {
 	return c.aufgabe(ctx, map[string]any{"action": "erledigt", "id": strconv.Itoa(id), "von": von})

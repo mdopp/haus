@@ -9,11 +9,11 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/mdopp/haus/internal/caldav"
+	"github.com/mdopp/homes/internal/caldav"
 )
 
-// Handy-Kontakte (laib ADR 0029): the Haus app sends all of a person's
-// phone contacts, and Haus mirrors them into that person's address book
+// Handy-Kontakte (laib ADR 0029): the Homes app sends all of a person's
+// phone contacts, and Homes mirrors them into that person's address book
 // handy-kontakte in Radicale, as its own account (haus), which may write
 // that one book of each person and nothing else of theirs. The person is
 // the device's (Whoami), never the request's. The book is a mirror: a card
@@ -30,9 +30,9 @@ const (
 const (
 	saysNoRadicale      = "Die Kontakte-Ablage (Radicale) ist auf dieser Box nicht eingerichtet."
 	saysKontakteTooBig  = "Die Kontakte sind zu groß: höchstens 64 MB auf einmal. Lass große Kontaktfotos weg oder sag dem Admin Bescheid."
-	saysKontakteType    = "Die Kontakte kommen als text/vcard. Aktualisiere die Haus-App."
-	saysKontakteBroken  = "Die Kontakte waren nicht lesbar (eine Karte ist nicht vollständig). Aktualisiere die Haus-App."
-	saysKontakteLeer    = "Es kamen keine Kontakte an. Die Box behält die zuletzt gesicherten; erlaube der Haus-App den Zugriff auf die Kontakte, dann geht es weiter."
+	saysKontakteType    = "Die Kontakte kommen als text/vcard. Aktualisiere die Homes-App."
+	saysKontakteBroken  = "Die Kontakte waren nicht lesbar (eine Karte ist nicht vollständig). Aktualisiere die Homes-App."
+	saysKontakteLeer    = "Es kamen keine Kontakte an. Die Box behält die zuletzt gesicherten; erlaube der Homes-App den Zugriff auf die Kontakte, dann geht es weiter."
 	saysKontakteBusy    = "Deine Kontakte werden gerade schon abgeglichen. Versuch es gleich noch einmal."
 	saysKontakteChanged = "Das Adressbuch Handy-Kontakte hat sich gerade geändert. Versuch es gleich noch einmal."
 	saysKontakteFailed  = "Die Box konnte die Kontakte nicht ablegen. Versuch es später noch einmal; hilft das nicht, sag dem Admin Bescheid."
@@ -40,7 +40,7 @@ const (
 
 // kontakte is the mirror of the phones' contacts; one upload per person at once.
 type kontakte struct {
-	dav    *caldav.Client // Haus's own Radicale account; nil: 503
+	dav    *caldav.Client // Homes' own Radicale account; nil: 503
 	whoami func(string) (string, bool)
 	mu     sync.Mutex
 	busy   map[string]bool
@@ -89,7 +89,7 @@ func (k *kontakte) post(w http.ResponseWriter, r *http.Request) {
 		if nouid.Name != "" {
 			say = "Der Kontakt „" + nouid.Name + "“ hat keine UID"
 		}
-		fehler(w, http.StatusBadRequest, say+"; so kann die Box ihn nicht zuordnen. Aktualisiere die Haus-App.")
+		fehler(w, http.StatusBadRequest, say+"; so kann die Box ihn nicht zuordnen. Aktualisiere die Homes-App.")
 		return
 	case err != nil:
 		fehler(w, http.StatusBadRequest, saysKontakteBroken)
@@ -109,7 +109,7 @@ func (k *kontakte) post(w http.ResponseWriter, r *http.Request) {
 	defer func() { k.mu.Lock(); delete(k.busy, person); k.mu.Unlock() }()
 	m, err := k.dav.Mirror(r.Context(), "/"+url.PathEscape(person)+"/"+kontakteBook+"/", kontakteName, cards)
 	if err != nil {
-		log.Printf("haus: kontakte: mirror of %s (%d cards, %+v so far): %v", person, len(cards), m, err)
+		log.Printf("homes: kontakte: mirror of %s (%d cards, %+v so far): %v", person, len(cards), m, err)
 		if errors.Is(err, caldav.ErrChanged) {
 			fehler(w, http.StatusConflict, saysKontakteChanged)
 			return
@@ -117,6 +117,6 @@ func (k *kontakte) post(w http.ResponseWriter, r *http.Request) {
 		fehler(w, http.StatusBadGateway, saysKontakteFailed)
 		return
 	}
-	log.Printf("haus: kontakte: %s: %d cards, %d new, %d changed, %d removed", person, m.Kontakte, m.Neu, m.Geaendert, m.Entfernt)
+	log.Printf("homes: kontakte: %s: %d cards, %d new, %d changed, %d removed", person, m.Kontakte, m.Neu, m.Geaendert, m.Entfernt)
 	answer(w, http.StatusOK, m)
 }

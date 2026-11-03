@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/laib"
-	"github.com/mdopp/haus/internal/schalter"
+	"github.com/mdopp/homes/internal/laib"
+	"github.com/mdopp/homes/internal/schalter"
 )
 
 // notesLaib keeps the laib_note texts it is given.
@@ -49,7 +49,7 @@ func notesLaib(t *testing.T) (*laib.Client, func() []string) {
 }
 
 // haus#82, haus#89: a switch from a page names who pressed it in Laib's
-// journal, with HA's context id, so HA's logbook ("Haus") and the journal
+// journal, with HA's context id, so HA's logbook ("Homes") and the journal
 // together say who it was. A refused switch notes nothing.
 func TestSchaltenNotesWhoItWas(t *testing.T) {
 	_, cfg := switchHouse(t)

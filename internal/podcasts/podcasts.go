@@ -1,7 +1,7 @@
 // Package podcasts is the family's podcasts (haus#123; owner 2026-10-25):
 // subscribed by a link, in Audiobookshelf, keeping only the last three
-// episodes, and a new episode told only to who subscribed. Haus keeps who
-// subscribed to what (abos.json in HAUS_DATA); ABS keeps the podcasts.
+// episodes, and a new episode told only to who subscribed. Homes keeps who
+// subscribed to what (abos.json in HOMES_DATA); ABS keeps the podcasts.
 package podcasts
 
 import (
@@ -17,11 +17,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mdopp/haus/internal/abs"
-	"github.com/mdopp/haus/internal/merken"
+	"github.com/mdopp/homes/internal/abs"
+	"github.com/mdopp/homes/internal/merken"
 )
 
-// File is the store's name in HAUS_DATA.
+// File is the store's name in HOMES_DATA.
 const File = "podcasts.json"
 
 // Abo is one podcast and who subscribed to it.
@@ -40,7 +40,7 @@ type Abo struct {
 
 type state struct {
 	Abos []Abo `json:"abos"`
-	// Seen are the episodes already told of (and those there when Haus
+	// Seen are the episodes already told of (and those there when Homes
 	// first looked): a new one is one not in it.
 	Seen  []string `json:"gesehen"`
 	Ready bool     `json:"bereit"` // the first look is done: from then on, new is new
@@ -130,7 +130,7 @@ func (s *Service) Abonnieren(ctx context.Context, person, link string) (Ergebnis
 		return Ergebnis{}, err
 	}
 	item := ""
-	if have, err := s.ABS.Podcasts(ctx, lib); err == nil { // ABS has it already (from before Haus): take it
+	if have, err := s.ABS.Podcasts(ctx, lib); err == nil { // ABS has it already (from before Homes): take it
 		for _, it := range have {
 			if it.FeedURL == pod.FeedURL {
 				item = it.ID
@@ -342,15 +342,15 @@ func (s *Service) erste(ctx context.Context, a Abo) bool {
 		err = s.ABS.Laden(ctx, a.Item, eps)
 	}
 	if err != nil {
-		log.Printf("haus: podcasts: %q: the first episodes: %v", a.Title, err)
+		log.Printf("homes: podcasts: %q: the first episodes: %v", a.Title, err)
 		return false
 	}
 	return true
 }
 
 // Nachladen fetches the first episodes of a subscription that has none on
-// the box and was never asked for them (one made before Haus asked), and
-// dates a subscription made before Haus kept the date.
+// the box and was never asked for them (one made before Homes asked), and
+// dates a subscription made before Homes kept the date.
 func (s *Service) Nachladen(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -368,7 +368,7 @@ func (s *Service) Nachladen(ctx context.Context) error {
 		}
 		n, err := s.ABS.Folgen(ctx, a.Item)
 		if err != nil {
-			log.Printf("haus: podcasts: %q: %v", a.Title, err)
+			log.Printf("homes: podcasts: %q: %v", a.Title, err)
 			continue
 		}
 		if n > 0 || s.erste(ctx, st.Abos[i]) {

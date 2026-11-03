@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/caldav/davfake"
+	"github.com/mdopp/homes/internal/caldav/davfake"
 )
 
 func phoneEvent(uid, start, end, summary string) string {
@@ -343,7 +343,7 @@ func vtodo(lines ...string) string {
 	return "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VTODO\r\n" + strings.Join(lines, "\r\n") + "\r\nEND:VTODO\r\nEND:VCALENDAR\r\n"
 }
 
-// A phone saving the reminder between Haus's read and write wins: 412, ErrChanged.
+// A phone saving the reminder between Homes' read and write wins: 412, ErrChanged.
 func TestCompleteTodoChangedInBetween(t *testing.T) {
 	ics := vtodo("UID:a", "SUMMARY:A")
 	fake, c := todoFake(t, map[string]string{"a.ics": ics})

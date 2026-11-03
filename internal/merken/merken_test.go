@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/judge"
-	"github.com/mdopp/haus/internal/judge/proxyfake"
-	"github.com/mdopp/haus/internal/notes"
+	"github.com/mdopp/homes/internal/judge"
+	"github.com/mdopp/homes/internal/judge/proxyfake"
+	"github.com/mdopp/homes/internal/notes"
 )
 
 const rezeptSeite = `<!doctype html><html><head><title>Lasagne | Chefkoch</title>

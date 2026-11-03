@@ -1,5 +1,5 @@
-// Package pages renders Haus's HTML. Behind Authelia: Caddy sends
-// Remote-User, and Haus listens on loopback only, so nothing else reaches
+// Package pages renders Homes' HTML. Behind Authelia: Caddy sends
+// Remote-User, and Homes listens on loopback only, so nothing else reaches
 // it. One page per file; no framework.
 package pages
 
@@ -15,9 +15,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mdopp/haus/internal/laib"
-	"github.com/mdopp/haus/internal/usage"
-	"github.com/mdopp/haus/internal/werkstatt"
+	"github.com/mdopp/homes/internal/laib"
+	"github.com/mdopp/homes/internal/usage"
+	"github.com/mdopp/homes/internal/werkstatt"
 )
 
 // adminHead opens an admin page (haus#58): the family pages' frame (#35)
@@ -115,7 +115,7 @@ type BoxConfig struct {
 func BoxPage(cfg BoxConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
-			http.Error(w, "Haus entscheidet nichts: Freigeben und Ablehnen gibt es nur auf der Laib-Seite", http.StatusForbidden)
+			http.Error(w, "Homes entscheidet nichts: Freigeben und Ablehnen gibt es nur auf der Laib-Seite", http.StatusForbidden)
 			return
 		}
 		if !adminOnly(w, r) {

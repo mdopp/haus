@@ -9,14 +9,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mdopp/haus/internal/notes"
+	"github.com/mdopp/homes/internal/notes"
 )
 
 // Notizen says where notes come from, and a person writes them here
 // (owner, 2026-10-24): Neue Notiz makes one and shows it with „Notiz
 // angelegt.“; Bearbeiten puts its whole file in a field and saves it,
 // unless someone else changed it since — then both texts are there and
-// nothing is overwritten. Only from Haus's own page; what does not work is
+// nothing is overwritten. Only from Homes' own page; what does not work is
 // said, the text kept.
 func TestNotizenWrite(t *testing.T) {
 	dir := t.TempDir()
@@ -31,7 +31,7 @@ func TestNotizenWrite(t *testing.T) {
 	_, body, _ := familyPage(t, Notizen, cfg, "GET", "/notizen", "family")
 	mustContain(t, body, "Notizen entstehen, wenn du Homes sagst „Merk dir …“", "Netzlaufwerk",
 		`<details class=neu><summary>Neue Notiz</summary><form class=notizform method=post action=/notizen>`, `name=titel required`, `<textarea id=text name=text>`)
-	mustContain(t, body, `<button data-laeuft="Legt an …">Anlegen</button>`, hausScript)
+	mustContain(t, body, `<button data-laeuft="Legt an …">Anlegen</button>`, homesScript)
 	// the assistant by its name where the page says how to address it
 	named(t, "Ada")
 	_, body, _ = familyPage(t, Notizen, cfg, "GET", "/notizen", "family")

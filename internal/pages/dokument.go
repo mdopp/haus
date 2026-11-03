@@ -8,13 +8,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mdopp/haus/internal/cards"
+	"github.com/mdopp/homes/internal/cards"
 )
 
 // Dokument is a document's page (haus#28), the page a documents widget row
-// opens: Paperless's own, behind its own login. Haus only sends the tap on.
+// opens: Paperless's own, behind its own login. Homes only sends the tap on.
 // Without Paperless's public address there is nowhere to send it, and no
-// row names this page: a 404, like an id that is none. Haus reads nothing
+// row names this page: a 404, like an id that is none. Homes reads nothing
 // from Paperless here, so there is nothing to say when it does not answer:
 // Paperless's own page says that (haus#33).
 func Dokument(cfg StartConfig) http.HandlerFunc {
@@ -65,7 +65,7 @@ func filed(w http.ResponseWriter, r *http.Request, cfg StartConfig, mark string)
 		defer cancel()
 		id, err := cfg.Docs.Filed(ctx, mark)
 		if err != nil {
-			log.Printf("haus: dokumente: filed %s: %v", mark, err)
+			log.Printf("homes: dokumente: filed %s: %v", mark, err)
 		}
 		if to := cfg.Docs.Page(id); id > 0 && to != "" {
 			http.Redirect(w, r, to, http.StatusFound)

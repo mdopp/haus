@@ -1,3 +1,3 @@
-module github.com/mdopp/haus
+module github.com/mdopp/homes
 
 go 1.27

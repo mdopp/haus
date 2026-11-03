@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mdopp/haus/internal/werkstatt"
+	"github.com/mdopp/homes/internal/werkstatt"
 )
 
 // haus#15: the Box page lists the Werkstatt's open tickets — what pi works

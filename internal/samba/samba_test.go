@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/samba/sambafake"
+	"github.com/mdopp/homes/internal/samba/sambafake"
 )
 
 // file-share's end is sambafake: a real FIFO, read as samba-accounts.sh reads it (laib#296).

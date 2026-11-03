@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/energie"
-	"github.com/mdopp/haus/internal/ha/hafake"
+	"github.com/mdopp/homes/internal/energie"
+	"github.com/mdopp/homes/internal/ha/hafake"
 )
 
 // flowLegs sets the four flow legs (W) by the fallback's friendly names;

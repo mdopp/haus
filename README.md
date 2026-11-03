@@ -1,17 +1,17 @@
-# Haus
+# Homes
 
-**Haus** is the family's surface for the box that [Laib](https://github.com/mdopp/laib)
-runs: pages for people, cards, and `/napi`, the API the widgets of the Haus
-app ([mdopp/haus-android](https://github.com/mdopp/haus-android)) speak.
-Haus renders and decides nothing; Laib acts; the Bote is who you talk to,
+**Homes** is the family's surface for the box that [Laib](https://github.com/mdopp/laib)
+runs: pages for people, cards, and `/napi`, the API the widgets of the Homes
+app ([mdopp/homes-android](https://github.com/mdopp/homes-android)) speak.
+Homes renders and decides nothing; Laib acts; the Bote is who you talk to,
 and messages to people go through their chat channel, not the app (laib ADR
 0014, 0016, 0022). The assistant has one name for the whole box, set once in
-Laib (box.yml `assistant:`, reaching Haus as `HAUS_ASSISTANT`; *Homes*
+Laib (box.yml `assistant:`, reaching Homes as `HOMES_ASSISTANT`; *Homes*
 without it). The
-app's names (scheme `cloud.dopp.haus`, token prefix
-`haus_device_`, the Box keys under `/napi/box`) live in `internal/app`; a
-`/napi` path wants a paired device (`Authorization: Bearer haus_device_…`,
-else 401, the unknown paths too); one Haus does not serve, or whose backend
+app's names (scheme `cloud.dopp.homes`, token prefix
+`homes_device_`, the Box keys under `/napi/box`) live in `internal/app`; a
+`/napi` path wants a paired device (`Authorization: Bearer homes_device_…`,
+else 401, the unknown paths too); one Homes does not serve, or whose backend
 is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
 
 ## This cut (laib#28)
@@ -29,7 +29,7 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   Assistant's mirror; a Jellyfin session is someone's app, on Medien only
   while it plays. A player refusing a command (HA 500) is said as such.
   *Meine Geräte*: the person's own things as tiles like the phone widget
-  (laib ADR 0017: favorites go to Haus): `HAUS_DATA/favoriten.json`,
+  (laib ADR 0017: favorites go to Homes): `HOMES_DATA/favoriten.json`,
   `{"<Remote-User>": ["light.buero", "cover.wohnzimmer", …]}`, read on each
   page load, in the person's order, at most twelve, the state in a word
   and a bar, a lamp's or a switch's switch on the tile, and its ★ that
@@ -51,32 +51,32 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   who is on it: amber when the box mends it itself, red only when a person
   is needed (nobody automatic on it, or the data not backed up). The admin's words (services, places, the last change,
   Rückgängig) are /box's. Start does not wait for laib's status (a
-  second, haus#67): Haus keeps it 45 s and waits for a read at most
+  second, haus#67): Homes keeps it 45 s and waits for a read at most
   250 ms; a page served before laib answered has the line's two places
   (*Wie es der Box geht, wird gerade nachgesehen …* at the bottom) and a
   script that fetches `GET /start/box?ruhig=0|1` (`{oben, unten}`, the
   same read, `ruhig` whether the rest of the page answered), or says
   laib's plain line when that fails.
-  Each part only when its backend is set (`HAUS_HA_URL` + `HAUS_HA_TOKEN`,
-  `HAUS_RADICALE_*`); one not set is not mentioned. One not
+  Each part only when its backend is set (`HOMES_HA_URL` + `HOMES_HA_TOKEN`,
+  `HOMES_RADICALE_*`); one not set is not mentioned. One not
   answering within 4s is one plain line where its rows would be (*Licht
   und Geräte antworten gerade nicht. Schalten geht im Moment nicht.*, *Der
   Kalender antwortet gerade nicht.* once, a line in *Meine Geräte* when its
-  file or HA does not), never its name or its error, which go to Haus's
+  file or HA does not), never its name or its error, which go to Homes'
   log; Laib not answering is *Wie es der Box geht, lässt sich gerade nicht
   sagen.* at the bottom. The page is always a 200. Cards are one renderer,
   `internal/cards` (title, rows, optional link; a list, boxes, tiles or a
   time column; a row may carry one button), for the pages and later the
-  widgets' JSON. `/` redirects to `/start`; every other page path Haus
+  widgets' JSON. `/` redirects to `/start`; every other page path Homes
   does not serve is a 404 in the family's frame: *Diese Seite gibt es
   nicht.* and *Zur Startseite* (haus#12).
 - The family's page frame (haus#35): the house palette (the chat's tokens
-  and haus-android's `colors.xml`: ground `#070709`, cards `#14141A`,
+  and homes-android's `colors.xml`: ground `#070709`, cards `#14141A`,
   orange `#F97316` for what you can do, amber `#FFC107` for what is on,
   green and red only for a state, never alone), dark or light as the phone
-  is, Geist served by Haus itself at `/schrift/…woff2` (OFL, vendored in
+  is, Geist served by Homes itself at `/schrift/…woff2` (OFL, vendored in
   `internal/pages/schrift`; no request to Google, the phone's own font
-  when it does not load), Haus's icon under `/symbol/` (the terminal prompt
+  when it does not load), Homes' icon under `/symbol/` (the terminal prompt
   inside a green house, the app's mark; `internal/pages/symbol/icon.svg`
   is the master, `tools/icons` renders the favicon, the touch icon and the
   web app manifest's icons from it), and one selection on every family page
@@ -111,11 +111,11 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   and through `/napi/ha/call`, there the person who paired the device —
   is one log line `ha person=<Remote-User> service=<d.s> entity=<id>
   context=<HA's context id>` and the same text as a `laib_note` (kind
-  `watch`), so HA's logbook (user „Haus“) and Laib's journal together name
+  `watch`), so HA's logbook (user „Haus“, the account Laib made for it) and Laib's journal together name
   the person. The note never holds up the switch: a failed one is a
-  warning, Laib refusing `note` to the haus hand is logged once. Only with `Remote-User` and from Haus's own page
+  warning, Laib refusing `note` to the homes hand is logged once. Only with `Remote-User` and from Homes' own page
   (`Sec-Fetch-Site: same-origin`, or, from an older browser, an `Origin`
-  of Haus's host; neither header is a 403 too), else 403; then 303 back. HA not answering is one plain
+  of Homes' host; neither header is a 403 too), else 403; then 303 back. HA not answering is one plain
   line and the way back. No script: a plain form.
 - `POST /raeume/<id>` `stern=an|aus` — the ☆ on a thing's own page pins it
   to the person's *Meine Geräte* or takes it off (`favoriten.json`, their
@@ -152,10 +152,10 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     (one `onchange` attribute; without script, its *Setzen* button). Only a
     cover whose `device_class` is named and is no garage, door or gate gets
     Hoch and the slider (`schalter.CoverFree`, the rule's own line); a
-    thing's page says why for any other (*Tore und Türen öffnet Haus
+    thing's page says why for any other (*Tore und Türen öffnet Homes
     nicht …*, or, with no class, to set *Anzeigen als* in HA).
-    A cover wired the wrong way round is listed in `HAUS_COVER_INVERTED`
-    (cover entity ids, comma-separated): Haus shows it turned over (its
+    A cover wired the wrong way round is listed in `HOMES_COVER_INVERTED`
+    (cover entity ids, comma-separated): Homes shows it turned over (its
     position 100 − HA's, open where HA says closed) and sends Hoch as HA's
     `close_cover`, a position as 100 − the slider's, on every family page;
     the widgets' `/napi` stays as HA says. It is a property of the house's
@@ -165,7 +165,7 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     over to another app of the box (`pages.App`, `Weiter`): a link *In
     <App> öffnen* and a line of what is there, from that app's public
     address in the config; no address, no link. Geräte has *In Home
-    Assistant öffnen* at the top (`HAUS_HA_PUBLIC_URL`, e.g.
+    Assistant öffnen* at the top (`HOMES_HA_PUBLIC_URL`, e.g.
     `https://home.<domain>`; only while HA answers), and a thing's page
     its device's page in HA (`/config/devices/device/<device_id>`, from the
     entity registry), else the entity's history (`/history?entity_id=…`).
@@ -185,10 +185,10 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     Kalender: every calendar with where it comes from (*aus Google, nur
     lesen · verbunden seit … · zuletzt abgeglichen vor 5 min*, laib's
     problem when there is one), a colour and *Ausblenden* (the person's own
-    view, `ansicht.json` in Haus's data folder; Radicale and the phones are
+    view, `ansicht.json` in Homes' data folder; Radicale and the phones are
     untouched), *Trennen* for a subscription, *Löschen* for a calendar
-    Haus made, and *Adresse fürs Telefon* (the CalDAV address from
-    `HAUS_RADICALE_PUBLIC_URL`, with the DAVx⁵/iPhone sentence; the same
+    Homes made, and *Adresse fürs Telefon* (the CalDAV address from
+    `HOMES_RADICALE_PUBLIC_URL`, with the DAVx⁵/iPhone sentence; the same
     for the address book). *Kalender hinzufügen* has three ways: *Google-
     Kalender verbinden* (Google's *Geheime Adresse im iCal-Format*, handed
     to laib once as `laib_calendar`'s stdin and never shown again),
@@ -211,7 +211,7 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     lists by tag or says which tags there are, `notizen_suchen` names them.
   - *Aus Link merken* (haus#117, `internal/merken`): a link — on Notizen
     (`POST /notizen/merken`: `link`, `hinweis`) or sent to the assistant
-    (`notiz_aus_link`) — becomes a note. Haus fetches the page itself, only
+    (`notiz_aus_link`) — becomes a note. Homes fetches the page itself, only
     public addresses (no home network by address or name, every redirect
     checked), 3 MB, 20 s. The page's JSON-LD makes a recipe (portions,
     time, ingredients, steps), an album (band, album, year, rating, the
@@ -227,7 +227,7 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     *Bearbeiten* (`?bearbeiten=1`: the whole file in a field;
     `POST /notizen/<name>`: `text`, `stand` = the file's time as read).
     A note changed since is not overwritten (409): what is saved now and
-    the person's own text are both on the page. Only from Haus's own page,
+    the person's own text are both on the page. Only from Homes' own page,
     who wrote what in the log; a note longer than a page shows is read-only
     here. Then a search field (`GET /notizen?q=…`, the memory library
     below: 20 hits, by meaning) and the ten newest notes. When the library
@@ -262,15 +262,15 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     sich gerade nicht lesen.*, for the list, a search and a note alike.
   - *Dokumente* (`/dokumente`, under Mehr; haus#68): the ways into
     Paperless, each only when its config is set. *Per E-Mail ablegen*, a
-    `mailto:` to `HAUS_DOCUMENTS_MAIL` (one plain address, else no button)
+    `mailto:` to `HOMES_DOCUMENTS_MAIL` (one plain address, else no button)
     with the hint that the attachments are filed and the subject becomes
     the title (Paperless fetches that mailbox itself, laib#521). *Dokument
     ablegen*, a file or the phone's camera and an optional title, stored
-    into `HAUS_UPLOAD_DIR` exactly as the app's `/napi/upload` (same
+    into `HOMES_UPLOAD_DIR` exactly as the app's `/napi/upload` (same
     types, caps, all-or-nothing staging; `napi.Uploads`), then back to the
     page with *Liegt in Paperless* or the reason in words. *In Paperless
-    öffnen* to `HAUS_PAPERLESS_PUBLIC_URL` (*Weiter in*); with
-    `HAUS_PAPERLESS_LAN_ONLY=true` the line says *Nur zu Hause im WLAN.*,
+    öffnen* to `HOMES_PAPERLESS_PUBLIC_URL` (*Weiter in*); with
+    `HOMES_PAPERLESS_LAN_ONLY=true` the line says *Nur zu Hause im WLAN.*,
     and from outside the house (the client address Caddy forwards is not
     private) a sentence replaces the dead link. Last, one line on what
     happens: OCR, then found under Notizen and by the Bote. None set: the
@@ -286,7 +286,7 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     Each button is `POST /scannen`, one `laib_scan` order for the person who
     pressed it (#35's rule), then back. Below, the inbox folder for a
     scanner that scans to the network drive
-    (`\\<HAUS_SAMBA_HOST>\data\scan-eingang`) and the last five stacks,
+    (`\\<HOMES_SAMBA_HOST>\data\scan-eingang`) and the last five stacks,
     each one folded line (haus#197: when, who, „nur für“ whom, pages, how
     many documents or what came of it; the newest open, what a viewer opens
     or closes kept in their browser). Opened, its documents as Paperless has
@@ -312,7 +312,7 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     scan service (laib#814) and Paperless-ngx split a stack at that sheet.
     A number outside 1–50 is the nearest end, and more than 50 says so.
     A box without the service shows the family no section;
-    a Laib before v0.20.0, or a policy.yml without `scan` for the haus hand,
+    a Laib before v0.20.0, or a policy.yml without `scan` for the homes hand,
     tells an admin so.
     *Scanner einrichten* (haus#77, laib#571), admins only, folded unless no
     scanner is set, a search runs or an order just came back: the last
@@ -322,7 +322,7 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     of `suche.funde` with *Diesen einrichten*; *Adresse von Hand*
     (`epson2:net:<ip>`, refused unless laib#571 would take it); and for a
     scanner that scans to a folder what goes into its own menu (the share
-    `\\<HAUS_SAMBA_HOST>\data`, the folder, a Netzlaufwerk account).
+    `\\<HOMES_SAMBA_HOST>\data`, the folder, a Netzlaufwerk account).
     A setup order is followed where it was pressed (haus#80): the button
     says *Sucht …* at once, the redirect carries `?tut=<order>&seit=<unix>`,
     and the page looks again every 2 s until the result the order writes
@@ -333,7 +333,7 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     Einrichten is `laib_scan einrichten [--geraet]`: one proposal, the
     service with that scanner on a box without it (*Scannen einrichten*),
     its `SCANNER` otherwise; back with a fixed sentence (no device in the
-    URL) and the way to the inbox with the proposal's number. Haus decides
+    URL) and the way to the inbox with the proposal's number. Homes decides
     nothing: Laib's dial and the owner do.
   - The item pages (haus#28), what a widget opens on a tap: `/raeume/<entity_id>`
     (a thing: its state in words, since when, its room; only an entity of
@@ -342,7 +342,7 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     `/kalender/erinnerung/<uid>` (a reminder: open and due, done, or
     cancelled), `/kontakte/<uid>` (a contact: numbers and email addresses to
     tap, the birthday, the postal addresses), `/dokumente/<id>` (a 302 to the document's page in
-    Paperless, `HAUS_PAPERLESS_PUBLIC_URL`; without it a 404), and a note's
+    Paperless, `HOMES_PAPERLESS_PUBLIC_URL`; without it a 404), and a note's
     `/notizen/<file>`.
     Something not there is a 404 that says so, with the way back. A
     backend that does not answer is a 200 with that page's plain line and
@@ -353,7 +353,7 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     paths are `internal/cards/pages.go`, one place for the routes and the
     rows.
 - `GET /box` — the admins' page behind Authelia, linked from Start for
-  the `admins` group. Haus itself sends anyone whose `Remote-Groups` lacks
+  the `admins` group. Homes itself sends anyone whose `Remote-Groups` lacks
   `admins` from `/box` and everything under it (Geräte included) to
   `/start` with 303, since Authelia here only restricts per host. That
   says who sees the admin page; it is not a verdict on anything, and
@@ -381,7 +381,7 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   `signal`), once Laib has `person_signal`: one proposal for someone who
   already has an account, said the same way.
   Every page request must
-  carry `X-Haus-Proxy: <HAUS_PROXY_SECRET>`, which only Caddy adds; the
+  carry `X-Homes-Proxy: <HOMES_PROXY_SECRET>`, which only Caddy adds; the
   loopback port is shared with every host-network container, so without
   the secret nobody is anybody.
 - `/napi/box/{home,services,approvals,upgrades}` — the four Box keys the
@@ -389,29 +389,40 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   `upgrades` are the open proposals of kind `template-update` (`laib
   template sync --propose` files one per update); `pendingApprovals` and
   `approvals` are the others. An update is counted once, as an update. `POST …/services/{name}/operate`
-  (restart). `POST …/approvals/{id}/approve|deny` answers 403: Haus decides
+  (restart). `POST …/approvals/{id}/approve|deny` answers 403: Homes decides
   nothing (haus#1); approvals reach the admin through the relay (laib ADR 0012).
 
-- Pairing: in the app, enter `https://haus.<domain>`. The app opens
+- Pairing: in the app, enter `https://homes.<domain>`. The app opens
   `/pair-device` in a Custom Tab, Authelia logs the person in, they confirm,
-  and Haus redirects to `cloud.dopp.haus://pair#token=haus_device_…&id=…`,
+  and Homes redirects to `cloud.dopp.homes://pair#token=homes_device_…&id=…`,
   the token in the fragment (haus#6). `GET /box/geraete` lists the devices,
   revocable, and can mint a token whose setup URI
-  (`cloud.dopp.haus://setup?server=…&token=…`) goes into a QR code the app
+  (`cloud.dopp.homes://setup?server=…&token=…`) goes into a QR code the app
   scans. That URI is QR content, not a link: the app only opens `…://pair`.
-  Tokens live hashed in `HAUS_DATA/devices.json`; `/napi/whoami` answers for
-  them. Only a bearer with `haus_device_` is a device: a phone paired before
-  the Haus app is not migrated, it pairs again (an old entry stays listed
-  under Geräte until revoked).
+  Tokens live hashed in `HOMES_DATA/devices.json`; `/napi/whoami` answers for
+  them. Only a bearer with `homes_device_` is a device — and, until every
+  phone runs the Homes app (laib#1021), one with the old Haus app's
+  `haus_device_` whose hash is stored: a phone paired with Haus keeps
+  working. `GET /napi/app` (a device token) answers
+  `{"name":"Homes","paket":"cloud.dopp.homes","quelle":"https://github.com/mdopp/homes-android"}`:
+  the old app (`cloud.dopp.haus`) sees the package is not its own and tells
+  the person to install Homes and remove Haus afterwards.
+
+- The old address: the box routes `haus.<domain>` here too (laib#1021). A
+  request there for anything but `/napi/…` — the only paths the old app
+  calls with its device token — is redirected (308) to the same path on
+  `HOMES_PUBLIC_URL`; `/napi/…` is served there as it is (OkHttp drops
+  `Authorization` on a redirect to another host). Requests from inside the
+  box (`host.containers.internal`, `127.0.0.1`) are never redirected.
 
 - The assistant's name: `GET /napi/assistent` with a device token →
-  `{"name":"Homes"}` — `HAUS_ASSISTANT` as Laib sets it from box.yml
+  `{"name":"Homes"}` — `HOMES_ASSISTANT` as Laib sets it from box.yml
   `assistant:`, *Homes* when unset or empty. That is all the app takes
   from the box about the assistant: its colours are fixed in the app, its
-  icon is the app's launcher icon. Internally Haus is always `haus`.
+  icon is the app's launcher icon.
 
-- The house paths, from Home Assistant (haus#10, set by `HAUS_HA_URL` +
-  `HAUS_HA_TOKEN`, a long-lived token; unset, they are 404):
+- The house paths, from Home Assistant (haus#10, set by `HOMES_HA_URL` +
+  `HOMES_HA_TOKEN`, a long-lived token; unset, they are 404):
   `POST /napi/ha/call` (`{entity_id, service, data?, confirmed?}`; only
   `light|switch|cover|climate|lock`, and `media_player.media_pause` (haus#35;
   any other player service is 400 `unsupported_service`), else 400; the
@@ -421,7 +432,7 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   anything but `close_cover`, `stop_cover`, `close_cover_tilt`,
   `stop_cover_tilt`, answers **403 `sensitive_action`** without
   `confirmed:true`; HA refusing the call is 400, HA in trouble is 502
-  `ha_unavailable`, HA's detail stays in Haus's log) and
+  `ha_unavailable`, HA's detail stays in Homes' log) and
   `GET /napi/portal/{state,energy,entity-history,active}`. Every one wants
   a paired device. The shapes are the ones the app's `data/ApiClient.kt` parses; no JSON `null` goes out
   (Android reads it as `"null"`). Every card names its thing's page
@@ -438,7 +449,7 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   days, this month by day, this year by month — with the span's sums
   as the same flow picture (Solar, Eigenverbrauch = Solar − Einspeisung,
   Bezug, Einspeisung) and a
-  bar chart Haus draws itself (SVG, no script, no library; Eigenverbrauch
+  bar chart Homes draws itself (SVG, no script, no library; Eigenverbrauch
   and Bezug above the line, Einspeisung below, each bar's numbers on
   hover, a legend, the same as a table; three series colours of its own,
   checked for colour blindness, dark and light). Then the comparisons,
@@ -456,15 +467,15 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   Eigenverbrauch good, more Bezug bad, Einspeisung neutral. A comparison whose earlier
   days HA does not have says *Vergleich ab <Monat Jahr>*, never a zero;
   one with part of them compares the days both have and says from which
-  day. The statistic ids are `HAUS_ENERGY_STATS`
+  day. The statistic ids are `HOMES_ENERGY_STATS`
   (`bezug=sensor.…,einspeisung=sensor.…,solar=sensor.…`, any subset), else
-  the counters below (their fallback names or `HAUS_ENERGY_TOTALS`'
+  the counters below (their fallback names or `HOMES_ENERGY_TOTALS`'
   labels with *Bezug*, *Einspeis…*, *PV* or *Solar*). HA's statistics not
   answering: *Der Verlauf lässt sich gerade nicht lesen.*, Jetzt and Heute
   stay.
-- The energy picture reads the entities `HAUS_ENERGY_FLOW`
+- The energy picture reads the entities `HOMES_ENERGY_FLOW`
   (`pv=sensor.…,house=sensor.…,grid=sensor.…,battery=sensor.…`, any subset)
-  and `HAUS_ENERGY_TOTALS` (`<Label>=sensor.…,…`, in that order) name;
+  and `HOMES_ENERGY_TOTALS` (`<Label>=sensor.…,…`, in that order) name;
   every other power sensor is a circuit. Unset, it falls back to matching
   one house's German friendly names (`Aktuell erzeugter PV-Strom`, …).
   Each total carries `today`, the kWh it added since the house's midnight
@@ -496,13 +507,13 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
 - The app's start screen (owner, 2026-11-02): `GET /napi/portal/favorites`
   is `{ok, favorites:[card]}`, the device's person's ☆ things (the same
   `favoriten.json` the pages pin to), in their order; a pinned thing HA
-  lost, or one Haus draws no card for, is left out, none is `[]`, and a
+  lost, or one Homes draws no card for, is left out, none is `[]`, and a
   file that does not read is a 500 `favorites_unreadable`.
 - The tool widgets, from the Haushalt source's backends (haus#10, the
   same variables as below; none set, they are 404): `GET /napi/defs/tool`
   lists a tool per backend that is set: `task` (*Erinnerungen*,
-  `HAUS_RADICALE_*`), `contacts`, `doc` (`HAUS_PAPERLESS_*`), `note`
-  (`HAUS_NOTES_DIR`). Each def names its
+  `HOMES_RADICALE_*`), `contacts`, `doc` (`HOMES_PAPERLESS_*`), `note`
+  (`HOMES_NOTES_DIR`). Each def names its
   row path (`/napi/portal/tasks|contacts|documents|notes`: the open
   reminders, soonest first, due in house time, each with `status` and
   its UID trimmed as `id`, and with `?done=1` the done (`done`) and
@@ -511,7 +522,7 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   documents; the newest notes; at most 40 rows, no JSON `null`, a
   backend in trouble 502). Each row with an id names its item page
   (`page`, above); a document only when Paperless's public address is
-  set. No def names a create page: Haus has none. A path whose backend is
+  set. No def names a create page: Homes has none. A path whose backend is
   not set is 404.
   `POST /napi/action-callback` (at most 64 KB, else 413 `too_large`)
   knows one action; any other id is 404 `unknown_action`.
@@ -525,19 +536,19 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   phone's edit in between 409 `changed`; unknown **410** `not_found`
   (not 404, which the app reads as an unknown action); bad params 400
   `bad_params`; Radicale in trouble 502. It is not destructive (the
-  phone unticks it), so it asks no `confirmed`; Haus adds, files or
+  phone unticks it), so it asks no `confirmed`; Homes adds, files or
   changes nothing else from a row.
-- Share → Haus (haus#120): `POST /napi/merken` with JSON `{"text"}`,
+- Share → Homes (haus#120): `POST /napi/merken` with JSON `{"text"}`,
   what the phone shared (a browser's link, often with the page's title
   around it). The first http(s) address is the link, the words around it
-  the hint (`#tags` become tags); Haus keeps the page as a note the way
+  the hint (`#tags` become tags); Homes keeps the page as a note the way
   *Aus Link merken* does. Answer `{"titel", "art", "kurz", "schon",
-  "teilweise", "notiz"}` (`notiz`: the note's page on Haus, or "" without
-  `HAUS_PUBLIC_URL`); a text without a link or an address at home 400, a
+  "teilweise", "notiz"}` (`notiz`: the note's page on Homes, or "" without
+  `HOMES_PUBLIC_URL`); a text without a link or an address at home 400, a
   page that does not answer 502, no notes 404 — each `{"error": "<a
   German sentence>"}`. Up to 75 s (a page, then the house model).
 - The camera capture: `POST /napi/upload` (multipart, `file` parts, an
-  optional `filename`) stores into `HAUS_UPLOAD_DIR`, the share's folder
+  optional `filename`) stores into `HOMES_UPLOAD_DIR`, the share's folder
   Paperless consumes; unset, 404. JPEG and PDF as the contract
   has them, and PNG, GIF and WebP beyond it (Paperless takes them), each
   only when its first bytes say so (else 415); 25 MB a file (413), 64 MB
@@ -550,19 +561,19 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   sees as `MOVED_TO`; without it (kernel, file system) a hard link. Either
   way it appears whole and never replaces another; a request is stored
   all or nothing. `{ok, id}` for one file, `{ok, files:[{ok, id}]}` for
-  several, with no `url` (Haus serves no file back). Limits: 507 when the
+  several, with no `url` (Homes serves no file back). Limits: 507 when the
   share has less than 128 MB free or runs full, 429 while two uploads
   run, 408 when a body stalls past two minutes; a disk error is 500
   `store_failed`, not the phone's fault.
 - The phone's message backups (haus#207, laib ADR 0029; the app's side is
-  haus-android#194): WhatsApp, Signal, SMS/call log and Discord files into
-  `HAUS_ARCHIV_DIR/<person>/<quelle>/<pfad>`, where that person's archive
+  homes-android#194): WhatsApp, Signal, SMS/call log and Discord files into
+  `HOMES_ARCHIV_DIR/<person>/<quelle>/<pfad>`, where that person's archive
   imports them. The person is the device's (the uid it was paired with),
   never the request's. `GET /napi/sicherung/stand` → `{quellen:{whatsapp|
   signal|sms|discord:{zuletzt, dateien, bytes, wartend}}, frei_bytes}`;
   `POST /napi/sicherung/fehlend {quelle, dateien:[{pfad, groesse}]}` (≤ 5000)
-  → `{fehlend:[pfad]}`, against Haus's ledger
-  (`HAUS_DATA/sicherung/<person>/<quelle>.jsonl`: the size each pfad last
+  → `{fehlend:[pfad]}`, against Homes' ledger
+  (`HOMES_DATA/sicherung/<person>/<quelle>.jsonl`: the size each pfad last
   arrived with; the importer deletes what it took, so the folder cannot
   say). The upload resumes: `POST /napi/sicherung/uploads {quelle, pfad,
   groesse}` → 201 `{id, offset}` (the same file again is the same upload,
@@ -579,7 +590,7 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   another holds the file past 5 s; a phone back from a dropped connection
   stops its own piece still hanging on the box and goes on), 413 a piece over 16 MB, 429 while four pieces arrive,
   507 when the disk lacks the rest of the file plus 1 GB, 503 without
-  `HAUS_ARCHIV_DIR` (*Das Archiv ist auf dieser Box nicht
+  `HOMES_ARCHIV_DIR` (*Das Archiv ist auf dieser Box nicht
   eingerichtet.*). A piece may stall 45 s; parts untouched for seven days
   go (at start and daily). The page *Daten sichern* (`/daten-sichern`;
   the old `/nachrichten-sichern` redirects there; under Mehr when the box
@@ -592,16 +603,16 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   date and size, and the phone change in three steps.
   The source `sms` is the phone's SMS and call log
   (`sms-<zeit>.xml.age`, `anrufe-<zeit>.xml.age`), which the app encrypts
-  on the phone to the person's archive before sending; Haus keeps them as
+  on the phone to the person's archive before sending; Homes keeps them as
   the bytes they are. The key: `GET /napi/sicherung/schluessel` → 200
   `{empfaenger: "age1…"}`, read (through `os.Root`) from
-  `HAUS_ARCHIV_DIR/<person>/.briefkasten.pub`, which the archive writes
+  `HOMES_ARCHIV_DIR/<person>/.briefkasten.pub`, which the archive writes
   (one age X25519 recipient); 404 `{fehler}` until it did (*Dein
   Archiv ist noch nicht eingerichtet. Richte es einmal auf der
   Archiv-Seite ein, …*), 500 when the file holds anything else.
 - A new phone gets the newest backup back (haus#209, laib ADR 0029
   amendment 2026-11-01): the person's archive keeps it in
-  `HAUS_ARCHIV_DIR/<person>/letzte/` — `signal/signal-*.backup` and
+  `HOMES_ARCHIV_DIR/<person>/letzte/` — `signal/signal-*.backup` and
   `whatsapp/Databases/msgstore.db.crypt15`, encrypted by the messenger,
   and `whatsapp/Media/<pfad>.age`, encrypted to the archive.
   `GET /napi/sicherung/letzte` → `{quellen:{signal|whatsapp:[{pfad,
@@ -611,38 +622,38 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   strong `ETag` (send it as `If-Range` when resuming: a backup replaced in
   the meantime comes whole, never mixed). The person is the device's, so
   another person's device gets 404. Media (`whatsapp/Media/…`) come only
-  from the person's open archive: Haus asks its
-  `/intern/whatsapp/medien/<pfad>` with `X-Archiv-Haus` and passes Range
+  from the person's open archive: Homes asks its
+  `/intern/whatsapp/medien/<pfad>` with `X-Archiv-Homes` and passes Range
   and the answer on; a closed vault is 423 (*Öffne dein Archiv, dann
-  kommen auch die Fotos und Sprachnachrichten zurück.*), an archive Haus
-  has no way into 503. The ways in: `HAUS_ARCHIV_INTERN="<person>=<url>
-  …"` (each archive as Haus's pod reaches it) and
-  `HAUS_ARCHIV_SECRET_<PERSON>` (laib's per-person suffix: upper case,
-  `-` as `_`), the instance's `ARCHIV_HAUS_SECRET`.
+  kommen auch die Fotos und Sprachnachrichten zurück.*), an archive Homes
+  has no way into 503. The ways in: `HOMES_ARCHIV_INTERN="<person>=<url>
+  …"` (each archive as Homes' pod reaches it) and
+  `HOMES_ARCHIV_SECRET_<PERSON>` (laib's per-person suffix: upper case,
+  `-` as `_`), the instance's `ARCHIV_HOMES_SECRET`.
 - The phone's contacts (laib ADR 0029; optional in the app, behind
   Android's contacts permission): `POST /napi/kontakte`, `text/vcard`,
   all of the phone's contacts as concatenated vCards (≤ 64 MB, else 413),
   each with a `UID` (the app's Android lookup key; a card without is 400,
-  naming it). Haus mirrors them, as its own Radicale account
-  (`HAUS_RADICALE_USER`, which may read and write `<person>/handy-kontakte`
+  naming it). Homes mirrors them, as its own Radicale account
+  (`HOMES_RADICALE_USER`, which may read and write `<person>/handy-kontakte`
   and nothing else of the person's), into the device's person's address
   book `/<person>/handy-kontakte/` ("Handy-Kontakte", made when missing):
   each card at `<sha256(UID)[:32 hex]>.vcf`, written only when its text
-  changed (Haus notes a hash of the phone's text on the card as
+  changed (Homes notes a hash of the phone's text on the card as
   `X-HAUS-INHALT`), and every card in the book the upload lacks deleted —
   the book is a mirror; an edit there is overwritten by the next upload.
   → 200 `{kontakte, neu, geaendert, entfernt}`. Refusals `{fehler}`: 403 a
   device of nobody, 409 an upload with no cards (a permission taken back
   never empties the mirror), an upload of that person already running, or
-  the book changed under Haus (If-Match), 415 not `text/vcard`, 502 when
-  Radicale refuses, 503 without Radicale (`HAUS_RADICALE_*`).
+  the book changed under Homes (If-Match), 415 not `text/vcard`, 502 when
+  Radicale refuses, 503 without Radicale (`HOMES_RADICALE_*`).
 - The phone's positions, passed on to Reitti (owner 2026-11-02; optional
   in the app, its own switch and background-location permission): the app
   records where its person was and sends the points in batches to `POST
   /napi/standort {punkte:[{zeit (RFC 3339), breite, laenge, genauigkeit
-  (m), hoehe?, tempo? (m/s)}]}` (≤ 1000 points, ≤ 2 MB). Haus passes them
+  (m), hoehe?, tempo? (m/s)}]}` (≤ 1000 points, ≤ 2 MB). Homes passes them
   on, inside the box, to Reitti's Overland ingest (`POST
-  <HAUS_REITTI_URL>/api/v1/ingest/overland`, GeoJSON points) with the
+  <HOMES_REITTI_URL>/api/v1/ingest/overland`, GeoJSON points) with the
   device's person's own Reitti token (`Authorization: Bearer`), and
   answers 200 `{angenommen, verworfen}` only once Reitti said
   `{"result":"ok"}`; a point without a readable time, a place on earth or
@@ -652,41 +663,41 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   "schluessel_abgelehnt"` when Reitti refuses the token (401/403), 503
   `grund: "reitti_weg"` with `Retry-After: 300` when Reitti does not take
   them (no answer, an error, a redirect, a 2xx without its `ok`), 503
-  `grund: "nicht_eingerichtet"` without `HAUS_REITTI_URL`. `GET
+  `grund: "nicht_eingerichtet"` without `HOMES_REITTI_URL`. `GET
   /napi/standort` → `{verbunden, seit?}`, never the token. The token: the
   person pastes it once on the page *Standortverlauf* (`/standort`, under
-  Mehr when the box has Reitti); Haus checks it with an empty batch
+  Mehr when the box has Reitti); Homes checks it with an empty batch
   (Reitti says yes only to a token it knows with a device attached), keeps
-  it in `HAUS_DATA/reitti-konten.json` (0600) for that person alone, never
+  it in `HOMES_DATA/reitti-konten.json` (0600) for that person alone, never
   logs or shows it (*Verbunden seit …* and Trennen).
 
 - The Haushalt MCP source (laib ADR 0017, haus#11): `POST /mcp/haushalt`,
   laib's MCP shape (JSON-RPC over POST: `initialize`, `tools/list`,
   `tools/call`), for the Bote and Claude. Only `Authorization: Bearer
-  <HAUS_HAUSHALT_TOKEN>` gets in; without that variable it refuses everyone.
+  <HOMES_HAUSHALT_TOKEN>` gets in; without that variable it refuses everyone.
   It is not a page and not behind Caddy: the Bote calls the host port from
   its pod (laib ADR 0012 §4; the template publishes 8650 `lan: false`, the
   firewall keeps the LAN out), so no proxy secret and no Authelia bypass.
   A tool is listed only when its backend is set:
-  - `HAUS_RADICALE_URL` + `HAUS_RADICALE_USER` + `HAUS_RADICALE_PASSWORD`
+  - `HOMES_RADICALE_URL` + `HOMES_RADICALE_USER` + `HOMES_RADICALE_PASSWORD`
     (CalDAV): `termine(von, bis?)`, `termin_anlegen(titel, beginn, ende?, ort?)`,
     `erinnerungen()`, `erinnerung_anlegen(text, wann)` (a VTODO due then,
     with a display alarm). Reads cover every calendar of the account that
     holds the component (found by PROPFIND). Writes go to one calendar
-    only: `HAUS_RADICALE_CALENDAR` (`/<owner>/<collection>/`, read too) when
+    only: `HOMES_RADICALE_CALENDAR` (`/<owner>/<collection>/`, read too) when
     set, else the one named `Haushalt`, made on the first write when
-    missing. No request goes to a host other than `HAUS_RADICALE_URL`'s.
+    missing. No request goes to a host other than `HOMES_RADICALE_URL`'s.
   - The same Radicale account (CardDAV): `kontakte_suchen(text)` (name,
     nickname, organisation, email, or a number of three digits or more,
     however either side writes it: `0170 …`, `+49 170 …` and `0049 170 …`
     are one number, a `+`/`00` query must match the whole international
     number, any other is a piece of it; the house's calling code is
-    `HAUS_PHONE_COUNTRY`, default `49`; ten hits with phone, email and
+    `HOMES_PHONE_COUNTRY`, default `49`; ten hits with phone, email and
     birthday),
     `kontakt_lesen(kontakt)` (one contact whole: every number and email,
     ten of a kind, the birthday, the postal addresses (`ADR`, as a letter
-    has them) and its page `<HAUS_PUBLIC_URL>/kontakte/<uid>` when
-    `HAUS_PUBLIC_URL` is set; found by its UID, else its whole name in any
+    has them) and its page `<HOMES_PUBLIC_URL>/kontakte/<uid>` when
+    `HOMES_PUBLIC_URL` is set; found by its UID, else its whole name in any
     case, else the search above; when several match, the answer names ten
     with their UIDs and shows none whole),
     `kontakt_anlegen(name, telefon?, email?, geburtstag?)` (a vCard 4.0
@@ -718,43 +729,43 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     Bote writes with one account over every address book it can read, and a
     changed card on someone's phone cannot be taken back the way a new one
     can be deleted; `kontakt_ergaenzen` only adds, and only to the firm
-    cards Haus made.
+    cards Homes made.
     Reads cover every address book of the account; writes go to
-    `HAUS_RADICALE_ADDRESSBOOK` when set, else the address book named
+    `HOMES_RADICALE_ADDRESSBOOK` when set, else the address book named
     `Haushalt`, made on the first write at `/<user>/haushalt-kontakte/`.
     A read stops at 5000 cards, 64 MB per address book or the 15 s
     timeout (after the first card) and says so. No redirect is followed.
-  - `HAUS_PAPERLESS_URL` + `HAUS_PAPERLESS_TOKEN` (a Paperless API token;
+  - `HOMES_PAPERLESS_URL` + `HOMES_PAPERLESS_TOKEN` (a Paperless API token;
     what its user may see is what the Bote sees): `dokumente_suchen(text)`,
-    Paperless's own full text search (no index of Haus's), at most 20 hits
-    with date, correspondent, title, five tags and, when `HAUS_PUBLIC_URL`
-    and `HAUS_PAPERLESS_PUBLIC_URL` are both set, a link to the document's
-    page on Haus, `<HAUS_PUBLIC_URL>/dokumente/<id>`, which sends the
+    Paperless's own full text search (no index of Homes'), at most 20 hits
+    with date, correspondent, title, five tags and, when `HOMES_PUBLIC_URL`
+    and `HOMES_PAPERLESS_PUBLIC_URL` are both set, a link to the document's
+    page on Homes, `<HOMES_PUBLIC_URL>/dokumente/<id>`, which sends the
     person on to Paperless. Read-only (GET only), no redirect followed, the
     token never in an answer.
   A backend that does not answer (refused, timed out) is a plain tool
   error, `Radicale antwortet gerade nicht; später noch einmal versuchen`
-  (or Paperless), its detail in Haus's log; any other answer it did not
+  (or Paperless), its detail in Homes' log; any other answer it did not
   expect says the status.
-  - `HAUS_NOTES_DIR` (the share's `notes` folder): `notizen_suchen(text)`,
+  - `HOMES_NOTES_DIR` (the share's `notes` folder): `notizen_suchen(text)`,
     `notiz_lesen(titel)`, `notiz_anlegen(titel, text)`. A note is
     `<slug>.md`, `# Titel` first, never written over an existing one (`-2`,
     `-3`; a share without hard links is an error); no name reaches outside
     the folder, hidden files and folders are never notes, a search reads at
     most 5000 files and 64 MB and says when it stopped early.
-  - The memory library (haus#13), `HAUS_QMD_URL` with the notes folder:
+  - The memory library (haus#13), `HOMES_QMD_URL` with the notes folder:
     `notizen_finden(text)`, the notes by meaning, eight at most, each with
-    its title, file, a passage and, with `HAUS_PUBLIC_URL`, its page
-    `<HAUS_PUBLIC_URL>/notizen/<file>`; the same cut and tidy-up as the
+    its title, file, a passage and, with `HOMES_PUBLIC_URL`, its page
+    `<HOMES_PUBLIC_URL>/notizen/<file>`; the same cut and tidy-up as the
     page (the tidy-up may take 3 s here: the Bote waits anyway), reduced
     to words the same way, and the answer's first line says so. With the
     documents in the library it finds documents too, in the same eight,
     each as `## Dokument: Titel (Datum, Absender)`, a passage and its page
-    `<HAUS_PUBLIC_URL>/dokumente/<id>`; Paperless not answering is the
+    `<HOMES_PUBLIC_URL>/dokumente/<id>`; Paperless not answering is the
     answer's first line (*Die Dokumente antworten gerade nicht; gesucht
     wurde nur in den Notizen.*), the notes follow.
   Times are local (`TZ`, e.g. `Europe/Berlin`): `JJJJ-MM-TT` or
-  `JJJJ-MM-TTTHH:MM`. Haus keeps nothing of it (ADR 0017 §3): a note is a
+  `JJJJ-MM-TTTHH:MM`. Homes keeps nothing of it (ADR 0017 §3): a note is a
   file the family syncs, a reminder an entry on their phones; the one
   index is the memory library's, qmd's, and the word search reads the
   files. Identity per person (the
@@ -762,13 +773,13 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
 
 - The memory library (haus#13, laib ADR 0017 §3): one search by meaning
   over the notes, for the Notizen page and the Haushalt alike. It is qmd
-  (github.com/tobi/qmd), which Laib runs in Haus's pod (laib#195) with its
+  (github.com/tobi/qmd), which Laib runs in Homes' pod (laib#195) with its
   own small embedding model on the CPU, refreshed by a timer, behind the
   Vermittler (laib#198), a small server on qmd's SDK that adds each hit's
-  cosine. Haus reads its address from `HAUS_QMD_URL`
+  cosine. Homes reads its address from `HOMES_QMD_URL`
   (`http://127.0.0.1:<port>`: it has no auth, so it must listen on
-  127.0.0.1) and the notes' collection from `HAUS_QMD_COLLECTION`
-  (default `notizen`). Haus sends only typed searches, words and meaning,
+  127.0.0.1) and the notes' collection from `HOMES_QMD_COLLECTION`
+  (default `notizen`). Homes sends only typed searches, words and meaning,
   with rerank off (a plain query pulls in a 1.7B model and the reranker,
   the slow path), and asks `GET /status` whether the vectors are there;
   qmd gets 2.5 s of a search, the word search the rest. A hit is a note
@@ -776,17 +787,17 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   qmd names elsewhere, hidden, linked out or deleted is left out. Without
   the notes folder there is no library.
   - **The documents.** Paperless has read every document already (its
-    OCR); Haus feeds that text into qmd as its own collection,
-    `HAUS_QMD_DOCUMENTS` (e.g. `dokumente`, never the notes' own), which
-    counts only with Paperless set. `haus export-documents`, a one-shot
+    OCR); Homes feeds that text into qmd as its own collection,
+    `HOMES_QMD_DOCUMENTS` (e.g. `dokumente`, never the notes' own), which
+    counts only with Paperless set. `homes export-documents`, a one-shot
     command the refresh timer runs before `qmd update`, mirrors what
-    Haus's Paperless user sees into `HAUS_DOCUMENTS_DIR`: one
+    Homes' Paperless user sees into `HOMES_DOCUMENTS_DIR`: one
     `<id>.md` per document, `# Titel`, then `Datum:`, `Von:` and
     `Schlagworte:`, then the text (at most 2 MB). A file whose time is
     the document's last change is not read again; a document deleted in
-    Paperless (or no longer shown to Haus's user) is deleted from the
+    Paperless (or no longer shown to Homes' user) is deleted from the
     folder; Paperless failing leaves the folder as it was and is not the
-    refresh's failure (only a folder Haus cannot write is). A search asks
+    refresh's failure (only a folder Homes cannot write is). A search asks
     qmd for both collections; every document it names is checked against
     Paperless in one request (`id__in`, at most 1.5 s, the start of its
     text with it): one deleted since is left out and sets no bar, and
@@ -804,9 +815,9 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     emptied). Nothing over the cut: the word search, said as "no note
     fits", not as the search being down (page and Haushalt alike).
   - **The tidy-up**, optional and never blocking: with more than one hit
-    left and `HAUS_LLM_URL` (the model proxy's OpenAI base, `…/v1`),
-    `HAUS_LLM_MODEL` (the house model, `gemma-4-e4b`) and `HAUS_LLM_KEY`
-    all set, Haus reads the lease (`GET /api/model-lease`, no key) and
+    left and `HOMES_LLM_URL` (the model proxy's OpenAI base, `…/v1`),
+    `HOMES_LLM_MODEL` (the house model, `gemma-4-e4b`) and `HOMES_LLM_KEY`
+    all set, Homes reads the lease (`GET /api/model-lease`, no key) and
     asks the house model which hits answer — only when the lease says
     that model is ready, or no window is held and it is the default
     (nobody holds the card; not loaded yet only runs out the budget),
@@ -822,8 +833,8 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
 - The Sprechen field (haus#12, laib ADR 0016): on Start under the day,
   above the cards, while the Bote is set (no tab of its own: `/sprechen`
   belongs to Start)
-  (`HAUS_BOTE_URL`, the Bote's OpenAI base `http://host.containers.internal:8642/v1`,
-  and `HAUS_BOTE_KEY`, Hermes' `API_SERVER_KEY`; laib renders the key only
+  (`HOMES_BOTE_URL`, the Bote's OpenAI base `http://host.containers.internal:8642/v1`,
+  and `HOMES_BOTE_KEY`, Hermes' `API_SERVER_KEY`; laib renders the key only
   with the Bote installed, laib#215: no key, no field, no word about it).
   One line and *Senden*, a plain form post that works without script;
   the page's script (haus#63) sends it in the background instead: from
@@ -831,15 +842,15 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   denkt nach …* (the assistant's name) with a running indicator and the seconds, then the reply
   in pieces as it comes, then the exchange as a reload would show it — or
   the plain line, never silence. `POST /sprechen`
-  takes it only from a person on Haus's own page (#35's rule) and sends it
+  takes it only from a person on Homes' own page (#35's rule) and sends it
   to the Bote's `/chat/completions` as one chat completion: the person's
   login (`Remote-User`) and, quoted after it without quotes or brackets
   of its own, their name (`Remote-Name`, which a person may set
   themselves) in a system line, because
   Hermes' API server has no per-person field and layers system lines on
-  top of the Bote's SOUL, and `X-Hermes-Session-Key: haus:<login>`, the
+  top of the Bote's SOUL, and `X-Hermes-Session-Key: homes:<login>`, the
   person's memory scope. No model named, one sentence at a time: the Bote
-  does not see the page's earlier exchange. Haus asks with `stream: true`
+  does not see the page's earlier exchange. Homes asks with `stream: true`
   and reads OpenAI's server-sent events (a Bote answering in one piece is
   one piece). A post that accepts `text/event-stream` (the script) gets
   server-sent events back: `{"angekommen":true}` at once, a comment beat
@@ -847,7 +858,7 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   `{"fertig":…}`, the exchange's HTML. A plain post gets 303 to
   `/sprechen`, which shows the person's last exchange (in memory, per
   person): their words, the reply under the assistant's name, as text (code
-  blocks kept, **bold** bold, nothing else rendered). Haus relays and
+  blocks kept, **bold** bold, nothing else rendered). Homes relays and
   decides nothing (haus#1). Leaving the page does not stop the wait: the
   reply is kept for the person's next look. It waits 150 s for the first
   word (the first message after a model reload takes 40–50 s, with a tool
@@ -860,12 +871,12 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   einmal.*, the error in the log. Over 1000 characters is refused plainly;
   empty sends nothing.
   The microphone beside the field (haus#63), with Home Assistant and
-  `HAUS_STT_PROVIDER` set (HA's speech-to-text, e.g. `stt.faster_whisper`,
-  Whisper on the box; `HAUS_STT_LANGUAGE` as the provider names it,
+  `HOMES_STT_PROVIDER` set (HA's speech-to-text, e.g. `stt.faster_whisper`,
+  Whisper on the box; `HOMES_STT_LANGUAGE` as the provider names it,
   default `de`); without them, no button. The browser records (Web Audio,
   no browser speech service), at most 30 s, as a 16 kHz 16-bit mono WAV,
-  and posts it to `POST /sprechen/hoeren` (a person, Haus's own page, at
-  most 2 MB); Haus passes it as it is to HA's `POST /api/stt/<provider>`
+  and posts it to `POST /sprechen/hoeren` (a person, Homes' own page, at
+  most 2 MB); Homes passes it as it is to HA's `POST /api/stt/<provider>`
   (`X-Speech-Content: format=wav; codec=pcm; sample_rate=…; bit_rate=16;
   channel=1; language=…`) and answers `{ok:true, text}`, which the page
   sends like typed words; nothing is kept. No words is one line
@@ -886,13 +897,13 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
 - The Netzlaufwerk page (haus#52, laib#296): `/netzlaufwerk`, linked from
   Start for a family member or admin (a to-do card while they have no
   password, a quiet link after). Each person sets their own password for the
-  network drive (Samba): what it is for, how to connect (`\\<HAUS_SAMBA_HOST>\data`,
+  network drive (Samba): what it is for, how to connect (`\\<HOMES_SAMBA_HOST>\data`,
   `smb://…/data`), that it may equal their family password. An admin sees
   everyone's state, sets a new one for anyone or removes one. Until a person
   sets one they have none. `POST /netzlaufwerk` takes it only from a person on
-  Haus's own page (#35's rule), for themselves or, as an admin, for anyone;
+  Homes' own page (#35's rule), for themselves or, as an admin, for anyone;
   package `samba` writes one line (`set <name> <base64>`, `clear <name>`) into
-  file-share's FIFO in `HAUS_SAMBA_DIR` (non-blocking, never into a plain
+  file-share's FIFO in `HOMES_SAMBA_DIR` (non-blocking, never into a plain
   file: no reader is "antwortet gerade nicht") and waits for its `status`.
   The password is never logged, stored or echoed. Unset: no page, no link.
 
@@ -900,23 +911,23 @@ Not yet: Start's *Häufig genutzt*; dictation in Notizen, timers in
 Kalender.
 
 - The Box page's Werkstatt card (haus#15): the open tickets of the repos in
-  `HAUS_WERKSTATT_REPOS` (owner/name, comma-separated), what pi works
+  `HOMES_WERKSTATT_REPOS` (owner/name, comma-separated), what pi works
   (`pi:ready`) and what waits for Claude (`needs-claude`), read-only and
   linked. Public GitHub API, no token, cached for 5 minutes. Unset: no card.
 
 ## What the family uses (haus#50)
 
-Haus counts, server-side and anonymously, what the family uses, so that
+Homes counts, server-side and anonymously, what the family uses, so that
 what gets built next is decided on numbers (owner decision 2026-10-16):
 a count per event and **UTC day**, nothing else. Never who: no
 `Remote-User`, no device token, no IP, no content, no search words, no
 entity — a request's query is read only for the widget source tag below.
 The counts go to **usage-metrics** (mdopp/usage-metrics, a Laib built-in,
-`POST /ingest`, app `haus`) with `HAUS_USAGE_URL` and `HAUS_USAGE_TOKEN`
-(laib's `templates/haus` wires both; unset, Haus counts nothing and the
+`POST /ingest`, app `haus`: the counted history's key, kept) with `HOMES_USAGE_URL` and `HOMES_USAGE_TOKEN`
+(laib's `templates/homes` wires both; unset, Homes counts nothing and the
 Box card is absent). Counting is a map increment in memory; a flush every
 five minutes sends one increment per counter, and SIGTERM sends what is
-left before Haus exits. usage-metrics not answering drops that batch and
+left before Homes exits. usage-metrics not answering drops that batch and
 says so once in the log; a page never waits for it.
 
 | Event | Counted when | The card says |
@@ -929,21 +940,21 @@ says so once in the log; a page never waits for it.
 | `sprechen.mikrofon` | speech turned into words for the field (never what) | *Ins Mikrofon gesprochen* |
 | `gestoert.<page>.<line>` | a page showed a plain line because something did not answer: `licht`, `raeume`, `kalender`, `kontakte`, `notizen`, `bedeutung`, `dokumente`, `favoriten`, `favoriten-verdeckt`, `strom`, `strom-heute`, `verlauf`, `lautsprecher`, `schalten`, `bote`, `bote-langsam`, `box`, `laib`, `github`, `dienste` | the line itself and where: *„Licht und Geräte antworten gerade nicht.“ auf Start* |
 | `napi.<path>` | a paired phone's `/napi` request, by path without wildcards (`napi.portal.state`, `napi.box.home`, `napi.ha.call`, …) | *Geräte-Widget aktualisiert*, … |
-| `von.widget.<kind>` | a page opened from a widget, `?von=widget.<kind>` (haus-android#181): `device`, `devices`, `active`, `energy`, `energy-stats`, `energy-totals`, `box-overview`, `box-services`, `tool`; any other value counts nothing | *Vom Widget „Gerät“ aus geöffnet* |
+| `von.widget.<kind>` | a page opened from a widget, `?von=widget.<kind>` (homes-android#181): `device`, `devices`, `active`, `energy`, `energy-stats`, `energy-totals`, `box-overview`, `box-services`, `tool`; any other value counts nothing | *Vom Widget „Gerät“ aus geöffnet* |
 
 **The voice control** (Home Assistant Assist), app `stimme`, when HA is
 configured: HA keeps the last ten runs of each Assist pipeline in memory
 (its debug store, `assist_pipeline/pipeline_debug/list|get` over the
-WebSocket); Haus reads them every minute and counts each run once:
+WebSocket); Homes reads them every minute and counts each run once:
 `erkannt` (HA's own intents answered), `weitergereicht` (the fallback
 conversation agent answered), `nicht-erkannt` (the answer was an error,
 e.g. `no_intent_match`). The sentence of a `nicht-erkannt` run goes to
 usage-metrics' `POST /miss` (source `stimme`) — the words alone, never the
 device, satellite or conversation; usage-metrics keeps it 30 days. Runs
-from before Haus started are not counted, so a restart counts nothing
+from before Homes started are not counted, so a restart counts nothing
 twice; more than ten commands on one pipeline within a minute lose the
 oldest. **These commands are admin-only in HA**: the user behind
-`HAUS_HA_TOKEN` must be an administrator, else Haus logs it once, counts
+`HOMES_HA_TOKEN` must be an administrator, else Homes logs it once, counts
 no voice, and the card says so.
 
 **The Box page's card "Was wird genutzt"** (admins only): the last 30
@@ -957,60 +968,60 @@ name: *Termine nachgesehen*, *Geräte ausgeschaltet*, *Gedächtnis*; a tool
 not known yet as *Sonst etwas im Haushalt* or *Ein anderes Werkzeug*) and the voice's
 numbers, and the sentences nobody could answer (*im Chat*, *per Stimme*;
 kept 30 days, without names). usage-metrics not answering is one plain
-line; nothing counted yet says so and since when Haus counts.
+line; nothing counted yet says so and since when Homes counts.
 
 Before: ServiceBay's Solaris widgets tagged their links `?src=widget.*`
 and the Solaris engine forwarded those hits to usage-metrics
 (solarisbay#1026), nothing else was counted. Now the app only tags the
-link (`?von=`), and Haus counts server-side itself — pages, actions,
+link (`?von=`), and Homes counts server-side itself — pages, actions,
 degraded lines, widget refreshes and the voice — under the same store and
 retention.
 
 ## Run
 
 ```
-LAIB_URL=http://host.containers.internal:5900 LAIB_TOKEN=<the haus hand's token, minted on laib add haus> \
-HAUS_PROXY_SECRET=<what Caddy sends as X-Haus-Proxy> LAIB_PUBLIC_URL=https://laib.<domain> \
-HAUS_LISTEN=0.0.0.0:8650 HAUS_ASSISTANT=Homes \
-HAUS_HA_URL=http://host.containers.internal:8123 HAUS_HA_TOKEN=<a long-lived HA token> \
-HAUS_ENERGY_FLOW=pv=sensor.…,house=sensor.…,grid=sensor.…,battery=sensor.… HAUS_ENERGY_TOTALS=PV-Erzeugung=sensor.…,… \
-HAUS_ENERGY_STATS=bezug=sensor.…,einspeisung=sensor.…,solar=sensor.… \
-HAUS_HA_PUBLIC_URL=https://home.<domain> HAUS_COVER_INVERTED=cover.…,… HAUS_RADICALE_PUBLIC_URL=https://caldav.<domain> \
-HAUS_HAUSHALT_TOKEN=<the Bote's bearer> TZ=Europe/Berlin \
-HAUS_RADICALE_URL=http://host.containers.internal:5232 HAUS_RADICALE_USER=<service account> HAUS_RADICALE_PASSWORD=<its password> \
-HAUS_PAPERLESS_URL=http://host.containers.internal:8000 HAUS_PAPERLESS_TOKEN=<a Paperless API token> \
-HAUS_PAPERLESS_PUBLIC_URL=https://paperless.<domain> HAUS_PAPERLESS_LAN_ONLY=true HAUS_DOCUMENTS_MAIL=dokumente@<domain> HAUS_NOTES_DIR=/notes \
-HAUS_QMD_URL=http://127.0.0.1:8181 HAUS_QMD_DOCUMENTS=dokumente HAUS_DOCUMENTS_DIR=/dokumente HAUS_UPLOAD_DIR=/consume \
-HAUS_LLM_URL=http://host.containers.internal:11435/v1 HAUS_LLM_MODEL=gemma-4-e4b HAUS_LLM_KEY=<the model key> \
-HAUS_BOTE_URL=http://host.containers.internal:8642/v1 HAUS_BOTE_KEY=<the Bote's API_SERVER_KEY> \
-HAUS_STT_PROVIDER=stt.faster_whisper HAUS_STT_LANGUAGE=de \
-HAUS_SAMBA_DIR=/samba-accounts HAUS_SAMBA_HOST=<the box's LAN address> \
-HAUS_ARCHIV_DIR=/archiv-eingang \
-HAUS_REITTI_URL=http://host.containers.internal:<Reitti's host port> HAUS_REITTI_PUBLIC_URL=https://reitti.<domain> \
+LAIB_URL=http://host.containers.internal:5900 LAIB_TOKEN=<the homes hand's token, minted on laib add homes> \
+HOMES_PROXY_SECRET=<what Caddy sends as X-Homes-Proxy> LAIB_PUBLIC_URL=https://laib.<domain> \
+HOMES_LISTEN=0.0.0.0:8650 HOMES_ASSISTANT=Homes \
+HOMES_HA_URL=http://host.containers.internal:8123 HOMES_HA_TOKEN=<a long-lived HA token> \
+HOMES_ENERGY_FLOW=pv=sensor.…,house=sensor.…,grid=sensor.…,battery=sensor.… HOMES_ENERGY_TOTALS=PV-Erzeugung=sensor.…,… \
+HOMES_ENERGY_STATS=bezug=sensor.…,einspeisung=sensor.…,solar=sensor.… \
+HOMES_HA_PUBLIC_URL=https://home.<domain> HOMES_COVER_INVERTED=cover.…,… HOMES_RADICALE_PUBLIC_URL=https://caldav.<domain> \
+HOMES_HAUSHALT_TOKEN=<the Bote's bearer> TZ=Europe/Berlin \
+HOMES_RADICALE_URL=http://host.containers.internal:5232 HOMES_RADICALE_USER=<service account> HOMES_RADICALE_PASSWORD=<its password> \
+HOMES_PAPERLESS_URL=http://host.containers.internal:8000 HOMES_PAPERLESS_TOKEN=<a Paperless API token> \
+HOMES_PAPERLESS_PUBLIC_URL=https://paperless.<domain> HOMES_PAPERLESS_LAN_ONLY=true HOMES_DOCUMENTS_MAIL=dokumente@<domain> HOMES_NOTES_DIR=/notes \
+HOMES_QMD_URL=http://127.0.0.1:8181 HOMES_QMD_DOCUMENTS=dokumente HOMES_DOCUMENTS_DIR=/dokumente HOMES_UPLOAD_DIR=/consume \
+HOMES_LLM_URL=http://host.containers.internal:11435/v1 HOMES_LLM_MODEL=gemma-4-e4b HOMES_LLM_KEY=<the model key> \
+HOMES_BOTE_URL=http://host.containers.internal:8642/v1 HOMES_BOTE_KEY=<the Bote's API_SERVER_KEY> \
+HOMES_STT_PROVIDER=stt.faster_whisper HOMES_STT_LANGUAGE=de \
+HOMES_SAMBA_DIR=/samba-accounts HOMES_SAMBA_HOST=<the box's LAN address> \
+HOMES_ARCHIV_DIR=/archiv-eingang \
+HOMES_REITTI_URL=http://host.containers.internal:<Reitti's host port> HOMES_REITTI_PUBLIC_URL=https://reitti.<domain> \
 
-HAUS_USAGE_URL=http://host.containers.internal:8094 HAUS_USAGE_TOKEN=<usage-metrics' USAGE_METRICS_TOKEN> ./haus
+HOMES_USAGE_URL=http://host.containers.internal:8094 HOMES_USAGE_TOKEN=<usage-metrics' USAGE_METRICS_TOKEN> ./homes
 ```
 
-`HAUS_DATA` (default `/data`) holds `devices.json` and `favoriten.json`; `HAUS_PUBLIC_URL` is the
-origin the setup link carries (default `https://<Host>`). Haus's Laib token is the `haus` hand: status, inbox, journal, restart —
-nothing else (no exec, no write). There are no static device tokens. Image: `ghcr.io/mdopp/haus`. Laib template: `haus` (route `haus.<domain>`,
-`bypass: [/napi/]`; the
+`HOMES_DATA` (default `/data`) holds `devices.json` and `favoriten.json`; `HOMES_PUBLIC_URL` is the
+origin the setup link carries (default `https://<Host>`). Homes' Laib token is the `homes` hand: status, inbox, journal, restart —
+nothing else (no exec, no write). There are no static device tokens. Image: `ghcr.io/mdopp/homes`. Laib template: `homes` (routes `homes.<domain>` and,
+until laib#1021 ends, the old `haus.<domain>`, both `bypass: [/napi/]`; the
 upload needs the share's consume folder mounted writable at
-`HAUS_UPLOAD_DIR`, on a file system with hard links, and Caddy letting a
+`HOMES_UPLOAD_DIR`, on a file system with hard links, and Caddy letting a
 request of 64 MB through; the message backups need
-`${DATA_DIR}/archiv-eingang` mounted writable at `HAUS_ARCHIV_DIR`,
+`${DATA_DIR}/archiv-eingang` mounted writable at `HOMES_ARCHIV_DIR`,
 `/archiv-eingang`, and a 16 MB request body).
 
-`haus export-documents` runs once instead of the server and exits (the
-refresh timer runs it in Haus's container, `podman exec systemd-haus
-/haus export-documents`, before `qmd update`): it reads
-`HAUS_PAPERLESS_URL`, `HAUS_PAPERLESS_TOKEN` and `HAUS_DOCUMENTS_DIR`,
+`homes export-documents` runs once instead of the server and exits (the
+refresh timer runs it in Homes' container, `podman exec systemd-homes
+/homes export-documents`, before `qmd update`): it reads
+`HOMES_PAPERLESS_URL`, `HOMES_PAPERLESS_TOKEN` and `HOMES_DOCUMENTS_DIR`,
 does nothing without them, and exits 1 only when the folder fails.
 
-`haus import-takeout [-dry-run] [-skip-calendar Name]… <zip>…` brings
+`homes import-takeout [-dry-run] [-skip-calendar Name]… <zip>…` brings
 a Google Takeout archive in once (haus#13, laib ADR 0017 §4), with
-Haus's own Radicale account and notes folder (`HAUS_RADICALE_*`,
-`HAUS_NOTES_DIR`; one not set is left out and said so): the calendars'
+Homes' own Radicale account and notes folder (`HOMES_RADICALE_*`,
+`HOMES_NOTES_DIR`; one not set is left out and said so): the calendars'
 entries into the Haushalt calendar, the contacts into the Haushalt
 address book (both shared for now, haus#11), the Google Keep notes as
 Markdown into the notes folder's `Google Notizen`, their attachments into
@@ -1037,14 +1048,14 @@ Telefon eingerichtet haben), Google Notizen als Notizen im Ordner
    *Notizen* (Google Notizen/Keep) auswählen, Format ZIP, exportieren und
    die ZIP-Datei(en) herunterladen. Große Exporte kommen als mehrere
    Dateien (`…-001.zip`, `…-002.zip`); alle gehören zusammen.
-2. **Auf die Box legen:** die Datei(en) in den Datenordner von Haus
-   kopieren, das ist `<dataDir>/haus` (`dataDir` steht in der `box.yml`,
-   z. B. `/mnt/data/stacks/haus`). Im Haus-Container heißt der Ordner
+2. **Auf die Box legen:** die Datei(en) in den Datenordner von Homes
+   kopieren, das ist `<dataDir>/homes` (`dataDir` steht in der `box.yml`,
+   z. B. `/mnt/data/stacks/homes`). Im Homes-Container heißt der Ordner
    `/data`.
 3. **Probelauf:** zeigt nur, was übernommen würde, und schreibt nichts:
 
    ```
-   laib exec haus --container systemd-haus -- /haus import-takeout -dry-run /data/takeout-20261015T100000Z-001.zip /data/takeout-20261015T100000Z-002.zip
+   laib exec homes --container systemd-homes -- /homes import-takeout -dry-run /data/takeout-20261015T100000Z-001.zip /data/takeout-20261015T100000Z-002.zip
    ```
 
    Einen Kalender, den die Telefone sowieso zeigen (etwa die Feiertage),
@@ -1052,7 +1063,7 @@ Telefon eingerichtet haben), Google Notizen als Notizen im Ordner
 4. **Übernehmen:** derselbe Befehl ohne `-dry-run`. Am Ende steht, wie
    viele Termine, Kontakte und Notizen neu sind, wie viele schon da waren
    und was nicht ging, mit Grund.
-5. **Aufräumen:** die ZIP-Dateien aus `<dataDir>/haus` löschen. Sie
+5. **Aufräumen:** die ZIP-Dateien aus `<dataDir>/homes` löschen. Sie
    enthalten persönliche Daten und würden sonst mitgesichert.
 
 Gut zu wissen:
@@ -1068,11 +1079,11 @@ Gut zu wissen:
   übernommen; archivierte schon, mit dem Hinweis „In Keep archiviert“.
 - **Die Suche** findet die übernommenen Notizen nach dem nächsten
   Auffrischen der Bibliothek, spätestens nach einer Viertelstunde.
-- **Ohne Radicale-Konto** für Haus (`RADICALE_USER` und `laib secret set
-  HAUS_RADICALE_PASSWORD`) werden Kalender und Kontakte ausgelassen; der
+- **Ohne Radicale-Konto** für Homes (`RADICALE_USER` und `laib secret set
+  HOMES_RADICALE_PASSWORD`) werden Kalender und Kontakte ausgelassen; der
   Befehl sagt das.
 - `laib exec` macht vorher eine Sicherung und zählt als Eingriff ins
-  Stunden-Budget von Haus.
+  Stunden-Budget von Homes.
 
 ## Tests
 
@@ -1083,12 +1094,12 @@ Gut zu wissen:
 (`internal/qmd/qmdfake`, built from the prototype's answers on qmd
 2.8.3 in `internal/qmd/testdata`), a fake model proxy
 (`internal/judge/proxyfake`), a fake Bote (`internal/bote/botefake`, Hermes' API server) and a temp folder for the notes; the shapes are pinned to the app's `data/*.kt`
-parsers in mdopp/haus-android. `HAUS_QMD_REAL=<a running qmd>
-HAUS_QMD_REAL_NOTES=<its notes folder> go test ./internal/library -run Real`
+parsers in mdopp/homes-android. `HOMES_QMD_REAL=<a running qmd>
+HOMES_QMD_REAL_NOTES=<its notes folder> go test ./internal/library -run Real`
 checks against a real qmd by hand; CI never does.
 No Go file names the old app or its names (`internal/app/names_test.go`).
 
-**In a browser** (`e2e/`, CI job `e2e`): `cmd/hausdemo` serves the family
+**In a browser** (`e2e/`, CI job `e2e`): `cmd/homesdemo` serves the family
 pages against the fakes (lamps, a cover, a player that change when
 switched, a notes folder; everyone is anna, `/demo/fehler?status=503`
 makes switching fail, `/demo/setze?id=…&state=…` changes a state from
@@ -1098,16 +1109,16 @@ the page follows a change made elsewhere within seconds (push), a player pauses 
 note is written and changed, and no page throws a script error. Pictures
 of the main pages are kept with each run. Locally: `cd e2e && npm ci &&
 npx playwright install chromium && npx playwright test`; `go run
-./cmd/hausdemo` alone to look at the pages.
+./cmd/homesdemo` alone to look at the pages.
 
 ## Einkauf (haus#118)
 
 `GET /einkauf`, a pill under Haushalt, with Radicale. The household's one
-shopping list is a task-only collection in Haus's account, `haus/einkauf`
+shopping list is a task-only collection in Homes' account, `haus/einkauf`
 ("Einkauf"), made at start with the Haushalt calendar, so the phones show
 it as a task list too (DAVx⁵ with a task app); it is no calendar and its
 tasks are no reminders. A line's text is all there is (a phone's edit is
-read the same way): Haus reads amounts the German way — g/kg, ml/l, EL, TL,
+read the same way): Homes reads amounts the German way — g/kg, ml/l, EL, TL,
 Prise, Dose, Packung …, fractions, ranges — adds up the same thing in the
 same kind of unit (200 g + 0,5 kg Mehl = 700 g; anything else stands side
 by side) and keeps the recipes it came from in DESCRIPTION. A tap ticks a
@@ -1117,13 +1128,13 @@ overwritten); the ticked ones go below, *Abgehakte entfernen* deletes them.
 (`art: rezept`, a `## Zutaten` list, "Für N Portionen"), added up and
 scaled as one buys (grams to 5, whole tins up), each to leave out before
 it goes on the list; a recipe note links there. Every change is pushed
-over `/live` (`haus.einkauf`) to the other open pages; a phone app's change
+over `/live` (`homes.einkauf`) to the other open pages; a phone app's change
 shows within a minute. The assistant: `einkaufsliste_dazu(dinge, rezepte,
 portionen)` and `einkaufsliste`.
 
 ## Musik-Wunschliste (owner 2026-10-25)
 
-A song or an album shared to Haus — the app's share target, *Aus Link
+A song or an album shared to Homes — the app's share target, *Aus Link
 merken* on Notizen, a link sent to the assistant (`notiz_aus_link`) — goes on the
 household's list *Musik* (`haus/liste-musik`, made at start) instead of
 into a note: "Künstler – Titel", its origin `von <person>, <link>`. A
@@ -1132,7 +1143,7 @@ YouTube video counts when YouTube's oEmbed says it is a music video
 Music); Spotify tracks and albums by their page. Its lines are never read
 as amounts. On the list each open wish shows who wished it, shops that sell
 music as files (Bandcamp, Qobuz, 7digital) and the link to listen to.
-With Jellyfin (`HAUS_JELLYFIN_URL`, `HAUS_JELLYFIN_TOKEN`, laib#695) a song
+With Jellyfin (`HOMES_JELLYFIN_URL`, `HOMES_JELLYFIN_TOKEN`, laib#695) a song
 already in the music is "Hast du schon … auf dem Album …", and every 15
 minutes the open wishes are looked up: one that arrived is ticked off and
 its wisher told (`laib_tell`). Nothing is downloaded from YouTube.
@@ -1144,7 +1155,7 @@ vorbestellen"), its label, and the shops the release, the band and the
 label name — Bandcamp first (a record there mostly comes with its download
 at once), mail order, the band's and the label's pages, known download
 shops. Shops are never asked themselves (Bandcamp lets no program in).
-Each wish moves through stages kept in `musikwuensche.json` in HAUS_DATA:
+Each wish moves through stages kept in `musikwuensche.json` in HOMES_DATA:
 *Wunsch* → *Bestellt* (a record with its download, or the file alone) →
 *Datei da* (the record on its way; set by hand, or by Jellyfin when the
 download is sorted in) → ticked off when all of it is there.
@@ -1153,11 +1164,11 @@ download is sorted in) → ticked off when all of it is there.
 
 One Discogs account per person (owner: "es muss doch ein Schlüssel pro
 User sein"), connected through the household's Discogs app ("Joshua";
-its consumer key and secret from laib: `HAUS_DISCOGS_KEY`,
-`HAUS_DISCOGS_SECRET`, laib#696). *Discogs* under Mehr (`/discogs`): "Mit
+its consumer key and secret from laib: `HOMES_DISCOGS_KEY`,
+`HOMES_DISCOGS_SECRET`, laib#696). *Discogs* under Mehr (`/discogs`): "Mit
 Discogs verbinden" sends the person to Discogs, which asks whether the
-app may use their account, and back to `/discogs/zurueck`; Haus keeps
-their token in `discogs-konten.json` (HAUS_DATA, 0600, never shown) for
+app may use their account, and back to `/discogs/zurueck`; Homes keeps
+their token in `discogs-konten.json` (HOMES_DATA, 0600, never shown) for
 them alone, and only for the connection it started for them (OAuth 1.0a,
 PLAINTEXT over https). *Trennen* forgets it. Per person then: a wish already
 on their shelf is "Hast du schon auf Vinyl"; *Auf die Discogs-Wantlist*
@@ -1166,34 +1177,34 @@ arrives on its wisher's shelf is ticked off and leaves the wantlist.
 *Platte erfassen* (`/platte`): 1–4 photos of a record. The phone makes
 them small and reads a barcode with the browser's `BarcodeDetector`;
 without a barcode the box's model reads catalogue number, label, artist
-and title (`HAUS_LLM_VISION_MODEL`, else the house model; only while it has
+and title (`HOMES_LLM_VISION_MODEL`, else the house model; only while it has
 the card, else who has it). Discogs is searched by barcode (its check digit
 checked), then catalogue number and label, then artist and title on vinyl;
-the best five show with their cover (through Haus, `/platte/bild`) and why
+the best five show with their cover (through Homes, `/platte/bild`) and why
 they match, and only *Das ist sie* adds one to the person's collection.
 
 ## Podcasts (haus#123)
 
-`GET /podcasts`, under Mehr, with Audiobookshelf (`HAUS_ABS_URL`,
-`HAUS_ABS_TOKEN`: an admin user's API key from laib, laib#676). Anyone in
+`GET /podcasts`, under Mehr, with Audiobookshelf (`HOMES_ABS_URL`,
+`HOMES_ABS_TOKEN`: an admin user's API key from laib, laib#676). Anyone in
 the family subscribes by a link — the feed, a website (its
 `<link rel=alternate type=application/rss+xml>`), Apple Podcasts (its id
 through Apple's lookup), a Spotify show (its name through Apple's
 search; a Spotify-only show is said to have no feed) — fetched by
-`internal/merken`'s rules. Haus asks ABS to read the feed, subscribes it
+`internal/merken`'s rules. Homes asks ABS to read the feed, subscribes it
 once for the household (`POST /api/podcasts`, auto-download) and sets it
 to keep only the last 3 episodes (owner 2026-10-25); `podcasts.json` in
-HAUS_DATA keeps who subscribed to what. *Meine Podcasts* with *Abo
+HOMES_DATA keeps who subscribed to what. *Meine Podcasts* with *Abo
 beenden* (the last one out takes the podcast off the box), their newest
 episodes. The assistant: `podcast_abonnieren(link, person)`. Every 15 minutes
-Haus looks for new episodes and tells each only to who subscribed,
+Homes looks for new episodes and tells each only to who subscribed,
 through Laib's `tell` (laib#676) — not before Laib has it, so nothing is
 taken as told unsaid.
 
 ## Musik hinzufügen (haus#107)
 
-`GET /musik`, under Mehr, only with laib's music inbox: `HAUS_MUSIC_INBOX`,
-else `/musik-eingang` when it is mounted (laib#639's haus template mounts
+`GET /musik`, under Mehr, only with laib's music inbox: `HOMES_MUSIC_INBOX`,
+else `/musik-eingang` when it is mounted (laib#639's homes template mounts
 it there; beets sorts it into the music and Jellyfin). Anyone in the family: files
 (MP3, FLAC, M4A, OGG, Opus, WAV), a whole folder (`webkitdirectory`, on
 a computer) or ZIPs. The page's script sends each file in 8 MB pieces to
@@ -1206,7 +1217,7 @@ the folders kept, nothing hidden, absolute or outside the inbox, up to
 box sorts them in. What beets made of them (laib's status) follows when
 laib reports it.
 
-## The Haus script
+## The Homes script
 
 Every family page carries one inline script in its head (`hausScript`,
 `internal/pages/skript.go`; owner 2026-10-24: scripts are welcome). A POST
@@ -1214,7 +1225,7 @@ form goes in the background: the pressed switch flips at once, a button
 with `data-laeuft` says what runs, the answer replaces the page in place
 (scroll, focus and open folds kept, the address follows a redirect). A
 refusal the server says as `text/plain` (`/schalten` does when asked with
-`X-Haus-Skript`) is shown at the bottom and the page stays. `data-frage`
+`X-Homes-Skript`) is shown at the bottom and the page stays. `data-frage`
 asks before a removal, `data-kopieren` copies the field before it, a
 `<div hidden data-auffrischen=N>` refreshes the page in place every N
 seconds while it is seen and nobody types (Energie 60, Dokumente 2–5

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/ha/hafake"
+	"github.com/mdopp/homes/internal/ha/hafake"
 )
 
 // haus#65: the long-term statistics over the WebSocket — what each id

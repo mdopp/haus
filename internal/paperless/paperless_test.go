@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/paperless/paperlessfake"
+	"github.com/mdopp/homes/internal/paperless/paperlessfake"
 )
 
 const token = "pl-geheim-123"
@@ -304,7 +304,7 @@ func TestStampsAllOrNothing(t *testing.T) {
 	}
 }
 
-// A document filed by Haus is found by the mark Haus put in its file name
+// A document filed by Homes is found by the mark Homes put in its file name
 // (<stem>-<mark>.<ext>, haus#68): one GET with only that mark and the id
 // field, never the title. Not yet consumed, or the mark not one document,
 // is 0: no guess.

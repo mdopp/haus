@@ -2,7 +2,7 @@ package pages
 
 import (
 	"context"
-	"github.com/mdopp/haus/internal/papierkorb"
+	"github.com/mdopp/homes/internal/papierkorb"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -12,12 +12,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/caldav"
-	"github.com/mdopp/haus/internal/caldav/davfake"
-	"github.com/mdopp/haus/internal/einkauf"
-	"github.com/mdopp/haus/internal/merken"
-	"github.com/mdopp/haus/internal/musicbrainz"
-	"github.com/mdopp/haus/internal/notes"
+	"github.com/mdopp/homes/internal/caldav"
+	"github.com/mdopp/homes/internal/caldav/davfake"
+	"github.com/mdopp/homes/internal/einkauf"
+	"github.com/mdopp/homes/internal/merken"
+	"github.com/mdopp/homes/internal/musicbrainz"
+	"github.com/mdopp/homes/internal/notes"
 )
 
 func shoppingList(t *testing.T) (*einkauf.Liste, *int) {
@@ -51,7 +51,7 @@ func uidOf(t *testing.T, l *einkauf.Liste, summary string) string {
 // haus#118: the list under Haushalt — empty says how it fills; a line
 // added answers on the page; a tap ticks it off (a switch, at once), the
 // ticked ones go below with Abgehakte entfernen (asked first); every change
-// is told to the other phones; only from Haus's own page.
+// is told to the other phones; only from Homes' own page.
 func TestEinkaufPage(t *testing.T) {
 	l, told := shoppingList(t)
 	cfg := StartConfig{Einkauf: l}

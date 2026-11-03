@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mdopp/haus/internal/laib"
+	"github.com/mdopp/homes/internal/laib"
 )
 
 // haus#10, slice 2: the camera widget (CameraWidgetConfigActivity.kt picks from

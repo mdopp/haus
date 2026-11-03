@@ -8,11 +8,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mdopp/haus/internal/laib"
+	"github.com/mdopp/homes/internal/laib"
 )
 
 // Start does not wait for laib (haus#67): laib's status takes a second, the
-// rest of Start a few milliseconds. Haus keeps the status statusFresh and
+// rest of Start a few milliseconds. Homes keeps the status statusFresh and
 // waits for a read at most boxInline; a page served before it came has a
 // place for the box line, and the page's script fetches it from StartBoxPath
 // once laib has answered. Variables for the tests.

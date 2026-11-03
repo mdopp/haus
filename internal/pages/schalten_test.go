@@ -9,16 +9,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/ha/hafake"
+	"github.com/mdopp/homes/internal/ha/hafake"
 )
 
-// post sends a family page's form as a browser on Haus's own page does:
+// post sends a family page's form as a browser on Homes' own page does:
 // the person (Remote-User; "" for none) and Sec-Fetch-Site same-origin,
 // unless hdr says otherwise ("" removes a header).
 func post(t *testing.T, h http.HandlerFunc, target string, form url.Values, user string, hdr map[string]string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest("POST", target, strings.NewReader(form.Encode()))
-	req.Host = "haus.box.test"
+	req.Host = "homes.box.test"
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Sec-Fetch-Site", "same-origin")
 	if user != "" {
@@ -168,10 +168,10 @@ func TestSchaltenRefusesWhatAPageDoesNotSwitch(t *testing.T) {
 	}
 }
 
-// Only Haus's own page switches: a POST from another site (Sec-Fetch-Site,
-// or an Origin that is not Haus, or neither), without a person, or not a
+// Only Homes' own page switches: a POST from another site (Sec-Fetch-Site,
+// or an Origin that is not Homes, or neither), without a person, or not a
 // POST, is refused and HA hears nothing.
-func TestSchaltenOnlyFromHausItself(t *testing.T) {
+func TestSchaltenOnlyFromHomesItself(t *testing.T) {
 	fake, cfg := switchHouse(t)
 	h := Schalten(cfg)
 	f := url.Values{"geraet": {"light.buero"}, "tun": {"light.turn_off"}}
@@ -184,7 +184,7 @@ func TestSchaltenOnlyFromHausItself(t *testing.T) {
 		{"anna", map[string]string{"Sec-Fetch-Site": "none"}},
 		{"anna", map[string]string{"Sec-Fetch-Site": "", "Origin": "https://boese.example"}},
 		{"anna", map[string]string{"Sec-Fetch-Site": "", "Origin": "null"}},
-		{"anna", map[string]string{"Sec-Fetch-Site": ""}}, // neither header: Haus's own form always sends one
+		{"anna", map[string]string{"Sec-Fetch-Site": ""}}, // neither header: Homes' own form always sends one
 		{"", nil},
 	} {
 		if rec := post(t, h, "/schalten", f, c.user, c.hdr); rec.Code != http.StatusForbidden {
@@ -203,15 +203,15 @@ func TestSchaltenOnlyFromHausItself(t *testing.T) {
 	if len(fake.Calls()) != 0 {
 		t.Fatalf("HA got %v", calls(fake))
 	}
-	// an older browser without Sec-Fetch-Site, from Haus's own origin, is fine
-	if rec := post(t, h, "/schalten", f, "anna", map[string]string{"Sec-Fetch-Site": "", "Origin": "https://haus.box.test"}); rec.Code != http.StatusSeeOther {
+	// an older browser without Sec-Fetch-Site, from Homes' own origin, is fine
+	if rec := post(t, h, "/schalten", f, "anna", map[string]string{"Sec-Fetch-Site": "", "Origin": "https://homes.box.test"}); rec.Code != http.StatusSeeOther {
 		t.Fatalf("same origin → %d", rec.Code)
 	}
 }
 
-// Back leads only to Haus's own Start, Räume (a room on it), or the
+// Back leads only to Homes' own Start, Räume (a room on it), or the
 // thing's page: anything else lands on Start.
-func TestSchaltenGoesBackOnlyToHaus(t *testing.T) {
+func TestSchaltenGoesBackOnlyToHomes(t *testing.T) {
 	_, cfg := switchHouse(t)
 	h := Schalten(cfg)
 	for _, back := range []string{"https://boese.example/", "//boese.example", "/raeume/../box", "/box", "/raeume/lock.haustuer?x", "javascript:alert(1)", "/start#x",
@@ -299,7 +299,7 @@ func TestDingPinsAndUnpins(t *testing.T) {
 	}
 }
 
-// Pinning is the person's own and only from Haus's page: without a
+// Pinning is the person's own and only from Homes' page: without a
 // person, from another site, for what has no page, or with a word the
 // form does not send, nothing is written. Without a store there is no ☆,
 // and the page takes no POST.

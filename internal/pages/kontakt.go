@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/mdopp/haus/internal/caldav"
-	"github.com/mdopp/haus/internal/cards"
-	"github.com/mdopp/haus/internal/haushalt"
+	"github.com/mdopp/homes/internal/caldav"
+	"github.com/mdopp/homes/internal/cards"
+	"github.com/mdopp/homes/internal/haushalt"
 )
 
 // Kontakt is one contact's own page (haus#28), the page a contacts widget
@@ -31,7 +31,7 @@ func Kontakt(cfg StartConfig) http.HandlerFunc {
 			fetch(r, func(ctx context.Context) { all, _, err = cfg.Contacts.Contacts(ctx) })
 		}
 		if err != nil {
-			log.Printf("haus: kontakt page: %q: %v", uid, err)
+			log.Printf("homes: kontakt page: %q: %v", uid, err)
 			missing{http.StatusOK, saysNoContacts, "Kontakt", "/start", "Start"}.write(w, r, cfg)
 			return
 		}

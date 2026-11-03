@@ -14,7 +14,7 @@ import (
 // it is; anything technical (an address, a protocol, a Go error) goes to
 // the log, and the person reads the fallback sentence instead.
 
-var technisch = regexp.MustCompile(`(?i)https?://|\bdial\b|\btcp\b|\beof\b|context deadline|\bjson\b|\bnil\b|connection|status \d|\.go:\d|\b[a-z]+_[a-z_]+\b|\b(?:laib|haus|mcp|caldav|radicale|paperless)\s*:`)
+var technisch = regexp.MustCompile(`(?i)https?://|\bdial\b|\btcp\b|\beof\b|context deadline|\bjson\b|\bnil\b|connection|status \d|\.go:\d|\b[a-z]+_[a-z_]+\b|\b(?:laib|homes|mcp|caldav|radicale|paperless)\s*:`)
 
 // familySentence is err as a person may read it, else fallback (and err in the log, under where).
 func familySentence(where string, err error, fallback string) string {
@@ -25,7 +25,7 @@ func familySentence(where string, err error, fallback string) string {
 	if t != "" && !technisch.MatchString(t) && strings.ToUpper(t[:1]) == t[:1] && strings.ContainsAny(t[len(t)-1:], ".!?“") {
 		return t
 	}
-	log.Printf("haus: %s: %v", where, err)
+	log.Printf("homes: %s: %v", where, err)
 	return fallback
 }
 

@@ -178,8 +178,8 @@ func TestReadRefusesHidden(t *testing.T) {
 	os.MkdirAll(filepath.Join(dir, "sub"), 0o755)
 	os.WriteFile(filepath.Join(dir, ".stversions", "alt.md"), []byte("# alt"), 0o644)
 	os.WriteFile(filepath.Join(dir, "sub", ".geheim.md"), []byte("# geheim"), 0o644)
-	os.WriteFile(filepath.Join(dir, ".haus-1.tmp"), []byte("halb"), 0o644)
-	for _, ref := range []string{".stversions/alt.md", "sub/.geheim.md", ".haus-1.tmp", "./.stversions/alt.md"} {
+	os.WriteFile(filepath.Join(dir, ".homes-1.tmp"), []byte("halb"), 0o644)
+	for _, ref := range []string{".stversions/alt.md", "sub/.geheim.md", ".homes-1.tmp", "./.stversions/alt.md"} {
 		if n, err := d.Read(bg, ref); !errors.Is(err, ErrHidden) {
 			t.Fatalf("%q: want ErrHidden, got %+v %v", ref, n, err)
 		}

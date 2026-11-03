@@ -93,7 +93,7 @@ func TestKontaktErgaenzenCreates(t *testing.T) {
 	}
 }
 
-// A firm's card Haus made is filled where empty and gets a second phone or
+// A firm's card Homes made is filled where empty and gets a second phone or
 // email; a value there is never changed, and a different IBAN is never
 // written but answered abweichend.
 func TestKontaktErgaenzenFills(t *testing.T) {
@@ -193,7 +193,7 @@ func TestKontaktErgaenzenRefusesBadValues(t *testing.T) {
 	}
 }
 
-// Two cards of the firm: Haus does not guess which, and writes nothing.
+// Two cards of the firm: Homes does not guess which, and writes nothing.
 func TestKontaktErgaenzenAmbiguous(t *testing.T) {
 	s := newSetup(t, want{contacts: true})
 	for _, u := range []string{"a", "b"} {
@@ -211,7 +211,7 @@ func TestKontaktErgaenzenAmbiguous(t *testing.T) {
 	}
 }
 
-// A phone saving the card between Haus's read and write wins: Haus reads
+// A phone saving the card between Homes' read and write wins: Homes reads
 // again and adds to what the phone wrote.
 func TestKontaktErgaenzenRace(t *testing.T) {
 	s := newSetup(t, want{contacts: true})

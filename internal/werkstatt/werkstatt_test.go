@@ -29,13 +29,13 @@ func TestOpenIsCached(t *testing.T) {
 }
 
 func TestFromEnv(t *testing.T) {
-	t.Setenv("HAUS_WERKSTATT_REPOS", "")
+	t.Setenv("HOMES_WERKSTATT_REPOS", "")
 	if FromEnv() != nil {
 		t.Fatal("no repos, no Werkstatt card")
 	}
-	t.Setenv("HAUS_WERKSTATT_REPOS", " mdopp/laib , mdopp/haus,")
+	t.Setenv("HOMES_WERKSTATT_REPOS", " mdopp/laib , mdopp/homes,")
 	tk := FromEnv()
-	if tk == nil || len(tk.Repos) != 2 || tk.Repos[1] != "mdopp/haus" || tk.API != "https://api.github.com" {
+	if tk == nil || len(tk.Repos) != 2 || tk.Repos[1] != "mdopp/homes" || tk.API != "https://api.github.com" {
 		t.Fatalf("%+v", tk)
 	}
 }

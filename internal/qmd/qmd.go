@@ -1,11 +1,11 @@
-// Package qmd is Haus's client for qmd (github.com/tobi/qmd), the memory
+// Package qmd is Homes' client for qmd (github.com/tobi/qmd), the memory
 // library's search (haus#13): keyword and vector search over the notes,
-// run by Laib in Haus's pod on loopback (laib#195), behind the Vermittler
+// run by Laib in Homes' pod on loopback (laib#195), behind the Vermittler
 // (laib#198), a small server on qmd's SDK that adds each hit's cosine. It
 // has no auth, so its address is 127.0.0.1 or localhost, never a name
 // another container could reach.
 //
-// Haus asks only two things of it: POST /query with typed searches, and
+// Homes asks only two things of it: POST /query with typed searches, and
 // GET /status. A search is always words (lex) plus meaning (vec), rerank
 // off, scoped to the notes' collection — never a plain query: that pulls
 // in the 1.7B query expansion model and the reranker, 30–140 s a query on
@@ -35,7 +35,7 @@ type Client struct {
 	HTTP      *http.Client
 }
 
-// maxAnswer caps what Haus reads of one answer.
+// maxAnswer caps what Homes reads of one answer.
 const maxAnswer = 4 << 20
 
 // Hit is one document qmd found: its collection (the notes' or the
@@ -100,7 +100,7 @@ type search struct {
 	Query string `json:"query"`
 }
 
-// query is the whole body Haus sends: nothing qmd would fill with its
+// query is the whole body Homes sends: nothing qmd would fill with its
 // defaults (rerank on, a plain query expanded by the LLM, an intent), and
 // nothing the Vermittler does not take — it answers any other field,
 // minScore too, with 400 (it sets minScore 0 itself).

@@ -8,14 +8,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mdopp/haus/internal/caldav"
+	"github.com/mdopp/homes/internal/caldav"
 )
 
-// Das Haus-Konto (haus#218): the app keeps an Android account "Haus" on each
+// Das Homes-Konto (haus#218): the app keeps an Android account "Homes" on each
 // family member's phone, and fills its contacts and calendars from here, so
 // the dialer, WhatsApp, mail and the calendar app see the household's shared
-// data. Read only: what changes, changes in Haus. Shared is what lives in
-// Haus's own Radicale account (caldav/gemeinsam.go); a person's own
+// data. Read only: what changes, changes in Homes. Shared is what lives in
+// Homes' own Radicale account (caldav/gemeinsam.go); a person's own
 // calendars and contacts go the other way, from the phone to the archive.
 // Standard formats both: vCard as Radicale keeps it, iCalendar with the
 // series expanded over a window. Each answer has an ETag of its body, so
@@ -34,7 +34,7 @@ const (
 )
 
 type gemeinsam struct {
-	dav    *caldav.Client // Haus's own Radicale account; nil: 503
+	dav    *caldav.Client // Homes' own Radicale account; nil: 503
 	whoami func(string) (string, bool)
 	loc    *time.Location
 	now    func() time.Time
@@ -71,12 +71,12 @@ func (g *gemeinsam) person(next http.HandlerFunc) http.HandlerFunc {
 func (g *gemeinsam) kontakte(w http.ResponseWriter, r *http.Request) {
 	cards, partial, err := g.dav.FamilyCards(r.Context())
 	if err != nil {
-		log.Printf("haus: gemeinsam: kontakte: %v", err)
+		log.Printf("homes: gemeinsam: kontakte: %v", err)
 		fehler(w, http.StatusBadGateway, saysGemeinsamFail)
 		return
 	}
 	if partial {
-		log.Printf("haus: gemeinsam: kontakte: cut at %d cards", len(cards))
+		log.Printf("homes: gemeinsam: kontakte: cut at %d cards", len(cards))
 		fehler(w, http.StatusInsufficientStorage, saysGemeinsamCut)
 		return
 	}
@@ -96,7 +96,7 @@ func (g *gemeinsam) kalender(w http.ResponseWriter, r *http.Request) {
 	now := g.clock()
 	cals, err := g.dav.FamilyFeed(r.Context(), now.Add(-gemeinsamBack), now.Add(gemeinsamAhead))
 	if err != nil {
-		log.Printf("haus: gemeinsam: kalender: %v", err)
+		log.Printf("homes: gemeinsam: kalender: %v", err)
 		fehler(w, http.StatusBadGateway, saysGemeinsamFail)
 		return
 	}

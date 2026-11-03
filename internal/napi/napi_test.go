@@ -11,14 +11,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mdopp/haus/internal/assistent"
-	"github.com/mdopp/haus/internal/caldav"
-	"github.com/mdopp/haus/internal/ha"
-	"github.com/mdopp/haus/internal/haushalt"
-	"github.com/mdopp/haus/internal/laib"
-	"github.com/mdopp/haus/internal/notes"
-	"github.com/mdopp/haus/internal/paperless"
-	"github.com/mdopp/haus/internal/reitti"
+	"github.com/mdopp/homes/internal/assistent"
+	"github.com/mdopp/homes/internal/caldav"
+	"github.com/mdopp/homes/internal/ha"
+	"github.com/mdopp/homes/internal/haushalt"
+	"github.com/mdopp/homes/internal/laib"
+	"github.com/mdopp/homes/internal/notes"
+	"github.com/mdopp/homes/internal/paperless"
+	"github.com/mdopp/homes/internal/reitti"
 )
 
 // fakeLaib answers tools/call per verb with canned text and records calls.
@@ -122,7 +122,7 @@ func TestBoxKeysFromLaib(t *testing.T) {
 	}
 }
 
-func TestDenyIsNotHausEither(t *testing.T) {
+func TestDenyIsNotHomesEither(t *testing.T) {
 	var calls []string
 	srv := fakeLaib(t, &calls)
 	defer srv.Close()
@@ -133,7 +133,7 @@ func TestDenyIsNotHausEither(t *testing.T) {
 }
 
 // haus#26, laib ADR 0022 §4: the old app's Box keys are gone, and a /napi
-// path Haus does not serve is 404, passed on to nobody — even with a paired
+// path Homes does not serve is 404, passed on to nobody — even with a paired
 // device's token. The 404 is JSON, as every refusal the app parses.
 func TestTheOldPathsAreGone(t *testing.T) {
 	var calls []string
@@ -154,33 +154,62 @@ func TestTheOldPathsAreGone(t *testing.T) {
 	}
 }
 
-func TestWhoamiFromHausDevices(t *testing.T) {
+func TestWhoamiFromHomesDevices(t *testing.T) {
 	var calls []string
 	lb := fakeLaib(t, &calls)
 	defer lb.Close()
 	h := Handler(Config{Laib: &laib.Client{URL: lb.URL, Token: "ops"},
-		Validate: StaticValidator([]string{"haus_device_a"}),
+		Validate: StaticValidator([]string{"homes_device_a"}),
 		Whoami: func(b string) (string, bool) {
-			if b == "haus_device_a" {
+			if b == "homes_device_a" {
 				return "mdopp", true
 			}
 			return "", false
 		}})
-	code, who := get(t, h, "GET", "/napi/whoami", "haus_device_a", "")
+	code, who := get(t, h, "GET", "/napi/whoami", "homes_device_a", "")
 	if code != 200 || who["uid"] != "mdopp" {
 		t.Fatalf("whoami: %d %v", code, who)
 	}
-	if code, _ := get(t, h, "GET", "/napi/whoami", "haus_device_other", ""); code != 401 {
+	if code, _ := get(t, h, "GET", "/napi/whoami", "homes_device_other", ""); code != 401 {
 		t.Fatalf("unknown device → %d, want 401", code)
 	}
-	if code, _ := get(t, h, "GET", "/napi/portal/energy", "haus_device_a", ""); code != 404 {
+	if code, _ := get(t, h, "GET", "/napi/portal/energy", "homes_device_a", ""); code != 404 {
 		t.Fatalf("portal without HA → %d, want 404", code)
 	}
 }
 
-// The app takes the assistant's name from Haus, behind a paired device's
+// laib#1021: the old Haus app (cloud.dopp.haus) asks which app this box
+// speaks to and, as paket is not its own, tells the person to install
+// Homes. Behind a paired device's token, the old app's haus_device_ one too.
+func TestTheOldAppLearnsAboutHomes(t *testing.T) {
+	var calls []string
+	lb := fakeLaib(t, &calls)
+	defer lb.Close()
+	h := Handler(Config{Laib: &laib.Client{URL: lb.URL, Token: "ops"}, Validate: StaticValidator([]string{"haus_device_alt"})})
+	code, p := get(t, h, "GET", "/napi/app", "haus_device_alt", "")
+	want := map[string]any{"name": "Homes", "paket": "cloud.dopp.homes", "quelle": "https://github.com/mdopp/homes-android"}
+	if code != 200 || len(p) != len(want) {
+		t.Fatalf("/napi/app: %d %v", code, p)
+	}
+	for k, v := range want {
+		if p[k] != v {
+			t.Errorf("/napi/app %s = %v, want %v", k, p[k], v)
+		}
+	}
+	if code, _ := get(t, h, "GET", "/napi/app", "", ""); code != 401 {
+		t.Fatalf("without a token: %d", code)
+	}
+	if code, _ := get(t, h, "GET", "/napi/app", "haus_device_fremd", ""); code != 401 {
+		t.Fatalf("an unknown token: %d", code)
+	}
+	if code, _ := get(t, h, "POST", "/napi/app", "haus_device_alt", ""); code == 200 {
+		t.Fatalf("POST /napi/app: %d", code)
+	}
+}
+
+// The app takes the assistant's name from Homes, behind a paired device's
 // token; nothing else (its colours are fixed in the app, its icon is its
-// launcher icon). Laib sets the name once (HAUS_ASSISTANT), "Homes" without it.
+// launcher icon). Laib sets the name once (HOMES_ASSISTANT), "Homes" without it.
 func TestTheAppReadsTheAssistantsName(t *testing.T) {
 	var calls []string
 	lb := fakeLaib(t, &calls)
@@ -232,7 +261,7 @@ func laibAnswering(t *testing.T, texts map[string]string) *laib.Client {
 // template-update, whatever class the dial gave it (a public route makes
 // it human). An update is counted and listed as an update only, never as
 // an approval too: three updates and one other proposal are one approval
-// and three updates. Haus decides none of them (haus#1).
+// and three updates. Homes decides none of them (haus#1).
 func TestPendingUpdatesAreLaibsTemplateUpdates(t *testing.T) {
 	lb := laibAnswering(t, map[string]string{
 		"laib_status": `{"ready":{"state":"bereit"},"services":[{"name":"immich","state":"grün"}]}`,
@@ -274,7 +303,7 @@ func notFound(t *testing.T, what string, code int, body string) {
 
 // Auth comes before the 404: without a paired device every /napi path is
 // 401, so a stranger learns nothing about which backends are set. With
-// one, a path Haus does not serve is the JSON 404.
+// one, a path Homes does not serve is the JSON 404.
 func TestUnknownNapiPathWantsADeviceFirst(t *testing.T) {
 	var calls []string
 	lb := fakeLaib(t, &calls)
@@ -315,7 +344,7 @@ func TestTheTokenWantsTheBearerScheme(t *testing.T) {
 	}
 }
 
-// Every route Haus registers under /napi wants a paired device: built with
+// Every route Homes registers under /napi wants a paired device: built with
 // every backend set, each one answers 401 without a token and with a wrong
 // one. The routes are read from the source, so a new route without a row
 // here fails too.
@@ -347,7 +376,7 @@ func TestEveryNapiRouteWantsADevice(t *testing.T) {
 		"GET /napi/sicherung/schluessel": true, "POST /napi/kontakte": true,
 		"GET /napi/sicherung/letzte": true, "GET /napi/sicherung/letzte/{quelle}/{pfad...}": true,
 		"GET /napi/gemeinsam/kontakte": true, "GET /napi/gemeinsam/kalender": true,
-		"GET /napi/standort": true, "POST /napi/standort": true,
+		"GET /napi/standort": true, "POST /napi/standort": true, "GET /napi/app": true,
 	}
 	// what the source registers: "METHOD /napi/…" and "METHOD "+prefix+"/…" (prefix is /napi/box)
 	re := regexp.MustCompile(`HandleFunc\("([A-Z]+) (?:(/napi/[^"]*)"|"\+prefix\+"([^"]*)")`)

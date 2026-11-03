@@ -1,6 +1,6 @@
 // Package samba hands a person's network-drive password to file-share's
 // Samba (laib#296, haus#52). File-share's samba-accounts.sh holds a FIFO
-// open in HAUS_SAMBA_DIR; Haus writes one line into it, "set <name>
+// open in HOMES_SAMBA_DIR; Homes writes one line into it, "set <name>
 // <password, base64>" or "clear <name>", and reads back the status file,
 // "<name> <unix time the password was set, 0: none>" for each family
 // member and admin. The password never touches a disk, an argv or a log:
@@ -22,12 +22,12 @@ import (
 	"unicode/utf8"
 )
 
-// Dir is file-share's samba-accounts folder as Haus mounts it.
+// Dir is file-share's samba-accounts folder as Homes mounts it.
 type Dir struct{ Path string }
 
-// FromEnv is HAUS_SAMBA_DIR; nil when unset: no page.
+// FromEnv is HOMES_SAMBA_DIR; nil when unset: no page.
 func FromEnv() *Dir {
-	if p := os.Getenv("HAUS_SAMBA_DIR"); p != "" {
+	if p := os.Getenv("HOMES_SAMBA_DIR"); p != "" {
 		return &Dir{Path: p}
 	}
 	return nil

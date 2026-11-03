@@ -9,14 +9,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mdopp/haus/internal/caldav"
-	"github.com/mdopp/haus/internal/dokumente"
-	"github.com/mdopp/haus/internal/notes"
-	"github.com/mdopp/haus/internal/paperless"
-	"github.com/mdopp/haus/internal/takeout"
+	"github.com/mdopp/homes/internal/caldav"
+	"github.com/mdopp/homes/internal/dokumente"
+	"github.com/mdopp/homes/internal/notes"
+	"github.com/mdopp/homes/internal/paperless"
+	"github.com/mdopp/homes/internal/takeout"
 )
 
-// command runs one of Haus's one-shot commands instead of the server;
+// command runs one of Homes' one-shot commands instead of the server;
 // getenv is the environment (os.Getenv), the container's own when Laib
 // runs it with podman exec.
 //   - export-documents: Paperless's documents into the folder qmd indexes
@@ -32,23 +32,23 @@ func command(ctx context.Context, args []string, getenv func(string) string, out
 	case "import-takeout":
 		return importTakeout(ctx, args[1:], getenv, out, errw)
 	}
-	fmt.Fprintf(errw, "haus: unknown command %q; known: export-documents, import-takeout\n", args[0])
+	fmt.Fprintf(errw, "homes: unknown command %q; known: export-documents, import-takeout\n", args[0])
 	return 2
 }
 
 // exportTime bounds one export: the first one reads every document.
 var exportTime = 30 * time.Minute
 
-// exportDocuments mirrors Paperless into HAUS_DOCUMENTS_DIR. Paperless in
+// exportDocuments mirrors Paperless into HOMES_DOCUMENTS_DIR. Paperless in
 // trouble (down, refusing the token) is not the refresh's failure: the
 // folder stays as it was, the notes are refreshed all the same, and the
 // pages say the documents do not answer. Only the folder failing is.
 func exportDocuments(ctx context.Context, getenv func(string) string, out, errw io.Writer) int {
-	dir := getenv("HAUS_DOCUMENTS_DIR")
-	u := strings.TrimRight(getenv("HAUS_PAPERLESS_URL"), "/")
-	tok := getenv("HAUS_PAPERLESS_TOKEN")
+	dir := getenv("HOMES_DOCUMENTS_DIR")
+	u := strings.TrimRight(getenv("HOMES_PAPERLESS_URL"), "/")
+	tok := getenv("HOMES_PAPERLESS_TOKEN")
 	if dir == "" || u == "" || tok == "" {
-		fmt.Fprintln(out, "haus export-documents: HAUS_DOCUMENTS_DIR or Paperless not set; nothing to export")
+		fmt.Fprintln(out, "homes export-documents: HOMES_DOCUMENTS_DIR or Paperless not set; nothing to export")
 		return 0
 	}
 	ctx, cancel := context.WithTimeout(ctx, exportTime)
@@ -57,13 +57,13 @@ func exportDocuments(ctx context.Context, getenv func(string) string, out, errw 
 	var src dokumente.SourceError
 	switch {
 	case errors.As(err, &src):
-		fmt.Fprintf(errw, "haus export-documents: %v; the documents stay as they were\n", err)
+		fmt.Fprintf(errw, "homes export-documents: %v; the documents stay as they were\n", err)
 		return 0
 	case err != nil:
-		fmt.Fprintf(errw, "haus export-documents: %v\n", err)
+		fmt.Fprintf(errw, "homes export-documents: %v\n", err)
 		return 1
 	}
-	fmt.Fprintf(out, "haus export-documents: %d written, %d unchanged, %d removed\n", rep.Written, rep.Unchanged, rep.Removed)
+	fmt.Fprintf(out, "homes export-documents: %d written, %d unchanged, %d removed\n", rep.Written, rep.Unchanged, rep.Removed)
 	return 0
 }
 
@@ -73,9 +73,9 @@ type names []string
 func (n *names) String() string     { return strings.Join(*n, ", ") }
 func (n *names) Set(v string) error { *n = append(*n, v); return nil }
 
-// importTakeout is `haus import-takeout [-dry-run] [-skip-calendar Name]…
-// <zip>…`: Haus's own Radicale account and notes folder (the Haushalt's,
-// HAUS_RADICALE_*, HAUS_NOTES_DIR) are where it writes; one not set is
+// importTakeout is `homes import-takeout [-dry-run] [-skip-calendar Name]…
+// <zip>…`: Homes' own Radicale account and notes folder (the Haushalt's,
+// HOMES_RADICALE_*, HOMES_NOTES_DIR) are where it writes; one not set is
 // left out, said so. It says in German what it did, for the person who
 // runs it; 1 when something was not written.
 func importTakeout(ctx context.Context, args []string, getenv func(string) string, out, errw io.Writer) int {
@@ -88,7 +88,7 @@ func importTakeout(ctx context.Context, args []string, getenv func(string) strin
 		return 2
 	}
 	if fs.NArg() == 0 {
-		fmt.Fprintln(errw, "Aufruf: haus import-takeout [-dry-run] [-skip-calendar Name]… <takeout.zip>…")
+		fmt.Fprintln(errw, "Aufruf: homes import-takeout [-dry-run] [-skip-calendar Name]… <takeout.zip>…")
 		return 2
 	}
 	t := takeout.Target{SkipCalendars: skip, DryRun: *dry, Loc: time.Local}
@@ -97,13 +97,13 @@ func importTakeout(ctx context.Context, args []string, getenv func(string) strin
 			t.Loc = l
 		}
 	}
-	if u, user, pw := strings.TrimRight(getenv("HAUS_RADICALE_URL"), "/"), getenv("HAUS_RADICALE_USER"), getenv("HAUS_RADICALE_PASSWORD"); u != "" && user != "" && pw != "" {
-		t.Radicale = &caldav.Client{URL: u, User: user, Password: pw, Calendar: getenv("HAUS_RADICALE_CALENDAR"),
-			AddressBook: getenv("HAUS_RADICALE_ADDRESSBOOK"), Loc: t.Loc}
+	if u, user, pw := strings.TrimRight(getenv("HOMES_RADICALE_URL"), "/"), getenv("HOMES_RADICALE_USER"), getenv("HOMES_RADICALE_PASSWORD"); u != "" && user != "" && pw != "" {
+		t.Radicale = &caldav.Client{URL: u, User: user, Password: pw, Calendar: getenv("HOMES_RADICALE_CALENDAR"),
+			AddressBook: getenv("HOMES_RADICALE_ADDRESSBOOK"), Loc: t.Loc}
 	} else {
-		fmt.Fprintln(out, "Kein Radicale eingerichtet (HAUS_RADICALE_URL, _USER, _PASSWORD): Kalender und Kontakte werden ausgelassen.")
+		fmt.Fprintln(out, "Kein Radicale eingerichtet (HOMES_RADICALE_URL, _USER, _PASSWORD): Kalender und Kontakte werden ausgelassen.")
 	}
-	if d := getenv("HAUS_NOTES_DIR"); d != "" {
+	if d := getenv("HOMES_NOTES_DIR"); d != "" {
 		n, err := notes.Open(d)
 		if err != nil {
 			fmt.Fprintf(errw, "Der Notizen-Ordner %s ist nicht lesbar: %v\n", d, err)
@@ -111,7 +111,7 @@ func importTakeout(ctx context.Context, args []string, getenv func(string) strin
 		}
 		t.Notes = n
 	} else {
-		fmt.Fprintln(out, "Kein Notizen-Ordner eingerichtet (HAUS_NOTES_DIR): Google Notizen werden ausgelassen.")
+		fmt.Fprintln(out, "Kein Notizen-Ordner eingerichtet (HOMES_NOTES_DIR): Google Notizen werden ausgelassen.")
 	}
 	rep, err := takeout.Import(ctx, fs.Args(), t, errw)
 	if *dry {

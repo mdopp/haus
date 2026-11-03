@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mdopp/haus/internal/caldav"
-	"github.com/mdopp/haus/internal/cards"
+	"github.com/mdopp/homes/internal/caldav"
+	"github.com/mdopp/homes/internal/cards"
 )
 
 // maxCalendarRows is the most one Kalender card lists.

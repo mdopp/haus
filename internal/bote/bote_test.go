@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/bote/botefake"
+	"github.com/mdopp/homes/internal/bote/botefake"
 )
 
 // haus#12: one sentence from the Sprechen field is one chat completion to
@@ -35,7 +35,7 @@ func TestAskRelaysAsThePerson(t *testing.T) {
 		t.Fatalf("%d requests, want 1", len(seen))
 	}
 	r := seen[0]
-	if r.Method != "POST" || r.Path != "/v1/chat/completions" || r.Auth != "Bearer k-bote-0123456789abcdef" || r.SessionKey != "haus:anna" {
+	if r.Method != "POST" || r.Path != "/v1/chat/completions" || r.Auth != "Bearer k-bote-0123456789abcdef" || r.SessionKey != "homes:anna" {
 		t.Fatalf("request %s %s auth %q session key %q", r.Method, r.Path, r.Auth, r.SessionKey)
 	}
 	msgs := r.Messages()
@@ -48,10 +48,10 @@ func TestAskRelaysAsThePerson(t *testing.T) {
 	var body map[string]any
 	json.Unmarshal(r.Body, &body)
 	if _, ok := body["model"]; ok {
-		t.Fatalf("Haus names a model: %s", r.Body)
+		t.Fatalf("Homes names a model: %s", r.Body)
 	}
 	if s, ok := body["stream"]; ok && s != false {
-		t.Fatalf("Haus asks for a stream it cannot show without script: %s", r.Body)
+		t.Fatalf("Homes asks for a stream it cannot show without script: %s", r.Body)
 	}
 }
 
@@ -145,8 +145,8 @@ func TestFromEnv(t *testing.T) {
 		{"http:///v1", "k", false},
 		{"http://host.containers.internal:8642/v1/", "k", true},
 	} {
-		t.Setenv("HAUS_BOTE_URL", c.url)
-		t.Setenv("HAUS_BOTE_KEY", c.key)
+		t.Setenv("HOMES_BOTE_URL", c.url)
+		t.Setenv("HOMES_BOTE_KEY", c.key)
 		got := FromEnv()
 		if (got != nil) != c.ok {
 			t.Fatalf("%q %q: %v, want ok %v", c.url, c.key, got, c.ok)
@@ -179,7 +179,7 @@ func TestAskNameCannotPassAsAnotherLogin(t *testing.T) {
 	if strings.ContainsAny(name, "\"„“”«»‚‘’'()") || !strings.Contains(name, "Mama") {
 		t.Fatalf("the name %q carries quotes or brackets: %q", name, sys)
 	}
-	if r.SessionKey != "haus:ben" {
+	if r.SessionKey != "homes:ben" {
 		t.Fatalf("session key %q", r.SessionKey)
 	}
 }
@@ -244,7 +244,7 @@ func TestAskWhoCannotAddAHeaderOrALine(t *testing.T) {
 	if _, err := c.Ask(context.Background(), Person{User: "ben\r\nX-Evil: 1", Name: strings.Repeat("Ä", 200)}, "Hallo"); err != nil {
 		t.Fatal(err)
 	}
-	if hdr.Get("X-Evil") != "" || hdr.Get("X-Hermes-Session-Key") != "haus:ben X-Evil: 1" || strings.ContainsAny(sys, "\r\n") {
+	if hdr.Get("X-Evil") != "" || hdr.Get("X-Hermes-Session-Key") != "homes:ben X-Evil: 1" || strings.ContainsAny(sys, "\r\n") {
 		t.Fatalf("session key %q, X-Evil %q, system %q", hdr.Get("X-Hermes-Session-Key"), hdr.Get("X-Evil"), sys)
 	}
 	if n := strings.Count(sys, "Ä"); n != 80 {
@@ -254,7 +254,7 @@ func TestAskWhoCannotAddAHeaderOrALine(t *testing.T) {
 	if _, err := c.Ask(context.Background(), Person{User: long, Name: long}, "Hallo"); err != nil {
 		t.Fatal(err)
 	}
-	if k := hdr.Get("X-Hermes-Session-Key"); k != "haus:"+long[:64] {
+	if k := hdr.Get("X-Hermes-Session-Key"); k != "homes:"+long[:64] {
 		t.Fatalf("session key %q", k)
 	}
 	if _, err := c.Ask(context.Background(), Person{User: "ben", Name: " ben "}, "Hallo"); err != nil {
@@ -284,7 +284,7 @@ func TestStreamHandsEachPiece(t *testing.T) {
 	r := fake.Seen()[0]
 	var body map[string]any
 	json.Unmarshal(r.Body, &body)
-	if body["stream"] != true || r.Auth != "Bearer "+fake.Key || r.SessionKey != "haus:anna" || !strings.Contains(r.Messages()[0]["content"], "Anna Muster") {
+	if body["stream"] != true || r.Auth != "Bearer "+fake.Key || r.SessionKey != "homes:anna" || !strings.Contains(r.Messages()[0]["content"], "Anna Muster") {
 		t.Fatalf("request %s, auth %q, session %q", r.Body, r.Auth, r.SessionKey)
 	}
 }

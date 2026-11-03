@@ -1,2 +1,4 @@
-/haus
+# built binaries (go build ./cmd/…)
+/homes
+/homesdemo
 *.test

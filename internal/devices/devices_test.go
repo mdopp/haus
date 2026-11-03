@@ -11,13 +11,13 @@ func TestMintLookupRevoke(t *testing.T) {
 		t.Fatal(err)
 	}
 	d, tok, err := s.Mint("Pixel", "mdopp")
-	if err != nil || !strings.HasPrefix(tok, "haus_device_") || d.UID != "mdopp" {
+	if err != nil || !strings.HasPrefix(tok, "homes_device_") || d.UID != "mdopp" {
 		t.Fatalf("mint: %v %q %+v", err, tok, d)
 	}
 	if got, ok := s.Lookup(tok); !ok || got.ID != d.ID || got.LastSeen.IsZero() {
 		t.Fatalf("lookup: %v %+v", ok, got)
 	}
-	if _, ok := s.Lookup("haus_device_nope"); ok {
+	if _, ok := s.Lookup("homes_device_nope"); ok {
 		t.Fatal("unknown token accepted")
 	}
 	// haus#26: a device paired before the new app is not migrated; its hash
@@ -25,7 +25,18 @@ func TestMintLookupRevoke(t *testing.T) {
 	old := "old_device_" + strings.Repeat("x", 43)
 	s.list = append(s.list, Device{ID: "alt", Name: "Altes Telefon", UID: "mdopp", Hash: hash(old)})
 	if _, ok := s.Lookup(old); ok {
-		t.Fatal("a token without haus_device_ accepted")
+		t.Fatal("a token without homes_device_ accepted")
+	}
+	s.list = s.list[:len(s.list)-1]
+	// laib#1021: a phone paired with the old Haus app keeps its token; the
+	// stored hash is the one minted then
+	legacy := "haus_device_" + strings.Repeat("y", 43)
+	s.list = append(s.list, Device{ID: "haus", Name: "Telefon mit der Haus-App", UID: "mdopp", Hash: hash(legacy)})
+	if got, ok := s.Lookup(legacy); !ok || got.ID != "haus" {
+		t.Fatalf("a haus_device_ token of a paired phone refused: %v %+v", ok, got)
+	}
+	if _, ok := s.Lookup("haus_device_nope"); ok {
+		t.Fatal("unknown legacy token accepted")
 	}
 	s.list = s.list[:len(s.list)-1]
 	// the file holds the hash, never the token

@@ -14,15 +14,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/caldav"
-	"github.com/mdopp/haus/internal/caldav/davfake"
-	"github.com/mdopp/haus/internal/cards"
-	"github.com/mdopp/haus/internal/devices"
-	"github.com/mdopp/haus/internal/favoriten"
-	"github.com/mdopp/haus/internal/ha"
-	"github.com/mdopp/haus/internal/ha/hafake"
-	"github.com/mdopp/haus/internal/laib"
-	"github.com/mdopp/haus/internal/notes"
+	"github.com/mdopp/homes/internal/caldav"
+	"github.com/mdopp/homes/internal/caldav/davfake"
+	"github.com/mdopp/homes/internal/cards"
+	"github.com/mdopp/homes/internal/devices"
+	"github.com/mdopp/homes/internal/favoriten"
+	"github.com/mdopp/homes/internal/ha"
+	"github.com/mdopp/homes/internal/ha/hafake"
+	"github.com/mdopp/homes/internal/laib"
+	"github.com/mdopp/homes/internal/notes"
 )
 
 func berlin(t *testing.T) *time.Location {
@@ -618,7 +618,7 @@ func TestStartSaysNothingAboutWhatIsNotConfigured(t *testing.T) {
 		t.Fatalf("status %d", code)
 	}
 	mustContain(t, body, "Alles in Ordnung · eure Daten sind von gestern Abend gesichert")
-	mustNotContain(t, body, "karte-im-haus", "karte-meine-geraete", "karte-heute", "Licht", "Termin", "Erinnerung", "Notiz", "nicht konfiguriert", "HAUS_")
+	mustNotContain(t, body, "karte-im-haus", "karte-meine-geraete", "karte-heute", "Licht", "Termin", "Erinnerung", "Notiz", "nicht konfiguriert", "HOMES_")
 }
 
 // haus#35: the family's pages switch Home Assistant things through
@@ -640,7 +640,7 @@ func TestStartLinksTheBoxForAdmins(t *testing.T) {
 	mustNotContain(t, body, `href=/box`)
 }
 
-// haus#12: "/" is Start; every other path Haus does not serve is a 404
+// haus#12: "/" is Start; every other path Homes does not serve is a 404
 // with the way to Start, in the house's frame, never a blank error and
 // never Start pretending all is well. The path asked for is not repeated.
 func TestOnlyTheRootLandsOnStart(t *testing.T) {
@@ -675,7 +675,7 @@ func brokenLaib(t *testing.T) *laib.Client {
 func TestBoxIsForAdmins(t *testing.T) {
 	store, _ := devices.Open(t.TempDir())
 	box := Box(fakeLaib(t, allGreen(t), nil), "https://laib.box.test")
-	geraete := Geraete(store, "https://haus.example", StartConfig{})
+	geraete := Geraete(store, "https://homes.example", StartConfig{})
 	for _, c := range []struct {
 		h      http.HandlerFunc
 		method string

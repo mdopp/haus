@@ -2,15 +2,15 @@ package pages
 
 import (
 	"encoding/json"
-	"github.com/mdopp/haus/internal/bote"
-	"github.com/mdopp/haus/internal/laib"
+	"github.com/mdopp/homes/internal/bote"
+	"github.com/mdopp/homes/internal/laib"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
-	"github.com/mdopp/haus/internal/samba"
-	"github.com/mdopp/haus/internal/samba/sambafake"
+	"github.com/mdopp/homes/internal/samba"
+	"github.com/mdopp/homes/internal/samba/sambafake"
 )
 
 // haus#188 (owner 2026-10-28): what a person sets up once is a task — open
@@ -44,7 +44,7 @@ func TestEinrichtungKommtUndGeht(t *testing.T) {
 }
 
 // laib#878: Laib's tasks for the person and the household join Einrichtung
-// (the admins' stay on Box); one with a Haus page leads there, one done
+// (the admins' stay on Box); one with a Homes page leads there, one done
 // together with the Bote has „Gemeinsam mit Ada“
 func TestEinrichtungMitLaibsAufgaben(t *testing.T) {
 	named(t, "Ada")
@@ -62,7 +62,7 @@ func TestEinrichtungMitLaibsAufgaben(t *testing.T) {
 			asked = req.Params.Args
 			text = `{"offen":4,"faellig":0,"aufgaben":[
  {"id":7,"titel":"Strato-Eintrag für fotos setzen","warum":"Ohne ihn ist Immich von außen nicht erreichbar.","fuer":"person:anna","weg":{"gespraech":true},"fertig_wenn":"route photos"},
- {"id":8,"titel":"Haus-App koppeln","fuer":"alle","weg":{"seite":"/willkommen"}},
+ {"id":8,"titel":"Homes-App koppeln","fuer":"alle","weg":{"seite":"/willkommen"}},
  {"id":9,"titel":"RAID prüfen","fuer":"admins"},
  {"id":10,"titel":"Bens Sache","fuer":"person:ben"},
  {"id":11,"titel":"Alte Aufgabe","fuer":"person:anna","erledigt":{"am":"2026-10-27","von":"laib","wie":"Befund weg"}}]}`
@@ -75,7 +75,7 @@ func TestEinrichtungMitLaibsAufgaben(t *testing.T) {
 	if asked["von"] != "anna" || asked["action"] != "list" {
 		t.Errorf("laib asked %v", asked)
 	}
-	mustContain(t, body, `<a href="/aufgaben#aufgabe-7">Strato-Eintrag für fotos setzen</a>`, `<a href="/willkommen">Haus-App koppeln</a>`)
+	mustContain(t, body, `<a href="/aufgaben#aufgabe-7">Strato-Eintrag für fotos setzen</a>`, `<a href="/willkommen">Homes-App koppeln</a>`)
 	mustNotContain(t, body, "RAID prüfen", "Bens Sache", "Alte Aufgabe")
 	_, body, _ = familyPage(t, DeineAufgaben, cfg, "GET", aufgabenPath, "family")
 	mustContain(t, body, `<section class=karte id=aufgabe-7><h2>Strato-Eintrag für fotos setzen</h2>`,

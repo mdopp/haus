@@ -5,10 +5,10 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/mdopp/haus/internal/abs"
-	"github.com/mdopp/haus/internal/caldav"
-	"github.com/mdopp/haus/internal/caldav/davfake"
-	"github.com/mdopp/haus/internal/jellyfin"
+	"github.com/mdopp/homes/internal/abs"
+	"github.com/mdopp/homes/internal/caldav"
+	"github.com/mdopp/homes/internal/caldav/davfake"
+	"github.com/mdopp/homes/internal/jellyfin"
 )
 
 // fakeFilme is Jellyfin for the tests: what each person played, the

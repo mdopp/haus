@@ -12,9 +12,9 @@ import (
 	"log"
 	"strings"
 
-	"github.com/mdopp/haus/internal/abs"
-	"github.com/mdopp/haus/internal/caldav"
-	"github.com/mdopp/haus/internal/jellyfin"
+	"github.com/mdopp/homes/internal/abs"
+	"github.com/mdopp/homes/internal/caldav"
+	"github.com/mdopp/homes/internal/jellyfin"
 )
 
 // Liste is the household's film and book wish list, beside the music's.
@@ -48,7 +48,7 @@ type Filme interface {
 	HatFilm(ctx context.Context, name string) (string, bool, error)
 }
 
-// Buecher is Audiobookshelf as this needs it (Haus's admin key, laib#676).
+// Buecher is Audiobookshelf as this needs it (Homes' admin key, laib#676).
 type Buecher interface {
 	Gehoerte(ctx context.Context, person string, n int) ([]abs.Gehoert, error)
 	HatBuch(ctx context.Context, title string, plain func(string) string) (string, bool, error)
@@ -102,13 +102,13 @@ func (s *Service) Wuenschen(ctx context.Context, person, titel string, art Art) 
 			}
 		}
 		if name, ok, err := s.Filme.HatFilm(ctx, titel); err != nil {
-			log.Printf("haus: gesehen: jellyfin: %v", err)
+			log.Printf("homes: gesehen: jellyfin: %v", err)
 		} else if ok {
 			return Gewuenscht{Schon: true, Satz: "„" + name + "“ ist schon in Jellyfin – du kannst gleich anfangen."}, nil
 		}
 	case art == Buch && s.Buecher != nil:
 		if name, ok, err := s.Buecher.HatBuch(ctx, titel, jellyfin.Plain); err != nil {
-			log.Printf("haus: gesehen: audiobookshelf: %v", err)
+			log.Printf("homes: gesehen: audiobookshelf: %v", err)
 		} else if ok {
 			return Gewuenscht{Schon: true, Satz: "„" + name + "“ gibt es schon als Hörbuch in Audiobookshelf."}, nil
 		}

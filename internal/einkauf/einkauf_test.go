@@ -7,12 +7,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/caldav"
-	"github.com/mdopp/haus/internal/caldav/davfake"
-	"github.com/mdopp/haus/internal/jellyfin"
-	"github.com/mdopp/haus/internal/merken"
-	"github.com/mdopp/haus/internal/musicbrainz"
-	"github.com/mdopp/haus/internal/notes"
+	"github.com/mdopp/homes/internal/caldav"
+	"github.com/mdopp/homes/internal/caldav/davfake"
+	"github.com/mdopp/homes/internal/jellyfin"
+	"github.com/mdopp/homes/internal/merken"
+	"github.com/mdopp/homes/internal/musicbrainz"
+	"github.com/mdopp/homes/internal/notes"
 )
 
 func TestParse(t *testing.T) {

@@ -55,7 +55,7 @@ type Server struct {
 }
 
 // AddPrincipal makes another account's home, /<name>/, that this account
-// lists from the root and reads below (laib#495: Haus reads each person's
+// lists from the root and reads below (laib#495: Homes reads each person's
 // mirrors); calendars added under it are listed there, not in the home.
 func (s *Server) AddPrincipal(name string) {
 	s.mu.Lock()

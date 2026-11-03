@@ -13,12 +13,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mdopp/haus/internal/ha"
+	"github.com/mdopp/homes/internal/ha"
 )
 
-// The realtime stream (haus#10): each paired device tells Haus which
+// The realtime stream (haus#10): each paired device tells Homes which
 // entities its widgets show (POST /napi/portal/watch) and holds one SSE
-// stream (GET /napi/portal/events). While anyone listens, Haus holds one
+// stream (GET /napi/portal/events). While anyone listens, Homes holds one
 // state_changed subscription to HA and sends a device a card_state frame
 // for the entities it watches, and, when it shows the active devices
 // (active: true in its watch), an active_set frame with the set of things
@@ -102,7 +102,7 @@ func (l *live) routes(mux *http.ServeMux, auth func(http.HandlerFunc) http.Handl
 	mux.HandleFunc("GET /napi/portal/events", auth(l.events))
 }
 
-// a device is its token; Haus keeps only a digest of it in memory
+// a device is its token; Homes keeps only a digest of it in memory
 func deviceOf(r *http.Request) string {
 	b, _ := bearerOf(r)
 	sum := sha256.Sum256([]byte(b))
@@ -113,7 +113,7 @@ func deviceOf(r *http.Request) string {
 // device's set; 503 while HA does not answer.
 func (l *live) watch(w http.ResponseWriter, r *http.Request) {
 	if err := l.ha.Ping(r.Context()); err != nil {
-		log.Printf("haus: watch: HA: %v", err)
+		log.Printf("homes: watch: HA: %v", err)
 		refuse(w, http.StatusServiceUnavailable, "watch_unavailable")
 		return
 	}
@@ -245,7 +245,7 @@ func (l *live) run(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		log.Printf("haus: HA state_changed: %v", err)
+		log.Printf("homes: HA state_changed: %v", err)
 		if time.Since(began) > time.Minute {
 			backoff = 2 * time.Second
 		}
@@ -261,13 +261,13 @@ func (l *live) run(ctx context.Context) {
 }
 
 // resync sends the watched entities' current cards and the active set
-// once HA confirmed the subscription: what changed while Haus was not
+// once HA confirmed the subscription: what changed while Homes was not
 // listening (first connect, an HA restart) arrives, and the deduplication
 // drops the rest. Only from here on is the set known whole.
 func (l *live) resync(ctx context.Context) {
 	states, err := l.ha.States(ctx)
 	if err != nil {
-		log.Printf("haus: HA resync: %v", err)
+		log.Printf("homes: HA resync: %v", err)
 		return
 	}
 	l.mu.Lock()
@@ -457,15 +457,15 @@ func (l *live) send(entity string, c map[string]any) {
 // sharedVersions is caldav.Client.FamilyVersions: a fingerprint per part.
 type sharedVersions func(ctx context.Context) (kontakte, kalender string, err error)
 
-// defaultSharedEvery: how often Haus looks whether the shared data changed
-// while a phone listens. One PROPFIND of Haus's Radicale home; a phone's
+// defaultSharedEvery: how often Homes looks whether the shared data changed
+// while a phone listens. One PROPFIND of Homes' Radicale home; a phone's
 // sync after the frame is what costs, and it comes once per change.
 const defaultSharedEvery = 30 * time.Second
 
 // watchShared reads the shared data's versions while anyone listens
 // (haus#223): the first read is the baseline, every later change of a part
 // is one gemeinsam frame {"teil": "kontakte"|"kalender"} to every open
-// stream. The frame carries no data: the app syncs its Haus account, which
+// stream. The frame carries no data: the app syncs its Homes account, which
 // fetches /napi/gemeinsam/… with its ETag. Radicale not answering keeps the
 // baseline; nothing is sent until it answers again.
 func (l *live) watchShared(ctx context.Context) {
@@ -483,7 +483,7 @@ func (l *live) watchShared(ctx context.Context) {
 		case ctx.Err() != nil:
 			return
 		case err != nil:
-			log.Printf("haus: shared versions: %v", err)
+			log.Printf("homes: shared versions: %v", err)
 		case !known:
 			kontakte, kalender, known = k, c, true
 		default:

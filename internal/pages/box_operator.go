@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mdopp/haus/internal/laib"
+	"github.com/mdopp/homes/internal/laib"
 )
 
 // Was der Operator kann (owner 2026-10-27: „ich möchte irgendwo die Skills
@@ -21,7 +21,7 @@ import (
 const skillsRepo = "https://github.com/mdopp/laib/tree/main/skills/"
 
 const (
-	saysSkillsNoList = "Laib nennt Haus die Liste der Skills noch nicht; dafür braucht Haus die Freigabe „skill“ (ein Vorschlag in Laibs Eingang). Bis dahin stehen hier nur die Skills, die schon gelaufen sind."
+	saysSkillsNoList = "Laib nennt Homes die Liste der Skills noch nicht; dafür braucht Homes die Freigabe „skill“ (ein Vorschlag in Laibs Eingang). Bis dahin stehen hier nur die Skills, die schon gelaufen sind."
 	saysSkillsNone   = "Der Operator hat noch keinen Skill."
 )
 
@@ -159,7 +159,7 @@ func operatorCard(ctx context.Context, c *laib.Client, now time.Time, loc *time.
 		}
 		b.WriteString("</span></li>")
 	}
-	b.WriteString("</ul><p class=k>Ein- und ausschalten geht auf der Laib-Seite; Haus zeigt nur.</p>")
+	b.WriteString("</ul><p class=k>Ein- und ausschalten geht auf der Laib-Seite; Homes zeigt nur.</p>")
 	return b.String()
 }
 

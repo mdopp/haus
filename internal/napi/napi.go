@@ -1,4 +1,4 @@
-// Package napi is the API the Haus app's widgets speak (mdopp/haus-android,
+// Package napi is the API the Homes app's widgets speak (mdopp/homes-android,
 // its data/*.kt parsers; laib ADR 0022): the four Box keys under
 // app.BoxPrefix served from Laib, operate and verdicts behind the right
 // token, the house paths, the event stream and the camera from Home
@@ -6,7 +6,7 @@
 // Haushalt source (tools.go), the capture upload (upload.go), the phone's
 // message backups (sicherung.go), the phone's contacts mirrored
 // (kontakte.go), the household's shared contacts and calendars for the
-// phone's Haus account (gemeinsam.go), its positions passed on to Reitti (standort.go), a link shared
+// phone's Homes account (gemeinsam.go), its positions passed on to Reitti (standort.go), a link shared
 // to the app kept as a note (merken.go) and the assistant's name. Every other /napi path is a JSON 404 (noSuchPath).
 package napi
 
@@ -18,15 +18,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mdopp/haus/internal/app"
-	"github.com/mdopp/haus/internal/assistent"
-	"github.com/mdopp/haus/internal/favoriten"
-	"github.com/mdopp/haus/internal/ha"
-	"github.com/mdopp/haus/internal/haushalt"
-	"github.com/mdopp/haus/internal/laib"
-	"github.com/mdopp/haus/internal/reitti"
-	"github.com/mdopp/haus/internal/schalter"
-	"github.com/mdopp/haus/internal/usage"
+	"github.com/mdopp/homes/internal/app"
+	"github.com/mdopp/homes/internal/assistent"
+	"github.com/mdopp/homes/internal/favoriten"
+	"github.com/mdopp/homes/internal/ha"
+	"github.com/mdopp/homes/internal/haushalt"
+	"github.com/mdopp/homes/internal/laib"
+	"github.com/mdopp/homes/internal/reitti"
+	"github.com/mdopp/homes/internal/schalter"
+	"github.com/mdopp/homes/internal/usage"
 )
 
 // Validator says whether a bearer is a paired device.
@@ -34,7 +34,7 @@ type Validator func(ctx context.Context, bearer string) bool
 
 // Config wires the handler.
 type Config struct {
-	Laib     *laib.Client // the haus hand: status, inbox, journal, restart — nothing else
+	Laib     *laib.Client // the homes hand: status, inbox, journal, restart — nothing else
 	Validate Validator
 	Whoami   func(bearer string) (string, bool) // the paired devices: uid behind a bearer
 	Witness  *schalter.Witness                  // who switched what (haus#89); nil: the log only
@@ -53,11 +53,11 @@ type Config struct {
 	// UploadDir: where /napi/upload stores (upload.go), the share's Paperless
 	// consume folder; "" = 404
 	UploadDir string
-	// Sicherung: the message archives' inbox (sicherung.go, HAUS_ARCHIV_DIR,
+	// Sicherung: the message archives' inbox (sicherung.go, HOMES_ARCHIV_DIR,
 	// haus#207); nil = every /napi/sicherung path answers 503 in words
 	Sicherung *Sicherung
 	// Reitti: the household's timeline, where /napi/standort passes the
-	// app's points on with the person's token (standort.go, HAUS_REITTI_URL);
+	// app's points on with the person's token (standort.go, HOMES_REITTI_URL);
 	// nil = /napi/standort answers 503 in words
 	Reitti *reitti.Reitti
 	// SharedEvery: how often the live stream looks whether the household's
@@ -96,7 +96,7 @@ func Handler(c Config) http.Handler {
 				http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 				return
 			}
-			if r.Pattern != "/napi/" { // a path Haus does not serve is no widget's
+			if r.Pattern != "/napi/" { // a path Homes does not serve is no widget's
 				c.Usage.Count(refreshed(r.Pattern))
 			}
 			next(w, r)
@@ -108,7 +108,14 @@ func Handler(c Config) http.Handler {
 	mux.HandleFunc("GET /napi/assistent", auth(func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]string{"name": assistent.Name()})
 	}))
-	// Bridge for app builds before haus-android's assistent change (dev.249 and older), which read
+	// which app this box's Homes speaks to (laib#1021): the old Haus app
+	// (cloud.dopp.haus) compares paket with its own package and, when they
+	// differ, tells the person in German to install Homes from quelle and
+	// to remove Homes once Homes is set up.
+	mux.HandleFunc("GET /napi/app", auth(func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]string{"name": "Homes", "paket": app.Paket, "quelle": app.Quelle})
+	}))
+	// Bridge for app builds before homes-android's assistent change (dev.249 and older), which read
 	// the name from /napi/persona: the same name in that shape, the fixed colours, no icon. Remove
 	// once every paired phone runs an app that reads /napi/assistent.
 	mux.HandleFunc("GET /napi/persona", auth(func(w http.ResponseWriter, r *http.Request) {
@@ -205,18 +212,18 @@ func Handler(c Config) http.Handler {
 		}
 		writeJSON(w, map[string]any{"ok": true, "name": name, "action": "restart"})
 	}))
-	// Verdicts are not Haus's (haus#1, ADR 0012): the one approval surface is
+	// Verdicts are not Homes' (haus#1, ADR 0012): the one approval surface is
 	// Laib's own page behind Authelia; phones decide, if ever, through the
 	// relay. The app's buttons get a plain answer.
 	verdict := auth(func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, `{"error":"Haus entscheidet nichts: Freigeben und Ablehnen gibt es nur auf der Laib-Seite (laib.<domain>/inbox)"}`, http.StatusForbidden)
+		http.Error(w, `{"error":"Homes entscheidet nichts: Freigeben und Ablehnen gibt es nur auf der Laib-Seite (laib.<domain>/inbox)"}`, http.StatusForbidden)
 	})
 	mux.HandleFunc("POST "+prefix+"/approvals/{id}/approve", verdict)
 	mux.HandleFunc("POST "+prefix+"/approvals/{id}/deny", verdict)
 	mux.HandleFunc("GET /napi/whoami", func(w http.ResponseWriter, r *http.Request) {
 		if bearer, ok := bearerOf(r); ok && c.Whoami != nil {
 			if uid, ok := c.Whoami(bearer); ok {
-				writeJSON(w, map[string]any{"uid": uid, "via": "haus"})
+				writeJSON(w, map[string]any{"uid": uid, "via": "homes"})
 				return
 			}
 		}
@@ -240,11 +247,11 @@ func Handler(c Config) http.Handler {
 	c.Sicherung.routes(mux, auth, c.Whoami) // the phone's message backups (haus#207)
 	// every other /napi path, passed on to nobody; a device first, so a
 	// stranger cannot tell which backends are set
-	mux.HandleFunc("POST /napi/merken", auth(c.merken)) // Share → Haus (haus#120)
+	mux.HandleFunc("POST /napi/merken", auth(c.merken)) // Share → Homes (haus#120)
 	// the phone's contacts, mirrored into the person's Handy-Kontakte (laib ADR 0029)
 	k := &kontakte{dav: c.Haushalt.Contacts, whoami: c.Whoami, busy: map[string]bool{}}
 	mux.HandleFunc("POST /napi/kontakte", auth(k.post))
-	// the household's shared contacts and calendars for the phone's Haus account (haus#218)
+	// the household's shared contacts and calendars for the phone's Homes account (haus#218)
 	(&gemeinsam{dav: c.Haushalt.Calendar, whoami: c.Whoami, loc: c.Haushalt.Loc, now: c.Now}).routes(mux, auth)
 	// the phone's positions, passed on to the person's Reitti (owner 2026-11-02)
 	(&standort{r: c.Reitti, whoami: c.Whoami}).routes(mux, auth)
@@ -258,7 +265,7 @@ func bearerOf(r *http.Request) (string, bool) {
 	return b, ok && b != ""
 }
 
-// noSuchPath is the one 404 of /napi: a path Haus does not serve, or whose
+// noSuchPath is the one 404 of /napi: a path Homes does not serve, or whose
 // backend is not set. JSON, as every refusal the app parses.
 func noSuchPath(w http.ResponseWriter, r *http.Request) {
 	answer(w, http.StatusNotFound, map[string]any{"ok": false, "reason": "not_found"})
@@ -267,7 +274,7 @@ func noSuchPath(w http.ResponseWriter, r *http.Request) {
 // isUpdate: a template update (haus#28). `laib template sync --propose`
 // files one proposal per update, its kind template-update whatever class
 // the dial gave it. It waits in Laib's inbox like any proposal, but the Box
-// counts and lists it as an update only, never as an approval too; Haus
+// counts and lists it as an update only, never as an approval too; Homes
 // decides neither (haus#1).
 func isUpdate(p laib.Proposal) bool { return p.Kind == "template-update" }
 

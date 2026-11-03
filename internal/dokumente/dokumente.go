@@ -5,7 +5,7 @@
 // the date, the sender and the tags, then the text. Paperless stays the
 // one place a document lives. The folder is a copy that each run puts
 // right: a document changed in Paperless is written again, one deleted
-// there (or no longer shown to Haus's user) is deleted here. Haus reads
+// there (or no longer shown to Homes' user) is deleted here. Homes reads
 // nothing back from it: a hit is checked against Paperless itself.
 package dokumente
 
@@ -21,7 +21,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/mdopp/haus/internal/paperless"
+	"github.com/mdopp/homes/internal/paperless"
 )
 
 // Report is what one run did.

@@ -1,4 +1,4 @@
-// Package jellyfin is what Haus asks of Jellyfin (laib#695): whether a song
+// Package jellyfin is what Homes asks of Jellyfin (laib#695): whether a song
 // or an album is in the household's own music already — for the music wish
 // list (a shared song that is there is "hast du schon"; a wish that has
 // arrived is ticked off). Reading only, with one API key as Laib hands it.
@@ -24,10 +24,10 @@ type Client struct {
 	HTTP  *http.Client
 }
 
-// FromEnv is Jellyfin from HAUS_JELLYFIN_URL and HAUS_JELLYFIN_TOKEN, or nil
+// FromEnv is Jellyfin from HOMES_JELLYFIN_URL and HOMES_JELLYFIN_TOKEN, or nil
 // without both.
 func FromEnv() *Client {
-	u, t := strings.TrimRight(strings.TrimSpace(os.Getenv("HAUS_JELLYFIN_URL")), "/"), strings.TrimSpace(os.Getenv("HAUS_JELLYFIN_TOKEN"))
+	u, t := strings.TrimRight(strings.TrimSpace(os.Getenv("HOMES_JELLYFIN_URL")), "/"), strings.TrimSpace(os.Getenv("HOMES_JELLYFIN_TOKEN"))
 	if u == "" || t == "" {
 		return nil
 	}
@@ -88,7 +88,7 @@ func (c *Client) get(ctx context.Context, path string, q url.Values, out any) er
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", `MediaBrowser Token="`+c.Token+`", Client="Haus"`)
+	req.Header.Set("Authorization", `MediaBrowser Token="`+c.Token+`", Client="Homes"`)
 	h := c.HTTP
 	if h == nil {
 		h = http.DefaultClient

@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/mdopp/haus/internal/markdown"
-	"github.com/mdopp/haus/internal/papierkorb"
+	"github.com/mdopp/homes/internal/markdown"
+	"github.com/mdopp/homes/internal/papierkorb"
 	"html"
 	"log"
 	"net/http"
@@ -14,12 +14,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mdopp/haus/internal/assistent"
-	"github.com/mdopp/haus/internal/cards"
-	"github.com/mdopp/haus/internal/einkauf"
-	"github.com/mdopp/haus/internal/library"
-	"github.com/mdopp/haus/internal/merken"
-	"github.com/mdopp/haus/internal/notes"
+	"github.com/mdopp/homes/internal/assistent"
+	"github.com/mdopp/homes/internal/cards"
+	"github.com/mdopp/homes/internal/einkauf"
+	"github.com/mdopp/homes/internal/library"
+	"github.com/mdopp/homes/internal/merken"
+	"github.com/mdopp/homes/internal/notes"
 )
 
 const (
@@ -31,7 +31,7 @@ const (
 // Notizen is the household's notes (haus#12, laib ADR 0017): a search
 // field (GET, q=) over the memory library — by meaning, or by words and
 // said so when the library cannot (haus#13) — and the newest notes;
-// /notizen/<name> is one note's own page. Haus keeps no index (qmd does) and renders
+// /notizen/<name> is one note's own page. Homes keeps no index (qmd does) and renders
 // no Markdown: a note is shown as its text, paragraphs and line breaks,
 // never as markup from the file.
 func Notizen(cfg StartConfig) http.HandlerFunc {
@@ -227,7 +227,7 @@ func notePage(w http.ResponseWriter, r *http.Request, cfg StartConfig, ref strin
 	if err != nil {
 		m := missing{http.StatusNotFound, "Diese Notiz gibt es nicht.", "Notizen", "/notizen", "Alle Notizen"}
 		if !errors.Is(err, notes.ErrNotFound) && !errors.Is(err, notes.ErrOutside) && !errors.Is(err, notes.ErrHidden) {
-			log.Printf("haus: notizen page: %q: %v", ref, err)
+			log.Printf("homes: notizen page: %q: %v", ref, err)
 			m.code, m.say = http.StatusOK, saysNoNotes
 		}
 		m.write(w, r, cfg)
@@ -310,11 +310,11 @@ func newNoteForm(title, text, art string, tags []string, open bool) string {
 
 // noteWrite takes a POST: to /notizen a new note (titel, text), to
 // /notizen/<name> the note's new text (text, stand: its time as read).
-// Only a person, only from Haus's own page; who wrote what is in the log.
+// Only a person, only from Homes' own page; who wrote what is in the log.
 // Done is a 303 to the note with its sentence; a problem keeps the text.
 func noteWrite(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
-	if !fromHaus(r) {
-		http.Error(w, "Notizen schreiben geht nur von Haus' eigener Seite.", http.StatusForbidden)
+	if !fromHomes(r) {
+		http.Error(w, "Notizen schreiben geht nur von Homes' eigener Seite.", http.StatusForbidden)
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, notes.MaxText+8<<10)
@@ -351,7 +351,7 @@ func noteWrite(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
 		var err error
 		if problem == "" {
 			if name, err = cfg.Notes.CreateWith(title, text, notes.Kopf{}.Set(art, tags)); err != nil {
-				log.Printf("haus: notizen: new %q by %s: %v", title, who, err)
+				log.Printf("homes: notizen: new %q by %s: %v", title, who, err)
 				problem = saysNoteNotSaved
 			}
 		}
@@ -361,7 +361,7 @@ func noteWrite(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
 			writePage(w, http.StatusBadRequest, b)
 			return
 		}
-		log.Printf("haus: notizen: %s angelegt by %s", name, who)
+		log.Printf("homes: notizen: %s angelegt by %s", name, who)
 		http.Redirect(w, r, cards.NotePage(name)+"?gesagt=angelegt", http.StatusSeeOther)
 		return
 	}
@@ -378,7 +378,7 @@ func noteWrite(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
 	var rerr error
 	fetch(r, func(ctx context.Context) { was, rerr = cfg.Notes.Read(ctx, ref) })
 	if rerr != nil && !errors.Is(rerr, notes.ErrNotFound) && !errors.Is(rerr, notes.ErrOutside) && !errors.Is(rerr, notes.ErrHidden) {
-		log.Printf("haus: notizen: %s by %s: %v", ref, who, rerr)
+		log.Printf("homes: notizen: %s by %s: %v", ref, who, rerr)
 		noteEdit(w, r, cfg, ref, http.StatusOK, saysNoteNotSaved, text)
 		return
 	}
@@ -386,14 +386,14 @@ func noteWrite(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
 	text = was.Kopf.Set(art, tags).With(body) // the head from the fields, its other lines kept
 	switch err := cfg.Notes.Update(ref, text, time.Unix(0, ns)); {
 	case err == nil:
-		log.Printf("haus: notizen: %s gespeichert by %s", ref, who)
+		log.Printf("homes: notizen: %s gespeichert by %s", ref, who)
 		http.Redirect(w, r, cards.NotePage(ref)+"?gesagt=gespeichert", http.StatusSeeOther)
 	case errors.Is(err, notes.ErrChanged):
 		noteEdit(w, r, cfg, ref, http.StatusConflict, saysNoteChanged, body)
 	case errors.Is(err, notes.ErrNotFound), errors.Is(err, notes.ErrOutside), errors.Is(err, notes.ErrHidden):
 		missing{http.StatusNotFound, "Diese Notiz gibt es nicht.", "Notizen", "/notizen", "Alle Notizen"}.write(w, r, cfg)
 	default:
-		log.Printf("haus: notizen: %s by %s: %v", ref, who, err)
+		log.Printf("homes: notizen: %s by %s: %v", ref, who, err)
 		noteEdit(w, r, cfg, ref, http.StatusOK, saysNoteNotSaved, text)
 	}
 }
@@ -412,7 +412,7 @@ func noteEdit(w http.ResponseWriter, r *http.Request, cfg StartConfig, ref strin
 		}
 		m := missing{http.StatusNotFound, "Diese Notiz gibt es nicht.", "Notizen", "/notizen", "Alle Notizen"}
 		if !errors.Is(err, notes.ErrNotFound) && !errors.Is(err, notes.ErrOutside) && !errors.Is(err, notes.ErrHidden) {
-			log.Printf("haus: notizen edit: %q: %v", ref, err)
+			log.Printf("homes: notizen edit: %q: %v", ref, err)
 			m.code, m.say = http.StatusOK, saysNoNotes
 		}
 		m.write(w, r, cfg)
@@ -597,7 +597,7 @@ func merkenPost(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
 	if res, ok, err := cfg.Podcasts.AusLink(ctx, r.Header.Get("Remote-User"), link); ok { // a podcast is subscribed, not kept
 		if err != nil {
 			if !knownPodcastError(err) {
-				log.Printf("haus: podcast from notizen by %s: %v", r.Header.Get("Remote-User"), err)
+				log.Printf("homes: podcast from notizen by %s: %v", r.Header.Get("Remote-User"), err)
 				err = errors.New(saysPodcastsDown)
 			}
 			b := familyHead(r, cfg, "Notizen", "Notizen")
@@ -610,7 +610,7 @@ func merkenPost(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
 	}
 	if g, ok, err := cfg.Wuensche.AusLink(ctx, cfg.Fetcher, link, r.Header.Get("Remote-User")); ok {
 		if err != nil {
-			log.Printf("haus: musikwunsch by %s: %v", r.Header.Get("Remote-User"), err)
+			log.Printf("homes: musikwunsch by %s: %v", r.Header.Get("Remote-User"), err)
 			say := saysNoteNotSaved
 			if errors.Is(err, merken.ErrNoAnswer) {
 				say = err.Error()
@@ -627,7 +627,7 @@ func merkenPost(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
 	if err != nil {
 		say := err.Error()
 		if !errors.Is(err, merken.ErrNoAddress) && !errors.Is(err, merken.ErrPrivate) && !errors.Is(err, merken.ErrNoAnswer) {
-			log.Printf("haus: merken by %s: %v", r.Header.Get("Remote-User"), err)
+			log.Printf("homes: merken by %s: %v", r.Header.Get("Remote-User"), err)
 			say = saysNoteNotSaved
 		}
 		b := familyHead(r, cfg, "Notizen", "Notizen")
@@ -642,7 +642,7 @@ func merkenPost(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
 	case got.Teilweise:
 		said = "teilweise"
 	}
-	log.Printf("haus: merken: %s by %s (%s)", got.Name, r.Header.Get("Remote-User"), said)
+	log.Printf("homes: merken: %s by %s (%s)", got.Name, r.Header.Get("Remote-User"), said)
 	http.Redirect(w, r, cards.NotePage(got.Name)+"?gesagt="+said, http.StatusSeeOther)
 }
 
@@ -680,18 +680,18 @@ func noteDelete(w http.ResponseWriter, r *http.Request, cfg StartConfig, ref, wh
 		http.Error(w, "Diese Notiz gibt es nicht mehr.", http.StatusConflict)
 		return
 	case err != nil:
-		log.Printf("haus: notizen: delete %s by %s: %v", n.Name, who, err)
+		log.Printf("homes: notizen: delete %s by %s: %v", n.Name, who, err)
 		http.Error(w, "Die Notiz ließ sich gerade nicht löschen; sie bleibt. Versuch es gleich noch einmal.", http.StatusServiceUnavailable)
 		return
 	}
 	e, kerr := cfg.Papierkorb.Rein("notiz", summary(n.Title), who, notizImKorb{Name: n.Name, Text: string(content)})
 	if kerr != nil { // the file is gone already: put it back rather than lose it
 		cfg.Notes.PutNew(n.Name, content)
-		log.Printf("haus: notizen: papierkorb: %v", kerr)
+		log.Printf("homes: notizen: papierkorb: %v", kerr)
 		http.Error(w, "Die Notiz ließ sich gerade nicht in den Papierkorb legen; sie bleibt. Versuch es gleich noch einmal.", http.StatusServiceUnavailable)
 		return
 	}
-	log.Printf("haus: notizen: %s deleted by %s", n.Name, who)
+	log.Printf("homes: notizen: %s deleted by %s", n.Name, who)
 	http.Redirect(w, r, "/notizen?gesagt=geloescht&korb="+e.ID, http.StatusSeeOther)
 }
 
@@ -712,7 +712,7 @@ func noteBack(w http.ResponseWriter, r *http.Request, cfg StartConfig, who strin
 	made, err := cfg.Notes.PutNew(d.Name, []byte(d.Text))
 	switch {
 	case err != nil:
-		log.Printf("haus: notizen: back %s by %s: %v", d.Name, who, err)
+		log.Printf("homes: notizen: back %s by %s: %v", d.Name, who, err)
 		http.Error(w, "Die Notiz ließ sich gerade nicht zurückholen. Versuch es gleich noch einmal; sie bleibt im Papierkorb.", http.StatusServiceUnavailable)
 		return
 	case !made:
@@ -720,7 +720,7 @@ func noteBack(w http.ResponseWriter, r *http.Request, cfg StartConfig, who strin
 		return
 	}
 	cfg.Papierkorb.Raus(e.ID)
-	log.Printf("haus: notizen: %s back by %s", d.Name, who)
+	log.Printf("homes: notizen: %s back by %s", d.Name, who)
 	http.Redirect(w, r, cards.NotePage(d.Name)+"?gesagt=zurueck", http.StatusSeeOther)
 }
 

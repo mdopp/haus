@@ -6,16 +6,16 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/mdopp/haus/internal/abs"
-	"github.com/mdopp/haus/internal/abs/absfake"
-	"github.com/mdopp/haus/internal/merken"
-	"github.com/mdopp/haus/internal/podcasts"
+	"github.com/mdopp/homes/internal/abs"
+	"github.com/mdopp/homes/internal/abs/absfake"
+	"github.com/mdopp/homes/internal/merken"
+	"github.com/mdopp/homes/internal/podcasts"
 )
 
 // haus#123: Podcasts under Mehr — subscribe by a link, one's own podcasts
 // with Abo beenden (asked first), their newest episodes; the sentence of
 // what happened on the page itself; what cannot be found said plainly, the
-// link kept; only for the person signed in, only from Haus's own page.
+// link kept; only for the person signed in, only from Homes' own page.
 func TestPodcastsPage(t *testing.T) {
 	fake := absfake.New("k")
 	defer fake.Close()

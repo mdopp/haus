@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mdopp/haus/internal/cards"
-	"github.com/mdopp/haus/internal/favoriten"
-	"github.com/mdopp/haus/internal/ha"
+	"github.com/mdopp/homes/internal/cards"
+	"github.com/mdopp/homes/internal/favoriten"
+	"github.com/mdopp/homes/internal/ha"
 )
 
 // Ding is one thing's own page (haus#28), the page a device widget and an
@@ -73,7 +73,7 @@ func Ding(cfg StartConfig) http.HandlerFunc {
 			unread := none
 			unread.code, unread.say = http.StatusOK, saysNoRooms
 			if err != nil {
-				log.Printf("haus: gerät page: %q: %v", id, err)
+				log.Printf("homes: gerät page: %q: %v", id, err)
 				unread.say = saysNoHouse
 			}
 			unread.write(w, r, cfg)
@@ -144,13 +144,13 @@ func star(id string, favs []string, err error) string {
 		"><button data-laeuft=\"Merkt …\">" + label + "</button></form><p class=k>" + says + "</p></section>"
 }
 
-// pin is the ☆'s POST: the person's own list only, only from Haus's own
+// pin is the ☆'s POST: the person's own list only, only from Homes' own
 // page; then back to Räume (one room on it) when it came from there, else
 // to the thing's page (303). A favorites file that does
 // not read is never written over: one plain line and the way back.
 func pin(w http.ResponseWriter, r *http.Request, cfg StartConfig, id string) {
-	if !fromHaus(r) {
-		http.Error(w, "Anheften geht nur von Haus' eigener Seite.", http.StatusForbidden)
+	if !fromHomes(r) {
+		http.Error(w, "Anheften geht nur von Homes' eigener Seite.", http.StatusForbidden)
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<10)
@@ -176,7 +176,7 @@ func pin(w http.ResponseWriter, r *http.Request, cfg StartConfig, id string) {
 		http.Redirect(w, r, back, http.StatusSeeOther)
 		return
 	}
-	log.Printf("haus: gerät page: pinning %q: %v", id, err)
+	log.Printf("homes: gerät page: pinning %q: %v", id, err)
 	m := missing{http.StatusOK, saysNoFavorites, "Räume", back, backText}
 	if errors.Is(err, favoriten.ErrFull) {
 		m.say = "Auf Start ist kein Platz mehr. Nimm erst ein anderes Gerät herunter."

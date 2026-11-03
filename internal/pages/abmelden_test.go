@@ -9,8 +9,8 @@ import (
 // haus#61, haus#67: every family page, Box too, says small at the top who
 // is signed in, and nothing more there; Abmelden is under Mehr — on the
 // Mehr page with the account, and in the list a wide window shows on the
-// right. /abmelden sends to Authelia's logout beside Haus, and the login
-// afterwards returns to Haus.
+// right. /abmelden sends to Authelia's logout beside Homes, and the login
+// afterwards returns to Homes.
 func TestAbmeldenUnderMehr(t *testing.T) {
 	for _, groups := range []string{"family", "admins"} {
 		_, body, _ := familyPage(t, Start, StartConfig{}, "GET", "/start", groups)
@@ -38,9 +38,9 @@ func TestAbmeldenUnderMehr(t *testing.T) {
 
 func TestAbmeldenSendsToAutheliasLogout(t *testing.T) {
 	for _, c := range []struct{ public, host, want string }{
-		{"https://haus.example.org", "", "https://auth.example.org/logout?rd=https%3A%2F%2Fhaus.example.org%2F"},
-		{"https://haus.example.org/", "ignored.test", "https://auth.example.org/logout?rd=https%3A%2F%2Fhaus.example.org%2F"},
-		{"", "haus.dopp.cloud:443", "https://auth.dopp.cloud/logout?rd=https%3A%2F%2Fhaus.dopp.cloud%2F"},
+		{"https://homes.example.org", "", "https://auth.example.org/logout?rd=https%3A%2F%2Fhomes.example.org%2F"},
+		{"https://homes.example.org/", "ignored.test", "https://auth.example.org/logout?rd=https%3A%2F%2Fhomes.example.org%2F"},
+		{"", "homes.dopp.cloud:443", "https://auth.dopp.cloud/logout?rd=https%3A%2F%2Fhomes.dopp.cloud%2F"},
 	} {
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest("GET", "/abmelden", nil)
@@ -51,7 +51,7 @@ func TestAbmeldenSendsToAutheliasLogout(t *testing.T) {
 		}
 	}
 	rec := httptest.NewRecorder()
-	Abmelden("https://haus.example.org")(rec, httptest.NewRequest("POST", "/abmelden", nil))
+	Abmelden("https://homes.example.org")(rec, httptest.NewRequest("POST", "/abmelden", nil))
 	if rec.Code != 405 {
 		t.Errorf("POST /abmelden: %d, want 405", rec.Code)
 	}

@@ -1,6 +1,6 @@
-// Package bote relays a sentence from Haus's Sprechen field to the Bote
+// Package bote relays a sentence from Homes' Sprechen field to the Bote
 // (laib ADR 0016, ADR 0015's amendment): Hermes' OpenAI-compatible API
-// server in the bote pod, one chat completion per sentence. Haus decides
+// server in the bote pod, one chat completion per sentence. Homes decides
 // nothing (haus#1): it says who is writing and shows what comes back.
 //
 // Hermes' API server has no field for a person (it ignores OpenAI's
@@ -31,18 +31,18 @@ type Client struct {
 	HTTP *http.Client
 }
 
-// FromEnv is the Bote from HAUS_BOTE_URL and HAUS_BOTE_KEY, or nil. Laib
+// FromEnv is the Bote from HOMES_BOTE_URL and HOMES_BOTE_KEY, or nil. Laib
 // renders the address always and the key only while the Bote is installed
 // (laib#215): no key, no Bote, quietly. A key without an http(s) address
 // is no Bote either, said in the log; never a reason not to start.
 func FromEnv() *Client {
-	c := &Client{URL: strings.TrimRight(strings.TrimSpace(os.Getenv("HAUS_BOTE_URL")), "/"), Key: strings.TrimSpace(os.Getenv("HAUS_BOTE_KEY"))}
+	c := &Client{URL: strings.TrimRight(strings.TrimSpace(os.Getenv("HOMES_BOTE_URL")), "/"), Key: strings.TrimSpace(os.Getenv("HOMES_BOTE_KEY"))}
 	if c.Key == "" {
 		return nil
 	}
 	u, err := url.Parse(c.URL)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-		log.Printf("haus: HAUS_BOTE_KEY is set but HAUS_BOTE_URL is not an http(s)://…/v1 address: no Sprechen field")
+		log.Printf("homes: HOMES_BOTE_KEY is set but HOMES_BOTE_URL is not an http(s)://…/v1 address: no Sprechen field")
 		return nil
 	}
 	return c
@@ -83,7 +83,7 @@ func who(p Person) string {
 		}
 		return r
 	}, p.Name), 80)
-	line := "Diese Nachricht kommt aus dem Sprechen-Feld auf der Haus-Seite. Es schreibt die Anmeldung „" + user + "“"
+	line := "Diese Nachricht kommt aus dem Sprechen-Feld auf der Homes-Seite. Es schreibt die Anmeldung „" + user + "“"
 	if name != "" && name != user {
 		line += " (Name: „" + name + "“)"
 	}
@@ -108,7 +108,7 @@ func (c *Client) request(ctx context.Context, p Person, text string, stream bool
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+c.Key)
-	req.Header.Set("X-Hermes-Session-Key", "haus:"+oneLine(p.User, 64))
+	req.Header.Set("X-Hermes-Session-Key", "homes:"+oneLine(p.User, 64))
 	if stream {
 		req.Header.Set("Accept", "text/event-stream")
 	}

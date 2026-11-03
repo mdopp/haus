@@ -12,14 +12,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/favoriten"
-	"github.com/mdopp/haus/internal/ha"
-	"github.com/mdopp/haus/internal/ha/hafake"
-	"github.com/mdopp/haus/internal/laib"
-	"github.com/mdopp/haus/internal/schalter"
+	"github.com/mdopp/homes/internal/favoriten"
+	"github.com/mdopp/homes/internal/ha"
+	"github.com/mdopp/homes/internal/ha/hafake"
+	"github.com/mdopp/homes/internal/laib"
+	"github.com/mdopp/homes/internal/schalter"
 )
 
-// haus#10: Haus serves the house paths itself, from Home Assistant, in the
+// haus#10: Homes serves the house paths itself, from Home Assistant, in the
 // shapes the app parses (the app's data/ApiClient.kt, RealtimeProtocol.kt)
 // and with the two structural rules for /napi/ha/call.
 
@@ -169,7 +169,7 @@ func TestHACallRules(t *testing.T) {
 	}
 }
 
-// HA's own trouble is a 502 and its detail stays in Haus's log; only HA's
+// HA's own trouble is a 502 and its detail stays in Homes' log; only HA's
 // 400 (a call HA refuses) is the caller's 400.
 func TestHACallWhenHAFails(t *testing.T) {
 	fake, h := house(t)
@@ -407,9 +407,9 @@ func TestWatchAndEvents(t *testing.T) {
 		t.Fatalf("events: %d %s", r1.StatusCode, r1.Header.Get("Content-Type"))
 	}
 	if !fake.WaitSubscribed(1) {
-		t.Fatal("Haus never subscribed to state_changed")
+		t.Fatal("Homes never subscribed to state_changed")
 	}
-	// once subscribed, Haus sends each watched entity's current card
+	// once subscribed, Homes sends each watched entity's current card
 	resync := readFrames(t, l1, 2, patience)
 	if len(resync) != 2 || !strings.Contains(resync[0].data+resync[1].data, `"state":"on"`) || !strings.Contains(resync[0].data+resync[1].data, `"cover.rollo"`) {
 		t.Fatalf("resync on subscribe: %+v", resync)
@@ -468,7 +468,7 @@ const patience = 30 * time.Second
 // haus#28: a device that shows the active devices says so in its watch
 // (active: true) and gets an active_set frame whenever the set of things
 // that are on or open changes, whichever entity it was, watched or not:
-// once when Haus subscribes, then at most every SensorEvery, the latest
+// once when Homes subscribes, then at most every SensorEvery, the latest
 // set always. The frame names the set; the app re-reads
 // /napi/portal/active. A change inside the set (a brightness) is no frame,
 // and a device that did not ask gets none.
@@ -485,7 +485,7 @@ func TestActiveSetEvents(t *testing.T) {
 	r2, l2 := stream(t, srv.URL, "dev2")
 	defer r2.Body.Close()
 	if !fake.WaitSubscribed(1) {
-		t.Fatal("Haus never subscribed to state_changed")
+		t.Fatal("Homes never subscribed to state_changed")
 	}
 	set := func(f []frame) []string {
 		t.Helper()
@@ -539,7 +539,7 @@ func activeSet(t *testing.T, f []frame) string {
 }
 
 // haus#28: the first active_set goes per phone, at once: to a stream that
-// opens while Haus already holds HA's subscription, and to an open stream
+// opens while Homes already holds HA's subscription, and to an open stream
 // whose watch turns active on. Not the interval, which is 10s here.
 func TestEachPhoneGetsTheActiveSetAtOnce(t *testing.T) {
 	fake, h := house(t)
@@ -549,7 +549,7 @@ func TestEachPhoneGetsTheActiveSetAtOnce(t *testing.T) {
 	r1, l1 := stream(t, srv.URL, "dev1")
 	defer r1.Body.Close()
 	if !fake.WaitSubscribed(1) {
-		t.Fatal("Haus never subscribed")
+		t.Fatal("Homes never subscribed")
 	}
 	const now = "cover.garage light.kueche switch.kaffee"
 	if got := activeSet(t, readFrames(t, l1, 1, 2*time.Second)); got != now {
@@ -586,7 +586,7 @@ func TestANewStreamOfAnActiveDeviceGetsTheSet(t *testing.T) {
 	r1, l1 := stream(t, srv.URL, "dev1")
 	defer r1.Body.Close()
 	if !fake.WaitSubscribed(1) {
-		t.Fatal("Haus never subscribed")
+		t.Fatal("Homes never subscribed")
 	}
 	activeSet(t, readFrames(t, l1, 1, 2*time.Second))
 	r2, l2 := stream(t, srv.URL, "dev1")
@@ -596,7 +596,7 @@ func TestANewStreamOfAnActiveDeviceGetsTheSet(t *testing.T) {
 	}
 }
 
-// After HA drops and Haus resubscribes, a phone that already has the set
+// After HA drops and Homes resubscribes, a phone that already has the set
 // gets no frame unless the set changed: the first frame is per phone, not
 // per subscription. The interval is short here, so a frame would show.
 func TestNoActiveSetAgainAfterAnHAReconnect(t *testing.T) {
@@ -607,7 +607,7 @@ func TestNoActiveSetAgainAfterAnHAReconnect(t *testing.T) {
 	r1, l1 := stream(t, srv.URL, "dev1")
 	defer r1.Body.Close()
 	if !fake.WaitSubscribed(1) {
-		t.Fatal("Haus never subscribed")
+		t.Fatal("Homes never subscribed")
 	}
 	activeSet(t, readFrames(t, l1, 1, 2*time.Second))
 	fake.DropAll()
@@ -641,7 +641,7 @@ func TestTheSameSetWithinTheIntervalIsNoFrame(t *testing.T) {
 	r1, l1 := stream(t, srv.URL, "dev1")
 	defer r1.Body.Close()
 	if !fake.WaitSubscribed(1) {
-		t.Fatal("Haus never subscribed")
+		t.Fatal("Homes never subscribed")
 	}
 	activeSet(t, readFrames(t, l1, 1, 2*time.Second))
 	fake.Change("light.flur", "on", map[string]any{"friendly_name": "Flur"})
@@ -651,7 +651,7 @@ func TestTheSameSetWithinTheIntervalIsNoFrame(t *testing.T) {
 	}
 }
 
-// haus#28: every card names its page, the thing's own page on Haus, for
+// haus#28: every card names its page, the thing's own page on Homes, for
 // the device widget and each active row to open.
 func TestACardNamesItsPage(t *testing.T) {
 	_, h := house(t)
@@ -725,7 +725,7 @@ func sawPing(lines <-chan string, d time.Duration) bool {
 	}
 }
 
-// Without HAUS_HA_URL the house paths and the event stream are 404, passed
+// Without HOMES_HA_URL the house paths and the event stream are 404, passed
 // on to nobody (haus#26).
 func TestWithoutHATheHousePathsAre404(t *testing.T) {
 	var calls []string
@@ -745,7 +745,7 @@ func TestWithoutHATheHousePathsAre404(t *testing.T) {
 	}
 }
 
-// After HA drops the WebSocket (a restart), Haus resubscribes and resends
+// After HA drops the WebSocket (a restart), Homes resubscribes and resends
 // what changed while it was away.
 func TestResyncAfterReconnect(t *testing.T) {
 	fake, h := house(t)
@@ -761,9 +761,9 @@ func TestResyncAfterReconnect(t *testing.T) {
 	if !fake.WaitSubscribedExactly(0) {
 		t.Fatal("the drop did not drop")
 	}
-	fake.Set("light.flur", "on", map[string]any{"friendly_name": "Flur"}) // no event: Haus is not listening
+	fake.Set("light.flur", "on", map[string]any{"friendly_name": "Flur"}) // no event: Homes is not listening
 	if !fake.WaitSubscribed(1) {
-		t.Fatal("Haus did not resubscribe")
+		t.Fatal("Homes did not resubscribe")
 	}
 	if f := readFrames(t, lines, 1, 3*time.Second); len(f) != 1 || !strings.Contains(f[0].data, `"state":"on"`) {
 		t.Fatalf("after the reconnect the missed change must arrive: %+v", f)
@@ -793,7 +793,7 @@ func TestSensorThrottle(t *testing.T) {
 	}
 }
 
-// When the last stream leaves, Haus lets go of HA's subscription.
+// When the last stream leaves, Homes lets go of HA's subscription.
 func TestTheLastStreamLetsGoOfHA(t *testing.T) {
 	fake, h := house(t)
 	srv := httptest.NewServer(h)
@@ -877,7 +877,7 @@ func ended(lines <-chan string, d time.Duration) bool {
 	}
 }
 
-// HAUS_ENERGY_FLOW / HAUS_ENERGY_TOTALS name the entities; the friendly
+// HOMES_ENERGY_FLOW / HOMES_ENERGY_TOTALS name the entities; the friendly
 // names are only the fallback.
 func TestPortalEnergyFromConfig(t *testing.T) {
 	fake, h := houseWith(t, func(c *Config) {
@@ -920,20 +920,20 @@ func TestPortalEnergyFromConfig(t *testing.T) {
 }
 
 func TestEnergyFromEnv(t *testing.T) {
-	t.Setenv("HAUS_ENERGY_FLOW", "")
-	t.Setenv("HAUS_ENERGY_TOTALS", "")
+	t.Setenv("HOMES_ENERGY_FLOW", "")
+	t.Setenv("HOMES_ENERGY_TOTALS", "")
 	if m, err := EnergyFromEnv(); err != nil || len(m.Flow) != 0 || len(m.Totals) != 0 {
 		t.Fatalf("unset: %+v %v", m, err)
 	}
-	t.Setenv("HAUS_ENERGY_FLOW", "pv=sensor.a, house=sensor.b,grid=sensor.c,battery=sensor.d")
-	t.Setenv("HAUS_ENERGY_TOTALS", "PV-Erzeugung=sensor.e, Batterie geladen=sensor.f")
+	t.Setenv("HOMES_ENERGY_FLOW", "pv=sensor.a, house=sensor.b,grid=sensor.c,battery=sensor.d")
+	t.Setenv("HOMES_ENERGY_TOTALS", "PV-Erzeugung=sensor.e, Batterie geladen=sensor.f")
 	m, err := EnergyFromEnv()
 	if err != nil || m.Flow["pv"] != "sensor.a" || m.Flow["battery"] != "sensor.d" || len(m.Totals) != 2 ||
 		m.Totals[1] != (EnergyTotal{Label: "Batterie geladen", Entity: "sensor.f"}) {
 		t.Fatalf("set: %+v %v", m, err)
 	}
 	for _, bad := range []string{"sun=sensor.a", "pv", "pv=not an entity"} {
-		t.Setenv("HAUS_ENERGY_FLOW", bad)
+		t.Setenv("HOMES_ENERGY_FLOW", bad)
 		if _, err := EnergyFromEnv(); err == nil {
 			t.Fatalf("%q must refuse to start", bad)
 		}
@@ -970,7 +970,7 @@ func TestHACallPausesAPlayerAndNothingMore(t *testing.T) {
 }
 
 // haus#89: a switch from the app names the person its device was paired
-// by, with HA's context id, in Haus's log and Laib's journal.
+// by, with HA's context id, in Homes' log and Laib's journal.
 func TestHACallNotesWhoItWas(t *testing.T) {
 	var notes []map[string]any
 	var mu sync.Mutex
@@ -1067,7 +1067,7 @@ func TestPortalEnergyToday(t *testing.T) {
 
 // The app's start screen shows the person's ☆ things first (owner,
 // 2026-11-02): the device's person's favorites, in their order, as cards;
-// what HA lost or Haus draws no card for is left out, and nobody's list
+// what HA lost or Homes draws no card for is left out, and nobody's list
 // leaks to another person's phone.
 func TestPortalFavorites(t *testing.T) {
 	store := favoriten.Open(t.TempDir())

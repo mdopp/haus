@@ -10,11 +10,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/judge"
-	"github.com/mdopp/haus/internal/judge/proxyfake"
-	"github.com/mdopp/haus/internal/notes"
-	"github.com/mdopp/haus/internal/qmd"
-	"github.com/mdopp/haus/internal/qmd/qmdfake"
+	"github.com/mdopp/homes/internal/judge"
+	"github.com/mdopp/homes/internal/judge/proxyfake"
+	"github.com/mdopp/homes/internal/notes"
+	"github.com/mdopp/homes/internal/qmd"
+	"github.com/mdopp/homes/internal/qmd/qmdfake"
 )
 
 const house = "gemma-4-e4b"
@@ -40,7 +40,7 @@ func tidyShelf(t *testing.T) tidied {
 }
 
 // neverTakesTheLease is the tidy-up's promise to the card (laib ADR
-// 0011): Haus reads the lease and asks the loaded model, nothing else —
+// 0011): Homes reads the lease and asks the loaded model, nothing else —
 // no POST or DELETE of the lease, no request that would load a model, and
 // every chat for the house model by name.
 func neverTakesTheLease(t *testing.T, p *proxyfake.Server) {
@@ -60,7 +60,7 @@ func neverTakesTheLease(t *testing.T, p *proxyfake.Server) {
 				t.Errorf("asked for %q, which could swap the card; only %q", body.Model, house)
 			}
 		default:
-			t.Errorf("%s %s: Haus never takes the lease or loads a model", r.Method, r.Path)
+			t.Errorf("%s %s: Homes never takes the lease or loads a model", r.Method, r.Path)
 		}
 	}
 }

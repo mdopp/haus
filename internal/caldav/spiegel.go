@@ -13,15 +13,16 @@ import (
 	"strings"
 )
 
-// The phone's contacts, mirrored (laib ADR 0029): the Haus app sends all
-// of a person's phone contacts as one text of vCards, and Haus keeps an
+// The phone's contacts, mirrored (laib ADR 0029): the Homes app sends all
+// of a person's phone contacts as one text of vCards, and Homes keeps an
 // address book of the person's (/<person>/handy-kontakte/) the same, as
 // its own account: each card at a place its UID names, written only when
 // its text changed, and every card the phone no longer has removed. What
-// Haus wrote is noted on the card itself (X-HAUS-INHALT, a hash of the
+// Homes wrote is noted on the card itself (X-HAUS-INHALT, a hash of the
 // phone's text), so "unchanged" holds whatever way Radicale stores it.
 
-// inhaltProp carries the hash of the phone's text of a mirrored card.
+// inhaltProp carries the hash of the phone's text of a mirrored card. It
+// keeps the old name: stored data, on every mirrored card (laib#1021).
 const inhaltProp = "X-HAUS-INHALT"
 
 // maxMirrorBytes caps the read of a mirrored address book: past it the
@@ -67,7 +68,7 @@ func SplitCards(text string) ([]RawCard, error) {
 			continue
 		}
 		if l == "" || depth == 1 && (strings.HasPrefix(t, inhaltProp+":") || strings.HasPrefix(t, inhaltProp+";")) {
-			continue // Haus's own note is never the phone's
+			continue // Homes' own note is never the phone's
 		}
 		cur = append(cur, l)
 		switch t {
@@ -130,7 +131,7 @@ func (cd RawCard) inhalt() string {
 	return hex.EncodeToString(h[:])
 }
 
-// stored is the card as Haus writes it: the phone's text, with the hash
+// stored is the card as Homes writes it: the phone's text, with the hash
 // before its end.
 func (cd RawCard) stored() string {
 	i := strings.LastIndex(strings.ToUpper(cd.Text), "END:VCARD")
@@ -341,7 +342,7 @@ func (c *Client) Mirror(ctx context.Context, book, name string, cards []RawCard)
 	return m, nil
 }
 
-// storedInhalt is the hash Haus noted on a card it wrote, or "".
+// storedInhalt is the hash Homes noted on a card it wrote, or "".
 func storedInhalt(data string) string {
 	for _, l := range unfold(data) {
 		if n, v, ok := strings.Cut(l, ":"); ok && strings.EqualFold(strings.TrimSpace(n), inhaltProp) {

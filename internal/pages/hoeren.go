@@ -10,14 +10,14 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/mdopp/haus/internal/ha"
+	"github.com/mdopp/homes/internal/ha"
 )
 
 // STT is the speech-to-text the Sprechen field's microphone uses (haus#63):
-// Home Assistant's, through Haus, so a sentence spoken into the field is
+// Home Assistant's, through Homes, so a sentence spoken into the field is
 // heard by Whisper on the box, never by a browser's cloud. Provider is
-// HA's provider (HAUS_STT_PROVIDER, e.g. stt.faster_whisper), Language as
-// that provider names it (HAUS_STT_LANGUAGE, default de). No provider, or
+// HA's provider (HOMES_STT_PROVIDER, e.g. stt.faster_whisper), Language as
+// that provider names it (HOMES_STT_LANGUAGE, default de). No provider, or
 // no HA: no microphone.
 type STT struct {
 	Provider, Language string
@@ -26,7 +26,7 @@ type STT struct {
 // HoerenPath is where the field's microphone sends what it recorded.
 const HoerenPath = "/sprechen/hoeren"
 
-// sttWait is how long Haus waits for HA's speech-to-text; maxSpeech caps a
+// sttWait is how long Homes waits for HA's speech-to-text; maxSpeech caps a
 // recording (16 kHz, 16 bit, mono: about a minute; the page stops at 30 s).
 var sttWait = 60 * time.Second
 
@@ -54,7 +54,7 @@ const micButton = `<button type=button class=mikro aria-label="Sprechen statt ti
 // Hoeren turns the microphone's recording into words (haus#63): a 16-bit
 // mono PCM WAV from the page, passed to HA's speech-to-text as it is, and
 // the words back as {"ok":true,"text":…}; the page then sends them like
-// typed ones. Only a person, only from Haus's own page; nothing is kept —
+// typed ones. Only a person, only from Homes' own page; nothing is kept —
 // not the recording, not the words. Anything that is no words is one
 // plain line ({"ok":false,"says":…}), HA's detail in the log.
 func Hoeren(cfg StartConfig) http.HandlerFunc {
@@ -68,8 +68,8 @@ func Hoeren(cfg StartConfig) http.HandlerFunc {
 			http.NotFound(w, r)
 			return
 		}
-		if !fromHaus(r) {
-			http.Error(w, "Sprechen geht nur von Haus' eigener Seite.", http.StatusForbidden)
+		if !fromHomes(r) {
+			http.Error(w, "Sprechen geht nur von Homes' eigener Seite.", http.StatusForbidden)
 			return
 		}
 		speech, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxSpeech))
@@ -98,7 +98,7 @@ func Hoeren(cfg StartConfig) http.HandlerFunc {
 		case errors.Is(err, ha.ErrNotUnderstood):
 			heard(w, http.StatusOK, "", saysNotHeard)
 		case err != nil:
-			log.Printf("haus: sprechen: speech-to-text %s: %v", cfg.STT.Provider, err)
+			log.Printf("homes: sprechen: speech-to-text %s: %v", cfg.STT.Provider, err)
 			heard(w, http.StatusBadGateway, "", saysNoSTT)
 		default:
 			cfg.Usage.Count("sprechen.mikrofon") // that the microphone was used, never what was said (haus#50)

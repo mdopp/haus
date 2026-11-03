@@ -11,11 +11,11 @@ import (
 	"time"
 )
 
-// Every family page carries the one Haus script in its head, before the
+// Every family page carries the one Homes script in its head, before the
 // selection, so a page swapped in keeps it; the pages that change by
 // themselves carry their interval, the others none. The script holds
 // nothing a leak probe looks for.
-func TestFamilyPagesCarryTheHausScript(t *testing.T) {
+func TestFamilyPagesCarryTheHomesScript(t *testing.T) {
 	_, hc := house(t)
 	_, cal := calendar(t)
 	nd := notesDir(t, map[string]time.Duration{"Einkaufsliste": time.Hour})
@@ -27,28 +27,28 @@ func TestFamilyPagesCarryTheHausScript(t *testing.T) {
 	}{{Start, "/start", "120 data-live=alle"}, {Raeume, "/raeume", "120 data-live=seite"}, {Medien, "/medien", "120 data-live=seite"}, {Energie, "/energie", "60"},
 		{Kalender, "/kalender", ""}, {Notizen, "/notizen", ""}, {Mehr, "/mehr", ""}} {
 		_, body, _ := familyPage(t, p.page, all, "GET", p.path, "family")
-		mustContain(t, body, hausScript, hausStyle)
-		before(t, body, hausScript, "<nav")
+		mustContain(t, body, homesScript, homesStyle)
+		before(t, body, homesScript, "<nav")
 		if p.every != "" {
 			mustContain(t, body, `<div hidden data-auffrischen=`+p.every+`></div>`)
 		} else {
 			mustNotContain(t, body, `<div hidden data-auffrischen`)
 		}
 	}
-	mustNotLeak(t, hausScript+hausStyle)
-	if strings.Contains(hausScript, "|") {
+	mustNotLeak(t, homesScript+homesStyle)
+	if strings.Contains(homesScript, "|") {
 		t.Error("the script holds a |, which leak probes of note tables look for")
 	}
 }
 
-// A switch the script sent (X-Haus-Skript) that fails is answered in a
+// A switch the script sent (X-Homes-Skript) that fails is answered in a
 // sentence, text/plain with the refusal's code or 502, so the page stays
 // and shows it; the same switch sent by the browser itself still gets
 // the page with the sentence.
 func TestSchaltenAnswersTheScriptInASentence(t *testing.T) {
 	fake, cfg := switchHouse(t)
 	h := Schalten(cfg)
-	script := map[string]string{"X-Haus-Skript": "1"}
+	script := map[string]string{"X-Homes-Skript": "1"}
 	fake.FailCalls(503)
 	rec := post(t, h, "/schalten", url.Values{"geraet": {"light.flur"}, "tun": {"light.turn_on"}, "zurueck": {"/start"}}, "anna", script)
 	if rec.Code != http.StatusBadGateway || !strings.HasPrefix(rec.Header().Get("Content-Type"), "text/plain") || strings.TrimSpace(rec.Body.String()) != saysSwitchFailed {

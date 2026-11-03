@@ -3,7 +3,7 @@ package pages
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/mdopp/haus/internal/papierkorb"
+	"github.com/mdopp/homes/internal/papierkorb"
 	"log"
 	"net/http"
 	"net/http/httptest"
@@ -14,10 +14,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/ansicht"
-	"github.com/mdopp/haus/internal/caldav"
-	"github.com/mdopp/haus/internal/caldav/davfake"
-	"github.com/mdopp/haus/internal/laib"
+	"github.com/mdopp/homes/internal/ansicht"
+	"github.com/mdopp/homes/internal/caldav"
+	"github.com/mdopp/homes/internal/caldav/davfake"
+	"github.com/mdopp/homes/internal/laib"
 )
 
 const secretAddress = "https://calendar.google.com/calendar/ical/anna%40gmail.com/private-0123456789abcdef/basic.ics"
@@ -104,16 +104,16 @@ func TestDeineKalenderListsWhereEachComesFrom(t *testing.T) {
 	mustContain(t, body, "<h1>Deine Kalender</h1>", "Haushalt", "der Haushalt, für alle",
 		"Familie", "aus Google, nur lesen · verbunden seit Mo 12.10. · abgeglichen alle 15 Minuten · zuletzt abgeglichen vor 5 min",
 		"Müllabfuhr", "abonniert, nur lesen", "seit 3 h nicht abgeglichen",
-		`value="https://caldav.box.test/anna/google-familie/"`, "DAVx⁵", "Anmeldung wie bei Haus",
+		`value="https://caldav.box.test/anna/google-familie/"`, "DAVx⁵", "Anmeldung wie bei Homes",
 		`href="https://caldav.box.test/.web/"`, "In Radicale öffnen", "Adressbuch fürs Telefon", `value="https://caldav.box.test/haus/haushalt-kontakte/"`,
 		"Google-Kalender verbinden", "Geheime Adresse im iCal-Format", "Kalender integrieren",
 		"Öffentlichen Kalender abonnieren", "Feiertage", "Schulferien", "Niedersachsen", "Neuen Kalender anlegen", "nur für mich",
 		"Trennen…")
 	mustNotContain(t, body, "private-", "<script>alert")
-	// the Haushalt is not Haus's to delete, a mirror not to delete but to Trennen
+	// the Haushalt is not Homes' to delete, a mirror not to delete but to Trennen
 	before(t, body, "Haushalt", "Familie")
 	if strings.Count(body, "Löschen…") != 0 {
-		t.Fatal("a calendar Haus did not make offers Löschen")
+		t.Fatal("a calendar Homes did not make offers Löschen")
 	}
 }
 
@@ -148,7 +148,7 @@ func TestGoogleVerbindenHandsTheAddressToLaibOnce(t *testing.T) {
 	if strings.Contains(logs.String(), "private-") || !strings.Contains(logs.String(), "verbindet google anna/arbeit-buero") {
 		t.Fatalf("log: %s", logs.String())
 	}
-	// laib's refusal is said in Haus's words, the address in neither
+	// laib's refusal is said in Homes' words, the address in neither
 	l.refuse = "Das ist nicht Googles „Geheime Adresse im iCal-Format“ (https://calendar.google.com/…/basic.ics)."
 	rec = post(t, KalenderHinzufuegen(cfg), kalenderAdd, url.Values{"weg": {"google"}, "name": {"X"}, "adresse": {"https://example.org/x.ics"}}, "anna", nil)
 	if rec.Header().Get("Location") != kalenderVerwalten+"?gesagt=keine-google" {
@@ -224,7 +224,7 @@ func TestFarbeUndAusblendenChangeOnlyThePersonsKalender(t *testing.T) {
 	}
 }
 
-func TestTrennenAsksLaibAndLoeschenOnlyWhatHausMade(t *testing.T) {
+func TestTrennenAsksLaibAndLoeschenOnlyWhatHomesMade(t *testing.T) {
 	fake, cfg, l := kalenderBox(t)
 	rec := post(t, KalenderAendern(cfg), kalenderChange, url.Values{"kalender": {"/anna/google-familie/"}, "tu": {"trennen"}}, "anna", nil)
 	if rec.Header().Get("Location") != kalenderVerwalten+"?gesagt=getrennt" {

@@ -28,7 +28,10 @@ import (
 	"unicode/utf8"
 )
 
-// App is Haus's own name in usage-metrics.
+// App is Homes' own name in usage-metrics. It stays "haus" (stored data,
+// laib#1021): usage-metrics keys every count by it, and the Box page's
+// "Was wird genutzt" reads the last 30 days of this one name, so a new name
+// would hide the counted history and show every page as never used.
 const App = "haus"
 
 const (
@@ -51,7 +54,7 @@ type Counter struct {
 	HTTP       *http.Client
 	Now        func() time.Time
 	Log        func(format string, args ...any)
-	Started    time.Time // since when this Haus counts, for the card
+	Started    time.Time // since when this Homes counts, for the card
 
 	mu     sync.Mutex
 	counts map[key]int64
@@ -64,15 +67,15 @@ func New(url, token string) *Counter {
 	return &Counter{URL: strings.TrimRight(url, "/"), Token: token, Started: time.Now()}
 }
 
-// FromEnv reads HAUS_USAGE_URL and HAUS_USAGE_TOKEN; without both, Haus
+// FromEnv reads HOMES_USAGE_URL and HOMES_USAGE_TOKEN; without both, Homes
 // counts nothing (nil).
 func FromEnv(getenv func(string) string) *Counter {
-	u, tok := strings.TrimRight(getenv("HAUS_USAGE_URL"), "/"), getenv("HAUS_USAGE_TOKEN")
+	u, tok := strings.TrimRight(getenv("HOMES_USAGE_URL"), "/"), getenv("HOMES_USAGE_TOKEN")
 	if u == "" && tok == "" {
 		return nil
 	}
 	if p, err := url.Parse(u); err != nil || (p.Scheme != "http" && p.Scheme != "https") || p.Host == "" || tok == "" {
-		log.Printf("haus: HAUS_USAGE_URL %q and HAUS_USAGE_TOKEN (set: %v) are both needed: nothing is counted", u, tok != "")
+		log.Printf("homes: HOMES_USAGE_URL %q and HOMES_USAGE_TOKEN (set: %v) are both needed: nothing is counted", u, tok != "")
 		return nil
 	}
 	return New(u, tok)
@@ -93,7 +96,7 @@ func (c *Counter) logf(format string, args ...any) {
 	log.Printf(format, args...)
 }
 
-// Count counts one Haus event today.
+// Count counts one Homes event today.
 func (c *Counter) Count(event string) { c.CountIn(App, event) }
 
 // CountIn counts one event of app today (the voice is app stimme). A name
@@ -155,7 +158,7 @@ func (c *Counter) Flush(ctx context.Context) {
 		return
 	}
 	if !c.down {
-		c.logf("haus: usage-metrics: %v — the counts are dropped until it answers", err)
+		c.logf("homes: usage-metrics: %v — the counts are dropped until it answers", err)
 	}
 	c.down = true
 }

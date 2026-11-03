@@ -11,9 +11,9 @@ import (
 	"time"
 )
 
-// haus#184: a page that waits long for its backends says so in Haus's log,
+// haus#184: a page that waits long for its backends says so in Homes' log,
 // with the page and how long, so its time can be read on the box (laib
-// logs haus) — the whole page sits behind the login and cannot be timed
+// logs homes) — the whole page sits behind the login and cannot be timed
 // from outside. A quick page says nothing.
 func TestASlowPageSaysHowLongItWaited(t *testing.T) {
 	var logs bytes.Buffer
@@ -28,7 +28,7 @@ func TestASlowPageSaysHowLongItWaited(t *testing.T) {
 		t.Fatalf("a quick page logged %q", logs.String())
 	}
 	fetch(r, func(context.Context) {}, func(context.Context) { time.Sleep(50 * time.Millisecond) })
-	if got := logs.String(); !strings.Contains(got, "haus: /kalender waited 0.0") || !strings.Contains(got, "s for its backends") {
+	if got := logs.String(); !strings.Contains(got, "homes: /kalender waited 0.0") || !strings.Contains(got, "s for its backends") {
 		t.Fatalf("logged %q", got)
 	}
 }

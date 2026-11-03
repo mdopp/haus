@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/merken"
+	"github.com/mdopp/homes/internal/merken"
 )
 
 func rel(kind, u string) map[string]any {

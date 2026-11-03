@@ -11,10 +11,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mdopp/haus/internal/assistent"
-	"github.com/mdopp/haus/internal/napi"
-	"github.com/mdopp/haus/internal/paperless"
-	"github.com/mdopp/haus/internal/paperless/paperlessfake"
+	"github.com/mdopp/homes/internal/assistent"
+	"github.com/mdopp/homes/internal/napi"
+	"github.com/mdopp/homes/internal/paperless"
+	"github.com/mdopp/homes/internal/paperless/paperlessfake"
 )
 
 // haus#68: the Dokumente page shows the ways into Paperless — a mailto to
@@ -66,7 +66,7 @@ func TestDokumenteShowsTheWaysIn(t *testing.T) {
 	}
 	// nothing set: said, for an admin what is missing (laib#418)
 	rec := getDokumente(StartConfig{}, "/dokumente", map[string]string{"Remote-Groups": "admins"})
-	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "noch nicht eingerichtet") || !strings.Contains(rec.Body.String(), "HAUS_DOCUMENTS_MAIL") {
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "noch nicht eingerichtet") || !strings.Contains(rec.Body.String(), "HOMES_DOCUMENTS_MAIL") {
 		t.Errorf("%d %s", rec.Code, rec.Body.String())
 	}
 }
@@ -83,7 +83,7 @@ func upload(t *testing.T, cfg StartConfig, ctype string, data []byte, title stri
 	part.Write(data)
 	mw.Close()
 	req := httptest.NewRequest("POST", "/dokumente", &body)
-	req.Host = "haus.box.test"
+	req.Host = "homes.box.test"
 	req.Header.Set("Content-Type", mw.FormDataContentType())
 	req.Header.Set("Sec-Fetch-Site", "same-origin")
 	req.Header.Set("Remote-User", "anna")
@@ -134,7 +134,7 @@ func TestDokumenteFilesIntoPaperlessInbox(t *testing.T) {
 		t.Errorf("cross-site: %d", rec.Code)
 	}
 	if rec := upload(t, StartConfig{DocumentsMail: "d@box.test"}, "application/pdf", pdf, "x", nil); rec.Code != http.StatusNotFound {
-		t.Errorf("without HAUS_UPLOAD_DIR: %d", rec.Code)
+		t.Errorf("without HOMES_UPLOAD_DIR: %d", rec.Code)
 	}
 	if files, _ := filepath.Glob(filepath.Join(dir, "*")); len(files) != 1 {
 		t.Errorf("only the first is there: %v", files)
@@ -172,7 +172,7 @@ func TestMailAddress(t *testing.T) {
 }
 
 // haus#68: after filing, the page links to what was just filed — through
-// Haus's own /dokumente/abgelegt/<mark>, which asks Paperless when the
+// Homes' own /dokumente/abgelegt/<mark>, which asks Paperless when the
 // link is followed — and says it is being read; several at once, or no
 // mark, link to Paperless's newest documents. Only where Paperless opens.
 func TestDokumenteFiledLinksToWhatWasFiled(t *testing.T) {
@@ -190,7 +190,7 @@ func TestDokumenteFiledLinksToWhatWasFiled(t *testing.T) {
 	if !strings.Contains(many, "3 Dokumente liegen in Paperless") || !strings.Contains(many, "werden gerade gelesen") || strings.Count(many, newest) != 2 || strings.Contains(many, "/dokumente/abgelegt/") {
 		t.Errorf("three filed:\n%s", many)
 	}
-	// a mark that is none: no Haus link with it, the newest instead
+	// a mark that is none: no Homes link with it, the newest instead
 	for _, bad := range []string{"..%2F..%2Fx", "0A1B2C3D", "0a1b2c3d0", "%22%3E%3Cscript%3E"} {
 		page := getDokumente(cfg, "/dokumente?abgelegt=1&datei="+bad, home).Body.String()
 		if strings.Contains(page, "/dokumente/abgelegt/") || strings.Contains(page, "\"><script>") || strings.Count(page, newest) != 2 {

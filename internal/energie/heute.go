@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/mdopp/haus/internal/ha"
+	"github.com/mdopp/homes/internal/ha"
 )
 
 // Added is what a counter added over its history points and its state

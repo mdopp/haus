@@ -19,12 +19,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/laib"
+	"github.com/mdopp/homes/internal/laib"
 )
 
 // haus#10, slice 2: the camera capture (CameraCaptureActivity.kt, ApiClient.uploadFile)
 // lands in the share's consume folder: multipart, a "filename" part and a "file"
-// part, JPEG or PDF. Haus writes a request whole or not at all, and never over
+// part, JPEG or PDF. Homes writes a request whole or not at all, and never over
 // another file.
 
 var pdf = []byte("%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n")
@@ -284,7 +284,7 @@ func TestUploadStagesUnderAName_PaperlessIgnores(t *testing.T) {
 	if code, _ := upload(t, h, "dev1", ct, body); code != 200 {
 		t.Fatalf("upload: %d", code)
 	}
-	if len(names) != 1 || !regexp.MustCompile(`^\._haus-[0-9a-f]{16}\.part$`).MatchString(names[0]) {
+	if len(names) != 1 || !regexp.MustCompile(`^\._homes-[0-9a-f]{16}\.part$`).MatchString(names[0]) {
 		t.Fatalf("staged as %v", names)
 	}
 }
@@ -453,14 +453,14 @@ func TestUploadReadDeadline(t *testing.T) {
 
 func TestSweepUploads(t *testing.T) {
 	dir := t.TempDir()
-	for _, n := range []string{"._haus-0123456789abcdef.part", "._andere", "rechnung.pdf"} {
+	for _, n := range []string{"._homes-0123456789abcdef.part", "._haus-fedcba9876543210.part", "._andere", "rechnung.pdf"} {
 		os.WriteFile(filepath.Join(dir, n), []byte("x"), 0o644)
 	}
 	if err := SweepUploads(dir); err != nil {
 		t.Fatal(err)
 	}
 	fs := files(t, dir)
-	if _, ok := fs["._haus-0123456789abcdef.part"]; ok || len(fs) != 2 {
+	if _, ok := fs["._homes-0123456789abcdef.part"]; ok || len(fs) != 2 {
 		t.Fatalf("after the sweep: %v", keys(fs))
 	}
 }

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mdopp/haus/internal/cards"
+	"github.com/mdopp/homes/internal/cards"
 )
 
 // The forecast (haus#65) as the history's own chart shows it (the owner

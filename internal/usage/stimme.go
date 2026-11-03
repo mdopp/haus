@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mdopp/haus/internal/ha"
+	"github.com/mdopp/homes/internal/ha"
 )
 
 // Assist is where the voice control's runs come from: Home Assistant.
@@ -47,7 +47,7 @@ func (v *Voice) Poll(ctx context.Context) {
 	runs, err := v.HA.AssistRuns(ctx, v.Since, func(id string) bool { _, ok := v.seen[id]; return ok })
 	if errors.Is(err, ha.ErrNotAdmin) {
 		if !v.refused && v.Log != nil {
-			v.Log("haus: voice: Home Assistant refuses the Assist runs: the HA token's user must be an Administrator to count the voice control")
+			v.Log("homes: voice: Home Assistant refuses the Assist runs: the HA token's user must be an Administrator to count the voice control")
 		}
 		v.refused = true
 		return

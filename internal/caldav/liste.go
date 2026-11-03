@@ -13,7 +13,7 @@ import (
 )
 
 // A list is a calendar of tasks only, below the account's home, that the
-// phones show as a task list and Haus as a list (haus#118): the household's
+// phones show as a task list and Homes as a list (haus#118): the household's
 // shopping list at einkauf/, later named ones at liste-*/. A list is no
 // calendar: listing calendars leaves it out, and its tasks are no reminders.
 
@@ -26,7 +26,7 @@ func isList(u string) bool {
 	return base == ShoppingList || strings.HasPrefix(base, "liste-")
 }
 
-// ListRef names a list (haus#119): whose home it is in — "" for Haus's
+// ListRef names a list (haus#119): whose home it is in — "" for Homes'
 // account, the household's; else the person's, for them alone — and its
 // slug there.
 type ListRef struct {
@@ -297,7 +297,7 @@ var itemProps = map[string]bool{"SUMMARY": true, "DESCRIPTION": true, "STATUS": 
 // ErrChanged, and the caller reads the list again.
 func (c *Client) UpdateItem(ctx context.Context, it Item) error {
 	if it.etag == "" || it.href == "" {
-		return errors.New("Liste: Radicale nennt kein ETag; ohne schreibt Haus nicht zurück")
+		return errors.New("Liste: Radicale nennt kein ETag; ohne schreibt Homes nicht zurück")
 	}
 	now := c.now()
 	set := []string{"SUMMARY:" + EscapeText(it.Summary)}

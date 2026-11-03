@@ -1,8 +1,8 @@
 // Package discogs is each person's records on Discogs (owner 2026-10-25,
 // 2026-10-26: one account per person): their collection — what is on the
 // shelf — and their wantlist, read and written with their own token, got
-// through the household's app (oauth.go; laib#696: HAUS_DISCOGS_KEY and
-// HAUS_DISCOGS_SECRET). Haus finds a record by its barcode, its catalogue
+// through the household's app (oauth.go; laib#696: HOMES_DISCOGS_KEY and
+// HOMES_DISCOGS_SECRET). Homes finds a record by its barcode, its catalogue
 // number or its name, adds what the owner confirmed, keeps record wishes on
 // the wantlist and sees when one arrived in the collection. Discogs asks
 // for at most 60 requests a minute and a User-Agent naming the program.
@@ -39,7 +39,7 @@ type Client struct {
 	user string
 }
 
-const userAgent = "Haus/1.0 +https://github.com/mdopp/haus"
+const userAgent = "Homes/1.0 +https://github.com/mdopp/homes"
 
 // Error is Discogs saying no.
 type Error struct {
@@ -369,7 +369,7 @@ func (c *Client) Album(ctx context.Context, artist, title string) (Treffer, bool
 	return ts[0], true, nil
 }
 
-// Bild is a release's cover, small: its bytes and type (Haus shows it
+// Bild is a release's cover, small: its bytes and type (Homes shows it
 // through its own address; a phone never asks Discogs).
 func (c *Client) Bild(ctx context.Context, release int) ([]byte, string, error) {
 	var r struct {

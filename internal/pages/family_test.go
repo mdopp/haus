@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/assistent"
-	"github.com/mdopp/haus/internal/caldav"
-	"github.com/mdopp/haus/internal/notes"
+	"github.com/mdopp/homes/internal/assistent"
+	"github.com/mdopp/homes/internal/caldav"
+	"github.com/mdopp/homes/internal/notes"
 )
 
 // familyPage asks one of the family's pages, with Start's test clock.
@@ -199,12 +199,12 @@ func TestFamilyPagesWithoutBackendSayWhatIsMissing(t *testing.T) {
 			t.Fatalf("%s without its backend → %d %q, want the page saying what is missing", p.path, code, h.Get("Location"))
 		}
 		mustContain(t, body, p.says, "noch nicht eingerichtet", "href=/start")
-		mustNotLeak(t, body, "Radicale", "Home Assistant", "Paperless", "HAUS_", "RADICALE_", "file-share", "laib add")
+		mustNotLeak(t, body, "Radicale", "Home Assistant", "Paperless", "HOMES_", "RADICALE_", "file-share", "laib add")
 		_, admin, _ := familyPage(t, p.page, StartConfig{}, "GET", p.path, "family,admins")
 		mustContain(t, admin, p.says, "Für Admins:")
 	}
 	_, admin, _ := familyPage(t, Kalender, StartConfig{}, "GET", "/kalender", "admins")
-	mustContain(t, admin, "RADICALE_USER", "HAUS_RADICALE_PASSWORD")
+	mustContain(t, admin, "RADICALE_USER", "HOMES_RADICALE_PASSWORD")
 }
 
 // haus#1: the family's pages show, they change nothing.
@@ -230,8 +230,8 @@ func TestFamilyPagesDecideNothing(t *testing.T) {
 
 // haus#35: the assistant's name appears where you talk to it, not on the
 // pages: no name on top of any family page. The pages wear the
-// house palette (the chat's tokens, haus-android's colors.xml), light
-// or dark as the phone is, and Haus's own Geist — never a font from
+// house palette (the chat's tokens, homes-android's colors.xml), light
+// or dark as the phone is, and Homes' own Geist — never a font from
 // Google.
 func TestFamilyPagesWearTheHousePalette(t *testing.T) {
 	named(t, "Ada")
@@ -251,18 +251,18 @@ func TestFamilyPagesWearTheHousePalette(t *testing.T) {
 			"#070709", "#14141a", "#f97316", "#ffc107", "prefers-color-scheme:light", "color-scheme",
 			"@font-face", FontPath, "system-ui",
 			"rel=icon href=/symbol/favicon.svg", "rel=apple-touch-icon href=/symbol/apple-touch-icon.png",
-			"rel=manifest href=/symbol/haus.webmanifest crossorigin=use-credentials")
+			"rel=manifest href=/symbol/homes.webmanifest crossorigin=use-credentials")
 		mustNotContain(t, body, "<header>", "class=sr>",
-			"<script src", "googleapis", "gstatic", "#faf9f6") // Haus's own small scripts only, never one from elsewhere
+			"<script src", "googleapis", "gstatic", "#faf9f6") // Homes' own small scripts only, never one from elsewhere
 		if h.Get("Content-Type") != "text/html; charset=utf-8" {
 			t.Fatalf("%s: %q", p.path, h.Get("Content-Type"))
 		}
 	}
 }
 
-// haus#35: Haus serves Geist itself (OFL, vendored), cached for good: the
+// haus#35: Homes serves Geist itself (OFL, vendored), cached for good: the
 // family's box asks no one else for a font.
-func TestHausServesItsFont(t *testing.T) {
+func TestHomesServesItsFont(t *testing.T) {
 	rec := httptest.NewRecorder()
 	Font().ServeHTTP(rec, httptest.NewRequest("GET", FontPath, nil))
 	if rec.Code != 200 || rec.Header().Get("Content-Type") != "font/woff2" || !strings.HasPrefix(rec.Body.String(), "wOF2") ||
@@ -286,10 +286,10 @@ func TestHausServesItsFont(t *testing.T) {
 	}
 }
 
-// Haus's own icon (owner, 2026-11-02): each size rendered from the master,
-// served with its type, and the manifest that puts Haus on a home screen;
+// Homes' own icon (owner, 2026-11-02): each size rendered from the master,
+// served with its type, and the manifest that puts Homes on a home screen;
 // nothing else under /symbol/.
-func TestHausServesItsIcon(t *testing.T) {
+func TestHomesServesItsIcon(t *testing.T) {
 	get := func(method, p string) *httptest.ResponseRecorder {
 		rec := httptest.NewRecorder()
 		Symbol().ServeHTTP(rec, httptest.NewRequest(method, p, nil))
@@ -310,7 +310,7 @@ func TestHausServesItsIcon(t *testing.T) {
 		!strings.Contains(rec.Body.String(), "#0c120e") || strings.Contains(rec.Body.String(), "<script") {
 		t.Fatalf("favicon.svg: %d %q %s", rec.Code, rec.Header().Get("Content-Type"), rec.Body.String())
 	}
-	rec = get("GET", SymbolPath+"haus.webmanifest")
+	rec = get("GET", SymbolPath+"homes.webmanifest")
 	var m struct {
 		Name     string
 		StartURL string `json:"start_url"`
@@ -458,7 +458,7 @@ func TestItemPagesSayPlainlyWhatDoesNotAnswer(t *testing.T) {
 // host is a backend's host and port, from its URL.
 func host(u string) string { return strings.TrimPrefix(u, "http://") }
 
-// named sets the assistant's name for one test, as Laib's HAUS_ASSISTANT would.
+// named sets the assistant's name for one test, as Laib's HOMES_ASSISTANT would.
 func named(t *testing.T, name string) {
 	t.Helper()
 	assistent.Set(name)

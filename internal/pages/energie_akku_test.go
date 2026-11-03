@@ -3,7 +3,7 @@ package pages
 import (
 	"testing"
 
-	"github.com/mdopp/haus/internal/energie"
+	"github.com/mdopp/homes/internal/energie"
 )
 
 // The owner (2026-10-24): Jetzt shows how full the battery is, in percent

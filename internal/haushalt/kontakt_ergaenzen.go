@@ -13,8 +13,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/mdopp/haus/internal/caldav"
-	"github.com/mdopp/haus/internal/mcpserver"
+	"github.com/mdopp/homes/internal/caldav"
+	"github.com/mdopp/homes/internal/mcpserver"
 )
 
 // kontakt_ergaenzen (haus#163): a firm from a document into the family
@@ -27,7 +27,7 @@ const (
 	stErgaenzt   = "ergaenzt"   // added to the card
 	stVorhanden  = "vorhanden"  // the card has it, or already another one that is kept
 	stAbweichend = "abweichend" // a different IBAN: never written, the document wants checking
-	stAbgelehnt  = "abgelehnt"  // not written: not a value, or not a card Haus may add to
+	stAbgelehnt  = "abgelehnt"  // not written: not a value, or not a card Homes may add to
 )
 
 // ergaenzenFields is the answer's field order.
@@ -213,7 +213,7 @@ func readErgaenzen(a map[string]any, e *ergaenzung) (ergaenzenArgs, error) {
 }
 
 // findFirm is the card the firm is: by ORG or FN, else the email, else the
-// IBAN; several at one step are narrowed to the firm cards Haus made.
+// IBAN; several at one step are narrowed to the firm cards Homes made.
 func findFirm(all []caldav.Card, v ergaenzenArgs) []caldav.Card {
 	steps := []func(caldav.Contact) bool{
 		func(ct caldav.Contact) bool {
@@ -362,7 +362,7 @@ func ergaenzenNew(ctx context.Context, c *caldav.Client, v ergaenzenArgs, e erga
 
 func ergaenzenOne(ctx context.Context, c *caldav.Client, cc string, v ergaenzenArgs, cd caldav.Card, e ergaenzung) (string, error) {
 	firm := cd.IsFirm()
-	const notOurs = "kein Firmenkontakt von Haus (ohne Kategorie Firma): Haus ergänzt ihn nicht"
+	const notOurs = "kein Firmenkontakt von Homes (ohne Kategorie Firma): Homes ergänzt ihn nicht"
 	var add, note []string
 	e.set("firma", stVorhanden, "")
 	if v.ansprechpartner != "" {

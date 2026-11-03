@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mdopp/haus/internal/ha/hafake"
+	"github.com/mdopp/homes/internal/ha/hafake"
 )
 
 // a house with three rooms (Bad has nothing to show) and a lamp in no room

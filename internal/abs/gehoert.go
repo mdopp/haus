@@ -11,7 +11,7 @@ import (
 )
 
 // What a person listened to (haus#152): ABS keeps each user's progress per
-// book; Haus's user is an administrator (laib#676), so it may read every
+// book; Homes' user is an administrator (laib#676), so it may read every
 // family member's — GET /api/users/:id, as UserController.findOne answers
 // it, with each progress's displayTitle. Reading only.
 

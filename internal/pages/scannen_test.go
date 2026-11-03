@@ -13,20 +13,20 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/laib"
-	"github.com/mdopp/haus/internal/paperless"
-	"github.com/mdopp/haus/internal/paperless/paperlessfake"
+	"github.com/mdopp/homes/internal/laib"
+	"github.com/mdopp/homes/internal/paperless"
+	"github.com/mdopp/homes/internal/paperless/paperlessfake"
 )
 
 // a Laib with laib#568's verb scan: status prints the service's status
 // file, every other action is an order; or a box without the service, or
-// a Laib that does not give haus the verb. It keeps the orders.
+// a Laib that does not give homes the verb. It keeps the orders.
 type scanLaib struct {
 	mu     sync.Mutex
 	status map[string]any
 	orders []map[string]any
 	unset  bool   // "Der Dienst scan ist nicht eingerichtet."
-	old    bool   // no laib_scan for haus
+	old    bool   // no laib_scan for homes
 	refuse string // an order's refusal, a tool error
 }
 
@@ -44,7 +44,7 @@ func (f *scanLaib) client(t *testing.T) *laib.Client {
 		switch {
 		case req.Params.Name != "laib_scan":
 		case f.old:
-			text, isErr = "haus may not scan: policy.yml limits it to status, inbox", true
+			text, isErr = "homes may not scan: policy.yml limits it to status, inbox", true
 		case f.unset && req.Params.Args["action"] != "einrichten":
 			text, isErr = "laib: Der Dienst scan ist nicht eingerichtet.", true
 		case req.Params.Args["action"] == "status":
@@ -141,7 +141,7 @@ func TestScannenShowsTheLastStacks(t *testing.T) {
 
 // haus#76, haus#77: a box without the scan service shows the family no
 // Scannen at all, an admin „Scannen einrichten“ (a proposal, laib#571)
-// and a device by hand; a Laib that does not give haus the verb tells only
+// and a device by hand; a Laib that does not give homes the verb tells only
 // an admin what to do; a scan service not answering is one plain line.
 func TestScannenWithoutTheService(t *testing.T) {
 	body := scanPage(t, &scanLaib{unset: true}, "family")
@@ -162,7 +162,7 @@ func TestScannenWithoutTheService(t *testing.T) {
 }
 
 // haus#76: a button is one order to Laib (laib scan <aktion>), for the
-// person who pressed it, then back to the page; only from Haus's own
+// person who pressed it, then back to the page; only from Homes' own
 // page, only the page's four orders.
 func TestScannenPassesTheOrderOn(t *testing.T) {
 	f := &scanLaib{status: map[string]any{"zustand": "wartet-auf-rest", "blatt": 3}}
@@ -503,7 +503,7 @@ func TestScannenShowsARefusedStartInPlace(t *testing.T) {
 }
 
 // laib#831: a stack the model could not split waits and is done again by
-// the service itself; Haus says so, with the service's sentence
+// the service itself; Homes says so, with the service's sentence
 func TestScannenSaysAStackIsDoneAgain(t *testing.T) {
 	st := map[string]any{"zustand": "bereit", "scanner": true, "letzte": []any{map[string]any{
 		"stapel": "2026-10-27T19-32-41", "ende": "nachholen", "quelle": "scanner", "seiten": 36,

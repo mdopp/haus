@@ -23,8 +23,8 @@ import (
 	"unicode/utf8"
 )
 
-// Daten sichern (haus#207, laib ADR 0029): the Haus app
-// (haus-android#194) brings a person's phone backups — WhatsApp's
+// Daten sichern (haus#207, laib ADR 0029): the Homes app
+// (homes-android#194) brings a person's phone backups — WhatsApp's
 // msgstore.db.crypt15 and its media, Signal's signal-*.backup, the SMS and
 // calls — into archiv-eingang/<person>/<quelle>/<pfad>, where that
 // person's archive imports them once its vault is open. A backup is
@@ -37,8 +37,8 @@ import (
 // it; the same file system, so the end is a rename) and fsync'd before it
 // is answered: what HEAD says the box has, it has. The last piece renames
 // the file into place — replacing one of the same name, as WhatsApp's
-// msgstore.db.crypt15 keeps its name every day — and Haus notes it in its
-// own ledger (HAUS_DATA/sicherung/<person>/<quelle>.jsonl), which is what
+// msgstore.db.crypt15 keeps its name every day — and Homes notes it in its
+// own ledger (HOMES_DATA/sicherung/<person>/<quelle>.jsonl), which is what
 // /fehlend compares against: the importer deletes what it imported, so the
 // folder cannot say what arrived.
 
@@ -73,22 +73,22 @@ const teil = ".teil"
 const (
 	saysArchivNotSet  = "Das Archiv ist auf dieser Box nicht eingerichtet."
 	saysArchivMissing = "Der Eingang des Archivs fehlt auf der Box. Sag dem Admin Bescheid."
-	saysNoPerson      = "Dieses Gerät gehört zu keiner Person. Kopple die Haus-App neu, angemeldet mit deinem Namen."
-	saysUnreadable    = "Die Anfrage war nicht lesbar. Aktualisiere die Haus-App."
+	saysNoPerson      = "Dieses Gerät gehört zu keiner Person. Kopple die Homes-App neu, angemeldet mit deinem Namen."
+	saysUnreadable    = "Die Anfrage war nicht lesbar. Aktualisiere die Homes-App."
 	saysTooMany       = "Zu viele Dateien auf einmal: höchstens 5000 je Anfrage."
 	saysTooBig        = "Die Datei ist zu groß: höchstens 20 GB je Datei."
-	saysBadSize       = "Die Größe der Datei fehlt oder ist ungültig. Aktualisiere die Haus-App."
+	saysBadSize       = "Die Größe der Datei fehlt oder ist ungültig. Aktualisiere die Homes-App."
 	saysNoUpload      = "Diese Übertragung gibt es auf der Box nicht (mehr). Starte sie neu."
 	saysBusyFile      = "Diese Datei wird gerade schon übertragen. Frag den Stand ab und mach dort weiter."
 	saysBusyBox       = "Die Box nimmt gerade schon andere Sicherungen an. Versuch es gleich noch einmal."
-	saysPieceTooBig   = "Ein Stück darf höchstens 16 MB groß sein. Aktualisiere die Haus-App."
+	saysPieceTooBig   = "Ein Stück darf höchstens 16 MB groß sein. Aktualisiere die Homes-App."
 	saysMoreThanSaid  = "Es kamen mehr Daten als angekündigt. Starte die Übertragung dieser Datei neu."
-	saysContentType   = "Ein Stück kommt als application/offset+octet-stream. Aktualisiere die Haus-App."
-	saysNoOffset      = "Es fehlt, ab welchem Byte das Stück gilt (Upload-Offset). Aktualisiere die Haus-App."
+	saysContentType   = "Ein Stück kommt als application/offset+octet-stream. Aktualisiere die Homes-App."
+	saysNoOffset      = "Es fehlt, ab welchem Byte das Stück gilt (Upload-Offset). Aktualisiere die Homes-App."
 	saysNoRoom        = "Auf der Box ist nicht genug Platz für diese Datei. Sag dem Admin Bescheid, dann geht es weiter."
-	saysCut           = "Die Übertragung brach ab. Die Haus-App macht beim nächsten Mal dort weiter."
+	saysCut           = "Die Übertragung brach ab. Die Homes-App macht beim nächsten Mal dort weiter."
 	saysStoreFailed   = "Die Box konnte die Datei nicht speichern. Versuch es später noch einmal; hilft das nicht, sag dem Admin Bescheid."
-	saysNoKey         = "Dein Archiv ist noch nicht eingerichtet. Richte es einmal auf der Archiv-Seite ein, dann sichert die Haus-App deine SMS und Anrufe verschlüsselt."
+	saysNoKey         = "Dein Archiv ist noch nicht eingerichtet. Richte es einmal auf der Archiv-Seite ein, dann sichert die Homes-App deine SMS und Anrufe verschlüsselt."
 	saysBadKey        = "Der Schlüssel deines Archivs auf der Box ist unlesbar. Sag dem Admin Bescheid."
 )
 
@@ -97,11 +97,11 @@ const (
 // encrypt to it what only the archive opens.
 const briefkasten = ".briefkasten.pub"
 
-// Sicherung is the inbox of the message archives and Haus's ledger of
+// Sicherung is the inbox of the message archives and Homes' ledger of
 // what arrived. The pages read its Stand.
 type Sicherung struct {
-	dir    string // HAUS_ARCHIV_DIR: one folder per person
-	ledger string // HAUS_DATA/sicherung: one folder per person, one file per quelle
+	dir    string // HOMES_ARCHIV_DIR: one folder per person
+	ledger string // HOMES_DATA/sicherung: one folder per person, one file per quelle
 	slots  chan struct{}
 	now    func() time.Time
 	intern map[string]ArchivIntern // each person's archive, for the media of a restore (haus#209)
@@ -111,8 +111,8 @@ type Sicherung struct {
 	ledgers map[string]*journal   // person/quelle, loaded once
 }
 
-// NewSicherung keeps the inbox in dir (HAUS_ARCHIV_DIR) and the ledger
-// under dataDir (HAUS_DATA).
+// NewSicherung keeps the inbox in dir (HOMES_ARCHIV_DIR) and the ledger
+// under dataDir (HOMES_DATA).
 func NewSicherung(dir, dataDir string) *Sicherung {
 	return &Sicherung{dir: dir, ledger: filepath.Join(dataDir, "sicherung"), slots: make(chan struct{}, sicherungConcurrent),
 		now: time.Now, busy: map[string]*schreiber{}, ledgers: map[string]*journal{}}
@@ -150,7 +150,7 @@ func (s *Sicherung) person(whoami func(string) (string, bool), next personHandle
 			return
 		}
 		if fi, err := os.Stat(s.dir); err != nil || !fi.IsDir() {
-			log.Printf("haus: sicherung: HAUS_ARCHIV_DIR %s is not a folder: %v", s.dir, err)
+			log.Printf("homes: sicherung: HOMES_ARCHIV_DIR %s is not a folder: %v", s.dir, err)
 			fehler(w, http.StatusServiceUnavailable, saysArchivMissing)
 			return
 		}
@@ -207,7 +207,7 @@ func validPfad(p string) bool {
 func checkFile(quelle, pfad string, groesse int64) string {
 	switch {
 	case !validQuelle(quelle):
-		return "Unbekannte Quelle „" + quelle + "“: es gibt whatsapp, signal und sms. Aktualisiere die Haus-App."
+		return "Unbekannte Quelle „" + quelle + "“: es gibt whatsapp, signal und sms. Aktualisiere die Homes-App."
 	case !validPfad(pfad):
 		return "Der Pfad „" + pfad + "“ geht nicht: nur Ordner und Dateien unterhalb der Sicherung, nichts Verstecktes (mit Punkt vorn), höchstens 512 Zeichen."
 	case groesse < 0:
@@ -297,7 +297,7 @@ func waiting(root *os.Root, quelle string) int {
 func (s *Sicherung) stand(w http.ResponseWriter, r *http.Request, person string) {
 	st, err := s.Stand(person)
 	if err != nil {
-		log.Printf("haus: sicherung: stand of %s: %v", person, err)
+		log.Printf("homes: sicherung: stand of %s: %v", person, err)
 		fehler(w, http.StatusInternalServerError, saysStoreFailed)
 		return
 	}
@@ -312,7 +312,7 @@ func (s *Sicherung) schluessel(w http.ResponseWriter, r *http.Request, person st
 	case errors.Is(err, fs.ErrNotExist):
 		fehler(w, http.StatusNotFound, saysNoKey)
 	case err != nil:
-		log.Printf("haus: sicherung: key of %s: %v", person, err)
+		log.Printf("homes: sicherung: key of %s: %v", person, err)
 		fehler(w, http.StatusInternalServerError, saysBadKey)
 	default:
 		answer(w, http.StatusOK, map[string]any{"empfaenger": key})
@@ -395,7 +395,7 @@ func (s *Sicherung) fehlend(w http.ResponseWriter, r *http.Request, person strin
 	}
 	j, err := s.journal(person, in.Quelle)
 	if err != nil {
-		log.Printf("haus: sicherung: ledger of %s/%s: %v", person, in.Quelle, err)
+		log.Printf("homes: sicherung: ledger of %s/%s: %v", person, in.Quelle, err)
 		fehler(w, http.StatusInternalServerError, saysStoreFailed)
 		return
 	}
@@ -588,7 +588,7 @@ func (s *Sicherung) create(w http.ResponseWriter, r *http.Request, person string
 	defer s.release(person, id)
 	root, err := s.open(person)
 	if err != nil {
-		log.Printf("haus: sicherung: inbox of %s: %v", person, err)
+		log.Printf("homes: sicherung: inbox of %s: %v", person, err)
 		fehler(w, http.StatusInternalServerError, saysStoreFailed)
 		return
 	}
@@ -608,7 +608,7 @@ func (s *Sicherung) create(w http.ResponseWriter, r *http.Request, person string
 		err = s.place(root, person, id, a)
 	}
 	if err != nil {
-		log.Printf("haus: sicherung: start %s/%s/%s: %v", person, a.Quelle, a.Pfad, err)
+		log.Printf("homes: sicherung: start %s/%s/%s: %v", person, a.Quelle, a.Pfad, err)
 		fehler(w, storeStatus(err), storeSays(err))
 		return
 	}
@@ -727,9 +727,9 @@ func (s *Sicherung) patch(w http.ResponseWriter, r *http.Request, person string)
 	}
 	if rest > 0 {
 		if free, err := freeSpace(s.dir); err != nil {
-			log.Printf("haus: sicherung: free space of %s: %v", s.dir, err)
+			log.Printf("homes: sicherung: free space of %s: %v", s.dir, err)
 		} else if free < uint64(rest)+sicherungRand {
-			log.Printf("haus: sicherung: %s has %d bytes free, %s/%s wants %d more", s.dir, free, person, a.Pfad, uint64(rest)+sicherungRand)
+			log.Printf("homes: sicherung: %s has %d bytes free, %s/%s wants %d more", s.dir, free, person, a.Pfad, uint64(rest)+sicherungRand)
 			fehler(w, http.StatusInsufficientStorage, saysNoRoom)
 			return
 		}
@@ -737,14 +737,14 @@ func (s *Sicherung) patch(w http.ResponseWriter, r *http.Request, person string)
 	written, code, say := s.write(root, id, have, min(rest, sicherungMaxStueck), rest, body)
 	now := have + written
 	if code != 0 {
-		log.Printf("haus: sicherung: %s/%s/%s at %d: %s", person, a.Quelle, a.Pfad, now, say)
+		log.Printf("homes: sicherung: %s/%s/%s at %d: %s", person, a.Quelle, a.Pfad, now, say)
 		answer(w, code, map[string]any{"fehler": say, "offset": now})
 		return
 	}
 	fertig := now == a.Groesse
 	if fertig {
 		if err := s.place(root, person, id, a); err != nil {
-			log.Printf("haus: sicherung: place %s/%s/%s: %v", person, a.Quelle, a.Pfad, err)
+			log.Printf("homes: sicherung: place %s/%s/%s: %v", person, a.Quelle, a.Pfad, err)
 			fehler(w, storeStatus(err), storeSays(err))
 			return
 		}
@@ -788,12 +788,12 @@ func (i *idleReader) stop() {
 func (s *Sicherung) write(root *os.Root, id string, have, limit, rest int64, body io.Reader) (int64, int, string) {
 	f, err := root.OpenFile(teil+"/"+id, os.O_WRONLY, 0)
 	if err != nil {
-		log.Printf("haus: sicherung: open part %s: %v", id, err)
+		log.Printf("homes: sicherung: open part %s: %v", id, err)
 		return 0, http.StatusInternalServerError, saysStoreFailed
 	}
 	defer f.Close()
 	if _, err := f.Seek(have, io.SeekStart); err != nil {
-		log.Printf("haus: sicherung: seek part %s: %v", id, err)
+		log.Printf("homes: sicherung: seek part %s: %v", id, err)
 		return 0, http.StatusInternalServerError, saysStoreFailed
 	}
 	n, err := io.Copy(diskWriter{f}, io.LimitReader(body, limit))
@@ -816,10 +816,10 @@ func (s *Sicherung) write(root *os.Root, id string, have, limit, rest int64, bod
 	case err == nil:
 		return n, 0, ""
 	case errors.As(err, &de):
-		log.Printf("haus: sicherung: write part %s: %v", id, err)
+		log.Printf("homes: sicherung: write part %s: %v", id, err)
 		return n, storeStatus(err), storeSays(err)
 	default: // the phone's side: a cut, a timeout
-		log.Printf("haus: sicherung: part %s: %d bytes, then %v", id, n, err)
+		log.Printf("homes: sicherung: part %s: %d bytes, then %v", id, n, err)
 		return n, http.StatusRequestTimeout, saysCut
 	}
 }
@@ -856,7 +856,7 @@ func (s *Sicherung) place(root *os.Root, person, id string, a auftrag) error {
 	if a.Geaendert > 0 {
 		t := time.UnixMilli(a.Geaendert)
 		if err := root.Chtimes(to, t, t); err != nil {
-			log.Printf("haus: sicherung: mtime of %s/%s: %v", person, to, err)
+			log.Printf("homes: sicherung: mtime of %s/%s: %v", person, to, err)
 		}
 	}
 	if d, err := root.Open(path.Dir(to)); err == nil { // the rename itself, durable
@@ -864,13 +864,13 @@ func (s *Sicherung) place(root *os.Root, person, id string, a auftrag) error {
 		d.Close()
 	}
 	if err := s.note(person, a); err != nil {
-		log.Printf("haus: sicherung: ledger of %s/%s: %v (%s is in place)", person, a.Quelle, err, a.Pfad)
+		log.Printf("homes: sicherung: ledger of %s/%s: %v (%s is in place)", person, a.Quelle, err, a.Pfad)
 	}
 	a.Fertig = true
 	if err := writeAuftrag(root, id, a); err != nil {
 		root.Remove(teil + "/" + id + ".json")
 	}
-	log.Printf("haus: sicherung: %s/%s/%s arrived, %d bytes", person, a.Quelle, a.Pfad, a.Groesse)
+	log.Printf("homes: sicherung: %s/%s/%s arrived, %d bytes", person, a.Quelle, a.Pfad, a.Groesse)
 	return nil
 }
 
@@ -1041,7 +1041,7 @@ func (s *Sicherung) aufraeumen(person string) {
 			for _, n := range []string{id, id + ".json", id + ".json.neu"} {
 				root.Remove(teil + "/" + n)
 			}
-			log.Printf("haus: sicherung: gave up %s's part %s, untouched since %s", person, id, touched.Format(time.DateOnly))
+			log.Printf("homes: sicherung: gave up %s's part %s, untouched since %s", person, id, touched.Format(time.DateOnly))
 		}
 		s.release(person, id)
 	}
@@ -1051,7 +1051,7 @@ func (s *Sicherung) aufraeumen(person string) {
 func (s *Sicherung) Pflegen(stop <-chan struct{}) {
 	for {
 		if err := s.Aufraeumen(); err != nil {
-			log.Printf("haus: sicherung: tidying %s: %v", s.dir, err)
+			log.Printf("homes: sicherung: tidying %s: %v", s.dir, err)
 		}
 		select {
 		case <-stop:

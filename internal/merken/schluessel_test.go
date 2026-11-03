@@ -10,7 +10,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/mdopp/haus/internal/notes"
+	"github.com/mdopp/homes/internal/notes"
 )
 
 func TestSchluessel(t *testing.T) {
@@ -33,7 +33,7 @@ func TestSchluessel(t *testing.T) {
 	}
 }
 
-// owner 2026-10-26: the same thing shared twice is not kept twice; Haus
+// owner 2026-10-26: the same thing shared twice is not kept twice; Homes
 // says so, and brings the note up to date when the page changed — unless
 // someone edited the note.
 func TestMerkenTwice(t *testing.T) {

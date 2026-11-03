@@ -1,6 +1,6 @@
 // Package assistent is the house's assistant as the family addresses it: one
 // name, set once for the whole box in Laib (box.yml assistant:, which reaches
-// Haus as HAUS_ASSISTANT), and the wake phrase every speaker listens for.
+// Homes as HOMES_ASSISTANT), and the wake phrase every speaker listens for.
 // The name appears where a sentence says how to address it („Sag Homes:
 // Merk dir …“); the pages wear the house's own palette.
 package assistent

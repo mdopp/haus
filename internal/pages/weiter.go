@@ -7,7 +7,7 @@ import (
 )
 
 // App is another app of the box a family page hands over to, for what
-// Haus does not do itself (haus#64): "Weiter in <App>", one pattern on
+// Homes does not do itself (haus#64): "Weiter in <App>", one pattern on
 // every page — Home Assistant on Geräte now, Paperless (haus#68) and the
 // calendar (haus#66) the same way. Name is the app's name for the family,
 // URL its public address from the config; no URL, no link.
@@ -25,15 +25,15 @@ func AppURL(raw string) string {
 }
 
 // OnDomain completes an address whose host ends in a dot ("https://caldav."
-// from a template value "https://caldav.${DOMAIN}" that reached Haus with
-// ${DOMAIN} empty) with the box's domain, taken from Haus's own public
-// address (haus.<domain>); else the address as it is.
-func OnDomain(raw, haus string) string {
+// from a template value "https://caldav.${DOMAIN}" that reached Homes with
+// ${DOMAIN} empty) with the box's domain, taken from Homes' own public
+// address (homes.<domain>); else the address as it is.
+func OnDomain(raw, homes string) string {
 	u, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil || !strings.HasSuffix(u.Host, ".") {
 		return raw
 	}
-	h, err := url.Parse(strings.TrimSpace(haus))
+	h, err := url.Parse(strings.TrimSpace(homes))
 	if err != nil || h.Host == "" {
 		return raw
 	}

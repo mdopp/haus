@@ -38,7 +38,7 @@ func TestFind(t *testing.T) {
 	if _, ok, _ := c.Find(ctx, "Bilderbuch", "Salbei"); ok {
 		t.Error("another artist's Salbei")
 	}
-	if auth != `MediaBrowser Token="k", Client="Haus"` {
+	if auth != `MediaBrowser Token="k", Client="Homes"` {
 		t.Errorf("auth %q", auth)
 	}
 	if _, _, err := (&Client{URL: srv.URL + "/nix", Token: "k"}).Find(ctx, "a", "b"); err == nil {

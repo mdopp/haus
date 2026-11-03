@@ -1,12 +1,12 @@
-// Package reitti is Haus's way into Reitti, the household's own timeline
-// (reitti.<domain>, a Laib service behind Authelia): the Haus app records
-// where a person was, sends the points to Haus (napi/standort.go), and Haus
+// Package reitti is Homes' way into Reitti, the household's own timeline
+// (reitti.<domain>, a Laib service behind Authelia): the Homes app records
+// where a person was, sends the points to Homes (napi/standort.go), and Homes
 // passes them on inside the box to Reitti's Overland ingest, with that
 // person's own device token. The phone never needs a route to Reitti, and
 // Authelia is never bypassed from outside.
 //
-// Each person pastes their Reitti token once on Haus's page Standortverlauf
-// (pages/standort.go). Haus keeps it in HAUS_DATA/reitti-konten.json (0600),
+// Each person pastes their Reitti token once on Homes' page Standortverlauf
+// (pages/standort.go). Homes keeps it in HOMES_DATA/reitti-konten.json (0600),
 // for that person alone; it is never logged and never shown back.
 package reitti
 
@@ -60,32 +60,32 @@ func (u *Unavailable) Error() string {
 
 func (u *Unavailable) Unwrap() error { return u.Err }
 
-// Konto is what Haus keeps of a person's Reitti connection.
+// Konto is what Homes keeps of a person's Reitti connection.
 type Konto struct {
 	Token string    `json:"token"`
 	Seit  time.Time `json:"seit"`
 }
 
-// Reitti is the household's Reitti as Haus reaches it inside the box, and
+// Reitti is the household's Reitti as Homes reaches it inside the box, and
 // every person's token.
 type Reitti struct {
-	URL       string       // HAUS_REITTI_URL, e.g. http://host.containers.internal:<port>
-	PublicURL string       // HAUS_REITTI_PUBLIC_URL, https://reitti.<domain>: where a person makes their token; "": no link
-	Dir       string       // HAUS_DATA: reitti-konten.json
+	URL       string       // HOMES_REITTI_URL, e.g. http://host.containers.internal:<port>
+	PublicURL string       // HOMES_REITTI_PUBLIC_URL, https://reitti.<domain>: where a person makes their token; "": no link
+	Dir       string       // HOMES_DATA: reitti-konten.json
 	HTTP      *http.Client // nil: a client with a 20 s timeout
 	Now       func() time.Time
 
 	mu sync.Mutex
 }
 
-// FromEnv is Reitti when HAUS_REITTI_URL names it, else nil: Haus then
+// FromEnv is Reitti when HOMES_REITTI_URL names it, else nil: Homes then
 // answers that the box has no timeline.
 func FromEnv(dataDir string) *Reitti {
-	u := strings.TrimRight(strings.TrimSpace(os.Getenv("HAUS_REITTI_URL")), "/")
+	u := strings.TrimRight(strings.TrimSpace(os.Getenv("HOMES_REITTI_URL")), "/")
 	if u == "" {
 		return nil
 	}
-	return &Reitti{URL: u, PublicURL: strings.TrimSpace(os.Getenv("HAUS_REITTI_PUBLIC_URL")), Dir: dataDir}
+	return &Reitti{URL: u, PublicURL: strings.TrimSpace(os.Getenv("HOMES_REITTI_PUBLIC_URL")), Dir: dataDir}
 }
 
 const kontenFile = "reitti-konten.json"

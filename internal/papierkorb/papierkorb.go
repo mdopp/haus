@@ -1,7 +1,7 @@
 // Package papierkorb keeps what the family deleted for 30 days (haus#174:
 // „calm, plain and undoable“, laib#60): a list with its lines, a calendar
 // with its appointments, an upload beets kept back. Each entry is one file
-// in Haus's data folder, 0600: its kind, its name as the family knows it,
+// in Homes' data folder, 0600: its kind, its name as the family knows it,
 // when and by whom, and what it takes to put it back. Older entries go by
 // themselves when the store is read.
 package papierkorb

@@ -1,7 +1,7 @@
-// Package ha is Haus's client for Home Assistant: its REST API for states,
+// Package ha is Homes' client for Home Assistant: its REST API for states,
 // history and service calls, its WebSocket for state_changed and the area
-// registry. URL and long-lived token come from the environment (HAUS_HA_URL,
-// HAUS_HA_TOKEN), never from a file in the repo. Haus reads and relays; the
+// registry. URL and long-lived token come from the environment (HOMES_HA_URL,
+// HOMES_HA_TOKEN), never from a file in the repo. Homes reads and relays; the
 // rules about what may be switched live in internal/napi (haus#10).
 package ha
 
@@ -30,20 +30,20 @@ type Client struct {
 	registry registryCache // CachedRegistry; shared by everyone holding this client
 }
 
-// FromEnv reads HAUS_HA_URL and HAUS_HA_TOKEN. Unset URL means no HA: the
+// FromEnv reads HOMES_HA_URL and HOMES_HA_TOKEN. Unset URL means no HA: the
 // house paths and the event stream are 404.
 func FromEnv() (*Client, error) {
-	u := strings.TrimRight(os.Getenv("HAUS_HA_URL"), "/")
+	u := strings.TrimRight(os.Getenv("HOMES_HA_URL"), "/")
 	if u == "" {
 		return nil, nil
 	}
 	if p, err := url.Parse(u); err != nil || (p.Scheme != "http" && p.Scheme != "https") || p.Host == "" {
-		return nil, fmt.Errorf("HAUS_HA_URL %q: want http(s)://host[:port]", u)
+		return nil, fmt.Errorf("HOMES_HA_URL %q: want http(s)://host[:port]", u)
 	}
-	tok := os.Getenv("HAUS_HA_TOKEN")
+	tok := os.Getenv("HOMES_HA_TOKEN")
 	if tok == "" {
 		// the template names the address; the token is the admin's one step
-		log.Printf("haus: HAUS_HA_TOKEN is not set: the house paths are off (laib secret set HAUS_HA_TOKEN)")
+		log.Printf("homes: HOMES_HA_TOKEN is not set: the house paths are off (laib secret set HOMES_HA_TOKEN)")
 		return nil, nil
 	}
 	return &Client{URL: u, Token: tok}, nil

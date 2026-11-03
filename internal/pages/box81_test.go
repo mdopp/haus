@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/laib"
+	"github.com/mdopp/homes/internal/laib"
 )
 
 // a Laib whose status takes as long as slow says; the rest answers "[]"

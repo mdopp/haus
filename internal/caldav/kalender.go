@@ -15,26 +15,27 @@ import (
 )
 
 // The calendars Haushalt/Kalender lists and makes (haus#66, laib#495). They
-// all live in Radicale, named by where they come from:
+// all live in Radicale, named by where they come from (haus is the
+// household's Radicale/LLDAP account; stored data, it keeps its name, laib#1021):
 //
-//	haus/haushalt            the household's, Haus's account's
-//	haus/familie-<name>      a calendar "für die Familie", made by Haus
+//	haus/haushalt            the household's, Homes' account's
+//	haus/familie-<name>      a calendar "für die Familie", made by Homes
 //	haus/abo-<name>          a public calendar the family subscribed to
-//	<person>/privat-<name>   a calendar "nur für mich", made by Haus
+//	<person>/privat-<name>   a calendar "nur für mich", made by Homes
 //	<person>/google-<name>   a Google calendar laib's kalender mirrors, read only
 //	<person>/abo-<name>      a public calendar the person subscribed to, read only
 //
 // Laib's kalender template writes the mirrors as its own account; Radicale's
-// rights let Haus's account list each person's home and read those, and make
+// rights let Homes' account list each person's home and read those, and make
 // privat-* there, nothing else of theirs.
 
 // Calendar is one row of the Kalender page's list.
 type Calendar struct {
 	Path    string    // /lea/google-familie/
-	URL     string    // where Haus reads it
+	URL     string    // where Homes reads it
 	Name    string    // its display name
-	Kind    string    // haushalt, familie, privat, google, abo; "" for any other of Haus's account's
-	Family  bool      // in Haus's account's home: everyone's
+	Kind    string    // haushalt, familie, privat, google, abo; "" for any other of Homes' account's
+	Family  bool      // in Homes' account's home: everyone's
 	Synced  time.Time // a mirror's last good run (laib's kalender); zero: not yet, or no mirror
 	Problem string    // what went wrong since, in laib's words
 }
@@ -68,7 +69,7 @@ func isMirror(u string) bool {
 	return k == "google" || k == "abo"
 }
 
-// principals are the homes below the server Haus's account may list, its
+// principals are the homes below the server Homes' account may list, its
 // own left out. Rights that do not let it list the root (a Radicale before
 // laib#495) are none, not an error.
 func (c *Client) principals(ctx context.Context) ([]string, error) {
@@ -131,7 +132,7 @@ func (c *Client) mirrors(ctx context.Context) ([]Collection, error) {
 	return out, nil
 }
 
-// personHome is a person's home; "" for Haus's own account.
+// personHome is a person's home; "" for Homes' own account.
 func (c *Client) personHome(person string) (string, error) {
 	if person == "" || person == c.User || strings.ContainsAny(person, "/?#") {
 		return "", errors.New("Kalender: keine Person")
@@ -140,7 +141,7 @@ func (c *Client) personHome(person string) (string, error) {
 }
 
 // PersonCalendars is what Kalender lists for one person: the family's in
-// Haus's account's home and the person's own Haus may see (privat-*, the
+// Homes' account's home and the person's own Homes may see (privat-*, the
 // mirrors), the family's first.
 func (c *Client) PersonCalendars(ctx context.Context, person string) ([]Calendar, error) {
 	fam, err := c.list(ctx, false)
@@ -227,11 +228,11 @@ func (c *Client) MakeCalendar(ctx context.Context, person, slug, name string, fa
 	return u.Path, nil
 }
 
-// DeleteCalendar deletes a calendar Haus made (familie-*, privat-*) with
+// DeleteCalendar deletes a calendar Homes made (familie-*, privat-*) with
 // everything in it; any other is refused here, whatever Radicale allows.
 func (c *Client) DeleteCalendar(ctx context.Context, calPath string) error {
 	if k := kindOf(path.Base(strings.TrimRight(calPath, "/"))); k != "familie" && k != "privat" {
-		return errors.New("Kalender: diesen Kalender löscht Haus nicht")
+		return errors.New("Kalender: diesen Kalender löscht Homes nicht")
 	}
 	u, err := c.resolve(calPath)
 	if err != nil {

@@ -9,21 +9,21 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mdopp/haus/internal/caldav/davfake"
-	"github.com/mdopp/haus/internal/paperless/paperlessfake"
+	"github.com/mdopp/homes/internal/caldav/davfake"
+	"github.com/mdopp/homes/internal/paperless/paperlessfake"
 )
 
-// haus#13: `haus export-documents` is the refresh timer's first step. It
-// mirrors Paperless into HAUS_DOCUMENTS_DIR and says what it did; unset,
+// haus#13: `homes export-documents` is the refresh timer's first step. It
+// mirrors Paperless into HOMES_DOCUMENTS_DIR and says what it did; unset,
 // it does nothing and succeeds. Paperless in trouble does not fail the
-// refresh (the notes are refreshed all the same), a folder Haus cannot
+// refresh (the notes are refreshed all the same), a folder Homes cannot
 // write does; neither says the token.
 func TestExportDocumentsCommand(t *testing.T) {
 	fake := paperlessfake.New("pl-geheim")
 	defer fake.Close()
 	fake.Add(paperlessfake.Doc{ID: 7, Title: "Stromvertrag", Content: "Laufzeit bis 2027", Modified: "2026-10-01T12:00:00Z"})
 	dir := t.TempDir()
-	env := map[string]string{"HAUS_DOCUMENTS_DIR": dir, "HAUS_PAPERLESS_URL": fake.URL, "HAUS_PAPERLESS_TOKEN": "pl-geheim"}
+	env := map[string]string{"HOMES_DOCUMENTS_DIR": dir, "HOMES_PAPERLESS_URL": fake.URL, "HOMES_PAPERLESS_TOKEN": "pl-geheim"}
 	run := func() (int, string) {
 		var out, errw bytes.Buffer
 		code := command(context.Background(), []string{"export-documents"}, func(k string) string { return env[k] }, &out, &errw)
@@ -40,7 +40,7 @@ func TestExportDocumentsCommand(t *testing.T) {
 		t.Fatalf("Paperless failing: %d %q", code, said)
 	}
 	fake.Status = 0
-	env["HAUS_DOCUMENTS_DIR"] = filepath.Join(dir, "gibtsnicht")
+	env["HOMES_DOCUMENTS_DIR"] = filepath.Join(dir, "gibtsnicht")
 	if code, said := run(); code != 1 || strings.Contains(said, "pl-geheim") {
 		t.Fatalf("folder failing: %d %q", code, said)
 	}
@@ -54,7 +54,7 @@ func TestExportDocumentsCommand(t *testing.T) {
 	}
 }
 
-// haus#13: `haus import-takeout` writes with Haus's own Radicale account
+// haus#13: `homes import-takeout` writes with Homes' own Radicale account
 // and notes folder and says in German what it did; a dry run writes
 // nothing; without an archive it says how to call it.
 func TestImportTakeoutCommand(t *testing.T) {
@@ -70,7 +70,7 @@ func TestImportTakeoutCommand(t *testing.T) {
 	w.Write([]byte(`{"title":"Idee","textContent":"Baumhaus bauen","createdTimestampUsec":1750000000000000,"userEditedTimestampUsec":1750000000000000,"isTrashed":false}`))
 	z.Close()
 	f.Close()
-	env := map[string]string{"HAUS_RADICALE_URL": dav.URL, "HAUS_RADICALE_USER": "haus", "HAUS_RADICALE_PASSWORD": "pw", "HAUS_NOTES_DIR": dir, "TZ": "Europe/Berlin"}
+	env := map[string]string{"HOMES_RADICALE_URL": dav.URL, "HOMES_RADICALE_USER": "haus", "HOMES_RADICALE_PASSWORD": "pw", "HOMES_NOTES_DIR": dir, "TZ": "Europe/Berlin"}
 	run := func(args ...string) (int, string) {
 		var out, errw bytes.Buffer
 		code := command(context.Background(), append([]string{"import-takeout"}, args...), func(k string) string { return env[k] }, &out, &errw)
@@ -88,16 +88,16 @@ func TestImportTakeoutCommand(t *testing.T) {
 	if code != 0 || !strings.Contains(said, "0 Termine neu, 1 schon da") || !strings.Contains(said, "0 Notizen neu, 1 schon da") {
 		t.Fatalf("again: %d %q", code, said)
 	}
-	if code, said := run(); code != 2 || !strings.Contains(said, "Aufruf: haus import-takeout") {
+	if code, said := run(); code != 2 || !strings.Contains(said, "Aufruf: homes import-takeout") {
 		t.Fatalf("no archive: %d %q", code, said)
 	}
 	// Radicale refusing: stopped, said, exit 1, the password never
-	env["HAUS_RADICALE_PASSWORD"] = "falsch-geheim"
+	env["HOMES_RADICALE_PASSWORD"] = "falsch-geheim"
 	if code, said := run(zp); code != 1 || !strings.Contains(said, "Abgebrochen") || strings.Contains(said, "falsch-geheim") {
 		t.Fatalf("refused: %d %q", code, said)
 	}
 	// no Radicale: the notes only, and said so
-	env = map[string]string{"HAUS_NOTES_DIR": dir}
+	env = map[string]string{"HOMES_NOTES_DIR": dir}
 	if code, said := run(zp); code != 0 || !strings.Contains(said, "Kein Radicale eingerichtet") {
 		t.Fatalf("notes only: %d %q", code, said)
 	}
@@ -123,7 +123,7 @@ func TestImportTakeoutEdges(t *testing.T) {
 	w.Write([]byte(`{"title":"Spät","textContent":"Licht aus","createdTimestampUsec":1750026600000000,"userEditedTimestampUsec":1750026600000000,"isTrashed":false}`))
 	z.Close()
 	f.Close()
-	env := map[string]string{"HAUS_RADICALE_URL": dav.URL, "HAUS_RADICALE_USER": "haus", "HAUS_RADICALE_PASSWORD": "pw", "HAUS_NOTES_DIR": dir, "TZ": "Europe/Berlin"}
+	env := map[string]string{"HOMES_RADICALE_URL": dav.URL, "HOMES_RADICALE_USER": "haus", "HOMES_RADICALE_PASSWORD": "pw", "HOMES_NOTES_DIR": dir, "TZ": "Europe/Berlin"}
 	run := func(args ...string) (int, string) {
 		var out, errw bytes.Buffer
 		code := command(context.Background(), append([]string{"import-takeout"}, args...), func(k string) string { return env[k] }, &out, &errw)

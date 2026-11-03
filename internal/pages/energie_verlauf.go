@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mdopp/haus/internal/cards"
-	"github.com/mdopp/haus/internal/energie"
-	"github.com/mdopp/haus/internal/ha"
+	"github.com/mdopp/homes/internal/cards"
+	"github.com/mdopp/homes/internal/energie"
+	"github.com/mdopp/homes/internal/ha"
 )
 
 // The history (haus#65): what came from the grid, went into it, what the

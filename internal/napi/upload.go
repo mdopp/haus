@@ -22,7 +22,7 @@ import (
 
 // The camera capture (haus#10): the app posts a photo or a PDF it made
 // (CameraCaptureActivity.kt, ApiClient.uploadFile: multipart, a "filename"
-// part and a "file" part) and Haus puts it into HAUS_UPLOAD_DIR, the
+// part and a "file" part) and Homes puts it into HOMES_UPLOAD_DIR, the
 // share's folder Paperless consumes. A file appears there whole or not at
 // all: written aside under a name Paperless ignores (._*), then renamed to
 // its name with renameat2(RENAME_NOREPLACE), which never replaces an
@@ -46,7 +46,7 @@ var (
 func uploadMinFree() uint64 { return 2 * uint64(uploadMaxBody) }
 
 // uploadTypes are what Paperless consumes and the app may send, with the
-// extension Haus gives them. The bytes must say the same (sniffed); an
+// extension Homes gives them. The bytes must say the same (sniffed); an
 // image/* outside this list (an SVG carries script) is 415.
 var uploadTypes = map[string]string{
 	"image/jpeg": ".jpg", "image/png": ".png", "image/gif": ".gif", "image/webp": ".webp", "application/pdf": ".pdf",
@@ -76,16 +76,21 @@ type stageFile interface {
 }
 
 // stagePrefix names a part written aside; Paperless ignores ._* files.
-const stagePrefix = "._haus-"
+const stagePrefix = "._homes-"
 
-// SweepUploads removes parts a stopped Haus left staged in dir.
+// legacyStagePrefix is legacy: what the program staged as before the rename
+// (laib#1021). A part the stopped Haus left behind is swept with the rest;
+// ends with laib#1021 step 9.
+const legacyStagePrefix = "._haus-"
+
+// SweepUploads removes parts a stopped Homes (or Haus) left staged in dir.
 func SweepUploads(dir string) error {
 	es, err := os.ReadDir(dir)
 	if err != nil {
 		return err
 	}
 	for _, e := range es {
-		if n := e.Name(); e.Type().IsRegular() && strings.HasPrefix(n, stagePrefix) && strings.HasSuffix(n, ".part") {
+		if n := e.Name(); e.Type().IsRegular() && (strings.HasPrefix(n, stagePrefix) || strings.HasPrefix(n, legacyStagePrefix)) && strings.HasSuffix(n, ".part") {
 			if err := os.Remove(dir + "/" + n); err != nil {
 				return err
 			}
@@ -159,7 +164,7 @@ func (u *uploads) upload(w http.ResponseWriter, r *http.Request) {
 	answer(w, http.StatusOK, map[string]any{"ok": true, "files": files})
 }
 
-// Uploads is the same way into Paperless's inbox for Haus's own Dokumente
+// Uploads is the same way into Paperless's inbox for Homes' own Dokumente
 // page (haus#68): one request's files, all or nothing, as the app's.
 type Uploads struct{ u *uploads }
 
@@ -183,9 +188,9 @@ func (u *uploads) store(w http.ResponseWriter, r *http.Request) ([]string, int, 
 		return nil, http.StatusTooManyRequests, "busy"
 	}
 	if free, err := freeSpace(u.dir); err != nil {
-		log.Printf("haus: upload: free space of %s: %v", u.dir, err)
+		log.Printf("homes: upload: free space of %s: %v", u.dir, err)
 	} else if free < uploadMinFree() {
-		log.Printf("haus: upload: %s has %d bytes free, wants %d", u.dir, free, uploadMinFree())
+		log.Printf("homes: upload: %s has %d bytes free, wants %d", u.dir, free, uploadMinFree())
 		return nil, http.StatusInsufficientStorage, "insufficient_storage"
 	}
 	// not supported by every ResponseWriter (a test recorder); the server's is
@@ -197,7 +202,7 @@ func (u *uploads) store(w http.ResponseWriter, r *http.Request) ([]string, int, 
 	}
 	root, err := os.OpenRoot(u.dir)
 	if err != nil {
-		log.Printf("haus: upload: %v", err)
+		log.Printf("homes: upload: %v", err)
 		return nil, http.StatusServiceUnavailable, "upload_unavailable"
 	}
 	defer root.Close()
@@ -217,7 +222,7 @@ func (u *uploads) store(w http.ResponseWriter, r *http.Request) ([]string, int, 
 		case errors.As(err, &mbe):
 			return http.StatusRequestEntityTooLarge, "request too large"
 		case errors.As(err, &de):
-			log.Printf("haus: upload into %s: %v", u.dir, err)
+			log.Printf("homes: upload into %s: %v", u.dir, err)
 			if errors.Is(err, syscall.ENOSPC) || errors.Is(err, syscall.EDQUOT) {
 				return http.StatusInsufficientStorage, "insufficient_storage"
 			}
@@ -225,7 +230,7 @@ func (u *uploads) store(w http.ResponseWriter, r *http.Request) ([]string, int, 
 		case errors.Is(err, os.ErrDeadlineExceeded):
 			return http.StatusRequestTimeout, "too_slow"
 		default:
-			log.Printf("haus: upload: %v", err)
+			log.Printf("homes: upload: %v", err)
 			return http.StatusBadRequest, "malformed multipart"
 		}
 	}
@@ -283,7 +288,7 @@ func (u *uploads) store(w http.ResponseWriter, r *http.Request) ([]string, int, 
 		}
 		final, err := place(root, dir, p.tmp, stem(name), p.ext)
 		if err != nil {
-			log.Printf("haus: upload into %s: %v", u.dir, err)
+			log.Printf("homes: upload into %s: %v", u.dir, err)
 			for _, f := range placed { // all or nothing: these are ours, just made
 				root.Remove(f)
 			}
@@ -291,7 +296,7 @@ func (u *uploads) store(w http.ResponseWriter, r *http.Request) ([]string, int, 
 		}
 		placed = append(placed, final)
 	}
-	log.Printf("haus: upload stored %s", strings.Join(placed, ", "))
+	log.Printf("homes: upload stored %s", strings.Join(placed, ", "))
 	return placed, 0, ""
 }
 

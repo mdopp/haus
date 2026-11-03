@@ -1,7 +1,7 @@
 // Package usagefake is a fake usage-metrics for tests (mdopp/usage-metrics:
 // POST /ingest, POST /miss, GET /summary, GET /misses, the bearer token).
 // It keeps every request body it got, so a test can say what never left
-// Haus. Never a live box.
+// Homes. Never a live box.
 package usagefake
 
 import (

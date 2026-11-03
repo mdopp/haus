@@ -7,11 +7,11 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/mdopp/haus/internal/laib"
+	"github.com/mdopp/homes/internal/laib"
 )
 
 // a Laib with these service rows and this many open inbox cards; it
-// records the tools Haus asked for
+// records the tools Homes asked for
 func dedupLaib(t *testing.T, services []map[string]any, inbox int, asked *[]string) BoxConfig {
 	t.Helper()
 	var mu sync.Mutex

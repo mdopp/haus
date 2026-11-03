@@ -7,30 +7,30 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/ha/hafake"
+	"github.com/mdopp/homes/internal/ha/hafake"
 )
 
 func TestFromEnv(t *testing.T) {
-	t.Setenv("HAUS_HA_URL", "")
-	t.Setenv("HAUS_HA_TOKEN", "")
+	t.Setenv("HOMES_HA_URL", "")
+	t.Setenv("HOMES_HA_TOKEN", "")
 	if c, err := FromEnv(); c != nil || err != nil {
 		t.Fatalf("unset: %v %v", c, err)
 	}
 	// the laib template always names HA's address; the token is the one step the
-	// admin takes (laib secret set HAUS_HA_TOKEN). Without it the paths are off,
+	// admin takes (laib secret set HOMES_HA_TOKEN). Without it the paths are off,
 	// not a crash loop.
-	t.Setenv("HAUS_HA_URL", "http://host.containers.internal:8123")
+	t.Setenv("HOMES_HA_URL", "http://host.containers.internal:8123")
 	if c, err := FromEnv(); c != nil || err != nil {
 		t.Fatalf("a URL without a token is off, not an error: %v %v", c, err)
 	}
-	t.Setenv("HAUS_HA_TOKEN", "llat")
+	t.Setenv("HOMES_HA_TOKEN", "llat")
 	for _, bad := range []string{"ftp://host:8123", "host.containers.internal:8123", "http://"} {
-		t.Setenv("HAUS_HA_URL", bad)
+		t.Setenv("HOMES_HA_URL", bad)
 		if _, err := FromEnv(); err == nil {
 			t.Fatalf("%q must refuse to start: http or https with a host", bad)
 		}
 	}
-	t.Setenv("HAUS_HA_URL", "http://host.containers.internal:8123")
+	t.Setenv("HOMES_HA_URL", "http://host.containers.internal:8123")
 	c, err := FromEnv()
 	if err != nil || c.URL != "http://host.containers.internal:8123" || c.Token != "llat" {
 		t.Fatalf("set: %+v %v", c, err)

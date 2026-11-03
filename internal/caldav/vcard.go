@@ -26,9 +26,9 @@ type Contact struct {
 	// Addresses are the postal addresses (ADR), each one line.
 	Addresses []string
 	// Categories are CATEGORIES' values; "Firma" marks a firm's card
-	// Haus made from a document (haus#163).
+	// Homes made from a document (haus#163).
 	Categories []string
-	// IBANs are X-IBAN's values, as written (Haus writes them without
+	// IBANs are X-IBAN's values, as written (Homes writes them without
 	// spaces).
 	IBANs []string
 	// Note is the NOTE text, several NOTE properties one line each.
@@ -38,7 +38,7 @@ type Contact struct {
 	WorkAddress *Address
 }
 
-// Address is a postal address as Haus writes one (haus#163).
+// Address is a postal address as Homes writes one (haus#163).
 type Address struct {
 	Street, Code, Locality, Country string
 }

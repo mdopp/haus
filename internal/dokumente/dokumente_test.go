@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/paperless"
-	"github.com/mdopp/haus/internal/paperless/paperlessfake"
+	"github.com/mdopp/homes/internal/paperless"
+	"github.com/mdopp/homes/internal/paperless/paperlessfake"
 )
 
 var bg = context.Background()
@@ -192,7 +192,7 @@ func TestMirrorKeepsTheFolderWhenPaperlessFails(t *testing.T) {
 	}
 }
 
-// A folder Haus cannot write is the run's own failure, not Paperless's.
+// A folder Homes cannot write is the run's own failure, not Paperless's.
 func TestMirrorFolderFailing(t *testing.T) {
 	_, c := archive(t)
 	_, err := Mirror(bg, c, filepath.Join(t.TempDir(), "gibtsnicht"))

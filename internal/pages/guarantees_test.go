@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/laib"
+	"github.com/mdopp/homes/internal/laib"
 )
 
 // fakeLaib answers `laib status --json` over MCP with the given readiness and rows.
@@ -34,7 +34,7 @@ func fakeLaib(t *testing.T, ready map[string]any, rows []map[string]any) *laib.C
 
 func get(h http.HandlerFunc, groups string) string { return getAt(h, "/box?ganz=1", groups) }
 
-// getAt is a Box page (haus: Übersicht, Aufgaben, Dienste, Personen,
+// getAt is a Box page (homes: Übersicht, Aufgaben, Dienste, Personen,
 // Nutzung), whole.
 func getAt(h http.HandlerFunc, target, groups string) string {
 	req := httptest.NewRequest("GET", target, nil)

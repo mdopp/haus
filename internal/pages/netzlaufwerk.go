@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mdopp/haus/internal/samba"
+	"github.com/mdopp/homes/internal/samba"
 )
 
 // What the Netzlaufwerk page says (haus#52, laib#296), in the family's
@@ -65,8 +65,8 @@ func Netzlaufwerk(cfg StartConfig) http.HandlerFunc {
 			http.Error(w, "Nur Anzeigen und das Formular.", http.StatusMethodNotAllowed)
 			return
 		}
-		if !fromHaus(r) {
-			http.Error(w, "Das geht nur von Haus' eigener Seite.", http.StatusForbidden)
+		if !fromHomes(r) {
+			http.Error(w, "Das geht nur von Homes' eigener Seite.", http.StatusForbidden)
 			return
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, 4<<10)
@@ -109,7 +109,7 @@ func Netzlaufwerk(cfg StartConfig) http.HandlerFunc {
 			http.Redirect(w, r, netzlaufwerkPath+"?"+key+"="+url.QueryEscape(who), http.StatusSeeOther)
 			return
 		}
-		log.Printf("haus: netzlaufwerk: %s for %s by %s: %v", do, who, person, err) // the error, never the password
+		log.Printf("homes: netzlaufwerk: %s for %s by %s: %v", do, who, person, err) // the error, never the password
 		code, say := http.StatusServiceUnavailable, saysDriveDown
 		switch {
 		case errors.Is(err, samba.ErrPassword):
@@ -148,7 +148,7 @@ func writeNetzlaufwerk(w http.ResponseWriter, r *http.Request, cfg StartConfig, 
 	acc, err := cfg.Samba.Accounts()
 	if err != nil {
 		if !errors.Is(err, samba.ErrNoShare) {
-			log.Printf("haus: netzlaufwerk: status: %v", err)
+			log.Printf("homes: netzlaufwerk: status: %v", err)
 		}
 		b.WriteString("<p>" + html.EscapeString(saysNoDrive) + "</p>")
 		writePage(w, code, b)

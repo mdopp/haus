@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mdopp/haus/internal/ha"
+	"github.com/mdopp/homes/internal/ha"
 )
 
 // The camera widget (haus#10): its picker reads /napi/portal/start/addable
@@ -39,7 +39,7 @@ func (h *homeAPI) snapshot(w http.ResponseWriter, r *http.Request) {
 		refuse(w, http.StatusNotFound, "unknown_entity")
 		return
 	case err != nil:
-		log.Printf("haus: camera %s: %v", id, err)
+		log.Printf("homes: camera %s: %v", id, err)
 		refuse(w, http.StatusBadGateway, "ha_unavailable")
 		return
 	}

@@ -13,8 +13,8 @@ test.beforeEach(async ({ page, request }) => {
 });
 test.afterEach(() => expect(errors, 'script errors').toEqual([]));
 
-const stays = (page) => page.evaluate(() => window.hausBleibt === 1);
-const mark = (page) => page.evaluate(() => { window.hausBleibt = 1; });
+const stays = (page) => page.evaluate(() => window.homesBleibt === 1);
+const mark = (page) => page.evaluate(() => { window.homesBleibt = 1; });
 
 test('a switch flips at once and the page stays', async ({ page }) => {
   await page.goto('/raeume');
@@ -32,7 +32,7 @@ test('a refusal is said on the page and the switch goes back', async ({ page, re
   await page.goto('/raeume');
   await mark(page);
   await page.getByRole('switch', { name: 'Flurlicht' }).click();
-  await expect(page.locator('#haus-hinweis')).toContainText('Das hat nicht geklappt');
+  await expect(page.locator('#homes-hinweis')).toContainText('Das hat nicht geklappt');
   await expect(page.getByRole('switch', { name: 'Flurlicht' })).toHaveAttribute('aria-checked', 'false');
   expect(await stays(page)).toBe(true);
 });
@@ -213,7 +213,7 @@ test('a record photo is searched without a second tap', async ({ page }) => {
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
   await page.setInputFiles('#platte-fotos', [{ name: 'rueckseite.png', mimeType: 'image/png', buffer: png }]);
   await expect(page.locator('#platte-gewaehlt')).toContainText('1 Foto(s) bereit');
-  await expect(page.locator('#haus-hinweis')).toContainText('Haus hat nichts, wonach es suchen kann', { timeout: 15_000 });
+  await expect(page.locator('#homes-hinweis')).toContainText('Homes hat nichts, wonach es suchen kann', { timeout: 15_000 });
   expect(await stays(page)).toBe(true);
 });
 
@@ -253,10 +253,10 @@ test('a dropped connection is said, not sent again', async ({ page }) => {
   await page.route('**/einkauf', (r) => { if (r.request().method() === 'POST') { posts++; return r.abort('internetdisconnected'); } return r.continue(); });
   await page.fill('input[name=was]', 'Milch');
   await page.locator('input[name=was]').press('Enter');
-  await expect(page.locator('#haus-hinweis')).toContainText('Haus ist gerade nicht erreichbar');
+  await expect(page.locator('#homes-hinweis')).toContainText('Homes ist gerade nicht erreichbar');
   expect(posts).toBe(1);
-  await page.locator('#haus-hinweis .zu').click();
-  await expect(page.locator('#haus-hinweis')).not.toHaveClass(/zeigt/);
+  await page.locator('#homes-hinweis .zu').click();
+  await expect(page.locator('#homes-hinweis')).not.toHaveClass(/zeigt/);
 });
 
 test('a form in a card stacks its fields on a phone', async ({ page }) => {

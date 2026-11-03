@@ -9,23 +9,23 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mdopp/haus/internal/reitti"
+	"github.com/mdopp/homes/internal/reitti"
 )
 
-// Standortverlauf (owner 2026-11-02): the Haus app can record where its
-// person was and Haus passes the points on to the household's Reitti,
-// into that person's own timeline. For that Haus needs the person's Reitti
+// Standortverlauf (owner 2026-11-02): the Homes app can record where its
+// person was and Homes passes the points on to the household's Reitti,
+// into that person's own timeline. For that Homes needs the person's Reitti
 // token once: pasted here, checked with Reitti, kept for them alone and
 // never shown back — the page says only since when it is connected, and
 // offers Trennen.
 const (
 	StandortPath = "/standort"
 
-	saysStandortWas       = "Die Haus-App kann aufzeichnen, wo du unterwegs warst, und schickt es in deinen eigenen Zeitstrahl in Reitti. Der Verlauf bleibt auf eurer Box, in deinem Reitti-Konto."
-	saysStandortHow       = "Dafür braucht Haus einmal einen Schlüssel aus deinem Reitti-Konto: In Reitti unter Einstellungen → API-Token einen neuen Token erstellen, ihn mit einem Gerät verbinden („Mit Gerät verbinden“), dann den Token hier einfügen."
-	saysStandortApp       = "Danach in der Haus-App unter „Standortverlauf“ die Aufzeichnung einschalten."
-	saysStandortVerbunden = "Verbunden: die Haus-App schickt deine Punkte jetzt an Reitti."
-	saysStandortGetrennt  = "Getrennt: Haus schickt nichts mehr an Reitti. Die Haus-App behält neue Punkte, bis du wieder verbindest; in Reitti kannst du den Token unter Einstellungen → API-Token ganz löschen."
+	saysStandortWas       = "Die Homes-App kann aufzeichnen, wo du unterwegs warst, und schickt es in deinen eigenen Zeitstrahl in Reitti. Der Verlauf bleibt auf eurer Box, in deinem Reitti-Konto."
+	saysStandortHow       = "Dafür braucht Homes einmal einen Schlüssel aus deinem Reitti-Konto: In Reitti unter Einstellungen → API-Token einen neuen Token erstellen, ihn mit einem Gerät verbinden („Mit Gerät verbinden“), dann den Token hier einfügen."
+	saysStandortApp       = "Danach in der Homes-App unter „Standortverlauf“ die Aufzeichnung einschalten."
+	saysStandortVerbunden = "Verbunden: die Homes-App schickt deine Punkte jetzt an Reitti."
+	saysStandortGetrennt  = "Getrennt: Homes schickt nichts mehr an Reitti. Die Homes-App behält neue Punkte, bis du wieder verbindest; in Reitti kannst du den Token unter Einstellungen → API-Token ganz löschen."
 	saysStandortLeer      = "Füge den Token aus Reitti ein; das Feld war leer."
 	saysStandortFalsch    = "Reitti kennt diesen Token nicht. Kopiere ihn noch einmal ganz aus Reitti (Einstellungen → API-Token)."
 	saysStandortGeraet    = "Reitti hat den Token nicht angenommen. Meist fehlt ihm das Gerät: in Reitti unter Einstellungen → API-Token „Mit Gerät verbinden“ wählen, dann hier noch einmal."
@@ -33,7 +33,7 @@ const (
 	saysStandortNotSaved  = "Das ließ sich gerade nicht speichern. Versuch es noch einmal; hilft das nicht, sag dem Admin Bescheid."
 )
 
-var notSetReitti = notSet{"Der Standortverlauf ist hier noch nicht eingerichtet.", "Für Admins: Haus kennt Reitti nicht (HAUS_REITTI_URL, die Adresse von Reitti in der Box)."}
+var notSetReitti = notSet{"Der Standortverlauf ist hier noch nicht eingerichtet.", "Für Admins: Homes kennt Reitti nicht (HOMES_REITTI_URL, die Adresse von Reitti in der Box)."}
 
 // Standort is the page and its two forms (tun=verbinden with the token,
 // tun=trennen).
@@ -70,8 +70,8 @@ func Standort(cfg StartConfig) http.HandlerFunc {
 			http.Error(w, "Nur Anzeigen und das Formular.", http.StatusMethodNotAllowed)
 			return
 		}
-		if !fromHaus(r) {
-			http.Error(w, "Das geht nur von Haus' eigener Seite.", http.StatusForbidden)
+		if !fromHomes(r) {
+			http.Error(w, "Das geht nur von Homes' eigener Seite.", http.StatusForbidden)
 			return
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, 8<<10)
@@ -89,7 +89,7 @@ func Standort(cfg StartConfig) http.HandlerFunc {
 			ctx, cancel := context.WithTimeout(r.Context(), 25*time.Second)
 			defer cancel()
 			if err := cfg.Reitti.Verbinden(ctx, user, token); err != nil {
-				log.Printf("haus: standort: connecting %s: %v", user, err) // the error, never the token
+				log.Printf("homes: standort: connecting %s: %v", user, err) // the error, never the token
 				code, say := http.StatusBadGateway, saysStandortWeg
 				var u *reitti.Unavailable
 				switch {
@@ -103,15 +103,15 @@ func Standort(cfg StartConfig) http.HandlerFunc {
 				writeStandort(w, r, cfg, code, "", say)
 				return
 			}
-			log.Printf("haus: standort: %s connected reitti", user)
+			log.Printf("homes: standort: %s connected reitti", user)
 			http.Redirect(w, r, StandortPath+"?ok=verbunden", http.StatusSeeOther)
 		case "trennen":
 			if err := cfg.Reitti.Trennen(user); err != nil {
-				log.Printf("haus: standort: %s: %v", user, err)
+				log.Printf("homes: standort: %s: %v", user, err)
 				writeStandort(w, r, cfg, http.StatusInternalServerError, "", saysStandortNotSaved)
 				return
 			}
-			log.Printf("haus: standort: %s disconnected reitti", user)
+			log.Printf("homes: standort: %s disconnected reitti", user)
 			http.Redirect(w, r, StandortPath+"?ok=getrennt", http.StatusSeeOther)
 		default:
 			http.Error(w, "Unbekannter Knopf.", http.StatusBadRequest)
@@ -136,7 +136,7 @@ func writeStandort(w http.ResponseWriter, r *http.Request, cfg StartConfig, code
 		mine.row("Verbunden seit "+dayWords(k.Seit, loc), "", true)
 		mine.row(saysStandortApp, "", false)
 		b.WriteString(mine.html())
-		b.WriteString(`<form method=post action=` + StandortPath + ` data-frage="Haus soll nichts mehr an Reitti schicken?"><input type=hidden name=tun value=trennen><button data-laeuft="Trennt …">Trennen</button></form>`)
+		b.WriteString(`<form method=post action=` + StandortPath + ` data-frage="Homes soll nichts mehr an Reitti schicken?"><input type=hidden name=tun value=trennen><button data-laeuft="Trennt …">Trennen</button></form>`)
 	} else {
 		b.WriteString("<form class=passwort method=post action=" + StandortPath + "><h2>Mit Reitti verbinden</h2><input type=hidden name=tun value=verbinden>" +
 			"<p class=k>" + html.EscapeString(saysStandortHow) + "</p>")

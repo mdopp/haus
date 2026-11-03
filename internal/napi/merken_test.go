@@ -7,15 +7,15 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mdopp/haus/internal/abs"
-	"github.com/mdopp/haus/internal/abs/absfake"
-	"github.com/mdopp/haus/internal/caldav"
-	"github.com/mdopp/haus/internal/caldav/davfake"
-	"github.com/mdopp/haus/internal/einkauf"
-	"github.com/mdopp/haus/internal/haushalt"
-	"github.com/mdopp/haus/internal/merken"
-	"github.com/mdopp/haus/internal/notes"
-	"github.com/mdopp/haus/internal/podcasts"
+	"github.com/mdopp/homes/internal/abs"
+	"github.com/mdopp/homes/internal/abs/absfake"
+	"github.com/mdopp/homes/internal/caldav"
+	"github.com/mdopp/homes/internal/caldav/davfake"
+	"github.com/mdopp/homes/internal/einkauf"
+	"github.com/mdopp/homes/internal/haushalt"
+	"github.com/mdopp/homes/internal/merken"
+	"github.com/mdopp/homes/internal/notes"
+	"github.com/mdopp/homes/internal/podcasts"
 )
 
 func shareText(t *testing.T, h http.Handler, bearer, body string) (int, map[string]any) {
@@ -36,7 +36,7 @@ func shareText(t *testing.T, h http.Handler, bearer, body string) (int, map[stri
 // merken" keeps it: the link out of the shared text, the words around it
 // the hint; once only; a text without a link, or a page that does not
 // answer, a sentence; only for a paired device.
-func TestShareToHaus(t *testing.T) {
+func TestShareToHomes(t *testing.T) {
 	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/weg" {
 			http.Error(w, "nein", http.StatusInternalServerError)
@@ -52,13 +52,13 @@ func TestShareToHaus(t *testing.T) {
 		t.Fatal(err)
 	}
 	h := Handler(Config{Validate: StaticValidator([]string{"dev1"}),
-		Haushalt: haushalt.Config{Notes: nd, Fetcher: merken.Fetcher{AllowPrivate: true}, PublicURL: "https://haus.box.test"}})
+		Haushalt: haushalt.Config{Notes: nd, Fetcher: merken.Fetcher{AllowPrivate: true}, PublicURL: "https://homes.box.test"}})
 
 	code, out := shareText(t, h, "dev1", `{"text":"Kürbissuppe #herbst `+site.URL+`/rezept"}`)
 	if code != 200 || out["art"] != "rezept" || out["titel"] != "Kürbissuppe" || out["schon"] != false || !strings.HasPrefix(out["kurz"].(string), "Rezept gemerkt: Kürbissuppe") {
 		t.Fatalf("%d %v", code, out)
 	}
-	if n, _ := out["notiz"].(string); !strings.HasPrefix(n, "https://haus.box.test/notizen/") {
+	if n, _ := out["notiz"].(string); !strings.HasPrefix(n, "https://homes.box.test/notizen/") {
 		t.Errorf("notiz %q", n)
 	}
 	got, _ := nd.Recent(t.Context(), 5)
@@ -116,9 +116,9 @@ func TestShareASong(t *testing.T) {
 	l := einkauf.Open(&caldav.Client{URL: dav.URL, User: "haus", Password: "pw"})
 	nd, _ := notes.Open(t.TempDir())
 	h := Handler(Config{Validate: StaticValidator([]string{"dev1"}), Whoami: func(string) (string, bool) { return "anna", true },
-		Haushalt: haushalt.Config{Notes: nd, Fetcher: merken.Fetcher{AllowPrivate: true}, PublicURL: "https://haus.box.test", Einkauf: l, Wuensche: &einkauf.Wuensche{Listen: l}}})
+		Haushalt: haushalt.Config{Notes: nd, Fetcher: merken.Fetcher{AllowPrivate: true}, PublicURL: "https://homes.box.test", Einkauf: l, Wuensche: &einkauf.Wuensche{Listen: l}}})
 	code, out := shareText(t, h, "dev1", `{"text":"https://youtube.com/watch?v=Ca7RfL4m744&is=x"}`)
-	if code != 200 || out["art"] != "musik" || out["kurz"] != "Auf der Musik-Wunschliste: „Wanda – Salbei“." || out["notiz"] != "https://haus.box.test/einkauf?liste=liste-musik" {
+	if code != 200 || out["art"] != "musik" || out["kurz"] != "Auf der Musik-Wunschliste: „Wanda – Salbei“." || out["notiz"] != "https://homes.box.test/einkauf?liste=liste-musik" {
 		t.Fatalf("%d %v", code, out)
 	}
 	items, _ := l.Andere(einkauf.MusikListe).Lesen(t.Context())
@@ -153,9 +153,9 @@ func TestShareAPodcast(t *testing.T) {
 	pods.Fetch = merken.Fetcher{AllowPrivate: true}
 	nd, _ := notes.Open(t.TempDir())
 	h := Handler(Config{Validate: StaticValidator([]string{"dev1"}), Whoami: func(string) (string, bool) { return "anna", true },
-		Haushalt: haushalt.Config{Notes: nd, Fetcher: merken.Fetcher{AllowPrivate: true}, PublicURL: "https://haus.box.test", Podcasts: pods}})
+		Haushalt: haushalt.Config{Notes: nd, Fetcher: merken.Fetcher{AllowPrivate: true}, PublicURL: "https://homes.box.test", Podcasts: pods}})
 	code, out := shareText(t, h, "dev1", `{"text":"Lage der Nation – der Politik-Podcast `+site.URL+`/"}`)
-	if code != 200 || out["art"] != "podcast" || !strings.HasPrefix(out["kurz"].(string), "Abonniert: „Lage der Nation“.") || out["notiz"] != "https://haus.box.test/podcasts" {
+	if code != 200 || out["art"] != "podcast" || !strings.HasPrefix(out["kurz"].(string), "Abonniert: „Lage der Nation“.") || out["notiz"] != "https://homes.box.test/podcasts" {
 		t.Fatalf("%d %v", code, out)
 	}
 	if mine, _ := pods.Meine("anna"); len(mine) != 1 {

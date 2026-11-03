@@ -1,11 +1,11 @@
-// Package caldav is Haus's CalDAV and CardDAV client for Radicale (laib
+// Package caldav is Homes' CalDAV and CardDAV client for Radicale (laib
 // ADR 0017): appointments as VEVENT, reminders as VTODO with VALARM, in the
 // calendars the family's phones sync, and contacts as vCards in their
 // address books. It finds the account's collections with PROPFIND, reads
 // every one of the kind with a REPORT (calendar-query, addressbook-query),
 // and writes with PUT to one collection of each kind only: the configured
 // one, else the one named "Haushalt", made when missing. Nothing is kept
-// in Haus. Address, account and password come from the environment; no
+// in Homes. Address, account and password come from the environment; no
 // request leaves for another host.
 package caldav
 
@@ -50,7 +50,7 @@ type Client struct {
 	lastOK atomic.Int64  // when Radicale last took the login, Unix nanoseconds
 }
 
-// quietSpell is how long Haus trusts Radicale to keep its login cached:
+// quietSpell is how long Homes trusts Radicale to keep its login cached:
 // the box caches one 900 s (laib#877); after longer the next login is an
 // LLDAP bind, 0.13 s alone, and binds made at once wait for each other.
 const quietSpell = 10 * time.Minute
@@ -92,7 +92,7 @@ func (e *ErrStatus) Error() string {
 		return fmt.Sprintf("Radicale: Anmeldung abgelehnt (%s, HTTP %d)", e.Method, e.Code)
 	}
 	if e.Code >= 300 && e.Code < 400 {
-		return fmt.Sprintf("Radicale: %s leitet um (HTTP %d); dem folgt Haus nicht", e.Method, e.Code)
+		return fmt.Sprintf("Radicale: %s leitet um (HTTP %d); dem folgt Homes nicht", e.Method, e.Code)
 	}
 	return fmt.Sprintf("Radicale: %s antwortet HTTP %d", e.Method, e.Code)
 }
@@ -397,7 +397,7 @@ func (c *Client) readable(ctx context.Context, k kind, comp string) ([]Collectio
 }
 
 // haushalt finds the collection named "Haushalt" (by display name, or by
-// path: Haushalt or where Haus makes it), if any.
+// path: Haushalt or where Homes makes it), if any.
 func haushalt(cols []Collection, slug string) (Collection, bool) {
 	for _, col := range cols {
 		base := path.Base(strings.TrimRight(col.URL, "/"))
@@ -660,7 +660,7 @@ func (c *Client) todos(ctx context.Context, filter string) ([]Todo, error) {
 // What CompleteTodo can answer besides a transport or status error.
 var (
 	ErrNoTodo    = errors.New("Kalender: keine solche Erinnerung")
-	ErrRecurring = errors.New("Kalender: eine wiederkehrende Erinnerung hakt Haus nicht ab, das Telefon schon")
+	ErrRecurring = errors.New("Kalender: eine wiederkehrende Erinnerung hakt Homes nicht ab, das Telefon schon")
 	ErrChanged   = errors.New("Kalender: die Erinnerung hat sich inzwischen geändert")
 	ErrCancelled = errors.New("Kalender: die Erinnerung ist abgesagt, nicht offen")
 )
@@ -723,7 +723,7 @@ func (c *Client) CompleteTodo(ctx context.Context, uid string) error {
 				return ErrCancelled
 			}
 			if o.etag == "" {
-				return errors.New("Kalender: Radicale nennt kein ETag; ohne schreibt Haus nicht zurück")
+				return errors.New("Kalender: Radicale nennt kein ETag; ohne schreibt Homes nicht zurück")
 			}
 			u, err := c.resolve(o.href)
 			if err != nil {
@@ -840,7 +840,7 @@ func ownUID(block []string, uid string) bool {
 func NewUID() string {
 	b := make([]byte, 16)
 	rand.Read(b)
-	return hex.EncodeToString(b) + "@haus"
+	return hex.EncodeToString(b) + "@homes"
 }
 
 // PutEvent writes a new appointment; it never replaces one.

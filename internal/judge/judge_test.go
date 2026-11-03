@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/judge/proxyfake"
+	"github.com/mdopp/homes/internal/judge/proxyfake"
 )
 
 var bg = context.Background()
@@ -112,7 +112,7 @@ func TestOnlyWhileTheHouseModelIsLoaded(t *testing.T) {
 }
 
 // No window held, the house model the default: nobody holds the card, so
-// Haus asks, once, for the house model.
+// Homes asks, once, for the house model.
 func TestAsksWhenNobodyHoldsTheCard(t *testing.T) {
 	p := proxyfake.New("gemma-4-e4b")
 	defer p.Close()
@@ -190,7 +190,7 @@ func TestTheAnswer(t *testing.T) {
 	}
 }
 
-// Haus never takes the lease: whatever happens, no POST or DELETE of it.
+// Homes never takes the lease: whatever happens, no POST or DELETE of it.
 func TestNeverTakesTheLease(t *testing.T) {
 	p := proxyfake.New("gemma-4-e4b")
 	defer p.Close()
@@ -219,9 +219,9 @@ func TestNeverTakesTheLease(t *testing.T) {
 // The three come together, or there is no tidy-up; never an error.
 func TestFromEnv(t *testing.T) {
 	set := func(u, m, k string) *Client {
-		t.Setenv("HAUS_LLM_URL", u)
-		t.Setenv("HAUS_LLM_MODEL", m)
-		t.Setenv("HAUS_LLM_KEY", k)
+		t.Setenv("HOMES_LLM_URL", u)
+		t.Setenv("HOMES_LLM_MODEL", m)
+		t.Setenv("HOMES_LLM_KEY", k)
 		return FromEnv()
 	}
 	if c := set("", "", ""); c != nil {

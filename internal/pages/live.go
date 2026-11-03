@@ -9,13 +9,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mdopp/haus/internal/cards"
-	"github.com/mdopp/haus/internal/ha"
+	"github.com/mdopp/homes/internal/cards"
+	"github.com/mdopp/homes/internal/ha"
 )
 
 // LivePath is where a family page listens for changes (owner, 2026-10-24:
 // push, not polling): server-sent events, one "geaendert" per thing that
-// changed in Home Assistant, its entity id as data. hausScript fetches the
+// changed in Home Assistant, its entity id as data. homesScript fetches the
 // page again in place when the thing is on it (or, on Start, any thing).
 const LivePath = "/live"
 
@@ -24,7 +24,7 @@ var livePing = 30 * time.Second
 
 // Live is the pages' stream: one state_changed subscription to Home
 // Assistant while anyone listens (when there is one), each change to every
-// listener, and Haus's own changes (Tell). What
+// listener, and Homes' own changes (Tell). What
 // pages show only: actuators, people; sensors change every few seconds
 // and Energie asks on its own.
 type Live struct {
@@ -107,7 +107,7 @@ func (l *Live) leave(ch chan string) {
 	}
 }
 
-// Tell is a change of Haus's own, its id as data (haus#118: "haus.einkauf"
+// Tell is a change of Homes' own, its id as data (haus#118: "homes.einkauf"
 // when the shopping list changed), to every listener.
 func (l *Live) Tell(id string) {
 	l.mu.Lock()
@@ -140,7 +140,7 @@ func (l *Live) run(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		log.Printf("haus: live: HA state_changed: %v", err)
+		log.Printf("homes: live: HA state_changed: %v", err)
 		select {
 		case <-ctx.Done():
 			return

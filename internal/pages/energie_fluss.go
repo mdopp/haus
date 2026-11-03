@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/mdopp/haus/internal/cards"
-	"github.com/mdopp/haus/internal/energie"
+	"github.com/mdopp/homes/internal/cards"
+	"github.com/mdopp/homes/internal/energie"
 )
 
 // The flow picture (the owner, 2026-10-22: "Spinnen-Diagramme, die

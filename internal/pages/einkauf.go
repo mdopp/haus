@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/mdopp/haus/internal/papierkorb"
+	"github.com/mdopp/homes/internal/papierkorb"
 	"html"
 	"log"
 	"net/http"
@@ -16,10 +16,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mdopp/haus/internal/caldav"
-	"github.com/mdopp/haus/internal/discogs"
-	"github.com/mdopp/haus/internal/einkauf"
-	"github.com/mdopp/haus/internal/notes"
+	"github.com/mdopp/homes/internal/caldav"
+	"github.com/mdopp/homes/internal/discogs"
+	"github.com/mdopp/homes/internal/einkauf"
+	"github.com/mdopp/homes/internal/notes"
 )
 
 // The household's shopping list (haus#118) and the other lists (haus#119):
@@ -36,8 +36,8 @@ const (
 // so it is fetched again. A token, not the list's name: every listener
 // hears it, a person's own list is theirs alone.
 func ListeLive(r caldav.ListRef) string {
-	sum := sha256.Sum256([]byte("haus-liste:" + r.ID()))
-	return "haus.liste." + hex.EncodeToString(sum[:6])
+	sum := sha256.Sum256([]byte("homes-liste:" + r.ID()))
+	return "homes.liste." + hex.EncodeToString(sum[:6])
 }
 
 const (
@@ -116,8 +116,8 @@ func Einkauf(cfg StartConfig) http.HandlerFunc {
 			writeEinkauf(w, r, cfg, l, said)
 			return
 		}
-		if !fromHaus(r) {
-			http.Error(w, "Das geht nur von Haus' eigener Seite.", http.StatusForbidden)
+		if !fromHomes(r) {
+			http.Error(w, "Das geht nur von Homes' eigener Seite.", http.StatusForbidden)
 			return
 		}
 		r.ParseForm()
@@ -204,7 +204,7 @@ func Einkauf(cfg StartConfig) http.HandlerFunc {
 				return
 			}
 			if err == nil {
-				log.Printf("haus: einkauf: %s made the list %s", person, ref.ID())
+				log.Printf("homes: einkauf: %s made the list %s", person, ref.ID())
 				http.Redirect(w, r, listPath(ref)+sep(listPath(ref))+"neu=1", http.StatusSeeOther)
 				return
 			}
@@ -226,14 +226,14 @@ func Einkauf(cfg StartConfig) http.HandlerFunc {
 				name, _ := listName(lists, l.Ref)
 				e, kerr := cfg.Papierkorb.Rein("liste", name, person, listeImKorb{Ref: l.Ref.ID(), Name: name, Abzug: a})
 				if kerr != nil {
-					log.Printf("haus: einkauf: papierkorb: %v", kerr)
+					log.Printf("homes: einkauf: papierkorb: %v", kerr)
 					http.Error(w, "Die Liste ließ sich gerade nicht in den Papierkorb legen; sie bleibt. Versuch es gleich noch einmal.", http.StatusServiceUnavailable)
 					return
 				}
 				ziel = EinkaufPath + "?geloescht=" + e.ID
 			}
 			if err = l.DAV.DeleteList(ctx, l.Ref); err == nil {
-				log.Printf("haus: einkauf: %s deleted the list %s", person, l.Ref.ID())
+				log.Printf("homes: einkauf: %s deleted the list %s", person, l.Ref.ID())
 				http.Redirect(w, r, ziel, http.StatusSeeOther)
 				return
 			}
@@ -243,7 +243,7 @@ func Einkauf(cfg StartConfig) http.HandlerFunc {
 				http.Error(w, said, http.StatusConflict)
 				return
 			}
-			log.Printf("haus: einkauf: %s put the list %s back", person, ref.ID())
+			log.Printf("homes: einkauf: %s put the list %s back", person, ref.ID())
 			http.Redirect(w, r, listPath(ref)+map[bool]string{true: "?", false: "&"}[ref == caldav.Einkauf]+"zurueck=1", http.StatusSeeOther)
 			return
 		default:
@@ -251,7 +251,7 @@ func Einkauf(cfg StartConfig) http.HandlerFunc {
 			return
 		}
 		if err != nil {
-			// a sentence at the bottom, the page as it was (hausScript)
+			// a sentence at the bottom, the page as it was (homesScript)
 			code, say := http.StatusServiceUnavailable, saysEinkaufWrite
 			switch {
 			case errors.Is(err, einkauf.ErrNoLine):
@@ -259,7 +259,7 @@ func Einkauf(cfg StartConfig) http.HandlerFunc {
 			case errors.Is(err, caldav.ErrChanged):
 				code, say = http.StatusConflict, saysEinkaufRace
 			default:
-				log.Printf("haus: einkauf: %s %s %s: %v", person, l.Ref.ID(), r.PostForm.Get("tun"), err)
+				log.Printf("homes: einkauf: %s %s %s: %v", person, l.Ref.ID(), r.PostForm.Get("tun"), err)
 			}
 			http.Error(w, say, code)
 			return
@@ -368,7 +368,7 @@ func writeEinkauf(w http.ResponseWriter, r *http.Request, cfg StartConfig, l *ei
 	person := r.Header.Get("Remote-User")
 	fetch(r, func(ctx context.Context) { items, err = l.Lesen(ctx) }, func(ctx context.Context) { lists, lerr = l.DAV.Lists(ctx, person) })
 	if lerr != nil {
-		log.Printf("haus: einkauf: lists: %v", lerr)
+		log.Printf("homes: einkauf: lists: %v", lerr)
 	}
 	name, known := listName(lists, l.Ref)
 	if lerr == nil && !known {
@@ -398,7 +398,7 @@ func writeEinkauf(w http.ResponseWriter, r *http.Request, cfg StartConfig, l *ei
 		`<input name=was aria-label="Was fehlt?" placeholder="Was fehlt? z. B. Milch, 500 g Mehl" autocomplete=off enterkeyhint=done required>` +
 		`<button data-laeuft="Schreibt …">Dazu</button></form>`)
 	if err != nil {
-		log.Printf("haus: einkauf: %s: %v", l.Ref.ID(), err)
+		log.Printf("homes: einkauf: %s: %v", l.Ref.ID(), err)
 		b.WriteString("<div class=achtung role=alert><p>" + html.EscapeString(saysEinkaufDown) + "</p><p>Die Seite versucht es von selbst wieder.</p></div>")
 		writePage(w, http.StatusOK, b)
 		return
@@ -504,7 +504,7 @@ func writeRezepte(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
 	fetch(r, func(ctx context.Context) {
 		var lerr error
 		if lists, lerr = cfg.Einkauf.DAV.Lists(ctx, r.Header.Get("Remote-User")); lerr != nil {
-			log.Printf("haus: einkauf: lists: %v", lerr)
+			log.Printf("homes: einkauf: lists: %v", lerr)
 		}
 	}, func(ctx context.Context) {
 		if all, err = einkauf.Rezepte(ctx, cfg.Notes); err != nil {
@@ -524,7 +524,7 @@ func writeRezepte(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
 		}
 	})
 	if err != nil {
-		log.Printf("haus: einkauf: recipes: %v", err)
+		log.Printf("homes: einkauf: recipes: %v", err)
 		b.WriteString("<div class=achtung role=alert><p>" + html.EscapeString(saysNoNotes) + "</p></div>")
 		writePage(w, http.StatusOK, b)
 		return
@@ -654,7 +654,7 @@ func wunschKarte(cfg StartConfig, act string, it caldav.Item, person string) str
 	case f != nil:
 		b.WriteString("<p class=k>MusicBrainz kennt es nicht; die Suchen unten finden es vielleicht.</p>")
 	case cfg.Wuensche != nil && cfg.Wuensche.MB != nil && !st.Versucht.IsZero():
-		b.WriteString("<p class=k>Die Suche kam nicht durch (MusicBrainz antwortete nicht); Haus versucht es stündlich wieder.</p>")
+		b.WriteString("<p class=k>Die Suche kam nicht durch (MusicBrainz antwortete nicht); Homes versucht es stündlich wieder.</p>")
 	}
 	b.WriteString("<p class=kaufen>Suchen: ")
 	for i, s := range einkauf.Kaufen(it.Summary) {
@@ -735,11 +735,11 @@ func listeZurueck(ctx context.Context, cfg StartConfig, l *einkauf.Liste, person
 		return ref, papierkorb.ErrWeg.Error(), papierkorb.ErrWeg
 	}
 	if _, err := l.DAV.MakeList(ctx, ref.Person, strings.TrimPrefix(ref.Slug, "liste-"), d.Name); err != nil && !errors.Is(err, caldav.ErrListExists) {
-		log.Printf("haus: einkauf: zurueck %s: %v", d.Ref, err)
+		log.Printf("homes: einkauf: zurueck %s: %v", d.Ref, err)
 		return ref, "Die Liste ließ sich gerade nicht zurückholen. Versuch es gleich noch einmal; sie bleibt im Papierkorb.", err
 	}
 	if err := l.DAV.ListZurueck(ctx, ref, d.Abzug); err != nil {
-		log.Printf("haus: einkauf: zurueck %s: %v", d.Ref, err)
+		log.Printf("homes: einkauf: zurueck %s: %v", d.Ref, err)
 		return ref, "Die Liste ist wieder da, aber nicht alle Zeilen kamen zurück. Versuch es gleich noch einmal.", err
 	}
 	cfg.Papierkorb.Raus(e.ID)

@@ -1,4 +1,4 @@
-// Package paperless is Haus's read-only client for the Paperless-ngx REST
+// Package paperless is Homes' read-only client for the Paperless-ngx REST
 // API (laib ADR 0017): the family's documents, searched in full text. It
 // sends GET requests only, to the configured address only, with the token
 // as "Authorization: Token …"; it never follows a redirect, and no error
@@ -23,7 +23,7 @@ import (
 // Client talks to one Paperless.
 type Client struct {
 	URL       string // the API's host, e.g. http://host.containers.internal:8000
-	Token     string // an API token of a Paperless user; its rights are what Haus sees
+	Token     string // an API token of a Paperless user; its rights are what Homes sees
 	PublicURL string // where people open Paperless; "": no links
 	HTTP      *http.Client
 }
@@ -49,7 +49,7 @@ func (e *ErrStatus) Error() string {
 	case e.Code == http.StatusUnauthorized || e.Code == http.StatusForbidden:
 		return fmt.Sprintf("Paperless: Anmeldung abgelehnt (HTTP %d)", e.Code)
 	case e.Code >= 300 && e.Code < 400:
-		return fmt.Sprintf("Paperless leitet um (HTTP %d); dem folgt Haus nicht", e.Code)
+		return fmt.Sprintf("Paperless leitet um (HTTP %d); dem folgt Homes nicht", e.Code)
 	}
 	return fmt.Sprintf("Paperless antwortet HTTP %d", e.Code)
 }
@@ -292,11 +292,11 @@ func (c *Client) Texts(ctx context.Context, ids []int) ([]Text, error) {
 	return out, nil
 }
 
-// markRE is the random part Haus puts in a filed file's name
+// markRE is the random part Homes puts in a filed file's name
 // (<stem>-<mark>.<ext>, napi's place).
 var markRE = regexp.MustCompile(`^[0-9a-f]{8}$`)
 
-// Filed is the document Paperless made of the file Haus filed with mark
+// Filed is the document Paperless made of the file Homes filed with mark
 // in its name (haus#68): Paperless keeps the consumed file's name as the
 // document's original_filename. 0 while it is still being read, or when
 // the mark is not exactly one document; an error for a mark that is none

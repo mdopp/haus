@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/mdopp/haus/internal/papierkorb"
+	"github.com/mdopp/homes/internal/papierkorb"
 	"html"
 	"log"
 	"net/http"
@@ -13,25 +13,25 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mdopp/haus/internal/ansicht"
-	"github.com/mdopp/haus/internal/caldav"
-	"github.com/mdopp/haus/internal/laib"
+	"github.com/mdopp/homes/internal/ansicht"
+	"github.com/mdopp/homes/internal/caldav"
+	"github.com/mdopp/homes/internal/laib"
 )
 
 // Deine Kalender (haus#66): every calendar lives in Radicale (laib#495), and
 // here the family adds and keeps them. Three ways in: a Google calendar by
-// its secret iCal address (Haus hands it to laib once and never shows it
+// its secret iCal address (Homes hands it to laib once and never shows it
 // again), a public calendar (Feiertage, Schulferien, any ICS address), a new
 // calendar for the family or for oneself. Per calendar: a colour and
-// whether Kalender shows it (Haus's own view, internal/ansicht), Trennen or
+// whether Kalender shows it (Homes' own view, internal/ansicht), Trennen or
 // Löschen, and its address for the phone.
 const (
 	kalenderVerwalten = "/kalender/verwalten"
 	kalenderAdd       = "/kalender/hinzufuegen"
 	kalenderChange    = "/kalender/aendern"
 
-	saysGoogleHow = "So findest du die Adresse: Google Kalender im Browser öffnen, oben rechts ⚙ → Einstellungen, links unter „Einstellungen für meine Kalender“ den Kalender wählen, dann „Kalender integrieren“ → „Geheime Adresse im iCal-Format“ kopieren. Haus gibt sie an die Box weiter und zeigt sie nie wieder."
-	saysPhoneHow  = "Auf dem Telefon: DAVx⁵ (Android) oder Einstellungen → Kalender → Accounts (iPhone) → Konto hinzufügen → CalDAV, diese Adresse, Anmeldung wie bei Haus."
+	saysGoogleHow = "So findest du die Adresse: Google Kalender im Browser öffnen, oben rechts ⚙ → Einstellungen, links unter „Einstellungen für meine Kalender“ den Kalender wählen, dann „Kalender integrieren“ → „Geheime Adresse im iCal-Format“ kopieren. Homes gibt sie an die Box weiter und zeigt sie nie wieder."
+	saysPhoneHow  = "Auf dem Telefon: DAVx⁵ (Android) oder Einstellungen → Kalender → Accounts (iPhone) → Konto hinzufügen → CalDAV, diese Adresse, Anmeldung wie bei Homes."
 	saysBookHow   = "Genauso für die Kontakte: in DAVx⁵ dasselbe Konto, beim iPhone ein CardDAV-Account mit dieser Adresse."
 	saysNoLaibCal = "Kalender verbinden geht auf dieser Box noch nicht: Laib kann es hier noch nicht (laib calendar, laib#495)."
 )
@@ -196,7 +196,7 @@ func KalenderVerwalten(cfg StartConfig) http.HandlerFunc {
 		}
 		b.WriteString("</ul></section>")
 		radicale := App{"Radicale", cfg.RadicalePublicURL}
-		b.WriteString(radicale.Weiter("/.web/", "alle Kalender und Adressbücher, Anmeldung wie bei Haus"))
+		b.WriteString(radicale.Weiter("/.web/", "alle Kalender und Adressbücher, Anmeldung wie bei Homes"))
 		if radicale.Set() {
 			b.WriteString("<details class=adresse><summary>Adressbuch fürs Telefon</summary>" + copyField(radicale.href("/"+cfg.Calendar.User+"/haushalt-kontakte/")) + "<p class=k>" + saysBookHow + "</p></details>")
 		}
@@ -364,15 +364,15 @@ func forWhom() string {
 	return "<fieldset><legend>Für wen</legend><label class=wahl><input type=radio name=fuer value=familie checked> für die Familie</label><label class=wahl><input type=radio name=fuer value=ich> nur für mich</label></fieldset>"
 }
 
-// kalenderForm is a POST from Haus's own page, parsed; "" and false when
+// kalenderForm is a POST from Homes' own page, parsed; "" and false when
 // it is not one (answered already).
 func kalenderForm(w http.ResponseWriter, r *http.Request, cfg StartConfig) (string, bool) {
 	if r.Method != http.MethodPost {
 		http.Redirect(w, r, kalenderVerwalten, http.StatusSeeOther)
 		return "", false
 	}
-	if !fromHaus(r) {
-		http.Error(w, "Das geht nur von Haus' eigener Seite.", http.StatusForbidden)
+	if !fromHomes(r) {
+		http.Error(w, "Das geht nur von Homes' eigener Seite.", http.StatusForbidden)
 		return "", false
 	}
 	if cfg.Calendar == nil {
@@ -414,7 +414,7 @@ func KalenderHinzufuegen(cfg StartConfig) http.HandlerFunc {
 		f := r.PostForm
 		title, owner := oneLine(f.Get("name")), me
 		if f.Get("fuer") != "ich" && f.Get("weg") != "google" {
-			owner = cfg.Calendar.User // the family's: Haus's account's home
+			owner = cfg.Calendar.User // the family's: Homes' account's home
 		}
 		switch f.Get("weg") {
 		case "google", "abo":
@@ -453,11 +453,11 @@ func KalenderHinzufuegen(cfg StartConfig) http.HandlerFunc {
 			}
 			_, err := cfg.Laib.CalendarSubscribe(r.Context(), laib.Abo{Person: owner, Name: slug, Kind: kind, Title: title, Every: every}, address)
 			if err != nil {
-				log.Printf("haus: kalender: %s verbindet %s %s/%s: %v", me, kind, owner, slug, err) // laib's errors carry no address
+				log.Printf("homes: kalender: %s verbindet %s %s/%s: %v", me, kind, owner, slug, err) // laib's errors carry no address
 				said(w, r, laibSaid(err))
 				return
 			}
-			log.Printf("haus: kalender: %s verbindet %s %s/%s", me, kind, owner, slug)
+			log.Printf("homes: kalender: %s verbindet %s %s/%s", me, kind, owner, slug)
 			said(w, r, "verbunden")
 		case "neu":
 			slug := calSlug(title)
@@ -470,7 +470,7 @@ func KalenderHinzufuegen(cfg StartConfig) http.HandlerFunc {
 			case errors.Is(err, caldav.ErrCalendarExists):
 				said(w, r, "gibt-es-schon")
 			case err != nil:
-				log.Printf("haus: kalender: %s legt %s an: %v", me, slug, err)
+				log.Printf("homes: kalender: %s legt %s an: %v", me, slug, err)
 				said(w, r, "nicht-moeglich")
 			default:
 				said(w, r, "angelegt")
@@ -494,7 +494,7 @@ func landName(code string) string {
 
 // KalenderAendern is one calendar's buttons: colour, show or hide (the
 // person's own view), Trennen (a subscription of theirs or the family's),
-// Löschen (a calendar Haus made, the family's or theirs).
+// Löschen (a calendar Homes made, the family's or theirs).
 func KalenderAendern(cfg StartConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		me, ok := kalenderForm(w, r, cfg)
@@ -520,7 +520,7 @@ func KalenderAendern(cfg StartConfig) http.HandlerFunc {
 				h = &hide
 			}
 			if err := cfg.Views.Set(me, path, h, color); err != nil {
-				log.Printf("haus: kalender: %s ansicht %s: %v", me, path, err)
+				log.Printf("homes: kalender: %s ansicht %s: %v", me, path, err)
 				said(w, r, "nicht-moeglich")
 				return
 			}
@@ -532,11 +532,11 @@ func KalenderAendern(cfg StartConfig) http.HandlerFunc {
 				return
 			}
 			if _, err := cfg.Laib.CalendarEvery(r.Context(), owner, name[strings.Index(name, "-")+1:], every); err != nil {
-				log.Printf("haus: kalender: %s abstand %s: %v", me, path, err)
+				log.Printf("homes: kalender: %s abstand %s: %v", me, path, err)
 				said(w, r, laibSaid(err))
 				return
 			}
-			log.Printf("haus: kalender: %s abstand %s %s", me, path, every)
+			log.Printf("homes: kalender: %s abstand %s %s", me, path, every)
 			said(w, r, "abstand")
 		case "trennen":
 			if cfg.Laib == nil || (!strings.HasPrefix(name, "google-") && !strings.HasPrefix(name, "abo-")) {
@@ -545,11 +545,11 @@ func KalenderAendern(cfg StartConfig) http.HandlerFunc {
 			}
 			_, err := cfg.Laib.CalendarUnsubscribe(r.Context(), owner, name[strings.Index(name, "-")+1:])
 			if err != nil {
-				log.Printf("haus: kalender: %s trennt %s: %v", me, path, err)
+				log.Printf("homes: kalender: %s trennt %s: %v", me, path, err)
 				said(w, r, laibSaid(err))
 				return
 			}
-			log.Printf("haus: kalender: %s trennt %s", me, path)
+			log.Printf("homes: kalender: %s trennt %s", me, path)
 			said(w, r, "getrennt")
 		case "loeschen":
 			korb := ""
@@ -560,26 +560,26 @@ func KalenderAendern(cfg StartConfig) http.HandlerFunc {
 					e, err = cfg.Papierkorb.Rein("kalender", r.PostForm.Get("name"), me, kalenderImKorb{Path: path, Name: r.PostForm.Get("name"), Abzug: a})
 				}
 				if err != nil {
-					log.Printf("haus: kalender: %s löscht %s: papierkorb: %v", me, path, err)
+					log.Printf("homes: kalender: %s löscht %s: papierkorb: %v", me, path, err)
 					said(w, r, "nicht-moeglich")
 					return
 				}
 				korb = e.ID
 			}
 			if err := cfg.Calendar.DeleteCalendar(r.Context(), path); err != nil {
-				log.Printf("haus: kalender: %s löscht %s: %v", me, path, err)
+				log.Printf("homes: kalender: %s löscht %s: %v", me, path, err)
 				said(w, r, "nicht-moeglich")
 				return
 			}
-			log.Printf("haus: kalender: %s löscht %s", me, path)
+			log.Printf("homes: kalender: %s löscht %s", me, path)
 			http.Redirect(w, r, kalenderVerwalten+"?gesagt=geloescht&korb="+url.QueryEscape(korb), http.StatusSeeOther)
 		case "zurueckholen":
 			if err := kalenderZurueck(r.Context(), cfg, path, r.PostForm.Get("id")); err != nil {
-				log.Printf("haus: kalender: %s holt %s zurück: %v", me, path, err)
+				log.Printf("homes: kalender: %s holt %s zurück: %v", me, path, err)
 				http.Error(w, familySentence("kalender zurück", err, "Der Kalender ließ sich gerade nicht zurückholen. Versuch es gleich noch einmal; er bleibt im Papierkorb."), http.StatusConflict)
 				return
 			}
-			log.Printf("haus: kalender: %s holt %s zurück", me, path)
+			log.Printf("homes: kalender: %s holt %s zurück", me, path)
 			said(w, r, "zurueck")
 		default:
 			http.Error(w, "Unbekannte Änderung.", http.StatusBadRequest)

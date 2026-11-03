@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mdopp/haus/internal/devices"
-	"github.com/mdopp/haus/internal/laib"
-	"github.com/mdopp/haus/internal/napi"
+	"github.com/mdopp/homes/internal/devices"
+	"github.com/mdopp/homes/internal/laib"
+	"github.com/mdopp/homes/internal/napi"
 )
 
 func testSite(t *testing.T) site {
@@ -20,7 +20,7 @@ func testSite(t *testing.T) site {
 	return site{napi: napi.Config{Laib: ops}, store: store, ops: ops, proxySecret: "geheim", laibURL: "https://laib.example"}
 }
 
-// haus#26, laib ADR 0022: the app has no TWA, so Haus serves no Digital
+// haus#26, laib ADR 0022: the app has no TWA, so Homes serves no Digital
 // Asset Links statement: /.well-known/assetlinks.json is a path like any
 // other, behind the proxy secret and landing on Start.
 func TestNoAssetLinks(t *testing.T) {
@@ -28,7 +28,7 @@ func TestNoAssetLinks(t *testing.T) {
 	for _, secret := range []string{"", "geheim"} {
 		req := httptest.NewRequest("GET", "/.well-known/assetlinks.json", nil)
 		if secret != "" {
-			req.Header.Set("X-Haus-Proxy", secret)
+			req.Header.Set("X-Homes-Proxy", secret)
 		}
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, req)

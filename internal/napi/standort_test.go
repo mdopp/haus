@@ -13,10 +13,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/reitti"
+	"github.com/mdopp/homes/internal/reitti"
 )
 
-// Standortverlauf (owner 2026-11-02): the app's points pass through Haus
+// Standortverlauf (owner 2026-11-02): the app's points pass through Homes
 // to the person's Reitti, with the person's own token. A fake Reitti
 // records what reached it.
 
@@ -151,7 +151,7 @@ func TestStandortForwardsThePersonsPointsWithTheirToken(t *testing.T) {
 	}
 }
 
-// Without a token Haus keeps nothing and sends nothing: 409 with the
+// Without a token Homes keeps nothing and sends nothing: 409 with the
 // sentence that says what to do, so the app keeps the batch.
 func TestStandortWithoutATokenKeepsTheBatchOnThePhone(t *testing.T) {
 	f := newFakeReitti(t)
@@ -212,7 +212,7 @@ func TestStandortAReittiErrorKeepsTheBatch(t *testing.T) {
 	}
 }
 
-// A point Haus cannot read is not passed on and is counted; one batch
+// A point Homes cannot read is not passed on and is counted; one batch
 // is at most 1000 points; an unreadable body is 400.
 func TestStandortCountsWhatItCannotRead(t *testing.T) {
 	f := newFakeReitti(t)

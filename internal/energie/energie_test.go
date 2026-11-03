@@ -3,16 +3,16 @@ package energie
 import (
 	"testing"
 
-	"github.com/mdopp/haus/internal/ha"
+	"github.com/mdopp/homes/internal/ha"
 )
 
-// haus#65: HAUS_ENERGY_STATS names the history's statistic ids; unset,
+// haus#65: HOMES_ENERGY_STATS names the history's statistic ids; unset,
 // the counters Pick found are the history's, by their fallback names or
 // the template's labels.
 func TestHistoryIDs(t *testing.T) {
-	t.Setenv("HAUS_ENERGY_FLOW", "")
-	t.Setenv("HAUS_ENERGY_TOTALS", "")
-	t.Setenv("HAUS_ENERGY_STATS", " bezug=sensor.senec_grid_import_energy, Einspeisung=sensor.senec_grid_export_energy,solar=sensor.senec_solar_energy")
+	t.Setenv("HOMES_ENERGY_FLOW", "")
+	t.Setenv("HOMES_ENERGY_TOTALS", "")
+	t.Setenv("HOMES_ENERGY_STATS", " bezug=sensor.senec_grid_import_energy, Einspeisung=sensor.senec_grid_export_energy,solar=sensor.senec_solar_energy")
 	m, err := FromEnv()
 	if err != nil {
 		t.Fatal(err)
@@ -22,7 +22,7 @@ func TestHistoryIDs(t *testing.T) {
 		t.Fatalf("stats %+v, history %+v, set %v", m.Stats, m.History(nil), m.Set())
 	}
 	for _, bad := range []string{"akku=sensor.x", "bezug=", "bezug", "solar=sensor.X"} {
-		t.Setenv("HAUS_ENERGY_STATS", bad)
+		t.Setenv("HOMES_ENERGY_STATS", bad)
 		if _, err := FromEnv(); err == nil {
 			t.Errorf("%q must refuse to start", bad)
 		}
@@ -41,9 +41,9 @@ func TestHistoryIDs(t *testing.T) {
 
 // soc= names the battery's charge (owner, 2026-10-24); it is no flow leg.
 func TestFromEnvTakesTheCharge(t *testing.T) {
-	t.Setenv("HAUS_ENERGY_FLOW", "battery=sensor.akku,soc=sensor.akku_soc")
-	t.Setenv("HAUS_ENERGY_TOTALS", "")
-	t.Setenv("HAUS_ENERGY_STATS", "")
+	t.Setenv("HOMES_ENERGY_FLOW", "battery=sensor.akku,soc=sensor.akku_soc")
+	t.Setenv("HOMES_ENERGY_TOTALS", "")
+	t.Setenv("HOMES_ENERGY_STATS", "")
 	m, err := FromEnv()
 	if err != nil || m.Flow["soc"] != "sensor.akku_soc" {
 		t.Fatalf("%v %v", m, err)

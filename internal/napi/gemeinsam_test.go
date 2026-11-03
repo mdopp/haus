@@ -8,13 +8,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/caldav"
-	"github.com/mdopp/haus/internal/caldav/davfake"
-	"github.com/mdopp/haus/internal/haushalt"
+	"github.com/mdopp/homes/internal/caldav"
+	"github.com/mdopp/homes/internal/caldav/davfake"
+	"github.com/mdopp/homes/internal/haushalt"
 )
 
 // haus#218: the household's shared contacts, calendars and reminders for
-// the phones' Haus account — what is in Haus's own account's home, nothing
+// the phones' Homes account — what is in Homes' own account's home, nothing
 // of a person's, no lists.
 
 var gemeinsamNow = time.Date(2026, 11, 3, 10, 0, 0, 0, time.UTC)

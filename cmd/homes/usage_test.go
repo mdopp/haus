@@ -14,12 +14,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/usage"
-	"github.com/mdopp/haus/internal/usage/usagefake"
+	"github.com/mdopp/homes/internal/usage"
+	"github.com/mdopp/homes/internal/usage/usagefake"
 )
 
 // #50: the routes count, behind the proxy secret only: a page Caddy let
-// through is a view; one without the secret (403), a path Haus does not
+// through is a view; one without the secret (403), a path Homes does not
 // serve (404) and a /napi call without a paired phone (401) are not.
 func TestRoutesCountPageViews(t *testing.T) {
 	fake := usagefake.New("um")
@@ -38,7 +38,7 @@ func TestRoutesCountPageViews(t *testing.T) {
 		req := httptest.NewRequest("GET", q.path, nil)
 		req.Header.Set("Remote-User", "anna")
 		if q.secret != "" {
-			req.Header.Set("X-Haus-Proxy", q.secret)
+			req.Header.Set("X-Homes-Proxy", q.secret)
 		}
 		h.ServeHTTP(httptest.NewRecorder(), req)
 	}
@@ -53,12 +53,12 @@ func TestRoutesCountPageViews(t *testing.T) {
 	}
 	for _, b := range fake.Bodies() {
 		if strings.Contains(b, "anna") || strings.Contains(b, "geheim") {
-			t.Errorf("left Haus: %s", b)
+			t.Errorf("left Homes: %s", b)
 		}
 	}
 }
 
-// #50, for laib's boot test: Haus stopped with SIGTERM (podman stop) sends
+// #50, for laib's boot test: Homes stopped with SIGTERM (podman stop) sends
 // what it counted before it exits, and runs on the environment alone.
 func TestSIGTERMFlushes(t *testing.T) {
 	if testing.Short() {
@@ -66,7 +66,7 @@ func TestSIGTERMFlushes(t *testing.T) {
 	}
 	fake := usagefake.New("um")
 	t.Cleanup(fake.Close)
-	bin := filepath.Join(t.TempDir(), "haus")
+	bin := filepath.Join(t.TempDir(), "homes")
 	if out, err := exec.Command("go", "build", "-o", bin, ".").CombinedOutput(); err != nil {
 		t.Fatalf("build: %v\n%s", err, out)
 	}
@@ -77,8 +77,8 @@ func TestSIGTERMFlushes(t *testing.T) {
 	addr := l.Addr().String()
 	l.Close()
 	cmd := exec.Command(bin)
-	cmd.Env = append(os.Environ(), "LAIB_TOKEN=ops", "LAIB_URL=http://127.0.0.1:1", "HAUS_PROXY_SECRET=geheim", "HAUS_DATA="+t.TempDir(),
-		"HAUS_LISTEN="+addr, "HAUS_USAGE_URL="+fake.URL, "HAUS_USAGE_TOKEN=um")
+	cmd.Env = append(os.Environ(), "LAIB_TOKEN=ops", "LAIB_URL=http://127.0.0.1:1", "HOMES_PROXY_SECRET=geheim", "HOMES_DATA="+t.TempDir(),
+		"HOMES_LISTEN="+addr, "HOMES_USAGE_URL="+fake.URL, "HOMES_USAGE_TOKEN=um")
 	var logs strings.Builder
 	cmd.Stdout, cmd.Stderr = &logs, &logs
 	if err := cmd.Start(); err != nil {
@@ -88,16 +88,16 @@ func TestSIGTERMFlushes(t *testing.T) {
 	var resp *http.Response
 	for i := 0; i < 100; i++ {
 		req, _ := http.NewRequest("GET", "http://"+addr+"/start", nil)
-		req.Header.Set("X-Haus-Proxy", "geheim")
+		req.Header.Set("X-Homes-Proxy", "geheim")
 		req.Header.Set("Remote-User", "anna")
-		req.AddCookie(&http.Cookie{Name: "haus_willkommen", Value: "gesehen"}) // not the first visit: Start, not Willkommen (haus#56)
+		req.AddCookie(&http.Cookie{Name: "homes_willkommen", Value: "gesehen"}) // not the first visit: Start, not Willkommen (haus#56)
 		if resp, err = http.DefaultClient.Do(req); err == nil {
 			break
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
 	if err != nil {
-		t.Fatalf("haus did not answer: %v\n%s", err, logs.String())
+		t.Fatalf("homes did not answer: %v\n%s", err, logs.String())
 	}
 	resp.Body.Close()
 	if resp.StatusCode != 200 {
@@ -112,7 +112,7 @@ func TestSIGTERMFlushes(t *testing.T) {
 	select {
 	case <-done:
 	case <-time.After(10 * time.Second):
-		t.Fatalf("haus did not stop on SIGTERM\n%s", logs.String())
+		t.Fatalf("homes did not stop on SIGTERM\n%s", logs.String())
 	}
 	if n := fake.Counts()[usagefake.Count{App: "haus", Event: "seite.start", Day: time.Now().UTC().Format(time.DateOnly)}]; n != 1 {
 		t.Errorf("seite.start %d after SIGTERM, want 1: %v\n%s", n, fake.Counts(), logs.String())

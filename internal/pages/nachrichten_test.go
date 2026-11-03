@@ -7,11 +7,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/haus/internal/napi"
+	"github.com/mdopp/homes/internal/napi"
 )
 
 // haus#207, owner 2026-11-03: „Daten sichern“ shows the person's state
-// from Haus's ledger and the inbox, and per source what to do and what then
+// from Homes' ledger and the inbox, and per source what to do and what then
 // happens; no Discord, the location history only as a pointer.
 func TestDatenSichernShowsTheStandAndTheGuide(t *testing.T) {
 	inbox, data := t.TempDir(), t.TempDir()
@@ -119,7 +119,7 @@ func TestDatenSichernWithoutTheArchiv(t *testing.T) {
 	if code != 200 || !strings.Contains(body, "Das Archiv ist auf dieser Box nicht eingerichtet.") || strings.Contains(body, "Dein Stand") {
 		t.Fatalf("%d %s", code, body)
 	}
-	if _, admin, _ := familyPage(t, Nachrichten, StartConfig{}, "GET", DatenPath, "admins"); !strings.Contains(admin, "HAUS_ARCHIV_DIR") {
+	if _, admin, _ := familyPage(t, Nachrichten, StartConfig{}, "GET", DatenPath, "admins"); !strings.Contains(admin, "HOMES_ARCHIV_DIR") {
 		t.Error("an admin hears what is missing")
 	}
 	if _, mehr, _ := familyPage(t, Mehr, StartConfig{}, "GET", mehrPath, "family"); strings.Contains(mehr, DatenPath) {

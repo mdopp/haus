@@ -17,7 +17,7 @@ import (
 // WhatsApp backup back from archiv-eingang/<person>/letzte/, resumably;
 // the media only through the person's open archive.
 
-// newLetzte is Haus with the inbox; anna1 is Anna's old phone, anna2 her
+// newLetzte is Homes with the inbox; anna1 is Anna's old phone, anna2 her
 // new one, ben1 Ben's.
 func newLetzte(t *testing.T) *archiv {
 	t.Helper()
@@ -44,7 +44,7 @@ func (a *archiv) lege(person, rel string, b []byte) string {
 }
 
 // ageGestalt is a file shaped like age's: header, nonce, 64 KiB chunks
-// with a 16-byte tag each. Haus reads only its header, never decrypts.
+// with a 16-byte tag each. Homes reads only its header, never decrypts.
 func ageGestalt(klar int) []byte {
 	var b bytes.Buffer
 	b.WriteString("age-encryption.org/v1\n-> X25519 c2Fsei1zdGFuemE\nYWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXo\n--- bWFj\n")
@@ -72,7 +72,7 @@ func newFakeArchiv(t *testing.T, secret string) *fakeArchiv {
 	f := &fakeArchiv{offen: true, media: map[string][]byte{}}
 	f.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f.saw = append(f.saw, r.URL.Path)
-		if r.Header.Get("X-Archiv-Haus") != secret {
+		if r.Header.Get("X-Archiv-Homes") != secret {
 			http.Error(w, `{"fehler":"nein"}`, 401)
 			return
 		}
@@ -262,7 +262,7 @@ func TestLetzteMediaOnlyWhileTheArchiveIsOpen(t *testing.T) {
 			t.Errorf("closed, %s → %d %q", p, rec.Code, rec.Body)
 		}
 	}
-	// an archive refusing Haus's secret is the admin's matter, said so
+	// an archive refusing Homes' secret is the admin's matter, said so
 	arch.offen = true
 	if rec, out := a.do("GET", medium, "ben1", nil, nil); rec.Code != http.StatusBadGateway || out["fehler"] != saysArchivSchweigt {
 		t.Errorf("wrong secret → %d %v", rec.Code, out)
@@ -276,10 +276,10 @@ func TestLetzteMediaOnlyWhileTheArchiveIsOpen(t *testing.T) {
 
 func TestArchivInternFromEnv(t *testing.T) {
 	env := map[string]string{
-		"HAUS_ARCHIV_INTERN":             "anna=http://host.containers.internal:18540/ max-mueller=http://host.containers.internal:18541 ben=ftp://x kaputt ohne=http://h:1",
-		"HAUS_ARCHIV_SECRET_ANNA":        "a",
-		"HAUS_ARCHIV_SECRET_MAX_MUELLER": "m",
-		"HAUS_ARCHIV_SECRET_BEN":         "b",
+		"HOMES_ARCHIV_INTERN":             "anna=http://host.containers.internal:18540/ max-mueller=http://host.containers.internal:18541 ben=ftp://x kaputt ohne=http://h:1",
+		"HOMES_ARCHIV_SECRET_ANNA":        "a",
+		"HOMES_ARCHIV_SECRET_MAX_MUELLER": "m",
+		"HOMES_ARCHIV_SECRET_BEN":         "b",
 	}
 	got := ArchivInternFromEnv(func(k string) string { return env[k] })
 	if len(got) != 2 || got["anna"] != (ArchivIntern{"http://host.containers.internal:18540", "a"}) || got["max-mueller"] != (ArchivIntern{"http://host.containers.internal:18541", "m"}) {

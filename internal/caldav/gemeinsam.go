@@ -13,9 +13,9 @@ import (
 	"time"
 )
 
-// The household's shared data for the phones' Haus account (haus#218): the
-// app keeps an Android account "Haus" whose contacts and calendars every
-// phone app sees. What counts as shared is what lives in Haus's own
+// The household's shared data for the phones' Homes account (haus#218): the
+// app keeps an Android account "Homes" whose contacts and calendars every
+// phone app sees. What counts as shared is what lives in Homes' own
 // account's home — the Haushalt calendar and address book, the calendars
 // "für die Familie" (familie-*) and the family's subscriptions (abo-*) —
 // never a person's own calendars or mirrors (privat-*, google-*, a person's
@@ -35,7 +35,7 @@ type FeedCalendar struct {
 // collection of Radicale's, the open reminders of every shared calendar.
 const RemindersID = "erinnerungen"
 
-// familyCalendars is every calendar in Haus's account's home that holds
+// familyCalendars is every calendar in Homes' account's home that holds
 // appointments, and the configured one.
 func (c *Client) familyCalendars(ctx context.Context) ([]Collection, error) {
 	cols, err := c.list(ctx, false)
@@ -100,7 +100,8 @@ func (c *Client) FamilyFeed(ctx context.Context, from, to time.Time) ([]FeedCale
 
 // FeedICS renders the shared calendars as one iCalendar stream (RFC 5545
 // §3.4: one VCALENDAR after the other), each named by X-WR-CALNAME and
-// X-HAUS-KALENDER (its id) with X-HAUS-ART (its kind). An expanded
+// X-HAUS-KALENDER (its id) with X-HAUS-ART (its kind; both keep the old
+// name, the app's parser reads them, laib#1021). An expanded
 // series' instances share their UID, so each carries a RECURRENCE-ID, its
 // start. A reminder is a VEVENT at its due time with a display alarm then
 // (a whole-day one without), a recurring one with its RRULE in loc, the
@@ -179,7 +180,7 @@ func zoned(loc *time.Location) bool {
 	return loc != nil && loc.String() != "Local" && loc.String() != "UTC" && loc.String() != ""
 }
 
-// FamilyCards is every card of the address books in Haus's account's home
+// FamilyCards is every card of the address books in Homes' account's home
 // (and the configured one), each as its text in Radicale; partial says a
 // cap cut the read short.
 func (c *Client) FamilyCards(ctx context.Context) (cards []string, partial bool, err error) {
@@ -203,10 +204,10 @@ const versionBody = `<?xml version="1.0" encoding="utf-8"?>
   <D:prop><D:resourcetype/><CS:getctag/><D:sync-token/></D:prop>
 </D:propfind>`
 
-// FamilyVersions is a cheap fingerprint of what the phones' Haus account
-// holds (haus#223): one PROPFIND of Haus's home for each collection's
+// FamilyVersions is a cheap fingerprint of what the phones' Homes account
+// holds (haus#223): one PROPFIND of Homes' home for each collection's
 // getctag (its sync-token where it has none), which Radicale changes with
-// every write into it — Haus's own, a phone's over DAVx⁵, laib's kalender
+// every write into it — Homes' own, a phone's over DAVx⁵, laib's kalender
 // mirroring an abo-*. kontakte covers the address books, kalender the
 // calendars, the reminders in them included; the lists stay out, as they
 // do from the feed. Equal strings: nothing the phones show changed.
