@@ -136,6 +136,10 @@ func writeStandort(w http.ResponseWriter, r *http.Request, cfg StartConfig, code
 		mine.row("Verbunden seit "+dayWords(k.Seit, loc), "", true)
 		mine.row(saysStandortApp, "", false)
 		b.WriteString(mine.html())
+		if u := AppURL(OnDomain(cfg.Reitti.PublicURL, cfg.PublicURL)); u != "" {
+			// connected, the timeline is what a person comes back for
+			b.WriteString(`<p class=wege><a class=knopf href="` + html.EscapeString(u) + `">Reitti öffnen</a></p>`)
+		}
 		b.WriteString(`<form method=post action=` + StandortPath + ` data-frage="Homes soll nichts mehr an Reitti schicken?"><input type=hidden name=tun value=trennen><button data-laeuft="Trennt …">Trennen</button></form>`)
 	} else {
 		b.WriteString("<form class=passwort method=post action=" + StandortPath + "><h2>Mit Reitti verbinden</h2><input type=hidden name=tun value=verbinden>" +
