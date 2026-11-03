@@ -287,6 +287,50 @@ func TestPortalEnergy(t *testing.T) {
 	}
 }
 
+// The owner (2026-11-03): the app's energy widget shows how full the
+// battery is, as the Energie page's Akku ring. The same sensor (SENEC's by
+// its friendly name here); nothing without a battery leg, nothing when it
+// says no number.
+func TestPortalEnergyCharge(t *testing.T) {
+	fake, h := house(t)
+	power := map[string]any{"device_class": "power", "unit_of_measurement": "W"}
+	with := func(name string) map[string]any {
+		m := map[string]any{"friendly_name": name}
+		for k, v := range power {
+			m[k] = v
+		}
+		return m
+	}
+	fake.Set("sensor.pv_now", "3200", with("Aktuell erzeugter PV-Strom"))
+	fake.Set("sensor.house_now", "800", with("Aktueller Hausverbrauch"))
+	fake.Set("sensor.grid_now", "-2100", with("Aktuelle Netz Leistung"))
+	soc := map[string]any{"friendly_name": "Akku-Füllstand in Prozent", "device_class": "battery", "unit_of_measurement": "%"}
+	fake.Set("sensor.senec_battery_charge_percent", "73.6", soc)
+	read := func() map[string]any {
+		t.Helper()
+		code, body := raw(t, h, "GET", "/napi/portal/energy", "dev1", "")
+		var out struct {
+			Energy map[string]any `json:"energy"`
+		}
+		if err := json.Unmarshal([]byte(body), &out); err != nil || code != 200 {
+			t.Fatalf("energy: %d %s", code, body)
+		}
+		return out.Energy
+	}
+	if c, ok := read()["charge"]; ok {
+		t.Fatalf("no battery leg, no charge: %v", c)
+	}
+	fake.Set("sensor.batt_now", "-300", with("Aktuelle Akku Leistung"))
+	c, ok := read()["charge"].(map[string]any)
+	if !ok || c["entity_id"] != "sensor.senec_battery_charge_percent" || c["state"] != "73.6" || c["unit"] != "%" || c["label"] != "Akku-Füllstand" {
+		t.Fatalf("charge: %v", c)
+	}
+	fake.Set("sensor.senec_battery_charge_percent", "unavailable", soc)
+	if c, ok := read()["charge"]; ok {
+		t.Fatalf("no number, no charge: %v", c)
+	}
+}
+
 func TestEntityHistory(t *testing.T) {
 	fake, h := house(t)
 	fake.SetHistory("sensor.temp", []map[string]any{
