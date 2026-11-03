@@ -34,7 +34,12 @@ var mehrSays = map[string]string{
 // the same, open.
 func Mehr(cfg StartConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != mehrPath {
+		switch r.URL.Path {
+		case mehrPath:
+		case MehrAufgabenPath: // the Einrichtung card, after the page
+			mehrAufgaben(w, r, cfg)
+			return
+		default:
 			Elsewhere(cfg)(w, r)
 			return
 		}

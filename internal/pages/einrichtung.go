@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/mdopp/homes/internal/assistent"
 	"github.com/mdopp/homes/internal/cards"
@@ -33,17 +32,10 @@ type aufgabe struct {
 	erledigt     bool
 }
 
-// mehrLaibWait is how long Mehr waits for Laib's tasks when it has none
-// kept yet (owner 2026-11-03: /mehr took seconds). Laib's aufgabe verb takes
-// its MCP lock alone and waits behind any tool running; the read goes on
-// without the page, and the next visit has it (laib.KeptAufgaben).
-var mehrLaibWait = 500 * time.Millisecond
-
 // mitLaib are the person's tasks with Laib's own for them (laib#878): the
 // household's and theirs; the admins' stay on Box. Laib away: Homes' own.
-// kept (Mehr) takes the list Homes keeps for a minute and waits at most
-// mehrLaibWait for one; Deine Aufgaben asks Laib each time.
-func mitLaib(r *http.Request, cfg StartConfig, kept bool) []aufgabe {
+// Deine Aufgaben asks Laib each time; Mehr never waits for it (einrichtungKarte).
+func mitLaib(r *http.Request, cfg StartConfig) []aufgabe {
 	as := einrichtung(r, cfg)
 	user := r.Header.Get("Remote-User")
 	if cfg.Laib == nil || user == "" {
@@ -51,23 +43,23 @@ func mitLaib(r *http.Request, cfg StartConfig, kept bool) []aufgabe {
 	}
 	var la laib.Aufgaben
 	var err error
-	if kept {
-		ctx, cancel := context.WithTimeout(r.Context(), mehrLaibWait)
-		var ok bool
-		la, ok, err = cfg.Laib.KeptAufgaben(ctx, user)
-		cancel()
-		if !ok && err == nil {
-			err = errors.New("no list yet")
-		}
-	} else {
-		fetch(r, func(ctx context.Context) { la, err = cfg.Laib.MeineAufgaben(ctx, user) })
-	}
+	fetch(r, func(ctx context.Context) { la, err = cfg.Laib.MeineAufgaben(ctx, user) })
 	if err != nil {
-		if !errors.Is(err, laib.ErrNoTool) {
-			log.Printf("homes: einrichtung: laib: %v", err)
-		}
+		logLaibAufgaben(err)
 		return as
 	}
+	return mitLaibs(r, cfg, as, la)
+}
+
+func logLaibAufgaben(err error) {
+	if !errors.Is(err, laib.ErrNoTool) {
+		log.Printf("homes: einrichtung: laib: %v", err)
+	}
+}
+
+// mitLaibs joins Laib's list la to Homes' own as, the important first.
+func mitLaibs(r *http.Request, cfg StartConfig, as []aufgabe, la laib.Aufgaben) []aufgabe {
+	user := r.Header.Get("Remote-User")
 	var mine []aufgabe
 	for _, t := range la.Aufgaben {
 		own := t.Fuer == "person:"+user
@@ -147,12 +139,67 @@ func offen(as []aufgabe) []aufgabe {
 	return out
 }
 
-// einrichtungKarte is Mehr's „Einrichtung“: the open tasks only; none, no card.
+// MehrAufgabenPath is where Mehr's Einrichtung card fills itself from
+// (owner 2026-11-03: „Warum werden die Aufgaben nicht async geladen?“).
+const MehrAufgabenPath = "/mehr/aufgaben"
+
+// What the Einrichtung card says of Laib's tasks while they are read, and
+// when they cannot be; the row leads to Deine Aufgaben, script or not.
+const (
+	saysAufgabenLesen = "Deine Aufgaben von der Box werden gerade gelesen …"
+	saysAufgabenNicht = "Die Aufgaben von der Box lassen sich gerade nicht lesen."
+	aufgabenRowTitle  = "Deine Aufgaben"
+)
+
+// einrichtungKarte is Mehr's „Einrichtung“: the open tasks only; none, no
+// card. Mehr never waits for Laib: with Laib's list kept (laib.KeptAufgaben,
+// a minute) the card is whole; without, it shows Homes' own and a row that
+// leads to Deine Aufgaben, and fills itself from MehrAufgabenPath.
 func einrichtungKarte(r *http.Request, cfg StartConfig) string {
-	open := offen(mitLaib(r, cfg, true))
-	if len(open) == 0 {
-		return ""
+	user := r.Header.Get("Remote-User")
+	if cfg.Laib == nil || user == "" {
+		return einrichtungCard(offen(einrichtung(r, cfg)), "")
 	}
+	if la, ok := cfg.Laib.PeekAufgaben(user); ok {
+		return einrichtungCard(offen(mitLaibs(r, cfg, einrichtung(r, cfg), la)), "")
+	}
+	own := offen(einrichtung(r, cfg))
+	return nachladen(MehrAufgabenPath, einrichtungCard(own, saysAufgabenLesen), einrichtungCard(own, saysAufgabenNicht))
+}
+
+// mehrAufgaben answers MehrAufgabenPath: the Einrichtung card with Laib's
+// tasks, once Laib has answered (the list kept a minute behind it), or with
+// the line that it cannot be read; "" when nothing is open.
+func mehrAufgaben(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
+	if !showOnly(w, r, "Mehr") {
+		return
+	}
+	user := r.Header.Get("Remote-User")
+	card := einrichtungCard(offen(einrichtung(r, cfg)), "")
+	if cfg.Laib != nil && user != "" {
+		ctx, cancel := context.WithTimeout(r.Context(), backendWait)
+		la, ok, err := cfg.Laib.KeptAufgaben(ctx, user)
+		cancel()
+		switch {
+		case ok:
+			card = einrichtungCard(offen(mitLaibs(r, cfg, einrichtung(r, cfg), la)), "")
+		case errors.Is(err, laib.ErrNoTool): // an older Laib: Homes' own only
+		default:
+			if err == nil {
+				err = context.DeadlineExceeded
+			}
+			logLaibAufgaben(err)
+			card = einrichtungCard(offen(einrichtung(r, cfg)), saysAufgabenNicht)
+		}
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Write([]byte(card))
+}
+
+// einrichtungCard is the card for open; laibSays, when set, is a last row
+// for Laib's tasks not in hand, leading to Deine Aufgaben.
+func einrichtungCard(open []aufgabe, laibSays string) string {
 	c := cards.Card{Title: "Einrichtung"}
 	for _, a := range open {
 		says := a.warum
@@ -163,6 +210,9 @@ func einrichtungKarte(r *http.Request, cfg StartConfig) string {
 			says = "Wenn du magst: " + says
 		}
 		c.AddLink(a.titel, says, a.href)
+	}
+	if laibSays != "" {
+		c.AddLink(aufgabenRowTitle, laibSays, aufgabenPath)
 	}
 	return c.HTML()
 }
@@ -192,7 +242,7 @@ func DeineAufgaben(cfg StartConfig) http.HandlerFunc {
 		if !showOnly(w, r, "Deine Aufgaben") {
 			return
 		}
-		as := mitLaib(r, cfg, false)
+		as := mitLaib(r, cfg)
 		b := familyHead(r, cfg, "Deine Aufgaben", "Aufgaben")
 		b.WriteString("<h1>Deine Aufgaben</h1><p class=k>Was du einmal einrichtest. Ist es erledigt, verschwindet es aus Mehr; hier kannst du es noch einmal machen.</p>")
 		if len(as) == 0 {

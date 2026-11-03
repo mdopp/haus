@@ -243,7 +243,7 @@ func familyHead(r *http.Request, cfg StartConfig, title, current string) *string
 	b.WriteString("<!doctype html><html lang=de><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1,viewport-fit=cover'>" +
 		"<meta name=color-scheme content='dark light'><meta name=theme-color content='#0c0c0e'><title>" + html.EscapeString(title) + "</title>" + symbolHead)
 	b.WriteString(frame)
-	b.WriteString(cards.Style + homesStyle + homesScript) // in the head: a page swapped in keeps it
+	b.WriteString(cards.Style + homesStyle + homesScript + nachladenScript) // in the head: a page swapped in keeps it
 	b.WriteString(familyNav(r, cfg, current))
 	b.WriteString(konto(r))
 	if tabOf(current) == "Haushalt" {
@@ -352,7 +352,9 @@ func (cfg StartConfig) clock() (time.Time, *time.Location) {
 
 // slowFetch is how long a page may wait for its backends before Homes'
 // log says so (haus#184): the page's time, readable with laib logs homes.
-var slowFetch = time.Second
+// A quarter second (2026-11-03): a page that waits that long is a candidate
+// for a part after the page (nachladen), and only the log can say which.
+var slowFetch = 250 * time.Millisecond
 
 // fetch runs each backend read at once, each within backendWait: a slow
 // one is left out, the page still comes. A wait over slowFetch is logged.

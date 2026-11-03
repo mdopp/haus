@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -43,51 +42,64 @@ func timedMehr(t *testing.T, cfg StartConfig) (time.Duration, string) {
 	return took, body
 }
 
-// The owner (2026-11-03): /mehr took over a second, the other pages less.
-// Its one remote read is Laib's aufgabe list; a slow Laib must cost the page
-// at most mehrLaibWait, once, and the next visits read the kept list at once.
-// Fails if Mehr waits for Laib again (backendWait, 4s) or asks it every time.
-func TestMehrWaitsNotForASlowLaib(t *testing.T) {
-	cl, calls := slowAufgaben(t, 1500*time.Millisecond)
-	cfg := StartConfig{Laib: cl}
-
-	took, body := timedMehr(t, cfg)
-	t.Logf("first /mehr, Laib 1.5s slow: %v", took)
-	if took > mehrLaibWait+300*time.Millisecond {
-		t.Fatalf("first /mehr took %v; a slow Laib may cost it at most %v", took, mehrLaibWait)
+// The owner (2026-11-03): „Warum werden die Aufgaben nicht async geladen?“
+// /mehr never waits for Laib: with nothing kept, the Einrichtung card is a
+// place that fills itself from MehrAufgabenPath, with a plain link to Deine
+// Aufgaben meanwhile and what it says should the part not come. Fails if
+// Mehr waits for Laib again, however briefly.
+func TestMehrDoesNotWaitForLaib(t *testing.T) {
+	cl, _ := slowAufgaben(t, 3*time.Second)
+	took, body := timedMehr(t, StartConfig{Laib: cl})
+	t.Logf("/mehr, Laib 3s slow: %v", took)
+	if took > 150*time.Millisecond {
+		t.Fatalf("/mehr took %v: it waited for Laib", took)
 	}
-	mustContain(t, body, "<h1>Mehr</h1>", "Abmelden")
-	mustNotContain(t, body, "Homes-App koppeln") // not there yet: the page did not wait
+	mustContain(t, body, "<h1>Mehr</h1>", "Abmelden",
+		`<div data-nachladen="/mehr/aufgaben" aria-busy=true>`, `<a href="/aufgaben">Deine Aufgaben</a>`, saysAufgabenLesen,
+		"<template>", saysAufgabenNicht, "window.homesNachladen")
+	mustNotContain(t, body, "Homes-App koppeln")
+}
 
-	// the read goes on without the page and is kept
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		_, body = timedMehr(t, cfg)
-		if strings.Contains(body, "Homes-App koppeln") || time.Now().After(deadline) {
-			break
-		}
-		time.Sleep(100 * time.Millisecond)
+// The part: the card with Laib's tasks once Laib answers, kept a minute,
+// so the next fragment and the next /mehr ask nobody; /mehr then has the
+// card whole, nothing to fetch.
+func TestMehrAufgabenFragment(t *testing.T) {
+	cl, calls := slowAufgaben(t, 50*time.Millisecond)
+	cfg := StartConfig{Laib: cl}
+	code, card, h := familyPage(t, Mehr, cfg, "GET", MehrAufgabenPath, "family")
+	if code != 200 || h.Get("Content-Type") != "text/html; charset=utf-8" {
+		t.Fatalf("%s → %d %q", MehrAufgabenPath, code, h.Get("Content-Type"))
+	}
+	mustContain(t, card, "<h2 id=karte-einrichtung>Einrichtung</h2>", `<a href="/willkommen">Homes-App koppeln</a>`)
+	mustNotContain(t, card, "<!doctype", "data-nachladen", saysAufgabenLesen)
+	n := calls.Load()
+	familyPage(t, Mehr, cfg, "GET", MehrAufgabenPath, "family")
+	took, body := timedMehr(t, cfg)
+	if took > 150*time.Millisecond {
+		t.Errorf("/mehr with the list kept took %v", took)
 	}
 	mustContain(t, body, `<a href="/willkommen">Homes-App koppeln</a>`)
-
-	n := calls.Load()
-	for i := 0; i < 5; i++ {
-		took, body = timedMehr(t, cfg)
-		if took > 200*time.Millisecond {
-			t.Errorf("/mehr with the list kept took %v", took)
-		}
-		mustContain(t, body, "Homes-App koppeln")
-	}
-	t.Logf("/mehr with the list kept: %v", took)
+	mustNotContain(t, body, "data-nachladen=", saysAufgabenLesen)
 	if got := calls.Load(); got != n {
 		t.Errorf("Laib asked %d more times within %v; the list is kept", got-n, laib.AufgabenFresh)
 	}
 }
 
-// A Laib that answers in time is on the page at the first visit.
-func TestMehrShowsAQuickLaibAtOnce(t *testing.T) {
-	cl, _ := slowAufgaben(t, 20*time.Millisecond)
-	took, body := timedMehr(t, StartConfig{Laib: cl})
-	t.Logf("/mehr, Laib 20ms: %v", took)
-	mustContain(t, body, `<a href="/willkommen">Homes-App koppeln</a>`)
+// Laib failing or silent: the part says so in a line, never spins, never
+// shows Laib's error.
+func TestMehrAufgabenFragmentWhenLaibFails(t *testing.T) {
+	_, card, _ := familyPage(t, Mehr, StartConfig{Laib: brokenLaib(t)}, "GET", MehrAufgabenPath, "family")
+	mustContain(t, card, `<a href="/aufgaben">Deine Aufgaben</a>`, saysAufgabenNicht)
+	mustNotLeak(t, card, "500", "boom")
+
+	old := backendWait
+	backendWait = 100 * time.Millisecond
+	t.Cleanup(func() { backendWait = old })
+	cl, _ := slowAufgaben(t, time.Second)
+	began := time.Now()
+	_, card, _ = familyPage(t, Mehr, StartConfig{Laib: cl}, "GET", MehrAufgabenPath, "family")
+	if d := time.Since(began); d > time.Second {
+		t.Fatalf("the part waited %v for a silent Laib", d)
+	}
+	mustContain(t, card, saysAufgabenNicht)
 }

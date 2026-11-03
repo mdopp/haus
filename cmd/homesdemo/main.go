@@ -7,7 +7,8 @@
 //
 // /demo/fehler?status=503 makes every switch fail (0: work again);
 // /demo/setze?id=light.flur&state=on changes a state as if someone
-// switched it elsewhere.
+// switched it elsewhere; /demo/laib?ms=800&fehler=0 makes Mehr's Laib
+// answer its task list that slowly (or fail), and forgets the kept list.
 package main
 
 import (
@@ -23,6 +24,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/mdopp/homes/internal/abs"
@@ -37,6 +39,7 @@ import (
 	"github.com/mdopp/homes/internal/ha"
 	"github.com/mdopp/homes/internal/ha/hafake"
 	"github.com/mdopp/homes/internal/jellyfin"
+	"github.com/mdopp/homes/internal/laib"
 	"github.com/mdopp/homes/internal/merken"
 	"github.com/mdopp/homes/internal/notes"
 	"github.com/mdopp/homes/internal/pages"
@@ -174,7 +177,19 @@ func main() {
 	})
 	mux.HandleFunc("/notizen", pages.Notizen(cfg))
 	mux.HandleFunc(cards.NotePages, pages.Notizen(cfg))
-	mux.HandleFunc("/mehr", pages.Mehr(cfg))
+	// Mehr with a Laib whose task list takes a while: the Einrichtung card
+	// fills itself after the page (owner 2026-11-03)
+	demoLaib := &laibFake{}
+	mux.Handle("/demo/laib/mcp", demoLaib)
+	mehr := cfg
+	mehr.Laib = &laib.Client{URL: "http://" + *addr + "/demo/laib", Token: "demo"}
+	mux.HandleFunc("/mehr", pages.Mehr(mehr))
+	mux.HandleFunc(pages.MehrAufgabenPath, pages.Mehr(mehr))
+	mux.HandleFunc("/demo/laib", func(w http.ResponseWriter, r *http.Request) {
+		ms, _ := strconv.Atoi(r.URL.Query().Get("ms"))
+		demoLaib.set(time.Duration(ms)*time.Millisecond, r.URL.Query().Get("fehler") == "1")
+		mehr.Laib.ForgetAufgaben()
+	})
 	mux.HandleFunc(pages.PodcastsPath, pages.Podcasts(cfg))
 	mux.HandleFunc(pages.GesehenPath, pages.Gesehen(cfg))
 	mux.HandleFunc("/demo/feed.xml", func(w http.ResponseWriter, r *http.Request) { // a podcast's feed; the fake ABS knows it by this address
@@ -264,4 +279,43 @@ func demoEnergyCounters(fake *hafake.HA, now time.Time) {
 // sunOf is how much the sun gives on a day, 0 in midwinter to 1 in midsummer.
 func sunOf(t time.Time) float64 {
 	return (1 - math.Cos(2*math.Pi*float64(t.YearDay()-10)/365)) / 2
+}
+
+// laibFake is Laib's MCP for Mehr: one task for everyone, after delay.
+type laibFake struct {
+	mu    sync.Mutex
+	delay time.Duration
+	fail  bool
+}
+
+func (f *laibFake) set(d time.Duration, fail bool) {
+	f.mu.Lock()
+	f.delay, f.fail = d, fail
+	f.mu.Unlock()
+}
+
+func (f *laibFake) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Params struct {
+			Name string `json:"name"`
+		} `json:"params"`
+	}
+	json.NewDecoder(r.Body).Decode(&req)
+	f.mu.Lock()
+	delay, fail := f.delay, f.fail
+	f.mu.Unlock()
+	select {
+	case <-time.After(delay):
+	case <-r.Context().Done():
+		return
+	}
+	if fail {
+		http.Error(w, "laib is down", http.StatusBadGateway)
+		return
+	}
+	text, isErr := "unknown tool "+req.Params.Name, true
+	if req.Params.Name == "laib_aufgabe" {
+		text, isErr = `{"offen":1,"faellig":0,"aufgaben":[{"id":8,"titel":"Homes-App koppeln","warum":"Dann hast du das Haus auf dem Handy.","fuer":"alle","weg":{"seite":"/willkommen"}}]}`, false
+	}
+	json.NewEncoder(w).Encode(map[string]any{"result": map[string]any{"content": []map[string]string{{"text": text}}, "isError": isErr}})
 }

@@ -69,6 +69,9 @@ func startPageAs(t *testing.T, cfg StartConfig, user, groups string) (int, strin
 		now := startNow(t)
 		cfg.Now = func() time.Time { return now }
 	}
+	if cfg.Laib != nil { // the box line as the page's script has it from /start/box: Start itself never waits
+		boxStatusFor(cfg.Laib).read(backendWait)
+	}
 	req := httptest.NewRequest("GET", "/start", nil)
 	if user != "" {
 		req.Header.Set("Remote-User", user)

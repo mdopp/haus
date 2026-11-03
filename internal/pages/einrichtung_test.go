@@ -71,7 +71,7 @@ func TestEinrichtungMitLaibsAufgaben(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 	cfg := StartConfig{Laib: &laib.Client{URL: srv.URL, Token: "t"}, Bote: &bote.Client{}}
-	_, body, _ := familyPage(t, Mehr, cfg, "GET", mehrPath, "family")
+	_, body, _ := familyPage(t, Mehr, cfg, "GET", MehrAufgabenPath, "family") // Mehr's card, after the page
 	if asked["von"] != "anna" || asked["action"] != "list" {
 		t.Errorf("laib asked %v", asked)
 	}

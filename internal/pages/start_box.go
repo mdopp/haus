@@ -11,15 +11,37 @@ import (
 	"github.com/mdopp/homes/internal/laib"
 )
 
-// Start does not wait for laib (haus#67): laib's status takes a second, the
-// rest of Start a few milliseconds. Homes keeps the status statusFresh and
-// waits for a read at most boxInline; a page served before it came has a
-// place for the box line, and the page's script fetches it from StartBoxPath
-// once laib has answered. Variables for the tests.
+// Start does not wait for laib (haus#67; owner 2026-11-03: not even
+// briefly): laib's status takes a second, the rest of Start a few
+// milliseconds. Homes keeps the status statusFresh, and while it is older
+// but not past statusKeep shows it at once and reads it anew behind the
+// page; a page with none kept has a place for the box line, and the page's
+// script fetches it from StartBoxPath once laib has answered. Variables for
+// the tests.
 var (
 	statusFresh = 45 * time.Second
-	boxInline   = 250 * time.Millisecond
+	statusKeep  = 5 * time.Minute
+	boxInline   = time.Duration(0)
 )
+
+// boxStatuses are the kept statuses, one per Laib: Start and Willkommen
+// share one read.
+var (
+	boxStatusesMu sync.Mutex
+	boxStatuses   = map[*laib.Client]*boxStatus{}
+)
+
+// boxStatusFor is c's kept status.
+func boxStatusFor(c *laib.Client) *boxStatus {
+	boxStatusesMu.Lock()
+	defer boxStatusesMu.Unlock()
+	s := boxStatuses[c]
+	if s == nil {
+		s = &boxStatus{laib: c}
+		boxStatuses[c] = s
+	}
+	return s
+}
 
 // StartBoxPath is where Start's script fetches the box line.
 const StartBoxPath = "/start/box"
@@ -41,7 +63,8 @@ type boxStatus struct {
 }
 
 // read is the status if one is fresh; else it starts a read (or joins the
-// one under way) and waits for it at most wait. ok is false when it did
+// one under way), answers at once with a status kept less than statusKeep,
+// and without one waits for the read at most wait. ok is false when it did
 // not come within wait; the read goes on and is kept for the next page.
 func (s *boxStatus) read(wait time.Duration) (ready laib.Readiness, services []laib.Service, err error, ok bool) {
 	s.mu.Lock()
@@ -65,6 +88,10 @@ func (s *boxStatus) read(wait time.Duration) (ready laib.Readiness, services []l
 			s.mu.Unlock()
 			close(done)
 		}()
+	}
+	if !s.at.IsZero() && time.Since(s.at) < statusKeep {
+		defer s.mu.Unlock()
+		return s.ready, s.services, nil, true
 	}
 	s.mu.Unlock()
 	t := time.NewTimer(wait)

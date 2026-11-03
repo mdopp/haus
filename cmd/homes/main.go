@@ -152,7 +152,8 @@ func routes(s site) http.Handler {
 	}
 	pagesMux.HandleFunc(pages.StartBoxPath, start)
 	pagesMux.HandleFunc("/mehr", pages.Mehr(family))
-	pagesMux.HandleFunc("/aufgaben", pages.DeineAufgaben(family)) // haus#188: Deine Aufgaben // the bar's fourth entry, with Abmelden (haus#67)
+	pagesMux.HandleFunc(pages.MehrAufgabenPath, pages.Mehr(family)) // its Einrichtung card, after the page
+	pagesMux.HandleFunc("/aufgaben", pages.DeineAufgaben(family))   // haus#188: Deine Aufgaben // the bar's fourth entry, with Abmelden (haus#67)
 	pagesMux.HandleFunc("/raeume", pages.Raeume(family))
 	pagesMux.HandleFunc("/energie", pages.Energie(family))
 	pagesMux.HandleFunc("/energie/", pages.Energie(family)) // a path it does not serve: 404 and the way back
