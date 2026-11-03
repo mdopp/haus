@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/mdopp/homes/internal/assistent"
 	"github.com/mdopp/homes/internal/cards"
@@ -32,9 +33,17 @@ type aufgabe struct {
 	erledigt     bool
 }
 
+// mehrLaibWait is how long Mehr waits for Laib's tasks when it has none
+// kept yet (owner 2026-11-03: /mehr took seconds). Laib's aufgabe verb takes
+// its MCP lock alone and waits behind any tool running; the read goes on
+// without the page, and the next visit has it (laib.KeptAufgaben).
+var mehrLaibWait = 500 * time.Millisecond
+
 // mitLaib are the person's tasks with Laib's own for them (laib#878): the
 // household's and theirs; the admins' stay on Box. Laib away: Homes' own.
-func mitLaib(r *http.Request, cfg StartConfig) []aufgabe {
+// kept (Mehr) takes the list Homes keeps for a minute and waits at most
+// mehrLaibWait for one; Deine Aufgaben asks Laib each time.
+func mitLaib(r *http.Request, cfg StartConfig, kept bool) []aufgabe {
 	as := einrichtung(r, cfg)
 	user := r.Header.Get("Remote-User")
 	if cfg.Laib == nil || user == "" {
@@ -42,7 +51,17 @@ func mitLaib(r *http.Request, cfg StartConfig) []aufgabe {
 	}
 	var la laib.Aufgaben
 	var err error
-	fetch(r, func(ctx context.Context) { la, err = cfg.Laib.MeineAufgaben(ctx, user) })
+	if kept {
+		ctx, cancel := context.WithTimeout(r.Context(), mehrLaibWait)
+		var ok bool
+		la, ok, err = cfg.Laib.KeptAufgaben(ctx, user)
+		cancel()
+		if !ok && err == nil {
+			err = errors.New("no list yet")
+		}
+	} else {
+		fetch(r, func(ctx context.Context) { la, err = cfg.Laib.MeineAufgaben(ctx, user) })
+	}
 	if err != nil {
 		if !errors.Is(err, laib.ErrNoTool) {
 			log.Printf("homes: einrichtung: laib: %v", err)
@@ -130,7 +149,7 @@ func offen(as []aufgabe) []aufgabe {
 
 // einrichtungKarte is Mehr's „Einrichtung“: the open tasks only; none, no card.
 func einrichtungKarte(r *http.Request, cfg StartConfig) string {
-	open := offen(mitLaib(r, cfg))
+	open := offen(mitLaib(r, cfg, true))
 	if len(open) == 0 {
 		return ""
 	}
@@ -173,7 +192,7 @@ func DeineAufgaben(cfg StartConfig) http.HandlerFunc {
 		if !showOnly(w, r, "Deine Aufgaben") {
 			return
 		}
-		as := mitLaib(r, cfg)
+		as := mitLaib(r, cfg, false)
 		b := familyHead(r, cfg, "Deine Aufgaben", "Aufgaben")
 		b.WriteString("<h1>Deine Aufgaben</h1><p class=k>Was du einmal einrichtest. Ist es erledigt, verschwindet es aus Mehr; hier kannst du es noch einmal machen.</p>")
 		if len(as) == 0 {
