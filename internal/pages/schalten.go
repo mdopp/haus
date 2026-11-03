@@ -117,7 +117,7 @@ func Schalten(cfg StartConfig) http.HandlerFunc {
 			return
 		}
 		log.Printf("homes: schalten %q on %q: %v", do, id, err)
-		m := missing{http.StatusOK, saysSwitchFailed, "Zuhause", back, "Zurück"}
+		m := missing{http.StatusOK, saysSwitchFailed, "Homes", back, "Zurück"}
 		switch {
 		case back == medienPath:
 			m.page = "Medien"

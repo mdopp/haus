@@ -184,16 +184,16 @@ func familyEvening(t *testing.T) StartConfig {
 		Favorites: favorites(t, `{"anna": ["light.buero", "cover.wohnzimmer", "climate.bad", "light.flur"], "ben": ["light.kueche"]}`)}
 }
 
-// haus#35: Start is "Zuhause" and the day — no assistant's name and no
-// admin words on top. Then Im Haus, Meine Geräte,
+// haus#35: Start is Homes' mark, name and claim, as the app's start screen
+// (owner 2026-11-03), and the day — no admin words on top. Then Im Haus, Meine Geräte,
 // Heute und demnächst, and the box in one calm line at the bottom.
-func TestStartIsZuhause(t *testing.T) {
+func TestStartIsHomes(t *testing.T) {
 	named(t, "Ada")
 	code, body := startPage(t, familyEvening(t), "family")
 	if code != 200 {
 		t.Fatalf("status %d", code)
 	}
-	mustContain(t, body, "<title>Zuhause</title>", "<h1>Zuhause</h1>", "Mittwoch, 14. Oktober", `lang=de`,
+	mustContain(t, body, "<title>Homes</title>", "<h1>Homes</h1>", "Dein Zuhause, klar im Blick.", "<img src=/symbol/favicon.svg", "Mittwoch, 14. Oktober", `lang=de`,
 		"<h2 id=karte-im-haus>Im Haus</h2>", "<h2 id=karte-meine-geraete>Meine Geräte</h2>",
 		"<h2 id=karte-heute-und-demnaechst>Heute und demnächst</h2>",
 		"Alles in Ordnung · eure Daten sind von gestern Abend gesichert")
@@ -201,7 +201,7 @@ func TestStartIsZuhause(t *testing.T) {
 		"Alles läuft", "Letzte Sicherung", "Orten", "Letzte Änderung", "Paperless wird installiert", "Operator", "Laib",
 		"Haushalt</h2>", "Jetzt</h2>", "Favoriten</h2>", "Einkaufsliste", "<script>alert", "fonts.googleapis", "fonts.gstatic")
 	// the day first, then what you switch, then the house (owner 2026-10-24)
-	before(t, body, "<h1>Zuhause</h1>", "karte-heute-und-demnaechst")
+	before(t, body, "<h1>Homes</h1>", "karte-heute-und-demnaechst")
 	before(t, body, "karte-heute-und-demnaechst", "karte-meine-geraete")
 	before(t, body, "karte-meine-geraete", "karte-im-haus")
 	before(t, body, "karte-im-haus", "Alles in Ordnung")
@@ -653,7 +653,7 @@ func TestOnlyTheRootLandsOnStart(t *testing.T) {
 		if code != http.StatusNotFound || hdr.Get("Location") != "" {
 			t.Fatalf("%s → %d %q, want 404", p, code, hdr.Get("Location"))
 		}
-		mustContain(t, body, "<title>Nicht gefunden · Zuhause</title>", "<h1>Nicht gefunden</h1>", "<p>Diese Seite gibt es nicht.</p>",
+		mustContain(t, body, "<title>Nicht gefunden · Homes</title>", "<h1>Nicht gefunden</h1>", "<p>Diese Seite gibt es nicht.</p>",
 			"<p><a href=/start>Zur Startseite</a></p>", "<nav class=tabs")
 		mustNotContain(t, body, "unbekannt", "download", "<b>x", "aria-current=page")
 	}

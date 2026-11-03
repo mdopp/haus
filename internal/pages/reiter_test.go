@@ -20,7 +20,7 @@ func TestStartHasTheEnergyLineAndGeraeteWhatPlays(t *testing.T) {
 	before(t, body, "karte-im-haus", "karte-energie")
 
 	_, body, _ = familyPage(t, Raeume, cfg, "GET", "/raeume", "family")
-	mustContain(t, body, "<title>Geräte · Zuhause</title>", "<h1>Geräte</h1>")
+	mustContain(t, body, "<title>Geräte · Homes</title>", "<h1>Geräte</h1>")
 	laeuft := section(t, body, "karte-laeuft-gerade")
 	mustContain(t, laeuft, `<a href="/raeume/media_player.wz">Sonos</a>`, `value="media_player.media_pause"`, `name=zurueck value="/raeume"`)
 	if strings.Count(body, ">Sonos</a>") != 1 {

@@ -88,7 +88,7 @@ func TestSprechenIsNoTab(t *testing.T) {
 		say(t, Sprechen(cfg), "anna", strings.Repeat("a", maxSay+1), nil), // too long
 		say(t, Sprechen(StartConfig{Notes: nd}), "anna", "Hallo", nil),    // the Bote went
 	} {
-		mustContain(t, rec.Body.String(), "<title>Sprechen · Zuhause</title>", "href=/start aria-current=page>")
+		mustContain(t, rec.Body.String(), "<title>Sprechen · Homes</title>", "href=/start aria-current=page>")
 	}
 }
 
@@ -119,7 +119,7 @@ func TestSprechenRelaysAndShowsTheReply(t *testing.T) {
 	if code != 200 {
 		t.Fatalf("GET /sprechen → %d", code)
 	}
-	mustContain(t, body, "<title>Sprechen · Zuhause</title>", "<h1>Sprechen</h1>", "Mach das Licht im Flur an", "Das Licht im Flur ist an.",
+	mustContain(t, body, "<title>Sprechen · Homes</title>", "<h1>Sprechen</h1>", "Mach das Licht im Flur an", "Das Licht im Flur ist an.",
 		">Du<", ">Ada<", "action=/sprechen")
 	before(t, body, "action=/sprechen", "Mach das Licht im Flur an")
 	before(t, body, "Mach das Licht im Flur an", "Das Licht im Flur ist an.")
