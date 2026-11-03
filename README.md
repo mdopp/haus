@@ -579,12 +579,15 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   another holds the file past 5 s; a phone back from a dropped connection
   stops its own piece still hanging on the box and goes on), 413 a piece over 16 MB, 429 while four pieces arrive,
   507 when the disk lacks the rest of the file plus 1 GB, 503 without
-  `HAUS_ARCHIV_DIR` (*Das Nachrichten-Archiv ist auf dieser Box nicht
+  `HAUS_ARCHIV_DIR` (*Das Archiv ist auf dieser Box nicht
   eingerichtet.*). A piece may stall 45 s; parts untouched for seven days
-  go (at start and daily). The page *Nachrichten sichern*
-  (`/nachrichten-sichern`, under Mehr when the box has the inbox) shows the
-  same state for the signed-in person and how to switch the backups on;
-  entering the keys comes with the archive (laib#986).
+  go (at start and daily). The page *Daten sichern* (`/daten-sichern`;
+  the old `/nachrichten-sichern` redirects there; under Mehr when the box
+  has the inbox) shows the same state for the signed-in person and, per
+  source, what to do and what then happens: Signal, WhatsApp, SMS and
+  calls, contacts, mail, calendars (owner, 2026-11-03; Discord dropped, the
+  location history only pointed to). The sources are `whatsapp`, `signal`
+  and `sms`.
   The source `sms` is the phone's SMS and call log
   (`sms-<zeit>.xml.age`, `anrufe-<zeit>.xml.age`), which the app encrypts
   on the phone to the person's archive before sending; Haus keeps them as
@@ -592,7 +595,7 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   `{empfaenger: "age1…"}`, read (through `os.Root`) from
   `HAUS_ARCHIV_DIR/<person>/.briefkasten.pub`, which the archive writes
   (one age X25519 recipient); 404 `{fehler}` until it did (*Dein
-  Nachrichten-Archiv ist noch nicht eingerichtet. Richte es einmal auf der
+  Archiv ist noch nicht eingerichtet. Richte es einmal auf der
   Archiv-Seite ein, …*), 500 when the file holds anything else.
 - The phone's contacts (laib ADR 0029; optional in the app, behind
   Android's contacts permission): `POST /napi/kontakte`, `text/vcard`,

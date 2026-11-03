@@ -175,7 +175,8 @@ func routes(s site) http.Handler {
 	pagesMux.HandleFunc(cards.SwitchPath, pages.Schalten(family))                 // a page's switch, the widgets' rule (haus#35)
 	pagesMux.HandleFunc("/sprechen", pages.Sprechen(family))                      // the Sprechen field to the Bote, and its reply (haus#12)
 	pagesMux.HandleFunc(pages.HoerenPath, pages.Hoeren(family))                   // the field's microphone, HA's speech-to-text (haus#63)
-	pagesMux.HandleFunc(pages.NachrichtenPath, pages.Nachrichten(family))         // the phone's message backups and how to switch them on (haus#207)
+	pagesMux.HandleFunc(pages.DatenPath, pages.Nachrichten(family))               // what goes into the person's archive and how to switch it on (haus#207)
+	pagesMux.HandleFunc(pages.NachrichtenPath, pages.Nachrichten(family))         // the page's old address, a redirect
 	pagesMux.HandleFunc(pages.StandortPath, pages.Standort(family))               // the person's Reitti token for the app's Standortverlauf (owner 2026-11-02)
 	pagesMux.HandleFunc("/netzlaufwerk", pages.Netzlaufwerk(family))              // each person's network-drive password (haus#52)
 	pagesMux.HandleFunc("/willkommen", pages.Willkommen(family))                  // a new person's apps and how to set them up (haus#56)

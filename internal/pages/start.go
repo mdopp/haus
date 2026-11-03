@@ -92,7 +92,7 @@ type StartConfig struct {
 	DocumentsMail string
 	Ablage        *napi.Uploads
 	// Sicherung is the message archives' inbox (HAUS_ARCHIV_DIR, haus#207):
-	// the page „Nachrichten sichern“ reads the person's state from it; nil:
+	// the page „Daten sichern“ reads the person's state from it; nil:
 	// the page says the box has no archive
 	Sicherung          *napi.Sicherung
 	Papierkorb         *papierkorb.Korb // what the family deleted, for 30 days (haus#174); nil: deletes go at once

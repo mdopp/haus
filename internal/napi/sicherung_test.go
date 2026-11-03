@@ -16,7 +16,7 @@ import (
 )
 
 // haus#207, laib ADR 0029: the Haus app brings a person's WhatsApp, Signal
-// and Discord backups into archiv-eingang/<person>/<quelle>/<pfad>, resumably;
+// backups into archiv-eingang/<person>/<quelle>/<pfad>, resumably;
 // the person is the device's, never the request's.
 
 type archiv struct {
@@ -396,8 +396,8 @@ func TestSicherungFehlendFromTheLedger(t *testing.T) {
 	if wa := st.Quellen["whatsapp"]; err != nil || wa.Dateien != 2 || wa.Bytes != 12 || wa.Wartend != 0 || wa.Zuletzt == nil {
 		t.Errorf("stand after the import: %+v %v", st, err)
 	}
-	if dc := st.Quellen["discord"]; dc.Dateien != 0 || dc.Zuletzt != nil {
-		t.Errorf("discord: %+v", dc)
+	if _, ok := st.Quellen["discord"]; ok {
+		t.Errorf("Discord is gone (owner, 2026-11-03): %+v", st.Quellen)
 	}
 	if _, err := os.Stat(filepath.Join(a.data, "sicherung", "anna", "whatsapp.jsonl")); err != nil {
 		t.Errorf("the ledger is not in HAUS_DATA: %v", err)
@@ -414,10 +414,10 @@ func TestSicherungFehlendFromTheLedger(t *testing.T) {
 
 func TestSicherungEmptyFileArrivesAtOnce(t *testing.T) {
 	a := newArchiv(t)
-	if _, off := a.start("anna1", "discord", "package/README.txt", 0); off != 0 {
+	if _, off := a.start("anna1", "signal", "leer.txt", 0); off != 0 {
 		t.Fatalf("offset %d", off)
 	}
-	if fi, err := os.Stat(filepath.Join(a.dir, "anna", "discord", "package", "README.txt")); err != nil || fi.Size() != 0 {
+	if fi, err := os.Stat(filepath.Join(a.dir, "anna", "signal", "leer.txt")); err != nil || fi.Size() != 0 {
 		t.Fatalf("an empty file: %v %v", fi, err)
 	}
 }
@@ -440,7 +440,7 @@ func TestSicherungWithoutArchivDirIs503(t *testing.T) {
 			}
 		}
 	}
-	if rec, out := (&archiv{t: t, h: archivHandler(nil)}).do("GET", "/napi/sicherung/stand", "anna1", nil, nil); out["fehler"] != "Das Nachrichten-Archiv ist auf dieser Box nicht eingerichtet." {
+	if rec, out := (&archiv{t: t, h: archivHandler(nil)}).do("GET", "/napi/sicherung/stand", "anna1", nil, nil); out["fehler"] != "Das Archiv ist auf dieser Box nicht eingerichtet." {
 		t.Errorf("the contract's sentence: %d %v", rec.Code, out)
 	}
 	rec, _ := (&archiv{t: t, h: archivHandler(nil)}).do("GET", "/napi/sicherung/stand", "fremd", nil, nil)
@@ -625,7 +625,7 @@ func TestSicherungTakesSMS(t *testing.T) {
 	if st.Quellen["sms"].Dateien != 2 {
 		t.Fatalf("stand %+v", st.Quellen["sms"])
 	}
-	if say := checkFile("telegram", "x", 1); !strings.Contains(say, "whatsapp, signal, sms und discord") {
+	if say := checkFile("telegram", "x", 1); !strings.Contains(say, "whatsapp, signal und sms") {
 		t.Fatalf("the sentence lists the sources wrong: %s", say)
 	}
 }
