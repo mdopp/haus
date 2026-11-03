@@ -75,7 +75,7 @@ func fixture(t *testing.T) []string {
 // yet) and the notes folder
 func box(t *testing.T) (*davfake.Server, Target, string) {
 	t.Helper()
-	dav := davfake.New("haus", "pw")
+	dav := davfake.New("homes", "pw")
 	t.Cleanup(dav.Close)
 	dir := t.TempDir()
 	d, err := notes.Open(dir)
@@ -86,7 +86,7 @@ func box(t *testing.T) (*davfake.Server, Target, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return dav, Target{Radicale: &caldav.Client{URL: dav.URL, User: "haus", Password: "pw", Loc: loc}, Notes: d, Loc: loc}, dir
+	return dav, Target{Radicale: &caldav.Client{URL: dav.URL, User: "homes", Password: "pw", Loc: loc}, Notes: d, Loc: loc}, dir
 }
 
 func objects(dav *davfake.Server, ext string) map[string]string {
@@ -167,7 +167,7 @@ func TestImportWritesEverythingWhereItBelongs(t *testing.T) {
 	if len(ics) != 5 {
 		t.Fatalf("%d objects: %v", len(ics), ics)
 	}
-	zahnarzt := ics["/haus/haushalt/zahnarzt-lena-1@google.com.ics"]
+	zahnarzt := ics["/homes/haushalt/zahnarzt-lena-1@google.com.ics"]
 	for _, want := range []string{"BEGIN:VCALENDAR\r\n", "BEGIN:VTIMEZONE\r\nTZID:Europe/Berlin\r\n", "SUMMARY:Zahnarzt Lena\r\n", "LOCATION:Praxis am Markt\\, Musterstadt\r\n",
 		"BEGIN:VALARM\r\n", "END:VEVENT\r\nEND:VCALENDAR\r\n"} {
 		if !strings.Contains(zahnarzt, want) {
@@ -181,17 +181,17 @@ func TestImportWritesEverythingWhereItBelongs(t *testing.T) {
 		t.Fatalf("not one readable appointment: %v", err)
 	}
 	// the series and its moved date: one object
-	muell := ics["/haus/haushalt/muellabfuhr-1@google.com.ics"]
+	muell := ics["/homes/haushalt/muellabfuhr-1@google.com.ics"]
 	if strings.Count(muell, "BEGIN:VEVENT") != 2 || !strings.Contains(muell, "RECURRENCE-ID;TZID=Europe/Berlin:20260406T070000") {
 		t.Fatalf("Müllabfuhr:\n%s", muell)
 	}
 	// folding kept as it came: the long description is still one property
-	if oma := ics["/haus/haushalt/geburtstag-oma@google.com.ics"]; !strings.Contains(oma, "DESCRIPTION:Fotobuch mit den Enkeln besorgen\\, Kuchen backen und die ganze F\r\n amilie") {
+	if oma := ics["/homes/haushalt/geburtstag-oma@google.com.ics"]; !strings.Contains(oma, "DESCRIPTION:Fotobuch mit den Enkeln besorgen\\, Kuchen backen und die ganze F\r\n amilie") {
 		t.Fatalf("Oma:\n%s", oma)
 	}
 	// no UID: one made from what it is, written into the entry
 	grill := withText(ics, "Grillfest im Garten")
-	if len(grill) != 1 || !strings.HasPrefix(grill[0], "/haus/haushalt/takeout-") || !strings.Contains(ics[grill[0]], "UID:takeout-") {
+	if len(grill) != 1 || !strings.HasPrefix(grill[0], "/homes/haushalt/takeout-") || !strings.Contains(ics[grill[0]], "UID:takeout-") {
 		t.Fatalf("Grillfest: %v", grill)
 	}
 
@@ -259,7 +259,7 @@ func TestImportTwiceWritesNothingTwice(t *testing.T) {
 		t.Fatal(err)
 	}
 	// edited since: an appointment on a phone, a note in the folder
-	dav.Put("/haus/haushalt/zahnarzt-lena-1@google.com.ics", "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:zahnarzt-lena-1@google.com\r\nSUMMARY:Zahnarzt Lena (verschoben)\r\n"+
+	dav.Put("/homes/haushalt/zahnarzt-lena-1@google.com.ics", "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:zahnarzt-lena-1@google.com\r\nSUMMARY:Zahnarzt Lena (verschoben)\r\n"+
 		"DTSTART:20260311T080000Z\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n")
 	before := files(t, dir)
 	note := filepath.Join(dir, before[1])
@@ -273,7 +273,7 @@ func TestImportTwiceWritesNothingTwice(t *testing.T) {
 	if rep.Events != (Count{There: 5}) || rep.Contacts != (Count{There: 4, Failed: 1}) || rep.Notes != (Count{There: 3}) || rep.Attachments != (Count{There: 1}) {
 		t.Fatalf("second run: %+v", rep)
 	}
-	if after := dav.Objects(); len(after) != len(objs) || after["/haus/haushalt/zahnarzt-lena-1@google.com.ics"] != objs["/haus/haushalt/zahnarzt-lena-1@google.com.ics"] {
+	if after := dav.Objects(); len(after) != len(objs) || after["/homes/haushalt/zahnarzt-lena-1@google.com.ics"] != objs["/homes/haushalt/zahnarzt-lena-1@google.com.ics"] {
 		t.Fatalf("objects changed: %d → %d", len(objs), len(after))
 	}
 	if after := files(t, dir); strings.Join(after, ",") != strings.Join(before, ",") || read(t, note) != "# Einkaufsliste\n\n- [ ] Hafermilch\n" {
@@ -458,7 +458,7 @@ func TestImportStopsOnWhatEveryEntryWouldHit(t *testing.T) {
 		srv.Close()
 	}
 	dav, target, _ := box(t)
-	dav.AddCalendar("/haus/haushalt/", "Haushalt", "VTODO")
+	dav.AddCalendar("/homes/haushalt/", "Haushalt", "VTODO")
 	if _, err := Import(bg, []string{ics}, target, io.Discard); err == nil || !strings.Contains(err.Error(), "nimmt kein") {
 		t.Fatalf("a calendar that takes no appointments: %v", err)
 	}
@@ -471,7 +471,7 @@ func TestObjectNamesEachZoneOnce(t *testing.T) {
 	if _, err := Import(bg, fixture(t), target, io.Discard); err != nil {
 		t.Fatal(err)
 	}
-	z := objects(dav, ".ics")["/haus/haushalt/zahnarzt-lena-1@google.com.ics"]
+	z := objects(dav, ".ics")["/homes/haushalt/zahnarzt-lena-1@google.com.ics"]
 	if !strings.Contains(z, "DTEND;TZID=Europe/Berlin") || strings.Count(z, "BEGIN:VTIMEZONE") != 1 {
 		t.Fatalf("%s", z)
 	}
@@ -493,7 +493,7 @@ func TestEntriesAreKnownByThemselves(t *testing.T) {
 	if err != nil || rep.Events != (Count{New: 4}) {
 		t.Fatalf("%+v %v", rep, err)
 	}
-	if _, ok := objects(dav, ".ics")["/haus/haushalt/sehr-lange-kennung-die-google-umbricht@google.com.ics"]; !ok {
+	if _, ok := objects(dav, ".ics")["/homes/haushalt/sehr-lange-kennung-die-google-umbricht@google.com.ics"]; !ok {
 		t.Fatalf("folded UID: %v", dav.Objects())
 	}
 }

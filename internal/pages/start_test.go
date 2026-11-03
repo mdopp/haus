@@ -90,10 +90,10 @@ func house(t *testing.T) (*hafake.HA, *ha.Client) {
 
 func calendar(t *testing.T) (*davfake.Server, *caldav.Client) {
 	t.Helper()
-	fake := davfake.New("haus", "pw")
+	fake := davfake.New("homes", "pw")
 	t.Cleanup(fake.Close)
-	fake.AddCalendar("/haus/familie/", "Haushalt")
-	return fake, &caldav.Client{URL: fake.URL, User: "haus", Password: "pw", Loc: berlin(t)}
+	fake.AddCalendar("/homes/familie/", "Haushalt")
+	return fake, &caldav.Client{URL: fake.URL, User: "homes", Password: "pw", Loc: berlin(t)}
 }
 
 func event(uid, start, end, summary string) string {
@@ -174,11 +174,11 @@ func familyEvening(t *testing.T) StartConfig {
 		"media_artist": "The Beatles", "supported_features": 152461.0})
 	fake.Set("media_player.kueche", "paused", map[string]any{"friendly_name": "Küchenradio", "media_title": "Deutschlandfunk", "supported_features": 1.0})
 	dav, cal := calendar(t)
-	dav.Put("/haus/familie/1.ics", event("1", "20261013T080000Z", "20261013T090000Z", "Gestern vorbei"))
-	dav.Put("/haus/familie/2.ics", eventAt("2", "20261015T063000Z", "20261015T073000Z", "Zahnarzt", "Ben"))
-	dav.Put("/haus/familie/m.ics", todo("muell", "Müll rausbringen", "DUE:20261014T170000Z\r\n"))
-	dav.Put("/haus/familie/o.ics", todo("oma", "Geschenk für Oma", "DUE;VALUE=DATE:20261017\r\n"))
-	dav.Put("/haus/familie/e.ics", todo("e", "Erledigt schon", "STATUS:COMPLETED\r\nDUE:20261014T070000Z\r\n"))
+	dav.Put("/homes/familie/1.ics", event("1", "20261013T080000Z", "20261013T090000Z", "Gestern vorbei"))
+	dav.Put("/homes/familie/2.ics", eventAt("2", "20261015T063000Z", "20261015T073000Z", "Zahnarzt", "Ben"))
+	dav.Put("/homes/familie/m.ics", todo("muell", "Müll rausbringen", "DUE:20261014T170000Z\r\n"))
+	dav.Put("/homes/familie/o.ics", todo("oma", "Geschenk für Oma", "DUE;VALUE=DATE:20261017\r\n"))
+	dav.Put("/homes/familie/e.ics", todo("e", "Erledigt schon", "STATUS:COMPLETED\r\nDUE:20261014T070000Z\r\n"))
 	return StartConfig{Laib: fakeLaib(t, allGreen(t), []map[string]any{{"name": "immich", "state": "grün"}}), LaibURL: "https://laib.box.test",
 		HA: hc, Calendar: cal, Notes: notesDir(t, map[string]time.Duration{"Einkaufsliste": time.Hour}),
 		Favorites: favorites(t, `{"anna": ["light.buero", "cover.wohnzimmer", "climate.bad", "light.flur"], "ben": ["light.kueche"]}`)}
@@ -424,11 +424,11 @@ func TestStartHeuteUndDemnaechst(t *testing.T) {
 // one overdue comes first; the list has an end, and says how much more.
 func TestStartHeuteUndDemnaechstOrder(t *testing.T) {
 	dav, cal := calendar(t)
-	dav.Put("/haus/familie/a.ics", todo("a", "Irgendwann", ""))
-	dav.Put("/haus/familie/b.ics", todo("b", "Liegt schon", "DUE:20261013T070000Z\r\n"))
-	dav.Put("/haus/familie/c.ics", todo("c", "Steuer", "DUE:20261030T070000Z\r\n"))
+	dav.Put("/homes/familie/a.ics", todo("a", "Irgendwann", ""))
+	dav.Put("/homes/familie/b.ics", todo("b", "Liegt schon", "DUE:20261013T070000Z\r\n"))
+	dav.Put("/homes/familie/c.ics", todo("c", "Steuer", "DUE:20261030T070000Z\r\n"))
 	for i := 1; i <= 6; i++ {
-		dav.Put(fmt.Sprintf("/haus/familie/e%d.ics", i), event(fmt.Sprintf("e%d", i), fmt.Sprintf("202610%02dT150000Z", 14+i), fmt.Sprintf("202610%02dT160000Z", 14+i), fmt.Sprintf("Termin %d", i)))
+		dav.Put(fmt.Sprintf("/homes/familie/e%d.ics", i), event(fmt.Sprintf("e%d", i), fmt.Sprintf("202610%02dT150000Z", 14+i), fmt.Sprintf("202610%02dT160000Z", 14+i), fmt.Sprintf("Termin %d", i)))
 	}
 	_, body := startPage(t, StartConfig{Calendar: cal}, "")
 	a := section(t, body, "karte-heute-und-demnaechst")
@@ -437,8 +437,8 @@ func TestStartHeuteUndDemnaechstOrder(t *testing.T) {
 	before(t, a, "Liegt schon", "Termin 1")
 
 	dav2, cal2 := calendar(t)
-	dav2.Put("/haus/familie/a.ics", todo("a", "Irgendwann", ""))
-	dav2.Put("/haus/familie/2.ics", event("2", "20261015T130000Z", "20261015T140000Z", "Zahnarzt"))
+	dav2.Put("/homes/familie/a.ics", todo("a", "Irgendwann", ""))
+	dav2.Put("/homes/familie/2.ics", event("2", "20261015T130000Z", "20261015T140000Z", "Zahnarzt"))
 	_, body = startPage(t, StartConfig{Calendar: cal2}, "")
 	a = section(t, body, "karte-heute-und-demnaechst")
 	mustContain(t, a, "<time>offen</time>", "Irgendwann")
@@ -591,7 +591,7 @@ func TestStartSaysPlainlyWhatDoesNotAnswer(t *testing.T) {
 // and the plain line, in the same section.
 func TestStartSaysFailingRemindersWithTheAppointments(t *testing.T) {
 	dav, cal := calendar(t)
-	dav.Put("/haus/familie/2.ics", event("2", "20261015T130000Z", "20261015T140000Z", "Zahnarzt"))
+	dav.Put("/homes/familie/2.ics", event("2", "20261015T130000Z", "20261015T140000Z", "Zahnarzt"))
 	// in front of the fake: a reminders query answers 500, the rest passes
 	front := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)

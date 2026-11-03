@@ -134,9 +134,9 @@ func TestAusNotizAndFuer(t *testing.T) {
 
 func list(t *testing.T) (*Liste, *davfake.Server, *int) {
 	t.Helper()
-	dav := davfake.New("haus", "pw")
+	dav := davfake.New("homes", "pw")
 	t.Cleanup(dav.Close)
-	l := Open(&caldav.Client{URL: dav.URL, User: "haus", Password: "pw"})
+	l := Open(&caldav.Client{URL: dav.URL, User: "homes", Password: "pw"})
 	told := 0
 	l.Changed = func(caldav.ListRef) { told++ }
 	if err := l.Ensure(context.Background()); err != nil {
@@ -168,7 +168,7 @@ func lines(t *testing.T, l *Liste) []string {
 func TestListeAddsUpTicksAndTidies(t *testing.T) {
 	ctx := context.Background()
 	l, dav, told := list(t)
-	if got := dav.Calendars(); len(got) != 1 || got[0] != "/haus/einkauf/" || dav.DisplayName("/haus/einkauf/") != "Einkauf" {
+	if got := dav.Calendars(); len(got) != 1 || got[0] != "/homes/einkauf/" || dav.DisplayName("/homes/einkauf/") != "Einkauf" {
 		t.Fatalf("calendars = %v", got)
 	}
 	if err := l.Ensure(ctx); err != nil { // there already: no error
@@ -228,18 +228,18 @@ func TestListeAddsUpTicksAndTidies(t *testing.T) {
 func TestListeReadsAPhonesLine(t *testing.T) {
 	ctx := context.Background()
 	l, dav, _ := list(t)
-	dav.Put("/haus/einkauf/phone.ics", "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VTODO\r\nUID:phone-1\r\nSUMMARY:2 Eier\r\nCATEGORIES:Kühlregal\r\nDTSTAMP:20261025T080000Z\r\nEND:VTODO\r\nEND:VCALENDAR\r\n")
+	dav.Put("/homes/einkauf/phone.ics", "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VTODO\r\nUID:phone-1\r\nSUMMARY:2 Eier\r\nCATEGORIES:Kühlregal\r\nDTSTAMP:20261025T080000Z\r\nEND:VTODO\r\nEND:VCALENDAR\r\n")
 	if res, err := l.Dazu(ctx, []Zeile{{Posten: Parse("1 Ei"), Herkunft: []string{"Kuchen"}}}); err != nil || res.Addiert != 1 {
 		t.Fatalf("Dazu = %+v, %v", res, err)
 	}
-	ics := dav.Objects()["/haus/einkauf/phone.ics"]
+	ics := dav.Objects()["/homes/einkauf/phone.ics"]
 	if !strings.Contains(ics, "SUMMARY:3 Eier") || !strings.Contains(ics, "CATEGORIES:Kühlregal") || !strings.Contains(ics, "DESCRIPTION:Kuchen") {
 		t.Errorf("the phone's line, added to:\n%s", ics)
 	}
 	if err := l.Haken(ctx, "phone-1", true); err != nil {
 		t.Fatal(err)
 	}
-	if ics := dav.Objects()["/haus/einkauf/phone.ics"]; !strings.Contains(ics, "STATUS:COMPLETED") || strings.Count(ics, "SUMMARY:") != 1 {
+	if ics := dav.Objects()["/homes/einkauf/phone.ics"]; !strings.Contains(ics, "STATUS:COMPLETED") || strings.Count(ics, "SUMMARY:") != 1 {
 		t.Errorf("ticked:\n%s", ics)
 	}
 }
@@ -334,7 +334,7 @@ func TestMusikWuensche(t *testing.T) {
 	if err != nil || g.Schon || !strings.HasPrefix(g.Satz, "Auf der Musik-Wunschliste: „Wanda – Salbei“.") {
 		t.Fatalf("%+v %v", g, err)
 	}
-	if got := dav.DisplayName("/haus/liste-musik/"); got != "Musik" {
+	if got := dav.DisplayName("/homes/liste-musik/"); got != "Musik" {
 		t.Errorf("list %q", got)
 	}
 	if g, _ := w.Wuenschen(ctx, merken.Lied{Kuenstler: "wanda", Titel: "salbei"}, "ben"); !g.Steht {

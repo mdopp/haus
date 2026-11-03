@@ -1,5 +1,5 @@
 // Package einkauf is the household's shopping list (haus#118; owner
-// 2026-10-25): one list for the household in Radicale (haus/einkauf), its
+// 2026-10-25): one list for the household in Radicale (homes/einkauf), its
 // lines tasks the phones show too. Lines are added by hand, by the assistant or
 // from recipes, scaled to the portions wanted; the same thing in the same
 // kind of unit is added up (200 g + 300 g Mehl = 500 g), anything else

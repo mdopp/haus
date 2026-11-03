@@ -77,9 +77,9 @@ func (f *calLaib) client(t *testing.T) *laib.Client {
 
 func kalenderBox(t *testing.T) (*davfake.Server, StartConfig, *calLaib) {
 	t.Helper()
-	fake := davfake.New("haus", "pw")
+	fake := davfake.New("homes", "pw")
 	t.Cleanup(fake.Close)
-	fake.AddCalendar("/haus/haushalt/", "Haushalt")
+	fake.AddCalendar("/homes/haushalt/", "Haushalt")
 	fake.AddPrincipal("anna")
 	fake.AddCalendar("/anna/google-familie/", "Familie")
 	fake.SetSynced("/anna/google-familie/", "2026-10-14T07:55:00Z", "")
@@ -87,8 +87,8 @@ func kalenderBox(t *testing.T) (*davfake.Server, StartConfig, *calLaib) {
 	fake.SetSynced("/anna/abo-muell/", "2026-10-14T05:00:00Z", "Kalender „Müllabfuhr“: seit 3 h nicht abgeglichen")
 	l := &calLaib{abos: []map[string]any{{"person": "anna", "name": "familie", "kind": "google", "title": "Familie", "since": "2026-10-12T08:00:00Z"},
 		{"person": "anna", "name": "muell", "kind": "abo", "title": "Müllabfuhr", "since": "2026-10-01T08:00:00Z"}}}
-	cfg := StartConfig{Calendar: &caldav.Client{URL: fake.URL, User: "haus", Password: "pw", Loc: berlin(t)}, Laib: l.client(t),
-		RadicalePublicURL: "https://caldav.box.test", Views: ansicht.Open(t.TempDir())}
+	cfg := StartConfig{Calendar: &caldav.Client{URL: fake.URL, User: "homes", Password: "pw", Loc: berlin(t)}, Laib: l.client(t),
+		RadicalePublicURL: "https://caldav.box.test", Views: ansicht.Open(t.TempDir(), "homes")}
 	return fake, cfg, l
 }
 
@@ -105,7 +105,7 @@ func TestDeineKalenderListsWhereEachComesFrom(t *testing.T) {
 		"Familie", "aus Google, nur lesen · verbunden seit Mo 12.10. · abgeglichen alle 15 Minuten · zuletzt abgeglichen vor 5 min",
 		"Müllabfuhr", "abonniert, nur lesen", "seit 3 h nicht abgeglichen",
 		`value="https://caldav.box.test/anna/google-familie/"`, "DAVx⁵", "Anmeldung wie bei Homes",
-		`href="https://caldav.box.test/.web/"`, "In Radicale öffnen", "Adressbuch fürs Telefon", `value="https://caldav.box.test/haus/haushalt-kontakte/"`,
+		`href="https://caldav.box.test/.web/"`, "In Radicale öffnen", "Adressbuch fürs Telefon", `value="https://caldav.box.test/homes/haushalt-kontakte/"`,
 		"Google-Kalender verbinden", "Geheime Adresse im iCal-Format", "Kalender integrieren",
 		"Öffentlichen Kalender abonnieren", "Feiertage", "Schulferien", "Niedersachsen", "Neuen Kalender anlegen", "nur für mich",
 		"Trennen…")
@@ -171,7 +171,7 @@ func TestFeiertageForTheFamilyFromTheList(t *testing.T) {
 		t.Fatalf("%d", rec.Code)
 	}
 	c := l.calls[len(l.calls)-1]
-	if c["person"] != "haus" || c["kind"] != "abo" || c["name"] != "feiertage-bayern" || c["title"] != "Feiertage Bayern" ||
+	if c["person"] != "homes" || c["kind"] != "abo" || c["name"] != "feiertage-bayern" || c["title"] != "Feiertage Bayern" ||
 		c["stdin"] != "https://openholidaysapi.org/PublicHolidays?countryIsoCode=DE&subdivisionCode=DE-BY&languageIsoCode=DE\n" {
 		t.Fatalf("laib got %v", c)
 	}
@@ -183,7 +183,7 @@ func TestFeiertageForTheFamilyFromTheList(t *testing.T) {
 
 func TestNeuerKalenderForTheFamilyOrForOneself(t *testing.T) {
 	fake, cfg, _ := kalenderBox(t)
-	for fuer, want := range map[string]string{"familie": "/haus/familie-ausfluege/", "ich": "/anna/privat-ausfluege/"} {
+	for fuer, want := range map[string]string{"familie": "/homes/familie-ausfluege/", "ich": "/anna/privat-ausfluege/"} {
 		rec := post(t, KalenderHinzufuegen(cfg), kalenderAdd, url.Values{"weg": {"neu"}, "name": {"Ausflüge"}, "fuer": {fuer}}, "anna", nil)
 		if rec.Header().Get("Location") != kalenderVerwalten+"?gesagt=angelegt" {
 			t.Fatalf("%s: %v", fuer, rec.Header())
@@ -237,9 +237,9 @@ func TestTrennenAsksLaibAndLoeschenOnlyWhatHomesMade(t *testing.T) {
 	if rec.Header().Get("Location") != kalenderVerwalten+"?gesagt=nicht-moeglich" || fake.DisplayName("/anna/abo-muell/") == "" {
 		t.Fatalf("a mirror deleted: %v", rec.Header())
 	}
-	fake.AddCalendar("/haus/familie-x/", "X")
-	post(t, KalenderAendern(cfg), kalenderChange, url.Values{"kalender": {"/haus/familie-x/"}, "tu": {"loeschen"}}, "anna", nil)
-	if fake.DisplayName("/haus/familie-x/") != "" {
+	fake.AddCalendar("/homes/familie-x/", "X")
+	post(t, KalenderAendern(cfg), kalenderChange, url.Values{"kalender": {"/homes/familie-x/"}, "tu": {"loeschen"}}, "anna", nil)
+	if fake.DisplayName("/homes/familie-x/") != "" {
 		t.Fatal("not deleted")
 	}
 }
@@ -274,7 +274,7 @@ func TestKalenderAbstandIsChosenAndChanged(t *testing.T) {
 	n := len(l.calls)
 	for _, bad := range []url.Values{
 		{"kalender": {"/anna/abo-muell/"}, "tu": {"abstand"}, "abstand": {"1s"}},
-		{"kalender": {"/haus/haushalt/"}, "tu": {"abstand"}, "abstand": {"1d"}},
+		{"kalender": {"/homes/haushalt/"}, "tu": {"abstand"}, "abstand": {"1d"}},
 	} {
 		if rec := post(t, KalenderAendern(cfg), kalenderChange, bad, "anna", nil); rec.Code != http.StatusBadRequest {
 			t.Errorf("%v → %d", bad, rec.Code)
@@ -291,13 +291,13 @@ func TestKalenderRueckgaengig(t *testing.T) {
 	fake, cfg, _ := kalenderBox(t)
 	now := time.Date(2026, 10, 28, 9, 0, 0, 0, time.UTC)
 	cfg.Papierkorb = &papierkorb.Korb{Dir: t.TempDir(), Now: func() time.Time { return now }}
-	fake.AddCalendar("/haus/familie-urlaub/", "Urlaub")
-	fake.Put("/haus/familie-urlaub/a.ics", event("a", "20261101T090000Z", "20261101T100000Z", "Flug"))
-	fake.Put("/haus/familie-urlaub/b.ics", event("b", "20261108T090000Z", "20261108T100000Z", "Rückflug"))
+	fake.AddCalendar("/homes/familie-urlaub/", "Urlaub")
+	fake.Put("/homes/familie-urlaub/a.ics", event("a", "20261101T090000Z", "20261101T100000Z", "Flug"))
+	fake.Put("/homes/familie-urlaub/b.ics", event("b", "20261108T090000Z", "20261108T100000Z", "Rückflug"))
 
-	rec := post(t, KalenderAendern(cfg), kalenderChange, url.Values{"kalender": {"/haus/familie-urlaub/"}, "name": {"Urlaub"}, "tu": {"loeschen"}}, "anna", nil)
+	rec := post(t, KalenderAendern(cfg), kalenderChange, url.Values{"kalender": {"/homes/familie-urlaub/"}, "name": {"Urlaub"}, "tu": {"loeschen"}}, "anna", nil)
 	loc := rec.Header().Get("Location")
-	if !strings.HasPrefix(loc, kalenderVerwalten+"?gesagt=geloescht&korb=") || fake.DisplayName("/haus/familie-urlaub/") != "" {
+	if !strings.HasPrefix(loc, kalenderVerwalten+"?gesagt=geloescht&korb=") || fake.DisplayName("/homes/familie-urlaub/") != "" {
 		t.Fatalf("loeschen → %q", loc)
 	}
 	_, body, _ := familyPage(t, KalenderVerwalten, cfg, "GET", loc, "family")
@@ -305,22 +305,43 @@ func TestKalenderRueckgaengig(t *testing.T) {
 		"Gelöscht, noch 30 Tage zurückzuholen")
 	id := loc[strings.Index(loc, "korb=")+5:]
 
-	if rec := post(t, KalenderAendern(cfg), kalenderChange, url.Values{"kalender": {"/haus/familie-urlaub/"}, "name": {"Urlaub"}, "tu": {"zurueckholen"}, "id": {id}}, "ben", nil); rec.Header().Get("Location") != kalenderVerwalten+"?gesagt=zurueck" {
+	if rec := post(t, KalenderAendern(cfg), kalenderChange, url.Values{"kalender": {"/homes/familie-urlaub/"}, "name": {"Urlaub"}, "tu": {"zurueckholen"}, "id": {id}}, "ben", nil); rec.Header().Get("Location") != kalenderVerwalten+"?gesagt=zurueck" {
 		t.Fatalf("zurueckholen → %d %v %s", rec.Code, rec.Header(), rec.Body)
 	}
-	if fake.DisplayName("/haus/familie-urlaub/") != "Urlaub" {
+	if fake.DisplayName("/homes/familie-urlaub/") != "Urlaub" {
 		t.Fatal("not made again")
 	}
 	back := 0
 	for p := range fake.Objects() {
-		if strings.HasPrefix(p, "/haus/familie-urlaub/") {
+		if strings.HasPrefix(p, "/homes/familie-urlaub/") {
 			back++
 		}
 	}
 	if back != 2 {
 		t.Fatalf("appointments back: %d of 2", back)
 	}
-	if rec := post(t, KalenderAendern(cfg), kalenderChange, url.Values{"kalender": {"/haus/familie-urlaub/"}, "name": {"Urlaub"}, "tu": {"zurueckholen"}, "id": {id}}, "anna", nil); rec.Code != http.StatusConflict {
+	if rec := post(t, KalenderAendern(cfg), kalenderChange, url.Values{"kalender": {"/homes/familie-urlaub/"}, "name": {"Urlaub"}, "tu": {"zurueckholen"}, "id": {id}}, "anna", nil); rec.Code != http.StatusConflict {
 		t.Errorf("twice → %d", rec.Code)
+	}
+}
+
+// laib#1021: a calendar deleted while Homes' account was haus is listed and
+// taken back under the account it is now.
+func TestKalenderRueckgaengigAltesKonto(t *testing.T) {
+	fake, cfg, _ := kalenderBox(t)
+	now := time.Date(2026, 11, 3, 9, 0, 0, 0, time.UTC)
+	cfg.Papierkorb = &papierkorb.Korb{Dir: t.TempDir(), Now: func() time.Time { return now }}
+	e, err := cfg.Papierkorb.Rein("kalender", "Urlaub", "anna", kalenderImKorb{Path: "/haus/familie-urlaub/", Name: "Urlaub",
+		Abzug: caldav.Abzug{Objekte: []caldav.AbzugObjekt{{Name: "a.ics", ICS: event("a", "20261108T090000Z", "20261108T100000Z", "Flug")}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, body, _ := familyPage(t, KalenderVerwalten, cfg, "GET", kalenderVerwalten, "family")
+	mustContain(t, body, "„Urlaub“ <small class=k>1 Termin · bis", `value="/homes/familie-urlaub/"`)
+	if rec := post(t, KalenderAendern(cfg), kalenderChange, url.Values{"kalender": {"/homes/familie-urlaub/"}, "name": {"Urlaub"}, "tu": {"zurueckholen"}, "id": {e.ID}}, "ben", nil); rec.Header().Get("Location") != kalenderVerwalten+"?gesagt=zurueck" {
+		t.Fatalf("zurueckholen → %d %v %s", rec.Code, rec.Header(), rec.Body)
+	}
+	if fake.DisplayName("/homes/familie-urlaub/") != "Urlaub" || fake.Objects()["/homes/familie-urlaub/a.ics"] == "" {
+		t.Fatalf("not made again under homes: %v", fake.Calendars())
 	}
 }

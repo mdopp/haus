@@ -31,23 +31,23 @@ func gemeinsamHandler(t *testing.T, dav *caldav.Client) http.Handler {
 
 func gemeinsamFake(t *testing.T) (*davfake.Server, http.Handler) {
 	t.Helper()
-	fake := davfake.New("haus", "pw")
+	fake := davfake.New("homes", "pw")
 	t.Cleanup(fake.Close)
 	berlin, _ := time.LoadLocation("Europe/Berlin")
-	dav := &caldav.Client{URL: fake.URL, User: "haus", Password: "pw", Loc: berlin}
+	dav := &caldav.Client{URL: fake.URL, User: "homes", Password: "pw", Loc: berlin}
 
-	fake.AddCalendar("/haus/haushalt/", "Haushalt", "VEVENT", "VTODO")
-	fake.AddCalendar("/haus/familie-urlaub/", "Urlaub")
-	fake.AddCalendar("/haus/einkauf/", "Einkauf", "VTODO") // a list, no calendar
-	fake.AddAddressBook("/haus/haushalt-kontakte/", "Haushalt")
-	fake.Put("/haus/haushalt/muell.ics", "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:muell\r\nDTSTART:20261105T060000Z\r\nDTEND:20261105T063000Z\r\nSUMMARY:Müll, Papier\r\nDESCRIPTION:raus\\nbis 7\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n")
-	fake.Put("/haus/familie-urlaub/see.ics", "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:see\r\nDTSTART;VALUE=DATE:20261220\r\nDTEND;VALUE=DATE:20261223\r\nSUMMARY:Am See\r\nLOCATION:Ammersee\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n")
-	fake.Put("/haus/haushalt/arzt.ics", "BEGIN:VCALENDAR\r\nBEGIN:VTODO\r\nUID:arzt\r\nSUMMARY:Arzt anrufen\r\nDUE:20261104T080000Z\r\nEND:VTODO\r\nEND:VCALENDAR\r\n")
-	fake.Put("/haus/haushalt/blumen.ics", "BEGIN:VCALENDAR\r\nBEGIN:VTODO\r\nUID:blumen\r\nSUMMARY:Blumen gießen\r\nDUE;TZID=Europe/Berlin:20261106T180000\r\nRRULE:FREQ=WEEKLY\r\nEND:VTODO\r\nEND:VCALENDAR\r\n")
-	fake.Put("/haus/haushalt/erledigt.ics", "BEGIN:VCALENDAR\r\nBEGIN:VTODO\r\nUID:erledigt\r\nSUMMARY:Erledigt\r\nDUE:20261101T080000Z\r\nSTATUS:COMPLETED\r\nCOMPLETED:20261101T090000Z\r\nEND:VTODO\r\nEND:VCALENDAR\r\n")
-	fake.Put("/haus/haushalt/irgendwann.ics", "BEGIN:VCALENDAR\r\nBEGIN:VTODO\r\nUID:irgendwann\r\nSUMMARY:Irgendwann\r\nEND:VTODO\r\nEND:VCALENDAR\r\n")
-	fake.Put("/haus/einkauf/milch.ics", "BEGIN:VCALENDAR\r\nBEGIN:VTODO\r\nUID:milch\r\nSUMMARY:Milch\r\nEND:VTODO\r\nEND:VCALENDAR\r\n")
-	fake.Put("/haus/haushalt-kontakte/oma.vcf", "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:oma\r\nFN:Oma Erna\r\nTEL;TYPE=CELL:+49 170 1234567\r\nEND:VCARD\r\n")
+	fake.AddCalendar("/homes/haushalt/", "Haushalt", "VEVENT", "VTODO")
+	fake.AddCalendar("/homes/familie-urlaub/", "Urlaub")
+	fake.AddCalendar("/homes/einkauf/", "Einkauf", "VTODO") // a list, no calendar
+	fake.AddAddressBook("/homes/haushalt-kontakte/", "Haushalt")
+	fake.Put("/homes/haushalt/muell.ics", "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:muell\r\nDTSTART:20261105T060000Z\r\nDTEND:20261105T063000Z\r\nSUMMARY:Müll, Papier\r\nDESCRIPTION:raus\\nbis 7\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n")
+	fake.Put("/homes/familie-urlaub/see.ics", "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:see\r\nDTSTART;VALUE=DATE:20261220\r\nDTEND;VALUE=DATE:20261223\r\nSUMMARY:Am See\r\nLOCATION:Ammersee\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n")
+	fake.Put("/homes/haushalt/arzt.ics", "BEGIN:VCALENDAR\r\nBEGIN:VTODO\r\nUID:arzt\r\nSUMMARY:Arzt anrufen\r\nDUE:20261104T080000Z\r\nEND:VTODO\r\nEND:VCALENDAR\r\n")
+	fake.Put("/homes/haushalt/blumen.ics", "BEGIN:VCALENDAR\r\nBEGIN:VTODO\r\nUID:blumen\r\nSUMMARY:Blumen gießen\r\nDUE;TZID=Europe/Berlin:20261106T180000\r\nRRULE:FREQ=WEEKLY\r\nEND:VTODO\r\nEND:VCALENDAR\r\n")
+	fake.Put("/homes/haushalt/erledigt.ics", "BEGIN:VCALENDAR\r\nBEGIN:VTODO\r\nUID:erledigt\r\nSUMMARY:Erledigt\r\nDUE:20261101T080000Z\r\nSTATUS:COMPLETED\r\nCOMPLETED:20261101T090000Z\r\nEND:VTODO\r\nEND:VCALENDAR\r\n")
+	fake.Put("/homes/haushalt/irgendwann.ics", "BEGIN:VCALENDAR\r\nBEGIN:VTODO\r\nUID:irgendwann\r\nSUMMARY:Irgendwann\r\nEND:VTODO\r\nEND:VCALENDAR\r\n")
+	fake.Put("/homes/einkauf/milch.ics", "BEGIN:VCALENDAR\r\nBEGIN:VTODO\r\nUID:milch\r\nSUMMARY:Milch\r\nEND:VTODO\r\nEND:VCALENDAR\r\n")
+	fake.Put("/homes/haushalt-kontakte/oma.vcf", "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:oma\r\nFN:Oma Erna\r\nTEL;TYPE=CELL:+49 170 1234567\r\nEND:VCARD\r\n")
 
 	// a person's own: never on the others' phones
 	fake.AddPrincipal("anna")
@@ -186,9 +186,9 @@ func TestGemeinsamRefusals(t *testing.T) {
 
 // Radicale refusing is a sentence, never a half answer the phone would mirror.
 func TestGemeinsamRadicaleDown(t *testing.T) {
-	fake := davfake.New("haus", "pw")
+	fake := davfake.New("homes", "pw")
 	t.Cleanup(fake.Close)
-	h := gemeinsamHandler(t, &caldav.Client{URL: fake.URL, User: "haus", Password: "falsch"})
+	h := gemeinsamHandler(t, &caldav.Client{URL: fake.URL, User: "homes", Password: "falsch"})
 	for _, p := range []string{"/napi/gemeinsam/kontakte", "/napi/gemeinsam/kalender"} {
 		rec := getGemeinsam(t, h, p, "anna1", "")
 		var out map[string]string

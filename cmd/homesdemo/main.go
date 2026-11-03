@@ -98,15 +98,15 @@ func main() {
 
 	inbox := filepath.Join(dir, "musik-eingang")
 	os.MkdirAll(inbox, 0o755)
-	dav := davfake.New("haus", "demo")
+	dav := davfake.New("homes", "demo")
 	defer dav.Close()
-	dav.AddCalendar("/haus/haushalt/", "Haushalt")
+	dav.AddCalendar("/homes/haushalt/", "Haushalt")
 	dav.AddPrincipal("anna")
 	absFake := absfake.New("demo")
 	defer absFake.Close()
 	pods := podcasts.Open(&abs.Client{URL: absFake.URL, Token: "demo"}, dir)
 	pods.Fetch = merken.Fetcher{AllowPrivate: true}
-	cal := &caldav.Client{URL: dav.URL, User: "haus", Password: "demo", Loc: time.Local}
+	cal := &caldav.Client{URL: dav.URL, User: "homes", Password: "demo", Loc: time.Local}
 	list := einkauf.Open(cal)
 	if err := list.Ensure(context.Background()); err != nil {
 		log.Fatal(err)
@@ -127,7 +127,7 @@ func main() {
 	seen := &gesehen.Service{Filme: demoFilme{}, Buecher: &abs.Client{URL: absFake.URL, Token: "demo"}, DAV: cal}
 	live := &pages.Live{}
 	cfg := pages.StartConfig{Gesehen: seen, Einkauf: list, Wuensche: wishes, Discogs: shelves, Podcasts: pods, HA: &ha.Client{URL: fake.URL, Token: "demo"}, Notes: nd, Favorites: favoriten.Open(dir), MusicInbox: inbox,
-		Calendar: cal, Views: ansicht.Open(dir),
+		Calendar: cal, Views: ansicht.Open(dir, "homes"),
 		RadicalePublicURL: "https://caldav.example", Fetcher: merken.Fetcher{AllowPrivate: true}}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/start", pages.Start(cfg))

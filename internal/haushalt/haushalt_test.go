@@ -1352,9 +1352,9 @@ func TestPodcastAbonnieren(t *testing.T) {
 // die Einkaufsliste" — the same thing added up, the recipe as its origin;
 // a recipe not kept said so; the list read back.
 func TestEinkaufsliste(t *testing.T) {
-	dav := davfake.New("haus", "pw")
+	dav := davfake.New("homes", "pw")
 	defer dav.Close()
-	l := einkauf.Open(&caldav.Client{URL: dav.URL, User: "haus", Password: "pw"})
+	l := einkauf.Open(&caldav.Client{URL: dav.URL, User: "homes", Password: "pw"})
 	if err := l.Ensure(context.Background()); err != nil {
 		t.Fatal(err)
 	}

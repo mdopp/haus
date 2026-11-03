@@ -22,9 +22,9 @@ import (
 
 func shoppingList(t *testing.T) (*einkauf.Liste, *int) {
 	t.Helper()
-	dav := davfake.New("haus", "pw")
+	dav := davfake.New("homes", "pw")
 	t.Cleanup(dav.Close)
-	l := einkauf.Open(&caldav.Client{URL: dav.URL, User: "haus", Password: "pw"})
+	l := einkauf.Open(&caldav.Client{URL: dav.URL, User: "homes", Password: "pw"})
 	if err := l.Ensure(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -107,7 +107,7 @@ func TestEinkaufPage(t *testing.T) {
 func TestEinkaufWhenRadicaleFails(t *testing.T) {
 	down := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusBadGateway) }))
 	defer down.Close()
-	cfg := StartConfig{Einkauf: einkauf.Open(&caldav.Client{URL: down.URL, User: "haus", Password: "pw"})}
+	cfg := StartConfig{Einkauf: einkauf.Open(&caldav.Client{URL: down.URL, User: "homes", Password: "pw"})}
 	_, body, _ := familyPage(t, Einkauf, cfg, "GET", EinkaufPath, "family")
 	mustContain(t, body, saysEinkaufDown, "Die Seite versucht es von selbst wieder.", "data-auffrischen=60")
 	rec := post(t, Einkauf(cfg), EinkaufPath, url.Values{"tun": {"dazu"}, "was": {"Brot"}}, "anna", nil)
@@ -125,7 +125,7 @@ func TestEinkaufWhenRadicaleFails(t *testing.T) {
 	was := einkaufWait
 	einkaufWait = 50 * time.Millisecond
 	defer func() { einkaufWait = was }()
-	cfg = StartConfig{Einkauf: einkauf.Open(&caldav.Client{URL: slow.URL, User: "haus", Password: "pw"})}
+	cfg = StartConfig{Einkauf: einkauf.Open(&caldav.Client{URL: slow.URL, User: "homes", Password: "pw"})}
 	start := time.Now()
 	rec = post(t, Einkauf(cfg), EinkaufPath, url.Values{"tun": {"dazu"}, "was": {"Brot"}}, "anna", nil)
 	if rec.Code != http.StatusServiceUnavailable || !strings.Contains(rec.Body.String(), saysEinkaufWrite) || time.Since(start) > time.Second {
@@ -183,11 +183,11 @@ func TestEinkaufFromRecipes(t *testing.T) {
 // between, a recipe put on the one chosen; another person's own list is
 // no list for anyone else, not even by its address.
 func TestListen(t *testing.T) {
-	dav := davfake.New("haus", "pw")
+	dav := davfake.New("homes", "pw")
 	t.Cleanup(dav.Close)
 	dav.AddPrincipal("anna")
 	dav.AddPrincipal("ben")
-	l := einkauf.Open(&caldav.Client{URL: dav.URL, User: "haus", Password: "pw"})
+	l := einkauf.Open(&caldav.Client{URL: dav.URL, User: "homes", Password: "pw"})
 	l.Ensure(context.Background())
 	var told []caldav.ListRef
 	l.Changed = func(r caldav.ListRef) { told = append(told, r) }
@@ -206,7 +206,7 @@ func TestListen(t *testing.T) {
 	if loc := rec.Header().Get("Location"); loc != "/einkauf?liste=anna%2Fliste-geschenke-fuer-ben&neu=1" {
 		t.Fatalf("mine → %q", loc)
 	}
-	if got := dav.Calendars(); strings.Join(got, " ") != "/anna/liste-geschenke-fuer-ben/ /haus/einkauf/ /haus/liste-baumarkt/" {
+	if got := dav.Calendars(); strings.Join(got, " ") != "/anna/liste-geschenke-fuer-ben/ /homes/einkauf/ /homes/liste-baumarkt/" {
 		t.Errorf("in Radicale: %v", got)
 	}
 	if rec := post(t, h, EinkaufPath, url.Values{"tun": {"neu"}, "name": {"Baumarkt"}}, "anna", nil); rec.Code != http.StatusConflict {
@@ -262,10 +262,10 @@ func TestRezepteOnAChosenList(t *testing.T) {
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "curry.md"), []byte("---\nart: rezept\n---\n# Curry\n\n## Zutaten\n\n- 1 Zwiebel\n"), 0o644)
 	nd, _ := notes.Open(dir)
-	dav := davfake.New("haus", "pw")
+	dav := davfake.New("homes", "pw")
 	t.Cleanup(dav.Close)
 	dav.AddPrincipal("anna")
-	l := einkauf.Open(&caldav.Client{URL: dav.URL, User: "haus", Password: "pw"})
+	l := einkauf.Open(&caldav.Client{URL: dav.URL, User: "homes", Password: "pw"})
 	l.Ensure(context.Background())
 	l.DAV.MakeList(context.Background(), "", "urlaub", "Urlaub")
 	cfg := StartConfig{Einkauf: l, Notes: nd}
@@ -323,11 +323,11 @@ func TestMusikWunschliste(t *testing.T) {
 // „Rückgängig“ where it was deleted, and under Listen verwalten, puts it back
 // whole; another person's own list is not theirs to take back
 func TestEinkaufListeRueckgaengig(t *testing.T) {
-	dav := davfake.New("haus", "pw")
+	dav := davfake.New("homes", "pw")
 	t.Cleanup(dav.Close)
 	dav.AddPrincipal("anna")
 	dav.AddPrincipal("ben")
-	l := einkauf.Open(&caldav.Client{URL: dav.URL, User: "haus", Password: "pw"})
+	l := einkauf.Open(&caldav.Client{URL: dav.URL, User: "homes", Password: "pw"})
 	l.Ensure(context.Background())
 	now := time.Date(2026, 10, 28, 9, 0, 0, 0, time.UTC)
 	korb := &papierkorb.Korb{Dir: t.TempDir(), Now: func() time.Time { return now }}

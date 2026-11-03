@@ -27,18 +27,18 @@ func eventAt(uid, start, end, summary, location string) string {
 // clock is Wednesday 14.10.2026, 10:00 in Berlin.
 func TestKalenderShowsTodayTheNextTwoWeeksAndReminders(t *testing.T) {
 	dav, cal := calendar(t)
-	dav.Put("/haus/familie/0.ics", event("0", "20261013T080000Z", "20261013T090000Z", "Gestern vorbei"))
-	dav.Put("/haus/familie/1.ics", event("1", "20261014T060000Z", "20261014T070000Z", "Frühstück"))
-	dav.Put("/haus/familie/2.ics", eventAt("2", "20261014T110000Z", "20261014T120000Z", "Mittag mit Oma", "Café Weiß"))
-	dav.Put("/haus/familie/3.ics", allDay("3", "20261014", "20261015", "Omas Geburtstag"))
-	dav.Put("/haus/familie/4.ics", eventAt("4", "20261015T130000Z", "20261015T140000Z", "Zahnarzt", "Praxis Dr. Berg"))
-	dav.Put("/haus/familie/5.ics", event("5", "20261023T160000Z", "20261023T180000Z", "Elternabend"))
-	dav.Put("/haus/familie/6.ics", allDay("6", "20261028", "20261029", "Letzter Tag"))
-	dav.Put("/haus/familie/7.ics", event("7", "20261029T090000Z", "20261029T100000Z", "Zu weit weg"))
-	dav.Put("/haus/familie/a.ics", todo("a", "Müll rausbringen", "DUE:20261015T050000Z\r\n"))
-	dav.Put("/haus/familie/b.ics", todo("b", "Rechnung bezahlen", "DUE:20261012T070000Z\r\n"))
-	dav.Put("/haus/familie/c.ics", todo("c", "Irgendwann Keller", ""))
-	dav.Put("/haus/familie/d.ics", todo("d", "Schon erledigt", "STATUS:COMPLETED\r\nDUE:20261014T070000Z\r\n"))
+	dav.Put("/homes/familie/0.ics", event("0", "20261013T080000Z", "20261013T090000Z", "Gestern vorbei"))
+	dav.Put("/homes/familie/1.ics", event("1", "20261014T060000Z", "20261014T070000Z", "Frühstück"))
+	dav.Put("/homes/familie/2.ics", eventAt("2", "20261014T110000Z", "20261014T120000Z", "Mittag mit Oma", "Café Weiß"))
+	dav.Put("/homes/familie/3.ics", allDay("3", "20261014", "20261015", "Omas Geburtstag"))
+	dav.Put("/homes/familie/4.ics", eventAt("4", "20261015T130000Z", "20261015T140000Z", "Zahnarzt", "Praxis Dr. Berg"))
+	dav.Put("/homes/familie/5.ics", event("5", "20261023T160000Z", "20261023T180000Z", "Elternabend"))
+	dav.Put("/homes/familie/6.ics", allDay("6", "20261028", "20261029", "Letzter Tag"))
+	dav.Put("/homes/familie/7.ics", event("7", "20261029T090000Z", "20261029T100000Z", "Zu weit weg"))
+	dav.Put("/homes/familie/a.ics", todo("a", "Müll rausbringen", "DUE:20261015T050000Z\r\n"))
+	dav.Put("/homes/familie/b.ics", todo("b", "Rechnung bezahlen", "DUE:20261012T070000Z\r\n"))
+	dav.Put("/homes/familie/c.ics", todo("c", "Irgendwann Keller", ""))
+	dav.Put("/homes/familie/d.ics", todo("d", "Schon erledigt", "STATUS:COMPLETED\r\nDUE:20261014T070000Z\r\n"))
 	code, body, _ := familyPage(t, Kalender, StartConfig{Calendar: cal}, "GET", "/kalender", "family")
 	if code != 200 {
 		t.Fatalf("status %d", code)
@@ -77,7 +77,7 @@ func TestKalenderSaysEmptyPlainly(t *testing.T) {
 // An appointment that began yesterday and runs on is today's, "bis" its end.
 func TestKalenderRunningAppointment(t *testing.T) {
 	dav, cal := calendar(t)
-	dav.Put("/haus/familie/1.ics", event("1", "20261013T200000Z", "20261014T090000Z", "Nachtschicht"))
+	dav.Put("/homes/familie/1.ics", event("1", "20261013T200000Z", "20261014T090000Z", "Nachtschicht"))
 	_, body, _ := familyPage(t, Kalender, StartConfig{Calendar: cal}, "GET", "/kalender", "")
 	mustContain(t, body, "Nachtschicht", "bis 11:00")
 	before(t, body, "karte-heute", "Nachtschicht")
@@ -87,7 +87,7 @@ func TestKalenderRunningAppointment(t *testing.T) {
 // Titles and places are text, never markup.
 func TestKalenderEscapes(t *testing.T) {
 	dav, cal := calendar(t)
-	dav.Put("/haus/familie/1.ics", eventAt("1", "20261014T110000Z", "20261014T120000Z", "<script>alert(1)</script>", "<b>Ort</b>"))
+	dav.Put("/homes/familie/1.ics", eventAt("1", "20261014T110000Z", "20261014T120000Z", "<script>alert(1)</script>", "<b>Ort</b>"))
 	_, body, _ := familyPage(t, Kalender, StartConfig{Calendar: cal}, "GET", "/kalender", "")
 	mustContain(t, body, "&lt;script&gt;alert(1)&lt;/script&gt;", "&lt;b&gt;Ort&lt;/b&gt;")
 	mustNotContain(t, body, "<script>alert", "<b>Ort")
@@ -97,7 +97,7 @@ func TestKalenderEscapes(t *testing.T) {
 func TestKalenderCutsLongLists(t *testing.T) {
 	dav, cal := calendar(t)
 	for i := 0; i < 60; i++ {
-		dav.Put(fmt.Sprintf("/haus/familie/t%02d.ics", i), todo(fmt.Sprintf("t%02d", i), fmt.Sprintf("Aufgabe %02d", i), fmt.Sprintf("DUE:202611%02dT070000Z\r\n", i%28+1)))
+		dav.Put(fmt.Sprintf("/homes/familie/t%02d.ics", i), todo(fmt.Sprintf("t%02d", i), fmt.Sprintf("Aufgabe %02d", i), fmt.Sprintf("DUE:202611%02dT070000Z\r\n", i%28+1)))
 	}
 	_, body, _ := familyPage(t, Kalender, StartConfig{Calendar: cal}, "GET", "/kalender", "")
 	mustContain(t, body, "und 10 weitere", "Aufgabe 00")
@@ -108,8 +108,8 @@ func TestKalenderCutsLongLists(t *testing.T) {
 func TestKalenderCutsLongDays(t *testing.T) {
 	dav, cal := calendar(t)
 	for i := 0; i < 60; i++ {
-		dav.Put(fmt.Sprintf("/haus/familie/h%02d.ics", i), event(fmt.Sprintf("h%02d", i), fmt.Sprintf("20261014T08%02d00Z", i), fmt.Sprintf("20261014T08%02d30Z", i), fmt.Sprintf("Heute %02d", i)))
-		dav.Put(fmt.Sprintf("/haus/familie/n%02d.ics", i), event(fmt.Sprintf("n%02d", i), fmt.Sprintf("20261016T08%02d00Z", i), fmt.Sprintf("20261016T08%02d30Z", i), fmt.Sprintf("Später %02d", i)))
+		dav.Put(fmt.Sprintf("/homes/familie/h%02d.ics", i), event(fmt.Sprintf("h%02d", i), fmt.Sprintf("20261014T08%02d00Z", i), fmt.Sprintf("20261014T08%02d30Z", i), fmt.Sprintf("Heute %02d", i)))
+		dav.Put(fmt.Sprintf("/homes/familie/n%02d.ics", i), event(fmt.Sprintf("n%02d", i), fmt.Sprintf("20261016T08%02d00Z", i), fmt.Sprintf("20261016T08%02d30Z", i), fmt.Sprintf("Später %02d", i)))
 	}
 	_, body, _ := familyPage(t, Kalender, StartConfig{Calendar: cal}, "GET", "/kalender", "")
 	mustContain(t, body, "Heute 00", "Heute 49", "Später 00", "Später 49")
@@ -120,7 +120,7 @@ func TestKalenderCutsLongDays(t *testing.T) {
 
 	dav2, cal2 := calendar(t)
 	for i := 0; i < 50; i++ {
-		dav2.Put(fmt.Sprintf("/haus/familie/t%02d.ics", i), todo(fmt.Sprintf("t%02d", i), fmt.Sprintf("Aufgabe %02d", i), ""))
+		dav2.Put(fmt.Sprintf("/homes/familie/t%02d.ics", i), todo(fmt.Sprintf("t%02d", i), fmt.Sprintf("Aufgabe %02d", i), ""))
 	}
 	_, body, _ = familyPage(t, Kalender, StartConfig{Calendar: cal2}, "GET", "/kalender", "")
 	mustContain(t, body, "Aufgabe 49")
@@ -131,9 +131,9 @@ func TestKalenderCutsLongDays(t *testing.T) {
 // overdue once that day is past — not at midnight of its own day.
 func TestKalenderReminderDueOnADay(t *testing.T) {
 	dav, cal := calendar(t)
-	dav.Put("/haus/familie/a.ics", todo("a", "Heute irgendwann", "DUE;VALUE=DATE:20261014\r\n"))
-	dav.Put("/haus/familie/b.ics", todo("b", "Gestern schon", "DUE;VALUE=DATE:20261013\r\n"))
-	dav.Put("/haus/familie/c.ics", todo("c", "Freitag", "DUE;VALUE=DATE:20261016\r\n"))
+	dav.Put("/homes/familie/a.ics", todo("a", "Heute irgendwann", "DUE;VALUE=DATE:20261014\r\n"))
+	dav.Put("/homes/familie/b.ics", todo("b", "Gestern schon", "DUE;VALUE=DATE:20261013\r\n"))
+	dav.Put("/homes/familie/c.ics", todo("c", "Freitag", "DUE;VALUE=DATE:20261016\r\n"))
 	_, body, _ := familyPage(t, Kalender, StartConfig{Calendar: cal}, "GET", "/kalender", "")
 	// each leads to its own page (haus#28)
 	mustContain(t, body, `<a href="/kalender/erinnerung/a">Heute irgendwann</a> <span class=k>heute</span>`,
@@ -187,8 +187,8 @@ func calendarFailing(t *testing.T, comp string) (*davfake.Server, *caldav.Client
 // failing: the line stands where they would be, the reminders come.
 func TestKalenderSaysWhichPartDoesNotAnswer(t *testing.T) {
 	dav, cal := calendarFailing(t, "VTODO")
-	dav.Put("/haus/familie/1.ics", event("1", "20261015T130000Z", "20261015T140000Z", "Zahnarzt"))
-	dav.Put("/haus/familie/a.ics", todo("a", "Müll rausbringen", ""))
+	dav.Put("/homes/familie/1.ics", event("1", "20261015T130000Z", "20261015T140000Z", "Zahnarzt"))
+	dav.Put("/homes/familie/a.ics", todo("a", "Müll rausbringen", ""))
 	code, body, _ := familyPage(t, Kalender, StartConfig{Calendar: cal}, "GET", "/kalender", "")
 	if code != 200 {
 		t.Fatalf("status %d", code)
@@ -203,8 +203,8 @@ func TestKalenderSaysWhichPartDoesNotAnswer(t *testing.T) {
 	before(t, body, "karte-erinnerungen", "Der Kalender antwortet gerade nicht.")
 
 	dav, cal = calendarFailing(t, "VEVENT")
-	dav.Put("/haus/familie/1.ics", event("1", "20261015T130000Z", "20261015T140000Z", "Zahnarzt"))
-	dav.Put("/haus/familie/a.ics", todo("a", "Müll rausbringen", ""))
+	dav.Put("/homes/familie/1.ics", event("1", "20261015T130000Z", "20261015T140000Z", "Zahnarzt"))
+	dav.Put("/homes/familie/a.ics", todo("a", "Müll rausbringen", ""))
 	code, body, _ = familyPage(t, Kalender, StartConfig{Calendar: cal}, "GET", "/kalender", "")
 	if code != 200 {
 		t.Fatalf("status %d", code)

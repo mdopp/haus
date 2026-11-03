@@ -44,9 +44,9 @@ func sendKontakte(t *testing.T, h http.Handler, bearer, body string) (int, map[s
 }
 
 func fakeRadicale(t *testing.T) (*davfake.Server, http.Handler) {
-	fake := davfake.New("haus", "pw")
+	fake := davfake.New("homes", "pw")
 	t.Cleanup(fake.Close)
-	return fake, newHandy(t, &caldav.Client{URL: fake.URL, User: "haus", Password: "pw"})
+	return fake, newHandy(t, &caldav.Client{URL: fake.URL, User: "homes", Password: "pw"})
 }
 
 func cardsUnder(fake *davfake.Server, prefix string) map[string]string {
