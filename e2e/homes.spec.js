@@ -90,6 +90,7 @@ test('a slider is folded: a swipe over it changes nothing, a tap opens it', asyn
   await expect(kueche).toHaveAttribute('aria-expanded', 'true');
   await expect(slider(page, 'Küchenlicht Helligkeit')).toBeVisible();
   await expect(slider(page, 'Küchenlicht Helligkeit')).toHaveValue('60');
+  await page.waitForTimeout(300); // the chevron has turned
   await page.screenshot({ path: info.outputPath('raeume-offen.png') });
 
   // one open at a time
