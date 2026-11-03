@@ -51,16 +51,16 @@ func TestRaeumeDimsAndMovesCovers(t *testing.T) {
 		`role=switch aria-checked=true aria-label="Bambi"`,
 		`<form method=post action=/schalten class=regler><input type=hidden name=geraet value="light.bambi"><input type=hidden name=tun value="light.turn_on">`,
 		`type=range name=wert min=0 max=100 step=1 value=60 aria-label="Bambi Helligkeit"`, `<output>60 %</output>`,
-		`name=geraet value="light.dimmer"><input type=hidden name=tun value="light.turn_on"><input type=hidden name=zurueck value="/raeume#karte-esszimmer"><span class=k>Helligkeit</span><input type=range name=wert min=0 max=100 step=1 value=0`,
+
 		`name=geraet value="cover.rollo"><input type=hidden name=tun value="cover.set_cover_position">`, `value=40 aria-label="Rollo Position"`,
 		`name=geraet value="cover.rollo"><input type=hidden name=tun value="cover.open_cover">`, "<button data-laeuft=\"Schaltet …\">Hoch</button>",
 		`name=geraet value="cover.rollo"><input type=hidden name=tun value="cover.stop_cover">`, "<button data-laeuft=\"Schaltet …\">Stopp</button>",
 		`name=geraet value="cover.rollo"><input type=hidden name=tun value="cover.close_cover">`, "<button data-laeuft=\"Schaltet …\">Runter</button>",
-		"<noscript><button>Setzen</button></noscript>", `onchange="this.form.requestSubmit`)
+		`<noscript><button data-laeuft="Setzt …">Setzen</button></noscript>`, `onchange="this.form.requestSubmit`)
 	mustNotContain(t, ess, `value="light.schalter"><input type=hidden name=tun value="light.turn_on"><input type=hidden name=zurueck value="/raeume#karte-esszimmer"><span`,
 		`value="cover.ohne"`, `value="cover.garage"`, "<script>alert")
-	if n := strings.Count(ess, "class=regler"); n != 4 { // Bambi, Dimmer, Rollo, Esszimmerjalousie
-		t.Fatalf("%d sliders, want 4:\n%s", n, ess)
+	if n := strings.Count(ess, "class=regler"); n != 3 { // Bambi, Rollo, Esszimmerjalousie; the Dimmer is off
+		t.Fatalf("%d sliders, want 3:\n%s", n, ess)
 	}
 
 	// the slider and the buttons switch through the page's rule

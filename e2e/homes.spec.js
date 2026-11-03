@@ -46,6 +46,98 @@ test('the page follows a change made elsewhere at once (push)', async ({ page, r
   expect(await stays(page), 'refreshed in place').toBe(true);
 });
 
+// owner 2026-11-03 (a screenshot of /raeume): scrolling the page moved
+// the sliders. A slider is folded behind its pill ("Helligkeit 60 %"): a
+// swipe over it changes nothing, a tap opens it, one is open at a time,
+// it folds again by itself, and a lamp that is off has none.
+const pill = (page, name) => page.locator('details.regelung > summary', { hasText: name });
+const slider = (page, name) => page.getByRole('slider', { name });
+async function swipe(page, from, dx, dy) {
+  const cdp = await page.context().newCDPSession(page);
+  const touch = (type, x, y) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y }] });
+  await touch('touchStart', from.x, from.y);
+  for (let i = 1; i <= 12; i++) await touch('touchMove', from.x + (dx * i) / 12, from.y + (dy * i) / 12);
+  await touch('touchEnd');
+  await cdp.detach();
+}
+
+test('a slider is folded: a swipe over it changes nothing, a tap opens it', async ({ page }, info) => {
+  const sent = [];
+  page.on('request', (r) => { if (r.method() === 'POST') sent.push(r.url() + ' ' + (r.postData() || '')); });
+  await page.goto('/raeume');
+  const kueche = pill(page, 'Küchenlicht');
+  await expect(kueche).toContainText('Helligkeit 60 %');
+  await expect(kueche).toHaveAttribute('aria-expanded', 'false');
+  await expect(slider(page, 'Küchenlicht Helligkeit')).toBeHidden();
+  expect((await kueche.boundingBox()).height, 'a finger hits the pill').toBeGreaterThanOrEqual(44);
+  await kueche.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: info.outputPath('raeume-zu.png') });
+
+  // a finger scrolling the page over the pill, up and across: nothing opens, nothing is sent
+  const b = await kueche.boundingBox();
+  const at = { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+  await swipe(page, at, 0, -220);
+  await swipe(page, { x: 30, y: at.y }, 300, 0);
+  await swipe(page, at, 200, 160);
+  await page.waitForTimeout(500);
+  await expect(kueche).toHaveAttribute('aria-expanded', 'false');
+  await expect(slider(page, 'Küchenlicht Helligkeit')).toBeHidden();
+  await expect(kueche).toContainText('60 %');
+  expect(sent, 'a swipe sends nothing').toEqual([]);
+
+  // a tap opens it, in place
+  await kueche.tap();
+  await expect(kueche).toHaveAttribute('aria-expanded', 'true');
+  await expect(slider(page, 'Küchenlicht Helligkeit')).toBeVisible();
+  await expect(slider(page, 'Küchenlicht Helligkeit')).toHaveValue('60');
+  await page.screenshot({ path: info.outputPath('raeume-offen.png') });
+
+  // one open at a time
+  await pill(page, 'Rollo').tap();
+  await expect(pill(page, 'Rollo')).toHaveAttribute('aria-expanded', 'true');
+  await expect(kueche).toHaveAttribute('aria-expanded', 'false');
+  await expect(slider(page, 'Küchenlicht Helligkeit')).toBeHidden();
+  // a second tap folds it
+  await pill(page, 'Rollo').tap();
+  await expect(pill(page, 'Rollo')).toHaveAttribute('aria-expanded', 'false');
+  expect(sent, 'opening sends nothing').toEqual([]);
+
+  // it folds again by itself when nobody touches it
+  await kueche.tap();
+  await expect(kueche).toHaveAttribute('aria-expanded', 'true');
+  await expect(kueche).toHaveAttribute('aria-expanded', 'false', { timeout: 10_000 });
+});
+
+test('a slider sends once, when it is let go', async ({ page }) => {
+  const sent = [];
+  page.on('request', (r) => { if (r.method() === 'POST' && r.url().endsWith('/schalten')) sent.push(r.postData() || ''); });
+  await page.goto('/raeume');
+  await pill(page, 'Küchenlicht').tap();
+  const s = slider(page, 'Küchenlicht Helligkeit');
+  await s.focus();
+  await s.press('ArrowRight');
+  await expect.poll(() => sent.length).toBe(1);
+  expect(sent[0]).toContain('wert=61');
+  expect(sent[0]).toContain('geraet=light.kueche');
+});
+
+test('a lamp that is off has no brightness; switched on, it is back', async ({ page }) => {
+  await page.goto('/raeume');
+  const sw = page.getByRole('switch', { name: 'Küchenlicht' });
+  await expect(sw).toHaveAttribute('aria-checked', 'true');
+  await expect(pill(page, 'Küchenlicht')).toBeVisible();
+  try {
+    await sw.click();
+    await expect(page.getByRole('switch', { name: 'Küchenlicht' })).toHaveAttribute('aria-checked', 'false');
+    await expect(pill(page, 'Küchenlicht')).toHaveCount(0);
+    await expect(slider(page, 'Küchenlicht Helligkeit')).toHaveCount(0);
+  } finally {
+    await page.getByRole('switch', { name: 'Küchenlicht' }).click();
+  }
+  await expect(page.getByRole('switch', { name: 'Küchenlicht' })).toHaveAttribute('aria-checked', 'true');
+  await expect(pill(page, 'Küchenlicht')).toContainText('Helligkeit 60 %');
+});
+
 test('a player pauses in place', async ({ page }) => {
   await page.goto('/medien');
   await mark(page);

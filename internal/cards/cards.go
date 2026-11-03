@@ -305,18 +305,25 @@ func (a *Action) form() string {
 	return b.String()
 }
 
-// form is the slider: a POST to SwitchPath with wert, sent when the
-// finger lets go; the number beside it follows the finger.
+// form is the slider, folded (owner, 2026-11-03: a finger scrolling the
+// page moved the sliders): a pill that says the level, "Helligkeit 74 %",
+// and opens the slider in place on a tap. The slider is a POST to
+// SwitchPath with wert, sent when the finger lets go; the number follows
+// the finger. homesScript keeps one open at a time, closes it after a few
+// idle seconds and says aria-expanded on the pill; without script the fold
+// opens and closes natively and Setzen sends.
 func (s *Slider) form() string {
 	v := strconv.Itoa(max(0, min(s.Value, 100)))
 	var b strings.Builder
+	b.WriteString(`<details class=regelung><summary><span class=nur-vorlesen>` + html.EscapeString(s.Name) + ` </span><span class=was>` + html.EscapeString(s.Label) +
+		`</span> <span class=wert>` + v + ` %</span><span class=aendern aria-hidden=true></span></summary>`)
 	b.WriteString("<form method=post action=" + SwitchPath + " class=regler>")
 	b.WriteString(`<input type=hidden name=geraet value="` + html.EscapeString(s.Entity) + `">`)
 	b.WriteString(`<input type=hidden name=tun value="` + html.EscapeString(s.Do) + `">`)
 	b.WriteString(`<input type=hidden name=zurueck value="` + html.EscapeString(s.Back) + `">`)
-	b.WriteString(`<span class=k>` + html.EscapeString(s.Label) + `</span><input type=range name=wert min=0 max=100 step=1 value=` + v +
-		` aria-label="` + html.EscapeString(s.Name+" "+s.Label) + `" oninput="this.nextElementSibling.value=this.value+' %'" onchange="this.form.requestSubmit?this.form.requestSubmit():this.form.submit()">` +
-		`<output>` + v + ` %</output><noscript><button>Setzen</button></noscript></form>`)
+	b.WriteString(`<input type=range name=wert min=0 max=100 step=1 value=` + v +
+		` aria-label="` + html.EscapeString(s.Name+" "+s.Label) + `" oninput="var t=this.value+' %';this.nextElementSibling.value=t;var d=this.closest('details');if(d)d.querySelector('.wert').textContent=t" onchange="this.form.requestSubmit?this.form.requestSubmit():this.form.submit()">` +
+		`<output>` + v + ` %</output><noscript><button data-laeuft="Setzt …">Setzen</button></noscript></form></details>`)
 	return b.String()
 }
 
@@ -357,8 +364,13 @@ const Style = `<style>.farbe{display:inline-block;width:.65em;height:.65em;borde
 .schalter::after{content:"";position:absolute;left:11px;top:13px;width:14px;height:14px;border-radius:50%;background:#fff}
 .schalter[aria-checked=true]::before{background:var(--state)}.schalter[aria-checked=true]::after{left:27px}
 .karte li.regelbar{flex-wrap:wrap;row-gap:4px}.regelbar>div:first-child{flex:1 1 9rem;min-width:0}.regelbar .knoepfe{flex-wrap:wrap;gap:6px}
-.karte form.regler{flex:1 1 100%;display:flex;align-items:center;gap:10px}.regler input[type=range]{flex:1;min-width:0;min-height:40px;margin:0;accent-color:var(--accent)}
-.regler output{min-width:3.4em;text-align:right;font-variant-numeric:tabular-nums;color:var(--muted);font-size:.85rem}.regler .k{font-size:.82rem}
+.regelung{flex:1 1 100%;position:relative;z-index:1}.regelung>summary{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 14px 0 16px;border:1px solid var(--edge);border-radius:22px;background:var(--tile);color:var(--ink);font-size:.9rem;cursor:pointer;list-style:none;-webkit-tap-highlight-color:transparent;user-select:none}
+.regelung>summary::-webkit-details-marker{display:none}.regelung .was{color:var(--muted)}.regelung .wert{font-weight:700;font-variant-numeric:tabular-nums}
+.regelung .aendern{width:7px;height:7px;margin:0 2px 3px 6px;border-right:2px solid var(--accent);border-bottom:2px solid var(--accent);transform:rotate(45deg);transition:transform .15s}.regelung[open] .aendern{transform:rotate(-135deg);margin-bottom:-3px}
+.regelung[open]>summary{border-color:var(--accent)}.nur-vorlesen{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.karte form.regler{display:flex;align-items:center;gap:10px;margin-top:6px}.regler input[type=range]{flex:1;min-width:0;min-height:44px;margin:0;accent-color:var(--accent)}
+.regler output{min-width:3.4em;text-align:right;font-variant-numeric:tabular-nums;color:var(--muted);font-size:.85rem}
+@media (prefers-reduced-motion:reduce){.regelung .aendern{transition:none}}
 .karte .hinweis{margin:-2px 2px 8px;font-size:.85rem;color:var(--muted)}.karte .hinweis a{color:var(--accent)}
 .kacheln .kopf .knoepfe{gap:0}.kacheln .kopf .anheften{width:40px;min-height:40px;font-size:1.2rem}
 .zeiten li{display:grid;grid-template-columns:6.4rem 1fr;gap:10px;align-items:baseline}
