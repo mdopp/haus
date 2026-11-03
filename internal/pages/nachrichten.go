@@ -11,56 +11,65 @@ import (
 	"github.com/mdopp/haus/internal/napi"
 )
 
-// NachrichtenPath is the page „Nachrichten sichern“ (haus#207, laib ADR 0029).
+// DatenPath is the page „Daten sichern“ (haus#207, laib ADR 0029; owner
+// 2026-11-03: more than messages go into the archive now).
+const DatenPath = "/daten-sichern"
+
+// NachrichtenPath is the page's old address, „Nachrichten sichern“: it
+// leads to DatenPath, so a bookmark or an older app still lands.
 const NachrichtenPath = "/nachrichten-sichern"
 
 // What the page says, in the family's words.
 const (
-	saysNachrichtenLead = "Die Haus-App bringt die Sicherungen von WhatsApp und Signal von deinem Handy auf die Box. Dort kommen sie in dein eigenes Nachrichten-Archiv, das nur du öffnest."
-	saysWieSieLiegen    = "Auf der Box liegen die Sicherungen so verschlüsselt, wie WhatsApp und Signal sie schreiben. Lesbar werden sie erst in deinem Archiv, mit deinen Schlüsseln."
-	saysSchluesselSpaet = "Schlüssel eingeben kommt mit dem Archiv. Bis dahin: Lege beide Schlüssel in Vaultwarden ab, wie unten beschrieben."
-	saysStandFehlt      = "Der Stand lässt sich gerade nicht lesen. Später noch einmal versuchen."
-	saysMenues          = "Die Menüs heißen je nach App-Version etwas anders. Findest du einen Punkt nicht, such in den Einstellungen der App nach „Backup“."
+	saysDatenLead     = "Deine Nachrichten, Kontakte, Mails und Termine kommen in dein eigenes Archiv auf der Box. Öffnen kannst nur du es, mit deinem Archiv-Passwort."
+	saysWieSieLiegen  = "Auf der Box liegen die Sicherungen so verschlüsselt, wie WhatsApp und Signal sie schreiben. Lesbar werden sie erst in deinem Archiv, mit deinen Schlüsseln."
+	saysSchluessel    = "Archiv-Passwort, Signal-Passphrase und WhatsApp-Schlüssel gehören in Vaultwarden. Wer einen davon verliert, kann diese Sicherungen nicht mehr lesen."
+	saysStandFehlt    = "Der Stand lässt sich gerade nicht lesen. Später noch einmal versuchen."
+	saysStandortNicht = "Dein Standortverlauf gehört nicht dazu: er geht in deinen Reitti-Zeitstrahl (Mehr → Standortverlauf)."
+	saysMenues        = "Die Menüs heißen je nach App-Version etwas anders. Findest du einen Punkt nicht, such in den Einstellungen der App nach „Backup“."
 )
 
-var notSetArchiv = notSet{"Das Nachrichten-Archiv ist auf dieser Box nicht eingerichtet.",
+var notSetArchiv = notSet{"Das Archiv ist auf dieser Box nicht eingerichtet.",
 	"Für Admins: Haus hat keinen Archiv-Eingang (HAUS_ARCHIV_DIR; laibs haus-Template hängt ${DATA_DIR}/archiv-eingang als /archiv-eingang ein)."}
 
 // quelleName is how the page names a quelle.
-var quelleName = map[string]string{"whatsapp": "WhatsApp", "signal": "Signal", "sms": "SMS und Anrufe", "discord": "Discord"}
+var quelleName = map[string]string{"whatsapp": "WhatsApp", "signal": "Signal", "sms": "SMS und Anrufe"}
 
-// the guide, step by step: each part a heading and its steps
-var nachrichtenAnleitung = []struct {
+// the guide, per source: what the person does, then what happens
+var datenAnleitung = []struct {
 	title string
 	steps []string
 	note  string
 }{
-	{"WhatsApp, auf dem Handy", []string{
-		"WhatsApp öffnen: Einstellungen → Chats → Chat-Backup.",
-		"„Ende-zu-Ende-verschlüsseltes Backup“ antippen und einschalten.",
-		"„64-stelligen Schlüssel verwenden“ wählen, nicht Passwort und nicht Passkey: aus einem Passkey lässt sich der Schlüssel nicht auslesen. Nutzt WhatsApp schon einen Passkey: das Backup deaktivieren und sofort wieder aktivieren, diesmal mit dem 64-stelligen Schlüssel.",
-		"Den Schlüssel in Vaultwarden ablegen, als eigenen Eintrag „WhatsApp-Schlüssel“. Wer ihn verliert, kann keine dieser Sicherungen mehr lesen.",
-	}, "WhatsApp legt dann jede Nacht eine Sicherung auf dem Handy an."},
-	{"Signal, auf dem Handy", []string{
-		"Signal öffnen: Einstellungen → Chats → Chat-Backups (je nach Version: Backups → Auf dem Gerät).",
-		"Einschalten und einen Ordner auf dem Handy wählen, zum Beispiel „Signal-Backups“.",
-		"Die 30-stellige Passphrase in Vaultwarden ablegen, als eigenen Eintrag „Signal-Passphrase“. Signal zeigt sie nur dieses eine Mal.",
-	}, ""},
-	{"In der Haus-App", []string{
-		"Mehr → Nachrichten sichern.",
-		"Den WhatsApp-Ordner freigeben (Android → media → com.whatsapp → WhatsApp).",
-		"Den Signal-Ordner freigeben, den du oben gewählt hast.",
-		"Wenn du magst: „Kontakte übertragen“ und „SMS und Anrufliste übertragen“ einschalten.",
-	}, "Danach bringt die App neue Sicherungen auf die Box. Bricht die Verbindung ab, macht sie später dort weiter, wo sie war."},
-	{"Discord", []string{
-		"Server-Kanäle kommen später: über einen Bot, den du in deine Server einlädst.",
-		"Direktnachrichten gibt es nur über dein Datenpaket: Discord → Einstellungen → Daten & Datenschutz → Daten anfordern. Discord schickt dir nach einigen Tagen eine Mail mit einem Zip.",
-		"Das Zip teilst du später per „Teilen“ an Haus. Bis dahin heb es auf.",
-	}, ""},
+	{"Signal", []string{
+		"In Signal: Einstellungen → Chats → Chat-Backups (je nach Version: Backups → Auf dem Gerät) einschalten und einen Ordner wählen, zum Beispiel „Signal-Backups“.",
+		"Die 30-stellige Passphrase in Vaultwarden ablegen. Signal zeigt sie nur dieses eine Mal.",
+		"In der Haus-App: Mehr → Daten sichern → bei Signal den Ordner freigeben, den du gewählt hast.",
+		"In deinem Archiv die Passphrase eingeben.",
+	}, "Signal legt jede Nacht eine Sicherung an, die App bringt sie auf die Box. Gelesen wird sie, während dein Archiv offen ist."},
+	{"WhatsApp", []string{
+		"In WhatsApp: Einstellungen → Chats → Chat-Backup → „Ende-zu-Ende-verschlüsseltes Backup“ einschalten.",
+		"„64-stelligen Schlüssel verwenden“ wählen, nicht Passwort und nicht Passkey: aus einem Passkey lässt sich der Schlüssel nicht auslesen. Nutzt WhatsApp schon einen Passkey: das Backup aus- und gleich wieder einschalten, diesmal mit dem 64-stelligen Schlüssel.",
+		"Den Schlüssel in Vaultwarden ablegen.",
+		"In der Haus-App: Mehr → Daten sichern → bei WhatsApp den Ordner freigeben (Android → media → com.whatsapp → WhatsApp).",
+		"In deinem Archiv den Schlüssel eingeben.",
+	}, "Die Nachrichten kommen ins Archiv, sobald es offen ist. Fotos und Videos bringt die App verschlüsselt mit auf die Box; durchsuchen kannst du im Archiv vorerst die Nachrichten."},
+	{"SMS und Anrufe", []string{
+		"In der Haus-App: Mehr → Daten sichern → „SMS und Anrufe übertragen“ einschalten.",
+	}, "Die App verschlüsselt sie schon auf dem Handy. Ins Archiv kommen sie, während es offen ist."},
+	{"Kontakte", []string{
+		"In der Haus-App: Mehr → Daten sichern → „Kontakte übertragen“ einschalten.",
+	}, "Die Kontakte kommen in dein Adressbuch „Handy-Kontakte“ auf der Box und von dort ins Archiv, während es offen ist. Löschst du einen Kontakt auf dem Handy, bleibt er im Archiv."},
+	{"E-Mail", []string{
+		"In deinem Archiv den Zugang zu deinem Postfach eintragen: Server, Benutzername und ein App-Passwort.",
+	}, "Das Archiv holt jede Stunde neue Mails ab, auch wenn es zu ist. Im Postfach ändert es nichts."},
+	{"Kalender", []string{
+		"In Haus unter Kalender deine Google-Kalender verbinden; eigene private Kalender legst du dort auch an.",
+	}, "Das Archiv übernimmt jeden Termin, während es offen ist. Gelöschte Termine bleiben im Archiv."},
 }
 
-// nachrichtenNie is what never reaches an archive, whatever the phone does.
-var nachrichtenNie = []string{
+// datenNie is what never reaches an archive, whatever the phone does.
+var datenNie = []string{
 	"Nachrichten, die sich selbst löschen (verschwindende Nachrichten): sie stehen in keiner Sicherung.",
 	"Fotos und Videos zur einmaligen Ansicht.",
 }
@@ -68,17 +77,22 @@ var nachrichtenNie = []string{
 const nachrichtenStyle = `<style>.lead{color:var(--muted)}.schritte ol{margin:0;padding:10px 14px 10px 34px;background:var(--card);border:1px solid var(--edge);border-radius:14px}
 .schritte ol li{margin:6px 0;overflow-wrap:anywhere}.schritte p.k{font-size:.85rem;margin:8px 2px 0}</style>`
 
-// Nachrichten is the page „Nachrichten sichern“: the person's state —
-// what arrived from each messenger, what waits for their archive, the
-// room left — from the same ledger the app's /napi/sicherung/stand reads,
-// and how to switch the phone backups on.
+// Nachrichten is the page „Daten sichern“: the person's state — what
+// arrived from each phone source, what waits for their archive, the room
+// left — from the same ledger the app's /napi/sicherung/stand reads, and
+// per source what to do and what then happens. Its old address
+// (NachrichtenPath) leads here.
 func Nachrichten(cfg StartConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !showOnly(w, r, "Nachrichten sichern") {
+		if r.URL.Path == NachrichtenPath {
+			http.Redirect(w, r, DatenPath, http.StatusMovedPermanently)
+			return
+		}
+		if !showOnly(w, r, "Daten sichern") {
 			return
 		}
 		if cfg.Sicherung == nil {
-			notSetArchiv.write(w, r, cfg, "Nachrichten sichern")
+			notSetArchiv.write(w, r, cfg, "Daten sichern")
 			return
 		}
 		person := r.Header.Get("Remote-User")
@@ -87,14 +101,14 @@ func Nachrichten(cfg StartConfig) http.HandlerFunc {
 			return
 		}
 		w.Header().Set("Cache-Control", "no-store")
-		b := familyHead(r, cfg, "Nachrichten sichern", "Nachrichten sichern")
+		b := familyHead(r, cfg, "Daten sichern", "Daten sichern")
 		b.WriteString(nachrichtenStyle)
-		b.WriteString("<h1>Nachrichten sichern</h1><p class=lead>" + html.EscapeString(saysNachrichtenLead) + "</p>")
+		b.WriteString("<h1>Daten sichern</h1><p class=lead>" + html.EscapeString(saysDatenLead) + "</p>")
 		b.WriteString(nachrichtenStand(cfg, person))
 		keys := cardsList("Deine Schlüssel")
-		keys.row(saysSchluesselSpaet, "", false)
+		keys.row(saysSchluessel, "", false)
 		b.WriteString(keys.html())
-		for _, a := range nachrichtenAnleitung {
+		for _, a := range datenAnleitung {
 			b.WriteString("<section class=\"karte schritte\"><h2>" + html.EscapeString(a.title) + "</h2><ol>")
 			for _, s := range a.steps {
 				b.WriteString("<li>" + html.EscapeString(s) + "</li>")
@@ -105,8 +119,9 @@ func Nachrichten(cfg StartConfig) http.HandlerFunc {
 			}
 			b.WriteString("</section>")
 		}
+		b.WriteString("<p class=k>" + html.EscapeString(saysStandortNicht) + "</p>")
 		nie := cardsList("Was nie ins Archiv kommt")
-		for _, n := range nachrichtenNie {
+		for _, n := range datenNie {
 			nie.row(n, "", false)
 		}
 		b.WriteString(nie.html())

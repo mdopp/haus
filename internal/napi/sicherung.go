@@ -23,10 +23,10 @@ import (
 	"unicode/utf8"
 )
 
-// Nachrichten sichern (haus#207, laib ADR 0029): the Haus app
+// Daten sichern (haus#207, laib ADR 0029): the Haus app
 // (haus-android#194) brings a person's phone backups — WhatsApp's
-// msgstore.db.crypt15 and its media, Signal's signal-*.backup, a Discord
-// data package — into archiv-eingang/<person>/<quelle>/<pfad>, where that
+// msgstore.db.crypt15 and its media, Signal's signal-*.backup, the SMS and
+// calls — into archiv-eingang/<person>/<quelle>/<pfad>, where that
 // person's archive imports them once its vault is open. A backup is
 // several GB and a phone's connection drops, so the upload resumes: POST
 // /napi/sicherung/uploads names the file and gets an id and how much the
@@ -64,15 +64,15 @@ var (
 // them. sms holds the phone's SMS and call log, which the app encrypts to
 // the person's archive (GET /napi/sicherung/schluessel) before it sends
 // them: sms-<zeit>.xml.age, anrufe-<zeit>.xml.age.
-var Quellen = []string{"whatsapp", "signal", "sms", "discord"}
+var Quellen = []string{"whatsapp", "signal", "sms"} // Discord dropped (owner, 2026-11-03)
 
 // teil is the hidden folder of the parts in a person's inbox.
 const teil = ".teil"
 
 // What the routes answer, one German sentence each with the next step.
 const (
-	saysArchivNotSet  = "Das Nachrichten-Archiv ist auf dieser Box nicht eingerichtet."
-	saysArchivMissing = "Der Eingang des Nachrichten-Archivs fehlt auf der Box. Sag dem Admin Bescheid."
+	saysArchivNotSet  = "Das Archiv ist auf dieser Box nicht eingerichtet."
+	saysArchivMissing = "Der Eingang des Archivs fehlt auf der Box. Sag dem Admin Bescheid."
 	saysNoPerson      = "Dieses Gerät gehört zu keiner Person. Kopple die Haus-App neu, angemeldet mit deinem Namen."
 	saysUnreadable    = "Die Anfrage war nicht lesbar. Aktualisiere die Haus-App."
 	saysTooMany       = "Zu viele Dateien auf einmal: höchstens 5000 je Anfrage."
@@ -88,8 +88,8 @@ const (
 	saysNoRoom        = "Auf der Box ist nicht genug Platz für diese Datei. Sag dem Admin Bescheid, dann geht es weiter."
 	saysCut           = "Die Übertragung brach ab. Die Haus-App macht beim nächsten Mal dort weiter."
 	saysStoreFailed   = "Die Box konnte die Datei nicht speichern. Versuch es später noch einmal; hilft das nicht, sag dem Admin Bescheid."
-	saysNoKey         = "Dein Nachrichten-Archiv ist noch nicht eingerichtet. Richte es einmal auf der Archiv-Seite ein, dann sichert die Haus-App deine SMS und Anrufe verschlüsselt."
-	saysBadKey        = "Der Schlüssel deines Nachrichten-Archivs auf der Box ist unlesbar. Sag dem Admin Bescheid."
+	saysNoKey         = "Dein Archiv ist noch nicht eingerichtet. Richte es einmal auf der Archiv-Seite ein, dann sichert die Haus-App deine SMS und Anrufe verschlüsselt."
+	saysBadKey        = "Der Schlüssel deines Archivs auf der Box ist unlesbar. Sag dem Admin Bescheid."
 )
 
 // briefkasten is the file in a person's inbox where their archive leaves
@@ -204,7 +204,7 @@ func validPfad(p string) bool {
 func checkFile(quelle, pfad string, groesse int64) string {
 	switch {
 	case !validQuelle(quelle):
-		return "Unbekannte Quelle „" + quelle + "“: es gibt whatsapp, signal, sms und discord. Aktualisiere die Haus-App."
+		return "Unbekannte Quelle „" + quelle + "“: es gibt whatsapp, signal und sms. Aktualisiere die Haus-App."
 	case !validPfad(pfad):
 		return "Der Pfad „" + pfad + "“ geht nicht: nur Ordner und Dateien unterhalb der Sicherung, nichts Verstecktes (mit Punkt vorn), höchstens 512 Zeichen."
 	case groesse < 0:

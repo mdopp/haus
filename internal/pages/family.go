@@ -86,7 +86,7 @@ var mehr = []tab{
 	{"Gesehen & Gehört", GesehenPath, `<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>`},
 	{"Musik", MusikPath, `<path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/>`},
 	{"Apps einrichten", willkommenPath, `<rect x="6" y="3" width="12" height="18" rx="2"/><path d="M11 18h2"/>`},
-	{"Nachrichten sichern", NachrichtenPath, `<path d="M4 5h16v11H9l-5 4z"/><path d="M12 7.5v5M9.5 10L12 12.5 14.5 10"/>`},
+	{"Daten sichern", DatenPath, `<path d="M4 5h16v11H9l-5 4z"/><path d="M12 7.5v5M9.5 10L12 12.5 14.5 10"/>`},
 	{"Standortverlauf", StandortPath, `<path d="M12 21s-6-5.5-6-11a6 6 0 0 1 12 0c0 5.5-6 11-6 11z"/><circle cx="12" cy="10" r="2.2"/>`},
 	{"Netzlaufwerk", "/netzlaufwerk", `<rect x="3" y="5" width="18" height="6" rx="1.5"/><rect x="3" y="13" width="18" height="6" rx="1.5"/><path d="M7 8h.01M7 16h.01"/>`},
 	{"Aufgaben", aufgabenPath, `<path d="M9 11l2 2 4-4"/><rect x="4" y="4" width="16" height="16" rx="3"/>`},
@@ -122,8 +122,8 @@ func shows(r *http.Request, cfg StartConfig) map[string]bool {
 		// Platte erfassen and Discogs live on Musik (owner 2026-10-26); on their own only on a box without it
 		"Platte erfassen": cfg.Discogs != nil && cfg.MusicInbox == "", "Discogs": (cfg.Discogs != nil || cfg.Wuensche != nil) && cfg.MusicInbox == "" && r.Header.Get("Remote-User") != "",
 		"Netzlaufwerk": cfg.Samba != nil && r.Header.Get("Remote-User") != "", "Box": isAdmin(r),
-		"Nachrichten sichern": cfg.Sicherung != nil && r.Header.Get("Remote-User") != "", // haus#207
-		"Standortverlauf":     cfg.Reitti != nil && r.Header.Get("Remote-User") != ""}    // owner 2026-11-02
+		"Daten sichern":   cfg.Sicherung != nil && r.Header.Get("Remote-User") != "", // haus#207
+		"Standortverlauf": cfg.Reitti != nil && r.Header.Get("Remote-User") != ""}    // owner 2026-11-02
 }
 
 func navLink(b *strings.Builder, t tab, class string, current bool) {
