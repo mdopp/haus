@@ -587,7 +587,9 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   source, what to do and what then happens: Signal, WhatsApp, SMS and
   calls, contacts, mail, calendars (owner, 2026-11-03; Discord dropped, the
   location history only pointed to). The sources are `whatsapp`, `signal`
-  and `sms`.
+  and `sms`. Its card *Für ein neues Handy* (haus#209) shows what the
+  archive keeps in `letzte/` (the same as `/napi/sicherung/letzte`), with
+  date and size, and the phone change in three steps.
   The source `sms` is the phone's SMS and call log
   (`sms-<zeit>.xml.age`, `anrufe-<zeit>.xml.age`), which the app encrypts
   on the phone to the person's archive before sending; Haus keeps them as
