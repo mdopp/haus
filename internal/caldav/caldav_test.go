@@ -416,21 +416,21 @@ func TestTodosWithTheDoneOnes(t *testing.T) {
 // from the start, so a phone can take them before the first entry; asked
 // again, nothing new is made; a configured calendar is left alone.
 func TestEnsureHaushaltMakesBothOnce(t *testing.T) {
-	fake := davfake.New("haus", "pw")
+	fake := davfake.New("homes", "pw")
 	defer fake.Close()
-	c := &Client{URL: fake.URL, User: "haus", Password: "pw"}
+	c := &Client{URL: fake.URL, User: "homes", Password: "pw"}
 	ctx := context.Background()
 	if err := c.EnsureHaushalt(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if got := fake.Calendars(); len(got) != 1 || got[0] != "/haus/haushalt/" {
+	if got := fake.Calendars(); len(got) != 1 || got[0] != "/homes/haushalt/" {
 		t.Fatalf("calendars %v", got)
 	}
-	if fake.DisplayName("/haus/haushalt-kontakte/") == "" {
+	if fake.DisplayName("/homes/haushalt-kontakte/") == "" {
 		t.Fatal("no address book")
 	}
 	before := count(fake.Methods, "MKCALENDAR") + count(fake.Methods, "MKCOL")
-	if err := (&Client{URL: fake.URL, User: "haus", Password: "pw"}).EnsureHaushalt(ctx); err != nil {
+	if err := (&Client{URL: fake.URL, User: "homes", Password: "pw"}).EnsureHaushalt(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if n := count(fake.Methods, "MKCALENDAR") + count(fake.Methods, "MKCOL"); n != before {

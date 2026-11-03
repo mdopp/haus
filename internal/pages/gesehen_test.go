@@ -55,9 +55,9 @@ func TestGesehenPage(t *testing.T) {
 	defer books.Close()
 	books.Hoert("anna", "Krabat", 0.4, false, now.Add(-time.Hour))
 	books.Hoert("anna", "Momo", 1, true, now.Add(-48*time.Hour))
-	dav := davfake.New("haus", "pw")
+	dav := davfake.New("homes", "pw")
 	defer dav.Close()
-	svc := &gesehen.Service{Filme: filme, Buecher: &abs.Client{URL: books.URL, Token: "k"}, DAV: &caldav.Client{URL: dav.URL, User: "haus", Password: "pw"}}
+	svc := &gesehen.Service{Filme: filme, Buecher: &abs.Client{URL: books.URL, Token: "k"}, DAV: &caldav.Client{URL: dav.URL, User: "homes", Password: "pw"}}
 	cfg := StartConfig{Gesehen: svc, Loc: berlin(t), Now: func() time.Time { return now }}
 
 	code, body, _ := familyPage(t, Gesehen, cfg, "GET", GesehenPath, "family")
@@ -98,7 +98,7 @@ func TestGesehenPage(t *testing.T) {
 	}
 
 	// Radicale away: the wish fails plainly, its title stays in the field
-	gone := &gesehen.Service{Filme: filme, DAV: &caldav.Client{URL: dav.URL + "/weg", User: "haus", Password: "falsch"}}
+	gone := &gesehen.Service{Filme: filme, DAV: &caldav.Client{URL: dav.URL + "/weg", User: "homes", Password: "falsch"}}
 	rec = post(t, Gesehen(StartConfig{Gesehen: gone}), GesehenPath, url.Values{"tun": {"wuenschen"}, "titel": {"Arrival"}, "art": {"Serie"}}, "anna", nil)
 	mustContain(t, rec.Body.String(), saysWunschDown, `value="Arrival"`, `<input type=radio name=art value=Serie checked>`)
 	mustNotContain(t, rec.Body.String(), "401", "jellyfin")

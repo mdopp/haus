@@ -14,12 +14,12 @@ import (
 // to every open stream as one gemeinsam frame of its part, found by the
 // collections' getctag; a list's change and no change send nothing.
 func TestSharedChangesBecomeOneFrameOfTheirPart(t *testing.T) {
-	fake := davfake.New("haus", "pw")
+	fake := davfake.New("homes", "pw")
 	defer fake.Close()
-	fake.AddCalendar("/haus/haushalt/", "Haushalt", "VEVENT", "VTODO")
-	fake.AddCalendar("/haus/einkauf/", "Einkauf", "VTODO")
-	fake.AddAddressBook("/haus/haushalt-kontakte/", "Haushalt")
-	dav := &caldav.Client{URL: fake.URL, User: "haus", Password: "pw"}
+	fake.AddCalendar("/homes/haushalt/", "Haushalt", "VEVENT", "VTODO")
+	fake.AddCalendar("/homes/einkauf/", "Einkauf", "VTODO")
+	fake.AddAddressBook("/homes/haushalt-kontakte/", "Haushalt")
+	dav := &caldav.Client{URL: fake.URL, User: "homes", Password: "pw"}
 
 	l := newLive(nil, time.Minute, time.Second)
 	var mu sync.Mutex
@@ -67,17 +67,17 @@ func TestSharedChangesBecomeOneFrameOfTheirPart(t *testing.T) {
 	if f := frames(); len(f) != 0 {
 		t.Fatalf("the baseline sent %q", f)
 	}
-	fake.Put("/haus/einkauf/milch.ics", "BEGIN:VCALENDAR\r\nBEGIN:VTODO\r\nUID:milch\r\nSUMMARY:Milch\r\nEND:VTODO\r\nEND:VCALENDAR\r\n")
+	fake.Put("/homes/einkauf/milch.ics", "BEGIN:VCALENDAR\r\nBEGIN:VTODO\r\nUID:milch\r\nSUMMARY:Milch\r\nEND:VTODO\r\nEND:VCALENDAR\r\n")
 	settle()
 	if f := frames(); len(f) != 0 {
 		t.Fatalf("the shopping list is no calendar of the phones: %q", f)
 	}
-	fake.Put("/haus/haushalt/arzt.ics", "BEGIN:VCALENDAR\r\nBEGIN:VTODO\r\nUID:arzt\r\nSUMMARY:Arzt\r\nDUE:20261104T080000Z\r\nEND:VTODO\r\nEND:VCALENDAR\r\n")
+	fake.Put("/homes/haushalt/arzt.ics", "BEGIN:VCALENDAR\r\nBEGIN:VTODO\r\nUID:arzt\r\nSUMMARY:Arzt\r\nDUE:20261104T080000Z\r\nEND:VTODO\r\nEND:VCALENDAR\r\n")
 	settle()
 	if f := frames(); len(f) != 1 || f[0] != "event: gemeinsam\ndata: {\"teil\":\"kalender\"}\n\n" {
 		t.Fatalf("a new reminder: %q", f)
 	}
-	fake.Put("/haus/haushalt-kontakte/oma.vcf", "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:oma\r\nFN:Oma\r\nEND:VCARD\r\n")
+	fake.Put("/homes/haushalt-kontakte/oma.vcf", "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:oma\r\nFN:Oma\r\nEND:VCARD\r\n")
 	settle()
 	if f := frames(); len(f) != 1 || f[0] != "event: gemeinsam\ndata: {\"teil\":\"kontakte\"}\n\n" {
 		t.Fatalf("a new card: %q", f)
@@ -91,9 +91,9 @@ func TestSharedChangesBecomeOneFrameOfTheirPart(t *testing.T) {
 // Nobody listening, Homes asks Radicale nothing; the first stream starts the
 // look, the last one leaving stops it.
 func TestSharedIsReadOnlyWhileSomeoneListens(t *testing.T) {
-	fake := davfake.New("haus", "pw")
+	fake := davfake.New("homes", "pw")
 	defer fake.Close()
-	fake.AddCalendar("/haus/haushalt/", "Haushalt")
+	fake.AddCalendar("/homes/haushalt/", "Haushalt")
 	l := newLive(nil, time.Minute, time.Second)
 	reads := make(chan struct{}, 100)
 	l.shared, l.sharedEvery = func(ctx context.Context) (string, string, error) {

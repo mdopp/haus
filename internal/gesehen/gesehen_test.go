@@ -49,11 +49,11 @@ func (f *fakeBuecher) HatBuch(_ context.Context, t string, plain func(string) st
 // box has it, or it is on the list already; a ticked-off wish open again;
 // a library that does not answer does not stop the wish; no title, no wish.
 func TestWuenschen(t *testing.T) {
-	dav := davfake.New("haus", "pw")
+	dav := davfake.New("homes", "pw")
 	defer dav.Close()
 	filme := &fakeFilme{seen: map[string][]jellyfin.Gesehen{"anna": {{Name: "Dark", Serie: true}}}, lib: []string{"Dune"}}
 	told := 0
-	s := &Service{Filme: filme, Buecher: &fakeBuecher{lib: []string{"Momo"}}, DAV: &caldav.Client{URL: dav.URL, User: "haus", Password: "pw"},
+	s := &Service{Filme: filme, Buecher: &fakeBuecher{lib: []string{"Momo"}}, DAV: &caldav.Client{URL: dav.URL, User: "homes", Password: "pw"},
 		Changed: func(r caldav.ListRef) {
 			if r == Liste {
 				told++

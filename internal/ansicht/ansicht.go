@@ -1,7 +1,7 @@
 // Package ansicht is how each person sees the calendars on Haushalt/Kalender
 // (haus#66): a colour per calendar and the ones they hid. It is Homes' own
 // view, one file in Homes' data folder, ansicht.json:
-// {"<Remote-User>": {"aus": ["/lea/abo-feiertage/"], "farben": {"/haus/haushalt/": "#2f6fdf"}}}.
+// {"<Remote-User>": {"aus": ["/lea/abo-feiertage/"], "farben": {"/homes/haushalt/": "#2f6fdf"}}}.
 // The calendars themselves stay in Radicale untouched; a phone keeps its own
 // colours. A file that does not read is an error and is never written over.
 package ansicht
@@ -17,6 +17,8 @@ import (
 	"slices"
 	"strings"
 	"sync"
+
+	"github.com/mdopp/homes/internal/caldav"
 )
 
 // File is the store's name in Homes' data folder.
@@ -47,12 +49,17 @@ func (o One) Color(path string) string { return o.Colors[path] }
 
 // Store is the file.
 type Store struct {
-	path string
-	mu   sync.Mutex
+	path    string
+	account string // Homes' Radicale account (HOMES_RADICALE_USER), for the legacy paths
+	mu      sync.Mutex
 }
 
-// Open names the store in dir; the file need not be there.
-func Open(dir string) *Store { return &Store{path: filepath.Join(dir, File)} }
+// Open names the store in dir; the file need not be there. account is
+// Homes' Radicale account: a calendar stored under the old account's path
+// is read as its path now (caldav.LegacyAccountPath).
+func Open(dir, account string) *Store {
+	return &Store{path: filepath.Join(dir, File), account: account}
+}
 
 // For is one person's view; no file, or nothing for them, is the default.
 func (s *Store) For(person string) (One, error) {
@@ -83,7 +90,33 @@ func (s *Store) read() (map[string]One, error) {
 	if err := json.Unmarshal(b, &all); err != nil {
 		return nil, fmt.Errorf("%s: %w", s.path, err)
 	}
+	for person, o := range all {
+		all[person] = s.legacy(o)
+	}
 	return all, nil
+}
+
+// legacy is legacy: a view stored while Homes' account was haus names
+// /haus/… calendars; read, they are the account's now, and the next Set
+// writes them so. A colour stored under the new path wins over the old
+// one. Ends with laib#1021 step 9.
+func (s *Store) legacy(o One) One {
+	var hidden []string
+	for _, p := range o.Hidden {
+		if p = caldav.LegacyAccountPath(p, s.account); !slices.Contains(hidden, p) {
+			hidden = append(hidden, p)
+		}
+	}
+	o.Hidden = hidden
+	for p, c := range o.Colors {
+		if q := caldav.LegacyAccountPath(p, s.account); q != p {
+			delete(o.Colors, p)
+			if _, ok := o.Colors[q]; !ok {
+				o.Colors[q] = c
+			}
+		}
+	}
+	return o
 }
 
 // Set changes one calendar in one person's view: hidden or shown, and its

@@ -9,8 +9,10 @@ token prefix, `/napi/box`) live in `internal/app`, one set; nothing old is
 carried (ADR 0022 §4) except what the rename from Haus keeps until every phone
 runs Homes (laib#1021): the `haus_device_` tokens, the `haus.<domain>`
 address for `/napi/`, `GET /napi/app`. Names stored in other apps keep the
-old name (the iCal `X-HAUS-*` and PRODIDs, the `haus` accounts, usage-metrics'
-app `haus`); each is marked where it is defined.
+old name (the iCal `X-HAUS-*` and PRODIDs, usage-metrics' app `haus`); each
+is marked where it is defined. The program's own logins are `homes` (owner,
+2026-11-03): a collection path Homes stored under `/haus/` is read as
+`/<HOMES_RADICALE_USER>/` (`caldav.LegacyAccountPath`, ends laib#1021 step 9).
 
 Rules: no framework, one page per file, every Laib call is one MCP tool call
 (`internal/laib`), Homes never decides — there is no verdict in Homes at all (haus#1): the

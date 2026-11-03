@@ -111,9 +111,9 @@ func TestShareASong(t *testing.T) {
 	was := merken.YouTubeBase
 	merken.YouTubeBase = yt.URL
 	defer func() { merken.YouTubeBase = was }()
-	dav := davfake.New("haus", "pw")
+	dav := davfake.New("homes", "pw")
 	defer dav.Close()
-	l := einkauf.Open(&caldav.Client{URL: dav.URL, User: "haus", Password: "pw"})
+	l := einkauf.Open(&caldav.Client{URL: dav.URL, User: "homes", Password: "pw"})
 	nd, _ := notes.Open(t.TempDir())
 	h := Handler(Config{Validate: StaticValidator([]string{"dev1"}), Whoami: func(string) (string, bool) { return "anna", true },
 		Haushalt: haushalt.Config{Notes: nd, Fetcher: merken.Fetcher{AllowPrivate: true}, PublicURL: "https://homes.box.test", Einkauf: l, Wuensche: &einkauf.Wuensche{Listen: l}}})

@@ -15,12 +15,13 @@ import (
 )
 
 // The calendars Haushalt/Kalender lists and makes (haus#66, laib#495). They
-// all live in Radicale, named by where they come from (haus is the
-// household's Radicale/LLDAP account; stored data, it keeps its name, laib#1021):
+// all live in Radicale, named by where they come from (homes is the
+// household's Radicale/LLDAP account, HOMES_RADICALE_USER; it was haus
+// before laib#1021, see LegacyAccountPath):
 //
-//	haus/haushalt            the household's, Homes' account's
-//	haus/familie-<name>      a calendar "für die Familie", made by Homes
-//	haus/abo-<name>          a public calendar the family subscribed to
+//	homes/haushalt           the household's, Homes' account's
+//	homes/familie-<name>     a calendar "für die Familie", made by Homes
+//	homes/abo-<name>         a public calendar the family subscribed to
 //	<person>/privat-<name>   a calendar "nur für mich", made by Homes
 //	<person>/google-<name>   a Google calendar laib's kalender mirrors, read only
 //	<person>/abo-<name>      a public calendar the person subscribed to, read only
@@ -200,7 +201,7 @@ func (c *Client) PersonEvents(ctx context.Context, person string, from, to time.
 // ErrCalendarExists is a calendar of that name that is there already.
 var ErrCalendarExists = errors.New("Kalender: den gibt es schon")
 
-// MakeCalendar makes a calendar for the family (haus/familie-<slug>) or
+// MakeCalendar makes a calendar for the family (homes/familie-<slug>) or
 // for one person (<person>/privat-<slug>) and returns its path.
 func (c *Client) MakeCalendar(ctx context.Context, person, slug, name string, family bool) (string, error) {
 	home, err := c.home()

@@ -111,7 +111,7 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   and through `/napi/ha/call`, there the person who paired the device —
   is one log line `ha person=<Remote-User> service=<d.s> entity=<id>
   context=<HA's context id>` and the same text as a `laib_note` (kind
-  `watch`), so HA's logbook (user „Haus“, the account Laib made for it) and Laib's journal together name
+  `watch`), so HA's logbook (user „Homes“, the account Laib made for it) and Laib's journal together name
   the person. The note never holds up the switch: a failed one is a
   warning, Laib refusing `note` to the homes hand is logged once. Only with `Remote-User` and from Homes' own page
   (`Sec-Fetch-Site: same-origin`, or, from an older browser, an `Origin`
@@ -1114,7 +1114,7 @@ npx playwright install chromium && npx playwright test`; `go run
 ## Einkauf (haus#118)
 
 `GET /einkauf`, a pill under Haushalt, with Radicale. The household's one
-shopping list is a task-only collection in Homes' account, `haus/einkauf`
+shopping list is a task-only collection in Homes' account, `homes/einkauf`
 ("Einkauf"), made at start with the Haushalt calendar, so the phones show
 it as a task list too (DAVx⁵ with a task app); it is no calendar and its
 tasks are no reminders. A line's text is all there is (a phone's edit is

@@ -18,11 +18,11 @@ import (
 // own calendars and one she made with Homes
 func mirrorBox(t *testing.T) (*davfake.Server, *Client) {
 	t.Helper()
-	fake := davfake.New("haus", "pw")
+	fake := davfake.New("homes", "pw")
 	t.Cleanup(fake.Close)
-	fake.AddCalendar("/haus/haushalt/", "Haushalt")
-	fake.AddCalendar("/haus/familie-geburtstage/", "Geburtstage")
-	fake.AddCalendar("/haus/abo-feiertage-ni/", "Feiertage Niedersachsen")
+	fake.AddCalendar("/homes/haushalt/", "Haushalt")
+	fake.AddCalendar("/homes/familie-geburtstage/", "Geburtstage")
+	fake.AddCalendar("/homes/abo-feiertage-ni/", "Feiertage Niedersachsen")
 	fake.AddPrincipal("lea")
 	fake.AddCalendar("/lea/google-familie/", "Familie")
 	fake.AddCalendar("/lea/abo-muell/", "Müllabfuhr")
@@ -31,7 +31,7 @@ func mirrorBox(t *testing.T) (*davfake.Server, *Client) {
 	fake.AddAddressBook("/lea/google-kontakte/", "Takeout")
 	fake.SetSynced("/lea/google-familie/", "2026-10-14T07:55:00Z", "")
 	fake.SetSynced("/lea/abo-muell/", "2026-10-14T05:00:00Z", "Abgleich seit 3 h nicht gelungen")
-	return fake, &Client{URL: fake.URL, User: "haus", Password: "pw", Loc: time.UTC}
+	return fake, &Client{URL: fake.URL, User: "homes", Password: "pw", Loc: time.UTC}
 }
 
 func ev(uid, start, summary string) string {
@@ -42,7 +42,7 @@ func ev(uid, start, summary string) string {
 // every person's calendars from outside; a person's own stay theirs.
 func TestEventsIncludeTheMirrorsAndNotThePrivateOnes(t *testing.T) {
 	fake, c := mirrorBox(t)
-	fake.Put("/haus/haushalt/1.ics", ev("1", "20261014T100000Z", "Müll raus"))
+	fake.Put("/homes/haushalt/1.ics", ev("1", "20261014T100000Z", "Müll raus"))
 	fake.Put("/lea/google-familie/2.ics", ev("2", "20261014T110000Z", "Zahnarzt"))
 	fake.Put("/lea/abo-muell/3.ics", ev("3", "20261014T120000Z", "Gelbe Tonne"))
 	fake.Put("/lea/privat-sport/4.ics", ev("4", "20261014T130000Z", "Laufen"))
@@ -70,10 +70,10 @@ func TestEventsIncludeTheMirrorsAndNotThePrivateOnes(t *testing.T) {
 
 // A Radicale before laib#495 does not let Homes list the root: no mirrors, no error.
 func TestNoRootListingIsNoMirrors(t *testing.T) {
-	fake := davfake.New("haus", "pw")
+	fake := davfake.New("homes", "pw")
 	t.Cleanup(fake.Close)
-	fake.AddCalendar("/haus/haushalt/", "Haushalt")
-	c := &Client{URL: fake.URL, User: "haus", Password: "pw"}
+	fake.AddCalendar("/homes/haushalt/", "Haushalt")
+	c := &Client{URL: fake.URL, User: "homes", Password: "pw"}
 	if _, err := c.Events(context.Background(), time.Now(), time.Now().Add(time.Hour)); err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestPersonCalendarsSayWhatEachIs(t *testing.T) {
 	for _, k := range cals {
 		got = append(got, k.Path+"="+k.Kind)
 	}
-	want := "/haus/abo-feiertage-ni/=abo,/haus/familie-geburtstage/=familie,/haus/haushalt/=haushalt,/lea/abo-muell/=abo,/lea/google-familie/=google,/lea/privat-sport/=privat"
+	want := "/homes/abo-feiertage-ni/=abo,/homes/familie-geburtstage/=familie,/homes/haushalt/=haushalt,/lea/abo-muell/=abo,/lea/google-familie/=google,/lea/privat-sport/=privat"
 	if strings.Join(got, ",") != want {
 		t.Fatalf("got %v\nwant %s", got, want)
 	}
@@ -103,7 +103,7 @@ func TestPersonCalendarsSayWhatEachIs(t *testing.T) {
 			if k.Problem == "" {
 				t.Fatalf("the problem laib's kalender noted is lost: %+v", k)
 			}
-		case "/haus/abo-feiertage-ni/":
+		case "/homes/abo-feiertage-ni/":
 			if !k.Family || !k.ReadOnly() {
 				t.Fatalf("the family's subscription: %+v", k)
 			}
@@ -118,7 +118,7 @@ func TestMakeAndDeleteOnlyWhatHomesMakes(t *testing.T) {
 	if err != nil || p != "/lea/privat-schule/" || fake.DisplayName(p) != "Schule &amp; Hort" && fake.DisplayName(p) != "Schule & Hort" {
 		t.Fatalf("%q %v %q", p, err, fake.DisplayName(p))
 	}
-	if p, err := c.MakeCalendar(ctx, "lea", "ausfluege", "Ausflüge", true); err != nil || p != "/haus/familie-ausfluege/" {
+	if p, err := c.MakeCalendar(ctx, "lea", "ausfluege", "Ausflüge", true); err != nil || p != "/homes/familie-ausfluege/" {
 		t.Fatalf("%q %v", p, err)
 	}
 	if _, err := c.MakeCalendar(ctx, "lea", "schule", "Schule", false); err != ErrCalendarExists {
@@ -127,7 +127,7 @@ func TestMakeAndDeleteOnlyWhatHomesMakes(t *testing.T) {
 	if _, err := c.MakeCalendar(ctx, "", "x", "X", false); err == nil {
 		t.Fatal("a calendar for nobody")
 	}
-	for _, p := range []string{"/lea/google-familie/", "/haus/haushalt/", "/lea/kalender/", "/haus/abo-feiertage-ni/"} {
+	for _, p := range []string{"/lea/google-familie/", "/homes/haushalt/", "/lea/kalender/", "/homes/abo-feiertage-ni/"} {
 		if err := c.DeleteCalendar(ctx, p); err == nil {
 			t.Fatalf("%s deleted", p)
 		}

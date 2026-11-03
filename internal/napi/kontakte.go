@@ -14,7 +14,7 @@ import (
 
 // Handy-Kontakte (laib ADR 0029): the Homes app sends all of a person's
 // phone contacts, and Homes mirrors them into that person's address book
-// handy-kontakte in Radicale, as its own account (haus), which may write
+// handy-kontakte in Radicale, as its own account (homes), which may write
 // that one book of each person and nothing else of theirs. The person is
 // the device's (Whoami), never the request's. The book is a mirror: a card
 // the phone no longer has goes, so an upload of no cards at all — a

@@ -352,7 +352,7 @@ func TestFamilyPagesDoNotWaitForAHangingBackend(t *testing.T) {
 	}))
 	defer hang.Close()
 	defer close(release)
-	cal := &caldav.Client{URL: hang.URL, User: "haus", Password: "pw", Loc: berlin(t)}
+	cal := &caldav.Client{URL: hang.URL, User: "homes", Password: "pw", Loc: berlin(t)}
 	nd := notesDir(t, map[string]time.Duration{"Einkaufsliste": time.Hour})
 	for _, p := range []struct {
 		page func(StartConfig) http.HandlerFunc

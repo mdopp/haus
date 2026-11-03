@@ -611,6 +611,7 @@ func kalenderZurueck(ctx context.Context, cfg StartConfig, path, id string) erro
 	if err == nil {
 		err = json.Unmarshal(e.Daten, &d)
 	}
+	d.Path = caldav.LegacyAccountPath(d.Path, cfg.Calendar.User) // a calendar deleted while the account was haus (laib#1021)
 	if err != nil || d.Path != path {
 		return papierkorb.ErrWeg
 	}
@@ -640,6 +641,7 @@ func kalenderKorb(cfg StartConfig, me, only string) string {
 		if json.Unmarshal(e.Daten, &d) != nil || (only != "" && e.ID != only) {
 			continue
 		}
+		d.Path = caldav.LegacyAccountPath(d.Path, cfg.Calendar.User) // a calendar deleted while the account was haus (laib#1021)
 		if !strings.HasPrefix(d.Path, "/"+me+"/") && !strings.HasPrefix(d.Path, "/"+cfg.Calendar.User+"/") {
 			continue
 		}

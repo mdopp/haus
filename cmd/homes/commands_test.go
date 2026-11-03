@@ -58,7 +58,7 @@ func TestExportDocumentsCommand(t *testing.T) {
 // and notes folder and says in German what it did; a dry run writes
 // nothing; without an archive it says how to call it.
 func TestImportTakeoutCommand(t *testing.T) {
-	dav := davfake.New("haus", "pw")
+	dav := davfake.New("homes", "pw")
 	defer dav.Close()
 	dir := t.TempDir()
 	zp := filepath.Join(t.TempDir(), "takeout-001.zip")
@@ -70,7 +70,7 @@ func TestImportTakeoutCommand(t *testing.T) {
 	w.Write([]byte(`{"title":"Idee","textContent":"Baumhaus bauen","createdTimestampUsec":1750000000000000,"userEditedTimestampUsec":1750000000000000,"isTrashed":false}`))
 	z.Close()
 	f.Close()
-	env := map[string]string{"HOMES_RADICALE_URL": dav.URL, "HOMES_RADICALE_USER": "haus", "HOMES_RADICALE_PASSWORD": "pw", "HOMES_NOTES_DIR": dir, "TZ": "Europe/Berlin"}
+	env := map[string]string{"HOMES_RADICALE_URL": dav.URL, "HOMES_RADICALE_USER": "homes", "HOMES_RADICALE_PASSWORD": "pw", "HOMES_NOTES_DIR": dir, "TZ": "Europe/Berlin"}
 	run := func(args ...string) (int, string) {
 		var out, errw bytes.Buffer
 		code := command(context.Background(), append([]string{"import-takeout"}, args...), func(k string) string { return env[k] }, &out, &errw)
@@ -108,7 +108,7 @@ func TestImportTakeoutCommand(t *testing.T) {
 // a contact left out is reason enough for exit 1; a Keep note's day is
 // the box's (TZ), not UTC's.
 func TestImportTakeoutEdges(t *testing.T) {
-	dav := davfake.New("haus", "pw")
+	dav := davfake.New("homes", "pw")
 	defer dav.Close()
 	dir := t.TempDir()
 	zp := filepath.Join(t.TempDir(), "takeout-001.zip")
@@ -123,7 +123,7 @@ func TestImportTakeoutEdges(t *testing.T) {
 	w.Write([]byte(`{"title":"Spät","textContent":"Licht aus","createdTimestampUsec":1750026600000000,"userEditedTimestampUsec":1750026600000000,"isTrashed":false}`))
 	z.Close()
 	f.Close()
-	env := map[string]string{"HOMES_RADICALE_URL": dav.URL, "HOMES_RADICALE_USER": "haus", "HOMES_RADICALE_PASSWORD": "pw", "HOMES_NOTES_DIR": dir, "TZ": "Europe/Berlin"}
+	env := map[string]string{"HOMES_RADICALE_URL": dav.URL, "HOMES_RADICALE_USER": "homes", "HOMES_RADICALE_PASSWORD": "pw", "HOMES_NOTES_DIR": dir, "TZ": "Europe/Berlin"}
 	run := func(args ...string) (int, string) {
 		var out, errw bytes.Buffer
 		code := command(context.Background(), append([]string{"import-takeout"}, args...), func(k string) string { return env[k] }, &out, &errw)
