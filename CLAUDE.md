@@ -45,3 +45,29 @@ a part fetched after the page, a live state, recording. A page need not
 work with script off. Homes' scripts are its own and inline: never one
 loaded from elsewhere (privacy, and the box stays self-contained), no
 framework, no build step.
+
+**Gates that keep the code clean (owner, 2026-11-03: „Code sollte immer
+möglichst sauber sein“).** Both run in CI; run them before a PR.
+
+- `scripts/loc.sh` — production lines per area under its cap (pages,
+  napi, cmd, connectors, household, shared; set at the size of
+  2026-11-03 plus 5 %, the reason next to each number), every
+  `internal/` package in exactly one area, and who may import whom: a
+  connector (a client of one other service) and a shared package import
+  no Homes package; only `cmd/` imports pages; only `cmd/` and pages
+  import napi; a fake only the tests and `cmd/homesdemo`. Crossing a cap
+  means raising it in the same PR with its reason and the owner's yes.
+  CI also fails on a file gofmt would change (lines count as gofmt
+  writes them).
+- `scripts/ratchet.py` — deadcode (`dead`: no caller even in a test;
+  `test-only`: production code only a test runs, fakes aside),
+  staticcheck (defaults + U1000, not ST1005: the error strings are German
+  sentences), dupl (75 tokens, production) and gocognit (over 30,
+  production), pinned, against today's findings in `scripts/ratchet/`.
+  A new or higher finding fails (a complexity score counts): fix it, or
+  if it must stay `scripts/ratchet.py --update --accept <tool>` with the
+  reason in the PR and the owner's yes. A finding that went away fails
+  too until the same PR lowers the baseline: `scripts/ratchet.py
+  --update` (it only lowers) and commit `scripts/ratchet/`. A renamed or
+  moved function counts as new under its new name. The script is the
+  same as laib's `scripts/ratchet.py`; change both.
