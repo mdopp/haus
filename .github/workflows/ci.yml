@@ -14,8 +14,23 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      - name: lines as gofmt writes them, the count scripts/loc.sh caps
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
       - run: go vet ./... && go test ./...
       - run: CGO_ENABLED=0 go build -o /dev/null ./cmd/homes
+      - name: each area under its cap, no import across the areas' rules
+        run: scripts/loc.sh
+  ratchet:
+    # dead code, staticcheck, duplicates and complexity only go down; the
+    # tools pinned in the script, today's findings in scripts/ratchet/
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: python3 -m unittest scripts/test_ratchet.py
+      - run: scripts/ratchet.py
   e2e:
     # the family pages in a real browser against cmd/homesdemo's fakes
     runs-on: ubuntu-latest

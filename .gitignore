@@ -2,3 +2,4 @@
 /homes
 /homesdemo
 *.test
+__pycache__/
