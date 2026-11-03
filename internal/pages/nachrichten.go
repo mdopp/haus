@@ -68,6 +68,15 @@ var datenAnleitung = []struct {
 	}, "Das Archiv übernimmt jeden Termin, während es offen ist. Gelöschte Termine bleiben im Archiv."},
 }
 
+// the phone change (haus#209, haus-android#197): three steps, the app's words
+var neuesHandy = []string{
+	"Auf dem neuen Handy die Haus-App installieren und mit deinem Namen koppeln.",
+	"In der Haus-App: Mehr → Daten sichern → „Sicherung zurückholen“. Für Signal einen Ordner wählen, etwa „Dokumente/Signal“. WhatsApp vorher installieren, aber noch nicht öffnen, und den Ordner „Android/media/com.whatsapp/WhatsApp“ freigeben (gibt es ihn noch nicht: „Android/media“).",
+	"Signal neu installieren, bei der Einrichtung „Aus Sicherung wiederherstellen“ wählen, die Datei auswählen und die 30-stellige Passphrase aus Vaultwarden eingeben. WhatsApp öffnen, mit derselben Nummer anmelden und „Wiederherstellen“ wählen.",
+}
+
+const saysNeuesHandyMedien = "Fotos und Sprachnachrichten kommen nur zurück, während dein Archiv offen ist. Die App überschreibt nichts, ohne zu fragen."
+
 // datenNie is what never reaches an archive, whatever the phone does.
 var datenNie = []string{
 	"Nachrichten, die sich selbst löschen (verschwindende Nachrichten): sie stehen in keiner Sicherung.",
@@ -105,6 +114,7 @@ func Nachrichten(cfg StartConfig) http.HandlerFunc {
 		b.WriteString(nachrichtenStyle)
 		b.WriteString("<h1>Daten sichern</h1><p class=lead>" + html.EscapeString(saysDatenLead) + "</p>")
 		b.WriteString(nachrichtenStand(cfg, person))
+		b.WriteString(nachrichtenZurueck(cfg, person))
 		keys := cardsList("Deine Schlüssel")
 		keys.row(saysSchluessel, "", false)
 		b.WriteString(keys.html())
@@ -164,6 +174,62 @@ func nachrichtenStand(cfg StartConfig, person string) string {
 	c.row("Auf der Box sind noch "+groesseWorte(st.FreiBytes)+" frei.", "", false)
 	c.row(saysWieSieLiegen, "", false)
 	return c.html()
+}
+
+// nachrichtenZurueck is the card „Für ein neues Handy“: what the archive
+// keeps of the newest backup (napi's Letzte, the same as the app's
+// /napi/sicherung/letzte), with date and size, and the phone change in
+// three steps.
+func nachrichtenZurueck(cfg StartConfig, person string) string {
+	c := cardsList("Für ein neues Handy")
+	letzte, err := cfg.Sicherung.Letzte(person)
+	if err != nil {
+		log.Printf("haus: nachrichten: letzte of %s: %v", person, err)
+		c.row(saysStandFehlt, "", false)
+	} else {
+		_, loc := cfg.clock()
+		am := func(ms int64) string {
+			t := time.UnixMilli(ms)
+			return "vom " + dayWords(t, loc) + ", " + t.In(loc).Format("15:04")
+		}
+		var signal *napi.LetzteDatei
+		for i, d := range letzte["signal"] {
+			if signal == nil || d.Geaendert > signal.Geaendert {
+				signal = &letzte["signal"][i]
+			}
+		}
+		if signal != nil {
+			c.row("Signal", "Sicherung "+am(signal.Geaendert)+" · "+groesseWorte(signal.Groesse), true)
+		} else {
+			c.row("Signal", "noch keine Sicherung zum Zurückholen", true)
+		}
+		var says []string
+		var medien int
+		var medienBytes int64
+		for _, d := range letzte["whatsapp"] {
+			if strings.HasPrefix(d.Pfad, "Media/") {
+				medien++
+				medienBytes += d.Groesse
+			} else if d.Pfad == "Databases/msgstore.db.crypt15" {
+				says = append(says, "Chats "+am(d.Geaendert)+" · "+groesseWorte(d.Groesse))
+			}
+		}
+		if medien > 0 {
+			says = append(says, anzahl(medien, "Foto oder Sprachnachricht", "Fotos und Sprachnachrichten")+", "+groesseWorte(medienBytes))
+		}
+		if len(says) == 0 {
+			says = append(says, "noch nichts zum Zurückholen")
+		}
+		c.row("WhatsApp", strings.Join(says, " · "), true)
+	}
+	var b strings.Builder
+	b.WriteString(c.html())
+	b.WriteString("<section class=\"karte schritte\"><h2>Handy wechseln</h2><ol>")
+	for _, s := range neuesHandy {
+		b.WriteString("<li>" + html.EscapeString(s) + "</li>")
+	}
+	b.WriteString("</ol><p class=k>" + html.EscapeString(saysNeuesHandyMedien) + "</p></section>")
+	return b.String()
 }
 
 // anzahl is "1 Datei", "12 Dateien".

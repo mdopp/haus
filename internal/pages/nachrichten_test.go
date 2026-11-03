@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/mdopp/haus/internal/napi"
 )
@@ -69,6 +70,47 @@ func TestDatenSichernShowsTheStandAndTheGuide(t *testing.T) {
 	// the old address still lands
 	if code, _, hdr := familyPage(t, Nachrichten, cfg, "GET", NachrichtenPath, "family"); code != 301 || hdr.Get("Location") != DatenPath {
 		t.Errorf("the old address → %d %q", code, hdr.Get("Location"))
+	}
+}
+
+// haus#209: the page shows what lies ready for a new phone (date, size)
+// and the phone change in three steps; only the person's own.
+func TestDatenSichernShowsWhatANewPhoneGetsBack(t *testing.T) {
+	inbox, data := t.TempDir(), t.TempDir()
+	lege := func(rel string, b []byte, at time.Time) {
+		p := filepath.Join(inbox, "anna", "letzte", filepath.FromSlash(rel))
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		os.WriteFile(p, b, 0o644)
+		os.Chtimes(p, at, at)
+	}
+	nacht := time.Date(2026, 11, 2, 2, 0, 0, 0, time.UTC)
+	lege("signal/signal-2026-11-02-03-00-00.backup", make([]byte, 3<<20), nacht)
+	lege("whatsapp/Databases/msgstore.db.crypt15", make([]byte, 2<<20), nacht.Add(time.Hour))
+	// two media, age-shaped: header, nonce, one chunk with its tag
+	for _, m := range []string{"WhatsApp Images/IMG-1.jpg", "WhatsApp Voice Notes/PTT-1.opus"} {
+		age := []byte("age-encryption.org/v1\n-> X25519 abc\nxyz\n--- mac\n")
+		age = append(age, make([]byte, 16+1024+16)...)
+		lege("whatsapp/Media/"+m+".age", age, nacht)
+	}
+	cfg := StartConfig{Sicherung: napi.NewSicherung(inbox, data)}
+	_, body, _ := familyPage(t, Nachrichten, cfg, "GET", DatenPath, "family")
+	for _, want := range []string{"Für ein neues Handy",
+		"Sicherung vom 2. November 2026, 03:00 · 3,0 MB", // Berlin time
+		"Chats vom 2. November 2026, 04:00 · 2,0 MB · 2 Fotos und Sprachnachrichten, 2,0 KB",
+		"<h2>Handy wechseln</h2>", "„Sicherung zurückholen“", "noch nicht öffnen", "Android/media/com.whatsapp/WhatsApp",
+		"„Aus Sicherung wiederherstellen“", "30-stellige Passphrase aus Vaultwarden", "„Wiederherstellen“ wählen",
+		"während dein Archiv offen ist"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the page lacks %q", want)
+		}
+	}
+	if strings.Count(body, "<h2>Handy wechseln</h2>") != 1 || strings.Count(body[strings.Index(body, "Handy wechseln"):], "<li>") < 3 {
+		t.Error("not three steps")
+	}
+	before(t, body, "Dein Stand", "Für ein neues Handy")
+	_, ben, _ := familyPageAs(t, Nachrichten, cfg, "GET", DatenPath, "ben", "family")
+	if strings.Contains(ben, "3,0 MB") || !strings.Contains(ben, "noch keine Sicherung zum Zurückholen") || !strings.Contains(ben, "noch nichts zum Zurückholen") {
+		t.Errorf("Ben's page:\n%s", ben)
 	}
 }
 
