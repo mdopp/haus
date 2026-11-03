@@ -14,8 +14,10 @@ import (
 )
 
 // what a room card shows, in this order (laib DEKONSTRUKTION: Lichter,
-// Heizung, Rollläden, Medien)
-var roomKinds = map[string]int{"light": 0, "climate": 1, "cover": 2, "media_player": 3}
+// Heizung, Rollläden, Medien), and the locks: a door lock is a device of
+// the house too (owner 2026-11-03, the Nuki was missing). A lock's row
+// only leads to its own page; opening a door is never one tap on a list.
+var roomKinds = map[string]int{"light": 0, "climate": 1, "cover": 2, "media_player": 3, "lock": 4}
 
 // maxRoomRows is the most one room card lists.
 const maxRoomRows = 40

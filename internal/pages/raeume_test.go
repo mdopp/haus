@@ -324,3 +324,28 @@ func TestRaeumeRoomWithoutLettersLandsBackOnIt(t *testing.T) {
 		t.Errorf("pin → %d %q, want /raeume#karte", rec.Code, rec.Header().Get("Location"))
 	}
 }
+
+// The owner, 2026-11-03: the Nuki lock was missing on „Alle Geräte“. A lock
+// is listed in its room with its state in words, leading to its own page,
+// with no button on the row.
+func TestRaeumeListsLocks(t *testing.T) {
+	fake, hc := house(t)
+	fake.SetRegistries(
+		[]map[string]any{{"area_id": "flur", "name": "Flur"}},
+		nil,
+		[]map[string]any{{"entity_id": "lock.haustuer", "area_id": "flur"}})
+	fake.Set("lock.haustuer", "locked", map[string]any{"friendly_name": "Haustür"})
+	_, body, _ := familyPage(t, Raeume, StartConfig{HA: hc}, "GET", "/raeume", "family")
+	mustContain(t, body, "<h2 id=karte-flur>Flur</h2>", `<a href="/raeume/lock.haustuer">Haustür</a>`, "verriegelt")
+	i := strings.Index(body, "lock.haustuer")
+	if i < 0 {
+		t.Fatal("no Haustür on the page")
+	}
+	row := body[i:]
+	if j := strings.Index(row, "</li>"); j > 0 {
+		row = row[:j]
+	}
+	if strings.Contains(row, "<button") {
+		t.Errorf("a lock's row has a button: %s", row)
+	}
+}
