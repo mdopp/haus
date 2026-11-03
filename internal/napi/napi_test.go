@@ -334,7 +334,7 @@ func TestEveryNapiRouteWantsADevice(t *testing.T) {
 		Haushalt:  haushalt.Config{Calendar: dav, Contacts: dav, Documents: &paperless.Client{URL: dead, Token: "pl"}, Notes: nd},
 		UploadDir: t.TempDir(), Sicherung: NewSicherung(t.TempDir(), t.TempDir()), Reitti: &reitti.Reitti{URL: dead, Dir: t.TempDir()}})
 	routes := map[string]bool{
-		"GET /napi/assistent": true, "GET /napi/whoami": true,
+		"GET /napi/assistent": true, "GET /napi/persona": true, "GET /napi/whoami": true,
 		"GET /napi/box/home": true, "GET /napi/box/services": true, "GET /napi/box/approvals": true, "GET /napi/box/upgrades": true,
 		"POST /napi/box/services/{name}/operate": true, "POST /napi/box/approvals/{id}/approve": true, "POST /napi/box/approvals/{id}/deny": true,
 		"POST /napi/ha/call": true, "GET /napi/portal/state": true, "GET /napi/portal/energy": true, "GET /napi/portal/entity-history": true,
