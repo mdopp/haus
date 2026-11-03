@@ -88,7 +88,7 @@ func TestStandortConnectsWithATokenReittiTakes(t *testing.T) {
 		t.Fatalf("connected → %d %q\n%s", rec.Code, rec.Header().Get("Location"), rec.Body.String())
 	}
 	page = getStandort(cfg, "anna", "?ok=verbunden").Body.String()
-	mustContain(t, page, html.EscapeString(saysStandortVerbunden), "Verbunden seit 2. November 2026", "Trennen", `data-frage=`)
+	mustContain(t, page, html.EscapeString(saysStandortVerbunden), "Verbunden seit 2. November 2026", "Trennen", `data-frage=`, `href="https://reitti.box.test"`)
 	if strings.Contains(page, "gut-0123") || strings.Contains(page, `name=token`) {
 		t.Fatalf("the token or its field is on the page:\n%s", page)
 	}
