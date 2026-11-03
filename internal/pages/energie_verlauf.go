@@ -31,9 +31,9 @@ const (
 	saysYearJustBegun   = "Das Jahr hat gerade erst angefangen; die Zahlen kommen morgen."
 )
 
-// energySeries are the history's three amounts, in the order and the
-// words Heute names them: what the sun made, what went into the grid,
-// what came from it.
+// energySeries are the history's three amounts, in the order the page
+// names them: what the sun made, what went into the grid, what came from
+// it.
 var energySeries = []struct{ key, name string }{
 	{"solar", "Erzeugt"}, {"einsp", "Ins Netz"}, {"bezug", "Netzbezug"},
 }
