@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="synthetisch" xmlns="http://www.topografix.com/GPX/1/1" xmlns:x="urn:synthetisch">
+  <wpt lat="47.5" lon="8.5"><time>2023-06-01T07:00:00Z</time></wpt>
+  <trk><name>Synthetische Runde</name><trkseg>
+    <trkpt lat="47.4000" lon="8.4000"><ele>500.5</ele><time>2023-06-01T08:00:00Z</time></trkpt>
+    <trkpt lat="47.4010" lon="8.4010"><time>2023-06-01T08:01:00Z</time><hdop>9</hdop></trkpt>
+    <trkpt lat="47.4020" lon="8.4020"><time>2023-06-01T08:02:00Z</time><extensions><x:accuracy>4.5</x:accuracy></extensions></trkpt>
+    <trkpt lat="47.4030" lon="8.4030"></trkpt>
+  </trkseg></trk>
+</gpx>
