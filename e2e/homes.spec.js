@@ -46,6 +46,117 @@ test('the page follows a change made elsewhere at once (push)', async ({ page, r
   expect(await stays(page), 'refreshed in place').toBe(true);
 });
 
+// owner 2026-11-03 (a screenshot of /raeume): scrolling the page moved
+// the sliders. The card has none: the level in its line ("an · 60 %") is
+// a button that opens a sheet with the thing's name, a large slider,
+// quick steps and Fertig. A swipe over the card changes nothing; a lamp
+// that is off has no level to tap.
+const level = (page, name) => page.getByRole('button', { name: new RegExp('^' + name + ' (Helligkeit|Position) \\d+ %, einstellen$') });
+const sheet = (page, name) => page.getByRole('dialog', { name });
+const slider = (page, name) => page.getByRole('slider', { name });
+async function swipe(page, from, dx, dy) {
+  const cdp = await page.context().newCDPSession(page);
+  const touch = (type, x, y) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y }] });
+  await touch('touchStart', from.x, from.y);
+  for (let i = 1; i <= 12; i++) await touch('touchMove', from.x + (dx * i) / 12, from.y + (dy * i) / 12);
+  await touch('touchEnd');
+  await cdp.detach();
+}
+const posts = (page) => { const sent = []; page.on('request', (r) => { if (r.method() === 'POST') sent.push(r.url() + ' ' + (r.postData() || '')); }); return sent; };
+
+test('a swipe over a card sends nothing; the level opens its sheet', async ({ page }, info) => {
+  const sent = posts(page);
+  await page.goto('/raeume');
+  const kueche = level(page, 'Küchenlicht');
+  await expect(kueche).toHaveText('60 %');
+  await expect(slider(page, 'Küchenlicht Helligkeit')).toBeHidden();
+  expect((await kueche.boundingBox()).height, 'a finger hits the level').toBeGreaterThanOrEqual(44);
+  await kueche.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: info.outputPath('raeume-karte.png') });
+
+  // a finger scrolling the page over the card, up, across and aslant: nothing opens, nothing is sent
+  const b = await kueche.boundingBox();
+  const at = { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+  await swipe(page, at, 0, -220);
+  await swipe(page, { x: 30, y: at.y }, 300, 0);
+  await swipe(page, at, 200, 160);
+  await page.waitForTimeout(500);
+  await expect(sheet(page, 'Küchenlicht')).toBeHidden();
+  expect(sent, 'a swipe sends nothing').toEqual([]);
+
+  // a tap on the level opens the sheet, titled with the thing
+  await kueche.scrollIntoViewIfNeeded();
+  await kueche.tap();
+  await expect(sheet(page, 'Küchenlicht')).toBeVisible();
+  await expect(kueche).toHaveAttribute('aria-expanded', 'true');
+  await expect(slider(page, 'Küchenlicht Helligkeit')).toHaveValue('60');
+  await expect(sheet(page, 'Küchenlicht').locator('output')).toHaveText('60 %');
+  const w = (await sheet(page, 'Küchenlicht').boundingBox()).width;
+  expect(w, 'the sheet fits the phone').toBeLessThanOrEqual(page.viewportSize().width);
+  await page.waitForTimeout(200);
+  await page.screenshot({ path: info.outputPath('blatt-licht.png') });
+  // Fertig, Escape and a tap outside close it
+  await sheet(page, 'Küchenlicht').getByRole('button', { name: 'Fertig' }).tap();
+  await expect(sheet(page, 'Küchenlicht')).toBeHidden();
+  await expect(kueche).toHaveAttribute('aria-expanded', 'false');
+  await kueche.tap();
+  await expect(sheet(page, 'Küchenlicht')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(sheet(page, 'Küchenlicht')).toBeHidden();
+  await kueche.tap();
+  await expect(sheet(page, 'Küchenlicht')).toBeVisible();
+  await page.touchscreen.tap(20, 20);
+  await expect(sheet(page, 'Küchenlicht')).toBeHidden();
+
+  // a cover's sheet: Auf, ½, Zu
+  const rollo = level(page, 'Rollo');
+  await rollo.scrollIntoViewIfNeeded();
+  await rollo.tap();
+  await expect(sheet(page, 'Rollo')).toBeVisible();
+  for (const step of ['Auf', '½', 'Zu']) await expect(sheet(page, 'Rollo').getByRole('button', { name: 'Position ' + step })).toBeVisible();
+  await page.waitForTimeout(200);
+  await page.screenshot({ path: info.outputPath('blatt-rollo.png') });
+  await sheet(page, 'Rollo').getByRole('button', { name: 'Fertig' }).tap();
+  expect(sent, 'opening and closing send nothing').toEqual([]);
+});
+
+test('a quick step sends exactly one request, the slider one when let go', async ({ page }) => {
+  const sent = posts(page);
+  await page.goto('/raeume');
+  await level(page, 'Küchenlicht').tap();
+  await sheet(page, 'Küchenlicht').getByRole('button', { name: 'Helligkeit 25 %' }).tap();
+  await expect.poll(() => sent.length).toBe(1);
+  await page.waitForTimeout(800);
+  expect(sent).toHaveLength(1);
+  expect(sent[0]).toContain('/schalten');
+  expect(sent[0]).toContain('geraet=light.kueche');
+  expect(sent[0]).toContain('wert=25');
+  await expect(sheet(page, 'Küchenlicht'), 'the sheet stays open after the answer').toBeVisible();
+  const s = slider(page, 'Küchenlicht Helligkeit');
+  await s.focus();
+  await s.press('ArrowRight');
+  await expect.poll(() => sent.length).toBe(2);
+  expect(sent[1]).toContain('wert=61');
+});
+
+test('a lamp that is off has no level to tap; switched on, it is back', async ({ page }) => {
+  await page.goto('/raeume');
+  const sw = page.getByRole('switch', { name: 'Küchenlicht' });
+  await expect(sw).toHaveAttribute('aria-checked', 'true');
+  await expect(level(page, 'Küchenlicht')).toBeVisible();
+  try {
+    await sw.click();
+    await expect(page.getByRole('switch', { name: 'Küchenlicht' })).toHaveAttribute('aria-checked', 'false');
+    await expect(level(page, 'Küchenlicht')).toHaveCount(0);
+    await expect(slider(page, 'Küchenlicht Helligkeit')).toHaveCount(0);
+    await expect(page.locator('section[aria-labelledby=karte-kueche]')).toContainText('aus');
+  } finally {
+    await page.getByRole('switch', { name: 'Küchenlicht' }).click();
+  }
+  await expect(page.getByRole('switch', { name: 'Küchenlicht' })).toHaveAttribute('aria-checked', 'true');
+  await expect(level(page, 'Küchenlicht')).toHaveText('60 %');
+});
+
 test('a player pauses in place', async ({ page }) => {
   await page.goto('/medien');
   await mark(page);

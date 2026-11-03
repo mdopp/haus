@@ -39,10 +39,11 @@ type Row struct {
 	Color string `json:"color,omitempty"`
 }
 
-// Slider is a row's level (haus#64): a form that POSTs to SwitchPath with
-// wert 0–100, sent when the finger lets go (a script of one attribute;
-// without script, its Setzen button). Label names what it sets, Name the
-// thing, for a screen reader.
+// Slider is a row's level (haus#64): the "60 %" in the row's line is a
+// button that opens a sheet (owner, 2026-11-03: a slider on the card moved
+// when the page was scrolled) with a large slider, sent when the finger
+// lets go, and Steps, each sent on a tap. Label names what it sets, Name
+// the thing: the sheet's title and the slider's name for a screen reader.
 type Slider struct {
 	Label  string `json:"label"`
 	Name   string `json:"name"`
@@ -50,6 +51,13 @@ type Slider struct {
 	Do     string `json:"do"`
 	Back   string `json:"back"`
 	Value  int    `json:"value"`
+	Steps  []Step `json:"steps,omitempty"`
+}
+
+// Step is one quick level in a slider's sheet: "50 %", "Zu".
+type Step struct {
+	Label string `json:"label"`
+	Value int    `json:"value"`
 }
 
 // Action is a row's one button (haus#35): a form that POSTs to
@@ -173,24 +181,6 @@ func (c Card) HTML() string {
 			b.WriteString("<li><time>" + html.EscapeString(r.When) + "</time><div>")
 			what(&b, r)
 			b.WriteString("</div></li>")
-		case r.Slider != nil:
-			b.WriteString(`<li class="tu regelbar"><div>`)
-			what(&b, r)
-			b.WriteString("</div>")
-			if r.Action != nil || len(r.Also) > 0 || r.Pin != nil {
-				b.WriteString("<div class=knoepfe>")
-				if r.Action != nil {
-					b.WriteString(r.Action.form())
-				}
-				for _, a := range r.Also {
-					b.WriteString(a.form())
-				}
-				if r.Pin != nil {
-					b.WriteString(r.Pin.form())
-				}
-				b.WriteString("</div>")
-			}
-			b.WriteString(r.Slider.form() + "</li>")
 		case r.Also != nil && (r.Action != nil || len(r.Also) > 0):
 			b.WriteString(`<li class="tu viele"><div>`)
 			what(&b, r)
@@ -235,18 +225,34 @@ func (c Card) HTML() string {
 	return b.String()
 }
 
-// what is a row's text, leading where it leads, and its detail.
+// what is a row's text, leading where it leads, and its detail. A row
+// with a Slider has its level ("60 %") as the button that opens the
+// slider's sheet: in the detail, else in a text that leads nowhere, else
+// after the detail; the sheet follows, hidden until then.
 func what(b *strings.Builder, r Row) {
 	if colorRE.MatchString(r.Color) {
 		b.WriteString(`<span class=farbe style="background:` + r.Color + `" aria-hidden=true></span>`)
 	}
-	if r.Href != "" {
-		b.WriteString(`<a href="` + html.EscapeString(r.Href) + `">` + html.EscapeString(r.Text) + "</a>")
-	} else {
-		b.WriteString(html.EscapeString(r.Text))
+	text, detail := html.EscapeString(r.Text), html.EscapeString(r.Detail)
+	if s := r.Slider; s != nil {
+		var ok bool
+		if detail, ok = s.inline(r.Detail); !ok {
+			if text, ok = s.inline(r.Text); !ok || r.Href != "" {
+				text = html.EscapeString(r.Text)
+				detail = strings.TrimSpace(html.EscapeString(r.Detail) + map[bool]string{true: " · "}[r.Detail != ""] + s.button())
+			}
+		}
 	}
-	if r.Detail != "" {
-		b.WriteString(" <span class=k>" + html.EscapeString(r.Detail) + "</span>")
+	if r.Href != "" {
+		b.WriteString(`<a href="` + html.EscapeString(r.Href) + `">` + text + "</a>")
+	} else {
+		b.WriteString(text)
+	}
+	if detail != "" {
+		b.WriteString(" <span class=k>" + detail + "</span>")
+	}
+	if r.Slider != nil {
+		b.WriteString(r.Slider.sheet())
 	}
 }
 
@@ -305,18 +311,60 @@ func (a *Action) form() string {
 	return b.String()
 }
 
-// form is the slider: a POST to SwitchPath with wert, sent when the
-// finger lets go; the number beside it follows the finger.
-func (s *Slider) form() string {
-	v := strconv.Itoa(max(0, min(s.Value, 100)))
+// percent is a level as the page says it.
+func percent(v int) string { return strconv.Itoa(max(0, min(v, 100))) + " %" }
+
+// id is the slider's sheet's element id, from its thing.
+func (s *Slider) id() string {
+	return "regler-" + strings.NewReplacer(".", "-", "_", "-").Replace(strings.ToLower(s.Entity))
+}
+
+// button is the level that opens the sheet: a popover's button, so it
+// opens without script too, and says aria-expanded on its own.
+func (s *Slider) button() string {
+	return `<button type=button class=stufe popovertarget=` + s.id() + ` aria-haspopup=dialog aria-label="` +
+		html.EscapeString(s.Name+" "+s.Label+" "+percent(s.Value)+", einstellen") + `">` + percent(s.Value) + `</button>`
+}
+
+// inline is line, escaped, with its last "60 %" as the button; !ok when
+// the line does not say the level.
+func (s *Slider) inline(line string) (string, bool) {
+	i := strings.LastIndex(line, percent(s.Value))
+	if i < 0 || (i > 0 && line[i-1] >= '0' && line[i-1] <= '9') {
+		return html.EscapeString(line), false
+	}
+	return html.EscapeString(line[:i]) + s.button() + html.EscapeString(line[i+len(percent(s.Value)):]), true
+}
+
+// hidden are a slider form's fields but wert.
+func (s *Slider) hidden() string {
+	return `<input type=hidden name=geraet value="` + html.EscapeString(s.Entity) + `"><input type=hidden name=tun value="` + html.EscapeString(s.Do) +
+		`"><input type=hidden name=zurueck value="` + html.EscapeString(s.Back) + `">`
+}
+
+// sheet is the slider's sheet: the thing's name, its level large, the
+// slider (a POST to SwitchPath with wert, sent when the finger lets go),
+// the Steps (each its own POST) and Fertig. A popover: a tap outside,
+// Escape and the phone's back close it, with or without script.
+func (s *Slider) sheet() string {
+	id, v := s.id(), strconv.Itoa(max(0, min(s.Value, 100)))
 	var b strings.Builder
-	b.WriteString("<form method=post action=" + SwitchPath + " class=regler>")
-	b.WriteString(`<input type=hidden name=geraet value="` + html.EscapeString(s.Entity) + `">`)
-	b.WriteString(`<input type=hidden name=tun value="` + html.EscapeString(s.Do) + `">`)
-	b.WriteString(`<input type=hidden name=zurueck value="` + html.EscapeString(s.Back) + `">`)
-	b.WriteString(`<span class=k>` + html.EscapeString(s.Label) + `</span><input type=range name=wert min=0 max=100 step=1 value=` + v +
-		` aria-label="` + html.EscapeString(s.Name+" "+s.Label) + `" oninput="this.nextElementSibling.value=this.value+' %'" onchange="this.form.requestSubmit?this.form.requestSubmit():this.form.submit()">` +
-		`<output>` + v + ` %</output><noscript><button>Setzen</button></noscript></form>`)
+	b.WriteString(`<div popover id=` + id + ` class=blatt role=dialog aria-labelledby=` + id + `-titel>`)
+	b.WriteString(`<p class=blatt-titel id=` + id + `-titel>` + html.EscapeString(s.Name) + `</p>`)
+	b.WriteString(`<form method=post action=` + SwitchPath + ` class=regler>` + s.hidden())
+	b.WriteString(`<p class=blatt-wert><span class=k>` + html.EscapeString(s.Label) + `</span> <output>` + v + ` %</output></p>`)
+	b.WriteString(`<input type=range name=wert min=0 max=100 step=1 value=` + v + ` aria-label="` + html.EscapeString(s.Name+" "+s.Label) +
+		`" oninput="this.form.querySelector('output').value=this.value+' %'" onchange="this.form.requestSubmit?this.form.requestSubmit():this.form.submit()">`)
+	b.WriteString(`<noscript><button data-laeuft="Setzt …">Setzen</button></noscript></form>`)
+	if len(s.Steps) > 0 {
+		b.WriteString(`<div class=schritte>`)
+		for _, st := range s.Steps {
+			b.WriteString(`<form method=post action=` + SwitchPath + `>` + s.hidden() + `<input type=hidden name=wert value=` + strconv.Itoa(max(0, min(st.Value, 100))) +
+				`><button data-laeuft="…" aria-label="` + html.EscapeString(s.Label+" "+st.Label) + `">` + html.EscapeString(st.Label) + `</button></form>`)
+		}
+		b.WriteString(`</div>`)
+	}
+	b.WriteString(`<button type=button class=fertig popovertarget=` + id + ` popovertargetaction=hide>Fertig</button></div>`)
 	return b.String()
 }
 
@@ -356,9 +404,13 @@ const Style = `<style>.farbe{display:inline-block;width:.65em;height:.65em;borde
 .schalter::before{content:"";position:absolute;left:8px;top:10px;width:36px;height:20px;border-radius:10px;background:var(--track)}
 .schalter::after{content:"";position:absolute;left:11px;top:13px;width:14px;height:14px;border-radius:50%;background:#fff}
 .schalter[aria-checked=true]::before{background:var(--state)}.schalter[aria-checked=true]::after{left:27px}
-.karte li.regelbar{flex-wrap:wrap;row-gap:4px}.regelbar>div:first-child{flex:1 1 9rem;min-width:0}.regelbar .knoepfe{flex-wrap:wrap;gap:6px}
-.karte form.regler{flex:1 1 100%;display:flex;align-items:center;gap:10px}.regler input[type=range]{flex:1;min-width:0;min-height:40px;margin:0;accent-color:var(--accent)}
-.regler output{min-width:3.4em;text-align:right;font-variant-numeric:tabular-nums;color:var(--muted);font-size:.85rem}.regler .k{font-size:.82rem}
+.karte li button.stufe{position:relative;z-index:1;display:inline-flex;align-items:center;min-height:44px;margin:-12px 0;padding:0 6px;background:none;border-radius:8px;font-size:inherit;color:var(--accent);text-decoration:underline dotted;text-underline-offset:3px;vertical-align:baseline}
+.blatt{position:fixed;inset:auto 0 0 0;margin:0 auto;width:min(32rem,100%);max-width:100%;box-sizing:border-box;padding:18px 20px calc(18px + env(safe-area-inset-bottom));border:1px solid var(--edge);border-bottom:0;border-radius:22px 22px 0 0;background:var(--panel);color:var(--ink)}
+.blatt::backdrop{background:rgba(0,0,0,.55)}.blatt-titel{margin:0 0 4px;font-weight:700;font-size:1.05rem}
+.blatt-wert{margin:0 0 6px;display:flex;align-items:baseline;gap:10px}.blatt-wert output{font-size:2.4rem;font-weight:700;font-variant-numeric:tabular-nums;color:var(--ink)}
+.blatt form.regler{display:block}.blatt input[type=range]{display:block;width:100%;min-height:48px;margin:0;accent-color:var(--accent)}
+.blatt .schritte{display:flex;gap:8px;margin:10px 0 0}.blatt .schritte form{flex:1}.blatt .schritte button{width:100%}
+.blatt .fertig{display:block;width:100%;margin-top:14px;background:var(--accent);color:#fff}
 .karte .hinweis{margin:-2px 2px 8px;font-size:.85rem;color:var(--muted)}.karte .hinweis a{color:var(--accent)}
 .kacheln .kopf .knoepfe{gap:0}.kacheln .kopf .anheften{width:40px;min-height:40px;font-size:1.2rem}
 .zeiten li{display:grid;grid-template-columns:6.4rem 1fr;gap:10px;align-items:baseline}

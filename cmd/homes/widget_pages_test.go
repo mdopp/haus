@@ -119,7 +119,7 @@ func TestEveryPageAWidgetIsHandedIsThere(t *testing.T) {
 	}
 	state := napiGet(t, h, "/napi/portal/state?entity_id=light.decke")
 	card, _ := state["card"].(map[string]any)
-	pageOf("the device widget's card", card, "Deckenlampe", "Küche", "an · 50 %")
+	pageOf("the device widget's card", card, "Deckenlampe", "Küche", `an · <button type=button class=stufe popovertarget=regler-light-decke aria-haspopup=dialog aria-label="Deckenlampe Helligkeit 50 %, einstellen">50 %</button>`)
 	active, _ := napiGet(t, h, "/napi/portal/active")["active"].([]any)
 	if len(active) != 2 {
 		t.Fatalf("active: %v", active)
@@ -252,7 +252,7 @@ func TestAThingPageSaysItsStateInWords(t *testing.T) {
 	for id, want := range map[string]string{
 		"switch.radio": "<li class=tu><div>aus ", "binary_sensor.haustuer": "<li>offen ", "binary_sensor.fenster": "<li>geschlossen ",
 		"binary_sensor.flur": "<li>an ", "lock.keller": "<li>verriegelt ", "lock.hof": "<li>offen ",
-		"sensor.temp": "<li>21.5 °C ", "light.decke": `<li class="tu regelbar"><div>an · 50 % `, // a dimmer: its slider under the button (haus#64)
+		"sensor.temp": "<li>21.5 °C ", "light.decke": `<li class=tu><div>an · <button type=button class=stufe popovertarget=regler-light-decke`, // a dimmer: its level opens its sheet (haus#64, owner 2026-11-03)
 	} {
 		rec := page(h, "/raeume/"+id)
 		if rec.Code != 200 || !strings.Contains(rec.Body.String(), want) {

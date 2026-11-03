@@ -16,6 +16,9 @@ import "strconv"
 // LivePath and is fetched again as soon as a thing on it changes (Home
 // Assistant pushes it), so N is only the fallback.
 //
+// An open sheet (a popover: a slider's, owner 2026-11-03) stays open
+// across the swap, and its button says aria-expanded.
+//
 // A form with data-ganz, or one whose answer is not a page (an app link),
 // goes the browser's own way. The script sits in the head and listens on
 // the document, so a page swapped in needs nothing bound again; the
@@ -30,8 +33,9 @@ function say(t){var h=document.getElementById('homes-hinweis');if(!h){h=document
 h.innerHTML='';var p=document.createElement('span');p.textContent=t;var x=document.createElement('button');x.type='button';x.className='zu';x.setAttribute('aria-label','Hinweis schließen');x.textContent='×';
 x.onclick=function(){h.className=''};h.appendChild(p);h.appendChild(x);h.className='zeigt'}
 function keep(){var a=document.activeElement,f=null;if(a&&a!==document.body){f={id:a.id,name:a.name,act:act(a)}}
-var open=[];document.querySelectorAll('details[open]>summary').forEach(function(s){open.push(s.textContent)});return {x:scrollX,y:scrollY,f:f,open:open}}
+var open=[];document.querySelectorAll('details[open]>summary').forEach(function(s){open.push(s.textContent)});var pop=[];try{document.querySelectorAll('[popover]').forEach(function(p){if(p.id&&p.matches(':popover-open'))pop.push(p.id)})}catch(e){}return {x:scrollX,y:scrollY,f:f,open:open,pop:pop}}
 function restore(k,same){document.querySelectorAll('details>summary').forEach(function(s){if(k.open.indexOf(s.textContent)>=0)s.parentNode.open=true});
+k.pop.forEach(function(id){var p=document.getElementById(id);if(p&&p.showPopover)try{p.showPopover()}catch(e){}});
 scrollTo(same?k.x:0,same?k.y:0);var f=k.f;if(!f)return;var el=f.id?document.getElementById(f.id):null;
 if(!el&&f.name)document.querySelectorAll('[name="'+f.name+'"]').forEach(function(e){if(!el&&act(e)===f.act&&e.type!=='hidden')el=e});
 if(el&&el.focus)el.focus({preventScroll:true})}
@@ -63,6 +67,8 @@ var ctl=window.AbortController?new AbortController():null,lang=false,uhr=setTime
 fetch(or(f.getAttribute('action'),location.pathname+location.search),{method:'POST',body:body,credentials:'same-origin',headers:{'X-Homes-Skript':'1'},signal:ctl?ctl.signal:undefined}).then(function(r){clearTimeout(uhr);var ct=or(r.headers.get('Content-Type'),'');
 return r.text().then(function(t){busy--;if(ct.indexOf('text/html')===0){swap(t,r.url);return}back();say(or(t.trim(),'Das hat nicht geklappt.'))})})
 .catch(function(){clearTimeout(uhr);busy--;back();say(lang?saysLong:saysAway)})},false);
+document.addEventListener('toggle',function(e){var p=e.target;if(!(p.id&&p.hasAttribute&&p.hasAttribute('popover')))return;
+document.querySelectorAll('.stufe[popovertarget="'+p.id+'"]').forEach(function(b){b.setAttribute('aria-expanded',e.newState==='open'?'true':'false')})},true);
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',plan);else plan()})()</script>`
 
 // homesStyle is what the script shows: the sentence at the bottom, a

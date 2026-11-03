@@ -51,16 +51,16 @@ func TestRaeumeDimsAndMovesCovers(t *testing.T) {
 		`role=switch aria-checked=true aria-label="Bambi"`,
 		`<form method=post action=/schalten class=regler><input type=hidden name=geraet value="light.bambi"><input type=hidden name=tun value="light.turn_on">`,
 		`type=range name=wert min=0 max=100 step=1 value=60 aria-label="Bambi Helligkeit"`, `<output>60 %</output>`,
-		`name=geraet value="light.dimmer"><input type=hidden name=tun value="light.turn_on"><input type=hidden name=zurueck value="/raeume#karte-esszimmer"><span class=k>Helligkeit</span><input type=range name=wert min=0 max=100 step=1 value=0`,
+
 		`name=geraet value="cover.rollo"><input type=hidden name=tun value="cover.set_cover_position">`, `value=40 aria-label="Rollo Position"`,
 		`name=geraet value="cover.rollo"><input type=hidden name=tun value="cover.open_cover">`, "<button data-laeuft=\"Schaltet …\">Hoch</button>",
 		`name=geraet value="cover.rollo"><input type=hidden name=tun value="cover.stop_cover">`, "<button data-laeuft=\"Schaltet …\">Stopp</button>",
 		`name=geraet value="cover.rollo"><input type=hidden name=tun value="cover.close_cover">`, "<button data-laeuft=\"Schaltet …\">Runter</button>",
-		"<noscript><button>Setzen</button></noscript>", `onchange="this.form.requestSubmit`)
+		`<noscript><button data-laeuft="Setzt …">Setzen</button></noscript>`, `onchange="this.form.requestSubmit`)
 	mustNotContain(t, ess, `value="light.schalter"><input type=hidden name=tun value="light.turn_on"><input type=hidden name=zurueck value="/raeume#karte-esszimmer"><span`,
 		`value="cover.ohne"`, `value="cover.garage"`, "<script>alert")
-	if n := strings.Count(ess, "class=regler"); n != 4 { // Bambi, Dimmer, Rollo, Esszimmerjalousie
-		t.Fatalf("%d sliders, want 4:\n%s", n, ess)
+	if n := strings.Count(ess, "class=regler"); n != 3 { // Bambi, Rollo, Esszimmerjalousie; the Dimmer is off
+		t.Fatalf("%d sliders, want 3:\n%s", n, ess)
 	}
 
 	// the slider and the buttons switch through the page's rule
@@ -123,8 +123,8 @@ func TestInvertedCoverIsTurnedOver(t *testing.T) {
 	}
 	_, body, _ := familyPage(t, Raeume, cfg, "GET", "/raeume", "family")
 	ess := section(t, body, "karte-esszimmer")
-	mustContain(t, ess, "Esszimmerjalousie</a> <span class=k>geschlossen</span>", `value=0 aria-label="Esszimmerjalousie Position"`,
-		"Rollo</a> <span class=k>offen · 40 %</span>", `value=40 aria-label="Rollo Position"`)
+	mustContain(t, ess, "Esszimmerjalousie</a> <span class=k>geschlossen · <button type=button class=stufe popovertarget=regler-cover-esszimmer aria-haspopup=dialog aria-label=\"Esszimmerjalousie Position 0 %, einstellen\">0 %</button></span>", `value=0 aria-label="Esszimmerjalousie Position"`,
+		"Rollo</a> <span class=k>offen · <button type=button class=stufe popovertarget=regler-cover-rollo aria-haspopup=dialog aria-label=\"Rollo Position 40 %, einstellen\">40 %</button></span>", `value=40 aria-label="Rollo Position"`)
 	_, body, _ = familyPage(t, Ding, cfg, "GET", "/raeume/cover.esszimmer", "family")
 	mustContain(t, body, "geschlossen", `value=0 aria-label="Esszimmerjalousie Position"`)
 
