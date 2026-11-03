@@ -104,6 +104,13 @@ func Handler(c Config) http.Handler {
 	mux.HandleFunc("GET /napi/assistent", auth(func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]string{"name": assistent.Name()})
 	}))
+	// Bridge for app builds before haus-android's assistent change (dev.249 and older), which read
+	// the name from /napi/persona: the same name in that shape, the fixed colours, no icon. Remove
+	// once every paired phone runs an app that reads /napi/assistent.
+	mux.HandleFunc("GET /napi/persona", auth(func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]string{"name": "haus", "display": assistent.Name(), "greeting": "",
+			"accent": "#3ddc84", "ground": "#0c120e", "icon": ""})
+	}))
 	// the Box keys (laib ADR 0022 §4: one name, app.BoxPrefix)
 	prefix := app.BoxPrefix
 	mux.HandleFunc("GET "+prefix+"/home", auth(func(w http.ResponseWriter, r *http.Request) {

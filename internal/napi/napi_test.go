@@ -197,10 +197,16 @@ func TestTheAppReadsTheAssistantsName(t *testing.T) {
 	if code, _ := get(t, h, "GET", "/napi/assistent", "", ""); code != 401 {
 		t.Fatalf("without a token: %d", code)
 	}
-	for _, gone := range []string{"/napi/persona", "/napi/persona/icon.png"} {
-		code, body := raw(t, h, "GET", gone, "dev1", "")
-		notFound(t, gone, code, body)
+	// an app from before (dev.249) still asks /napi/persona: it gets the same name, the fixed look, no icon
+	assistent.Set("")
+	if code, p := get(t, h, "GET", "/napi/persona", "dev1", ""); code != 200 || p["display"] != "Homes" || p["accent"] != "#3ddc84" || p["ground"] != "#0c120e" || p["icon"] != "" {
+		t.Fatalf("/napi/persona for an older app: %d %v", code, p)
 	}
+	if code, _ := get(t, h, "GET", "/napi/persona", "", ""); code != 401 {
+		t.Fatalf("/napi/persona without a token: %d", code)
+	}
+	code, body := raw(t, h, "GET", "/napi/persona/icon.png", "dev1", "")
+	notFound(t, "/napi/persona/icon.png", code, body)
 }
 
 // laibAnswering is a Laib whose tools answer the given text; any other
