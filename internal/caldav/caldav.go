@@ -217,25 +217,30 @@ type multistatus struct {
 	Responses []struct {
 		Href     string `xml:"DAV: href"`
 		Propstat []struct {
-			Status string `xml:"DAV: status"`
-			Prop   struct {
-				ResourceType struct {
-					Calendar    *struct{} `xml:"urn:ietf:params:xml:ns:caldav calendar"`
-					AddressBook *struct{} `xml:"urn:ietf:params:xml:ns:carddav addressbook"`
-				} `xml:"DAV: resourcetype"`
-				DisplayName string `xml:"DAV: displayname"`
-				Comps       struct {
-					Comp []struct {
-						Name string `xml:"name,attr"`
-					} `xml:"urn:ietf:params:xml:ns:caldav comp"`
-				} `xml:"urn:ietf:params:xml:ns:caldav supported-calendar-component-set"`
-				CalendarData string `xml:"urn:ietf:params:xml:ns:caldav calendar-data"`
-				Abgleich     string `xml:"urn:laib:kalender abgleich"`
-				Problem      string `xml:"urn:laib:kalender problem"`
-				ETag         string `xml:"DAV: getetag"`
-			} `xml:"DAV: prop"`
+			Status string          `xml:"DAV: status"`
+			Prop   multistatusProp `xml:"DAV: prop"`
 		} `xml:"DAV: propstat"`
 	} `xml:"DAV: response"`
+}
+
+// multistatusProp is one propstat's properties.
+type multistatusProp struct {
+	ResourceType struct {
+		Calendar    *struct{} `xml:"urn:ietf:params:xml:ns:caldav calendar"`
+		AddressBook *struct{} `xml:"urn:ietf:params:xml:ns:carddav addressbook"`
+	} `xml:"DAV: resourcetype"`
+	DisplayName string `xml:"DAV: displayname"`
+	Comps       struct {
+		Comp []struct {
+			Name string `xml:"name,attr"`
+		} `xml:"urn:ietf:params:xml:ns:caldav comp"`
+	} `xml:"urn:ietf:params:xml:ns:caldav supported-calendar-component-set"`
+	CalendarData string `xml:"urn:ietf:params:xml:ns:caldav calendar-data"`
+	Abgleich     string `xml:"urn:laib:kalender abgleich"`
+	Problem      string `xml:"urn:laib:kalender problem"`
+	ETag         string `xml:"DAV: getetag"`
+	CTag         string `xml:"http://calendarserver.org/ns/ getctag"`
+	SyncToken    string `xml:"DAV: sync-token"`
 }
 
 const propfindBody = `<?xml version="1.0" encoding="utf-8"?>

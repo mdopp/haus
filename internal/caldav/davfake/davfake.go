@@ -150,6 +150,19 @@ func (s *Server) store(path, ics string) {
 	s.etags[path] = s.version
 }
 
+// ctag is a collection's getctag, as Radicale's: it changes with any
+// object put into or deleted from it (s.mu held).
+func (s *Server) ctag(col string) string {
+	var parts []string
+	for p := range s.objs {
+		if strings.HasPrefix(p, col) {
+			parts = append(parts, p+"="+strconv.Itoa(s.etags[p]))
+		}
+	}
+	sort.Strings(parts)
+	return esc(strings.Join(parts, ","))
+}
+
 func (s *Server) etag(path string) string { return `"` + strconv.Itoa(s.etags[path]) + `"` }
 
 func (s *Server) etagProp(path string) string {
@@ -224,7 +237,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "PROPFIND":
 		var b strings.Builder
-		b.WriteString(`<?xml version="1.0" encoding="utf-8"?><multistatus xmlns="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:CR="urn:ietf:params:xml:ns:carddav" xmlns:L="urn:laib:kalender">`)
+		b.WriteString(`<?xml version="1.0" encoding="utf-8"?><multistatus xmlns="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:CR="urn:ietf:params:xml:ns:carddav" xmlns:L="urn:laib:kalender" xmlns:CS="http://calendarserver.org/ns/">`)
 		if r.URL.Path == "/" && s.others != nil {
 			b.WriteString(`<response><href>/</href><propstat><prop><resourcetype><collection/></resourcetype></prop><status>HTTP/1.1 200 OK</status></propstat></response>`)
 			homes := []string{home}
@@ -266,6 +279,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 				}
 				b.WriteString(`</C:supported-calendar-component-set>`)
 			}
+			b.WriteString(`<CS:getctag>` + s.ctag(k) + `</CS:getctag>`)
 			if st, ok := s.synced[k]; ok {
 				b.WriteString(`<L:abgleich>` + esc(st[0]) + `</L:abgleich><L:problem>` + esc(st[1]) + `</L:problem>`)
 			}
