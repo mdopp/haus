@@ -2,12 +2,13 @@ package pages
 
 import (
 	"encoding/json"
-	"github.com/mdopp/homes/internal/bote"
-	"github.com/mdopp/homes/internal/laib"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/mdopp/homes/internal/bote"
+	"github.com/mdopp/homes/internal/laib"
 
 	"github.com/mdopp/homes/internal/samba"
 	"github.com/mdopp/homes/internal/samba/sambafake"

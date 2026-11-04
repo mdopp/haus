@@ -6,6 +6,7 @@ import (
 	"html"
 	"log"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -19,7 +20,7 @@ import (
 const PodcastsPath = "/podcasts"
 
 const (
-	saysPodcastsHow  = "Einen Podcast abonniert die Box für dich: Link von Apple Podcasts, von der Website des Podcasts oder die Feed-Adresse. Sie lädt immer die letzten 3 Folgen; bei jeder neuen bekommst du auf Signal Bescheid."
+	saysPodcastsHow  = "Ein Link von Apple Podcasts, von der Website des Podcasts oder die Feed-Adresse. Die Box lädt immer die letzten 3 Folgen; bei jeder neuen bekommst du auf Signal Bescheid."
 	saysPodcastsHear = "Anhören in der Audiobookshelf-App oder in Symfonium mit Audiobookshelf."
 	saysPodcastsDown = "Audiobookshelf antwortet gerade nicht."
 )
@@ -81,61 +82,63 @@ func writePodcasts(w http.ResponseWriter, r *http.Request, cfg StartConfig, code
 	person := r.Header.Get("Remote-User")
 	b := familyHead(r, cfg, "Podcasts", "Podcasts")
 	oben, unten := einrichtenHier(r, cfg, "podcasts") // the Audiobookshelf app, while it is not set up (owner 2026-11-04)
-	b.WriteString(noteStyle + "<h1>Podcasts</h1>" + oben + "<p class=k>" + html.EscapeString(saysPodcastsHow) + "</p>")
-	b.WriteString(gesagt(done, problem))
-	b.WriteString(`<section class=karte aria-labelledby=k-abo><h2 id=k-abo>Podcast abonnieren</h2><form class=notizform method=post action=` + PodcastsPath + `>` +
-		`<input type=hidden name=tun value=abonnieren><label for=link>Link zum Podcast</label><input id=link type=url name=link required inputmode=url autocomplete=off placeholder="https://podcasts.apple.com/…" value="` + html.EscapeString(link) + `">` +
-		`<button data-laeuft="Sucht den Feed …">Abonnieren</button></form><p class=k>` + html.EscapeString(saysPodcastsHear) + `</p></section>`)
+	b.WriteString(noteStyle + "<h1>Podcasts</h1>" + oben + gesagt(done, problem))
 	mine, err := cfg.Podcasts.Meine(person)
 	if err != nil {
 		log.Printf("homes: podcasts: %v", err)
 	}
-	c := cards.Card{Title: "Meine Podcasts"}
+	abo := `<section class="karte abo" aria-labelledby=k-abo><h2 id=k-abo>Podcast abonnieren</h2><form class=notizform method=post action=` + PodcastsPath + `>` +
+		`<input type=hidden name=tun value=abonnieren><label for=link>Link zum Podcast</label><div class=zeile><input id=link type=url name=link required inputmode=url autocomplete=off placeholder="https://podcasts.apple.com/…" value="` + html.EscapeString(link) + `">` +
+		`<button data-laeuft="Sucht den Feed …">Abonnieren</button></div></form><p class=k>` + html.EscapeString(saysPodcastsHow) + `</p></section>` +
+		`<style>.abo .zeile{display:flex;gap:8px;align-items:center}.abo .zeile button{margin:0;flex:none}.abo p.k{font-size:.85rem}</style>`
+	if len(mine) == 0 { // nothing yet: subscribing is what the page is for
+		b.WriteString(abo + unten)
+		writePage(w, code, b)
+		return
+	}
 	var b2 strings.Builder
-	for _, a := range mine {
+	for _, a := range mine { // ending one is rare: quiet, and asked first
 		b2.WriteString(`<li class=tu><div>` + html.EscapeString(a.Title) + `</div><form method=post action=` + PodcastsPath + ` data-frage="„` + html.EscapeString(a.Title) + `“ nicht mehr abonnieren?">` +
-			`<input type=hidden name=tun value=beenden><input type=hidden name=feed value="` + html.EscapeString(a.Feed) + `"><button data-laeuft="Beendet …">Abo beenden</button></form></li>`)
+			`<input type=hidden name=tun value=beenden><input type=hidden name=feed value="` + html.EscapeString(a.Feed) + `"><button class=leise data-laeuft="Beendet …">Abo beenden</button></form></li>`)
 	}
-	if len(mine) == 0 {
-		c.Add("Noch kein Podcast abonniert", "")
-		b.WriteString(c.HTML())
-	} else {
-		b.WriteString(`<section class=karte aria-labelledby=k-meine><h2 id=k-meine>Meine Podcasts</h2><ul>` + b2.String() + `</ul></section>`)
-	}
-	if len(mine) > 0 {
-		var eps []abs.Episode
-		var eerr error
-		fetch(r, func(ctx context.Context) {
-			lib, err := cfg.Podcasts.ABS.PodcastLibrary(ctx)
-			if err != nil {
-				eerr = err
-				return
-			}
-			eps, eerr = cfg.Podcasts.ABS.Recent(ctx, lib, 50)
-		})
-		mineItem := map[string]bool{}
-		for _, a := range mine {
-			mineItem[a.Item] = true
-		}
-		f := cards.Card{Title: "Neueste Folgen"}
-		if eerr != nil {
-			log.Printf("homes: podcasts: recent: %v", eerr)
-			f.Add(saysPodcastsDown, "")
-		}
-		now, loc := cfg.clock()
-		n := 0
-		for _, e := range eps {
-			if !mineItem[e.ItemID] || n == 10 {
-				continue
-			}
-			n++
-			f.Add(e.Title, e.Podcast+" · "+dayWord(e.Published, now, loc))
-		}
-		if eerr == nil && n == 0 {
-			f.Add("Noch keine Folge geladen", "Die Box holt sie in den nächsten Minuten.")
-		}
-		b.WriteString(f.HTML())
-	}
-	b.WriteString(unten)
+	b.WriteString(neuesteFolgen(r, cfg, mine) + `<section class=karte aria-labelledby=k-meine><h2 id=k-meine>Meine Podcasts</h2><ul>` + b2.String() + `</ul></section>` + abo + unten)
 	writePage(w, code, b)
+}
+
+// neuesteFolgen is the newest episodes of one's podcasts, ten at most, the
+// way to hear them as the card's note; first on the page once there are any.
+func neuesteFolgen(r *http.Request, cfg StartConfig, mine []podcasts.Abo) string {
+	var eps []abs.Episode
+	var eerr error
+	fetch(r, func(ctx context.Context) {
+		lib, err := cfg.Podcasts.ABS.PodcastLibrary(ctx)
+		if err != nil {
+			eerr = err
+			return
+		}
+		eps, eerr = cfg.Podcasts.ABS.Recent(ctx, lib, 50)
+	})
+	sort.SliceStable(eps, func(i, j int) bool { return eps[i].Published.After(eps[j].Published) }) // the newest first, whatever order ABS answers in
+	mineItem := map[string]bool{}
+	for _, a := range mine {
+		mineItem[a.Item] = true
+	}
+	f := cards.Card{Title: "Neueste Folgen", Note: saysPodcastsHear}
+	if eerr != nil {
+		log.Printf("homes: podcasts: recent: %v", eerr)
+		f.Add(saysPodcastsDown, "")
+	}
+	now, loc := cfg.clock()
+	n := 0
+	for _, e := range eps {
+		if !mineItem[e.ItemID] || n == 10 {
+			continue
+		}
+		n++
+		f.Add(e.Title, e.Podcast+" · "+dayWord(e.Published, now, loc))
+	}
+	if eerr == nil && n == 0 {
+		f.Add("Noch keine Folge geladen", "Die Box holt sie in den nächsten Minuten.")
+	}
+	return f.HTML()
 }

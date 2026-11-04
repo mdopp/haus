@@ -172,6 +172,9 @@ func (r *Regale) save(all map[string]Konto) error {
 
 // Konto is the person's connected account, if any.
 func (r *Regale) Konto(user string) (Konto, bool) {
+	if r == nil { // a box without the household's Discogs app
+		return Konto{}, false
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	k, ok := r.load()[user]

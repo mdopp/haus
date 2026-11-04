@@ -32,7 +32,8 @@ func TestPodcastsPage(t *testing.T) {
 	h := Podcasts(cfg)
 
 	_, body, _ := familyPage(t, Podcasts, cfg, "GET", PodcastsPath, "family")
-	mustContain(t, body, "<h1>Podcasts</h1>", saysPodcastsHow, `<input type=hidden name=tun value=abonnieren>`, "Noch kein Podcast abonniert")
+	mustContain(t, body, "<h1>Podcasts</h1>", saysPodcastsHow, `<input type=hidden name=tun value=abonnieren>`)
+	mustNotContain(t, body, "Meine Podcasts", "Neueste Folgen")
 	mustContain(t, mehrOf(t, body), `href=/podcasts aria-current=page>`)
 
 	rec := post(t, h, PodcastsPath, url.Values{"tun": {"abonnieren"}, "link": {feeds.URL + "/lage"}}, "anna", nil)
@@ -43,9 +44,12 @@ func TestPodcastsPage(t *testing.T) {
 		`data-frage="„Lage der Nation“ nicht mehr abonnieren?"`, "Folge 5 <span class=k>Lage der Nation · ") // the newest three, fetched at once
 	fake.Episode("Lage der Nation", "LdN 401", "")
 	_, body, _ = familyPageAs(t, Podcasts, cfg, "GET", PodcastsPath, "anna", "family")
-	mustContain(t, body, "LdN 401 <span class=k>Lage der Nation · ")
+	mustContain(t, body, "LdN 401 <span class=k>Lage der Nation · ", `<button class=leise data-laeuft="Beendet …">Abo beenden</button>`)
+	// the Mehr audit (owner 2026-11-04): with a subscription, the newest episodes first, then one's podcasts, then subscribing
+	before(t, body, "Neueste Folgen", "Meine Podcasts")
+	before(t, body, "Meine Podcasts", "Podcast abonnieren")
 	_, body, _ = familyPageAs(t, Podcasts, cfg, "GET", PodcastsPath, "ben", "family")
-	mustContain(t, body, "Noch kein Podcast abonniert")
+	mustContain(t, body, "Podcast abonnieren")
 	mustNotContain(t, body, "LdN 401")
 
 	rec = post(t, h, PodcastsPath, url.Values{"tun": {"abonnieren"}, "link": {"kein link"}}, "anna", nil)

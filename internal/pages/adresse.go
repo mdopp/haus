@@ -181,10 +181,10 @@ func adresseForm(z laib.Zuhause) string {
 		field("Breite", "latitude", num(z.Latitude), "inputmode=decimal placeholder=52.1234 maxlength=12") +
 		field("Länge", "longitude", num(z.Longitude), "inputmode=decimal placeholder=8.0456 maxlength=12") + "</div>")
 	b.WriteString(`<div class=wege><button type=button class=hier hidden>Position aus diesem Gerät übernehmen</button>` +
-		`<button type=submit form=osm formtarget=_blank class=osm>Auf OpenStreetMap nachsehen ↗</button></div>` +
+		`<button type=button class=osm onclick="document.getElementById('osm').submit()">Auf OpenStreetMap nachsehen ↗</button></div>` +
 		`<p class=hilfe aria-live=polite id=a-wo>Die Position fragt der Browser; sie bleibt in diesem Formular, bis du vorschlägst. OpenStreetMap bekommt die getippte Adresse erst, wenn du dort tippst, in einem neuen Tab: lange drücken oder Rechtsklick auf das Haus, „Adresse anzeigen“, und Breite und Länge abschreiben.</p></fieldset>`)
 	b.WriteString(field("Höhe in Metern <span class=k>(freiwillig)</span>", "elevation", elevation, "type=number step=1 min=-500 max=9000 inputmode=numeric class=kurz"))
-	b.WriteString("<button class=senden>Vorschlagen</button><p class=hilfe>Die Box ändert nichts, bevor du den Vorschlag in der Inbox freigibst.</p></form>")
+	b.WriteString("<button class=senden data-laeuft=\"Schlägt vor …\">Vorschlagen</button><p class=hilfe>Die Box ändert nichts, bevor du den Vorschlag in der Inbox freigibst.</p></form>")
 	b.WriteString(`<form id=osm method=get action=https://www.openstreetmap.org/search target=_blank rel="noreferrer noopener"><input type=hidden name=query value="` + html.EscapeString(query) + `"></form>`)
 	b.WriteString(adresseScript + "</section>")
 	return b.String()
@@ -306,7 +306,7 @@ func zuhauseRefusal(err error) string {
 const adresseStyle = `<style>.adresse-form{display:block!important;background:var(--card);border-radius:14px;padding:4px 14px 14px}
 .adresse-form label{display:block;margin:12px 0 0;font-size:.85rem;color:var(--muted)}
 .adresse-form input{display:block;width:100%;margin-top:4px;font:inherit;font-size:1rem;color:var(--ink);background:var(--bg);border:1px solid var(--edge);border-radius:10px;padding:0 12px;min-height:44px}
-.adresse-form input:focus{outline:2px solid var(--accent);outline-offset:1px}.adresse-form input.kurz{width:7rem}
+.adresse-form input:focus{outline:2px solid var(--accent);outline-offset:1px}.adresse-form input.kurz{width:8rem}
 .adresse-form .zwei{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,3fr);gap:0 10px}.adresse-form fieldset .zwei{grid-template-columns:1fr 1fr}
 .adresse-form fieldset{border:0;border-top:1px solid var(--line);margin:16px 0 0;padding:6px 0 0}.adresse-form legend{padding:0;margin:10px 0 0;font-size:.95rem;font-weight:700;color:var(--muted)}
 .adresse-form .wege{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 0}.adresse-form .wege button{background:var(--panel);color:var(--ink);white-space:normal;text-align:left}

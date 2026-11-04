@@ -2,6 +2,7 @@ package pages
 
 import (
 	"bytes"
+	"context"
 	"html"
 	"log"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mdopp/homes/internal/napi"
 	"github.com/mdopp/homes/internal/reitti"
 	"github.com/mdopp/homes/internal/texte"
 )
@@ -198,4 +200,32 @@ func trennenLast(t *testing.T, page string) {
 			t.Errorf("%q after Trennen:\n%s", after, page[i:])
 		}
 	}
+}
+
+// The Mehr audit (owner 2026-11-04): Mehr lists what a person uses day to day
+// first; what is set up once comes lower, quieter, each row saying where it
+// stands from what Homes keeps itself; the account is one row.
+func TestMehrSaysWhereEachStands(t *testing.T) {
+	cfg, _ := standortCfg(t)
+	_, net := netzlaufwerk(t, true)
+	cfg.Samba, cfg.SambaHost = net.Samba, net.SambaHost
+	cfg.Module = modulListe(t, "dokumente", "standort", "netzlaufwerk")
+	cfg.Ablage = napi.NewUploads(t.TempDir())
+	page := func(user string) string {
+		req := httptest.NewRequest("GET", "/mehr", nil)
+		req.Header.Set("Remote-User", user)
+		rec := httptest.NewRecorder()
+		Mehr(cfg).ServeHTTP(rec, req)
+		return rec.Body.String()
+	}
+	anna := page("anna")
+	mustContain(t, anna, `<section class="karte leise" aria-labelledby=karte-einrichten>`,
+		`<a href="/standort">Standortverlauf</a> <span class=k>Noch nicht verbunden</span>`,
+		`<a href="/netzlaufwerk">Netzlaufwerk</a> <span class=k>Noch kein Passwort</span>`,
+		`<a href="/abmelden">Abmelden</a> <span class=k>Angemeldet als anna</span>`)
+	mustNotContain(t, anna, "Danach meldet sich jemand anderes an")
+	before(t, anna, `href="/dokumente"`, "karte-einrichten")
+	before(t, anna, "karte-einrichten", "karte-konto")
+	cfg.Reitti.Verbinden(context.Background(), "ben", "gut-0123")
+	mustContain(t, page("ben"), "Verbunden, noch kein Punkt angekommen", "Passwort seit 3. Mai 2026")
 }

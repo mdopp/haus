@@ -1,6 +1,7 @@
 package pages
 
 import (
+	"context"
 	"html"
 	"log"
 	"net"
@@ -11,7 +12,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/mdopp/homes/internal/assistent"
+	"github.com/mdopp/homes/internal/cards"
+	"github.com/mdopp/homes/internal/paperless"
 )
 
 // DokumentePath is the Dokumente page (haus#68); a document's own page is
@@ -21,8 +23,8 @@ const DokumentePath = "/dokumente"
 // What the Dokumente page says (haus#68), in the family's words.
 const (
 	saysDocsLead     = "Briefe, Rechnungen, Verträge: alles, was aufgehoben werden soll, kommt ins Archiv des Hauses."
-	saysMailHow      = "Häng das PDF oder Foto an und schick die Mail ab. Abgelegt werden die Anhänge, der Betreff wird der Titel. Paperless holt die Mails alle zehn Minuten ab."
-	saysUploadHow    = "Fotos (JPG, PNG) und PDFs, bis 25 MB. Ohne Titel bekommt das Dokument den Namen der Datei."
+	saysMailHow      = "Die Anhänge werden abgelegt, der Betreff wird der Titel."
+	saysUploadHow    = "Fotos und PDFs, bis 25 MB. Ohne Titel heißt es wie die Datei."
 	saysFiled        = "Liegt in Paperless und wird gerade gelesen (Texterkennung). Das dauert ein paar Minuten."
 	saysFiledMany    = " Dokumente liegen in Paperless und werden gerade gelesen (Texterkennung). Das dauert ein paar Minuten."
 	saysSeeFiled     = "Im Paperless ansehen"
@@ -30,13 +32,6 @@ const (
 	saysPaperlessLAN = "Paperless öffnet sich nur zu Hause im WLAN. Ablegen geht hier auch von unterwegs."
 	saysOnlyAtHome   = "Nur zu Hause im WLAN."
 )
-
-// docsWhatHappens is what happens to a document once it is filed (haus#68,
-// haus#13): who reads it and where it is found again.
-func docsWhatHappens() string {
-	return "Paperless liest den Text jedes Dokuments (Texterkennung) und legt es ins Archiv. Danach findest du es hier unter Notizen über die Suche, und " +
-		assistent.Name() + " findet es, wenn du fragst, etwa „Wann läuft die Autoversicherung aus?“."
-}
 
 // what a refused upload says: napi's reason in the family's words
 var uploadSays = map[string]string{
@@ -193,7 +188,9 @@ func atHome(r *http.Request) bool {
 	return ip != nil && (ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast())
 }
 
-const dokStyle = `<style>.lead{color:var(--muted)}.weg{margin:22px 0 0;padding:14px;background:var(--card);border-radius:14px}.weg h2{margin:0;font-size:1rem}
+const dokStyle = `<style>.lead{color:var(--muted)}.ablegen{margin:18px 0 0}.ablegen .vorne{margin:0;cursor:pointer}.ablegen .vorne input{position:absolute;width:1px;height:1px;opacity:0}.ablegen .danach{display:none}.ablegen:has(input[type=file]:valid) .danach{display:block}
+.ablegen label[for]{display:block;font-size:.85rem;color:var(--muted);margin:12px 0 6px}.ablegen input[type=text]{width:100%}.ablegen button{margin:12px 0 0}.ablegen p.k{font-size:.85rem}
+.weg{margin:22px 0 0;padding:14px;background:var(--card);border-radius:14px}.weg h2{margin:0;font-size:1rem}
 .weg p.k{font-size:.85rem;margin:8px 0 0}.knopf{display:inline-flex;align-items:center;margin:12px 0 0;min-height:44px;padding:0 18px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-weight:600;text-decoration:none}
 .weg label{display:block;font-size:.85rem;color:var(--muted);margin:12px 0 6px}.weg input[type=text]{width:100%;font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--edge);border-radius:12px;padding:0 14px;min-height:44px}
 .weg input[type=file]{width:100%;font:inherit;color:var(--muted)}.weg button{margin:14px 0 0;width:100%}@media (min-width:36rem){.weg button{width:auto}}
@@ -205,13 +202,9 @@ func writeDokumente(w http.ResponseWriter, r *http.Request, cfg StartConfig, cod
 	if scan.moving() {
 		b.WriteString(refreshEvery(scan.refresh())) // the scan moves on by itself; the page follows in place
 	}
-	b.WriteString(dokStyle + scanStyle)
-	b.WriteString("<h1>Dokumente</h1><p class=lead>" + html.EscapeString(saysDocsLead) + "</p>")
+	b.WriteString(dokStyle + scanStyle + gekoppeltStyle + "<h1>Dokumente</h1><p class=lead>" + html.EscapeString(saysDocsLead) + "</p>")
 	if done != "" {
-		if see != "" {
-			see = " " + see
-		}
-		b.WriteString("<div class=gut role=status><span class=punkt></span><p>" + html.EscapeString(done) + see + "</p></div>")
+		b.WriteString("<div class=gut role=status><span class=punkt></span><p>" + html.EscapeString(done) + " " + see + "</p></div>")
 	}
 	b.WriteString(gesagt("", problem))
 	scanning := scanSection(r, cfg, scan)
@@ -219,34 +212,45 @@ func writeDokumente(w http.ResponseWriter, r *http.Request, cfg StartConfig, cod
 		b.WriteString(scanning)
 		scanning = ""
 	}
+	if cfg.Ablage != nil { // what the page is for, first and big (the Mehr audit, owner 2026-11-04); the title once a file is chosen
+		b.WriteString(`<form class=ablegen method=post action=` + DokumentePath + ` enctype=multipart/form-data><label class=vorne>Foto machen oder Datei ablegen` +
+			`<input type=file name=file accept="image/jpeg,image/png,image/gif,image/webp,application/pdf" multiple required onchange="this.form.querySelector('.gewaehlt').textContent=[...this.files].map(f=>f.name).join(', ')"></label>` +
+			`<p class="k gewaehlt" role=status></p><div class=danach><label for=titel>Titel (wenn du magst)</label><input id=titel type=text name=filename maxlength=80 autocomplete=off placeholder="z. B. Stromrechnung Oktober">` +
+			`<button type=submit data-laeuft="Lädt hoch …">Ablegen</button></div><p class=k>` + html.EscapeString(saysUploadHow) + `</p></form>`)
+	}
 	if cfg.DocumentsMail != "" {
 		addr := html.EscapeString(cfg.DocumentsMail)
-		b.WriteString(`<section class=weg><h2>Per E-Mail ablegen</h2>` +
-			`<a class=knopf href="mailto:` + addr + `">Per E-Mail ablegen</a>` +
-			`<p class=k>An <span class=adresse>` + addr + `</span>. ` + html.EscapeString(saysMailHow) + `</p></section>`)
+		b.WriteString(`<p class=k>Oder per Mail an <a href="mailto:` + addr + `">` + addr + `</a>. ` + html.EscapeString(saysMailHow) + `</p>`)
 	}
-	if cfg.Ablage != nil {
-		b.WriteString(`<section class=weg><h2>Dokument ablegen</h2>` +
-			`<form method=post action=` + DokumentePath + ` enctype=multipart/form-data>` +
-			`<label for=datei>Datei wählen oder Foto machen</label>` +
-			`<input id=datei type=file name=file accept="image/jpeg,image/png,image/gif,image/webp,application/pdf" multiple required>` +
-			`<label for=titel>Titel (wenn du magst)</label>` +
-			`<input id=titel type=text name=filename maxlength=80 autocomplete=off placeholder="z. B. Stromrechnung Oktober">` +
-			`<button type=submit data-laeuft="Lädt hoch …">Ablegen</button></form>` +
-			`<p class=k>` + html.EscapeString(saysUploadHow) + `</p></section>`)
-	}
-	b.WriteString(scanning)
+	b.WriteString(zuletztAbgelegt(r, cfg) + scanning)
 	if p := cfg.paperless(); p.Set() {
 		if !cfg.paperlessOpens(r) {
 			b.WriteString(`<p class=weiter-in><span class=k>` + html.EscapeString(saysPaperlessLAN) + `</span></p>`)
 		} else {
-			what := "Die neuesten zuerst; alle Dokumente suchen, lesen und ordnen."
-			if cfg.PaperlessLANOnly {
-				what += " " + saysOnlyAtHome
-			}
-			b.WriteString(p.Weiter(newestPath, what))
+			b.WriteString(p.Weiter(newestPath, map[bool]string{true: saysOnlyAtHome}[cfg.PaperlessLANOnly]))
 		}
 	}
-	b.WriteString(`<p class=k>` + html.EscapeString(docsWhatHappens()) + `</p>`)
 	writePage(w, code, b)
+}
+
+// zuletztAbgelegt is the five documents the archive got last, each to its
+// page where Paperless opens; "" without Paperless's API or when it is silent.
+func zuletztAbgelegt(r *http.Request, cfg StartConfig) string {
+	if cfg.Docs == nil {
+		return ""
+	}
+	var docs []paperless.Doc
+	fetch(r, func(ctx context.Context) {
+		var err error
+		if docs, err = cfg.Docs.Recent(ctx, 5); err != nil {
+			log.Printf("homes: dokumente: recent: %v", err)
+		}
+	})
+	c, opens := cards.Card{Title: "Zuletzt abgelegt"}, cfg.paperlessOpens(r)
+	now, loc := cfg.clock()
+	for _, d := range docs {
+		detail := strings.Trim(d.Correspondent+" · "+map[bool]string{false: dayWord(d.Created, now, loc)}[d.Created.IsZero()], " ·")
+		c.AddLink(d.Title, detail, map[bool]string{true: cards.DocumentPages + strconv.Itoa(d.ID)}[opens]) // away from a LAN-only Paperless: no link
+	}
+	return c.HTML()
 }

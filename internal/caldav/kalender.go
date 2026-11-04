@@ -145,6 +145,9 @@ func (c *Client) personHome(person string) (string, error) {
 // Homes' account's home and the person's own Homes may see (privat-*, the
 // mirrors), the family's first.
 func (c *Client) PersonCalendars(ctx context.Context, person string) ([]Calendar, error) {
+	if c == nil {
+		return nil, ErrNoClient
+	}
 	fam, err := c.list(ctx, false)
 	if err != nil {
 		return nil, err

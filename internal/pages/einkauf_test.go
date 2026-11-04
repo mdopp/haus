@@ -2,7 +2,6 @@ package pages
 
 import (
 	"context"
-	"github.com/mdopp/homes/internal/papierkorb"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -11,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/mdopp/homes/internal/papierkorb"
 
 	"github.com/mdopp/homes/internal/caldav"
 	"github.com/mdopp/homes/internal/caldav/davfake"

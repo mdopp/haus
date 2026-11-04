@@ -2,7 +2,6 @@ package pages
 
 import (
 	"fmt"
-	"github.com/mdopp/homes/internal/papierkorb"
 	"net/http"
 	"net/url"
 	"os"
@@ -11,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/mdopp/homes/internal/papierkorb"
 
 	"github.com/mdopp/homes/internal/judge"
 	"github.com/mdopp/homes/internal/judge/proxyfake"

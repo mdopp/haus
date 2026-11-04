@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/mdopp/homes/internal/cards"
 	"github.com/mdopp/homes/internal/modul"
@@ -26,6 +27,67 @@ var mehrSays = map[string]string{
 	"Standortverlauf":  "Wo du unterwegs warst, in deiner eigenen Zeitleiste",
 	"Daten sichern":    "Nachrichten, Kontakte, Mails und Termine in dein Archiv",
 	"Box":              "Wie es der Box geht, für Admins",
+}
+
+// einmalig are the pages a person sets up once and then rarely opens, and Box.
+var einmalig = map[string]bool{StandortPath: true, netzlaufwerkPath: true, DatenPath: true, DiscogsPath: true, aufgabenPath: true, "/box": true}
+
+// mehrStand is where a page stands for the person, from what Homes keeps
+// itself (Mehr never waits for a backend); "" where there is nothing cheap to say.
+func mehrStand(r *http.Request, cfg StartConfig, pfad string) string {
+	user := r.Header.Get("Remote-User")
+	now, loc := cfg.clock()
+	switch pfad {
+	case aufgabenPath:
+		if n := offeneZahl(r, cfg); n > 0 { // the counter, in words (owner 2026-11-04)
+			return fmt.Sprintf(texte.T(texte.Offen), n) + " · " + mehrSays["Deine Aufgaben"]
+		}
+	case StandortPath:
+		if k, ok := cfg.Reitti.Konto(user); !ok {
+			return "Noch nicht verbunden"
+		} else if !k.Zuletzt.IsZero() {
+			return "Zuletzt aufgezeichnet " + dayWord(k.Zuletzt, now, loc) + " " + k.Zuletzt.In(loc).Format("15:04")
+		}
+		return "Verbunden, noch kein Punkt angekommen"
+	case netzlaufwerkPath:
+		if acc, err := cfg.Samba.Accounts(); err == nil && !acc[user].IsZero() {
+			return "Passwort seit " + dayWords(acc[user], loc)
+		}
+		return "Noch kein Passwort"
+	case DatenPath:
+		var last time.Time
+		st, _ := cfg.Sicherung.Stand(user)
+		for _, q := range st.Quellen {
+			if t := am(q); t.After(last) {
+				last = t
+			}
+		}
+		if last.IsZero() {
+			return "Noch nichts angekommen"
+		}
+		return "Zuletzt angekommen " + dayWord(last, now, loc) + " " + last.In(loc).Format("15:04")
+	case MusikPath: // the inbox, read here; beets' own word is Laib's, which Mehr does not wait for
+		if cfg.MusicInbox == "" {
+			return ""
+		} else if n := len(zurueck(cfg.MusicInbox)); n > 0 {
+			return texte.Anzahl(n, "Datei", "Dateien") + " " + texte.T(texte.MusikNicht)
+		} else if n := len(musikWartet(cfg.MusicInbox)); n > 0 {
+			return texte.Anzahl(n, "Datei", "Dateien") + map[bool]string{true: " wird", false: " werden"}[n == 1] + " einsortiert"
+		}
+		return "Alles einsortiert"
+	case PodcastsPath:
+		if cfg.Podcasts == nil { // no podcasts on this box
+			return ""
+		}
+		if mine, _ := cfg.Podcasts.Meine(user); len(mine) > 0 {
+			return texte.Anzahl(len(mine), "Podcast", "Podcasts") + " abonniert"
+		}
+	case DiscogsPath:
+		if k, ok := cfg.Discogs.Konto(user); ok {
+			return "Verbunden mit „" + k.Name + "“"
+		}
+	}
+	return ""
 }
 
 // Mehr is the bar's last entry on the phone (haus#67): the pages that
@@ -54,23 +116,23 @@ func Mehr(cfg StartConfig) http.HandlerFunc {
 		b := familyHead(r, cfg, "Mehr", "Mehr")
 		b.WriteString("<h1>Mehr</h1>")
 		b.WriteString(einrichtungKarte(r, cfg)) // haus#188: the open setup first; gone once done
-		pages := cards.Card{Title: "Seiten"}
-		n := offeneZahl(r, cfg)
+		// the Mehr audit (owner 2026-11-04): what a person uses day to day first; what is set up
+		// once, and the admins' Box, lower and quieter, each saying where it stands
+		pages, einmal := cards.Card{Title: "Seiten"}, cards.Card{Title: "Einrichten", Look: "leise"}
 		for _, t := range eintraege(r, cfg, modul.Mehr) {
 			says := mehrSays[t.Titel]
-			if t.Pfad == aufgabenPath && n > 0 { // the counter, in words (owner 2026-11-04)
-				says = fmt.Sprintf(texte.T(texte.Offen), n) + " · " + says
+			if stand := mehrStand(r, cfg, t.Pfad); stand != "" {
+				says = stand
 			}
-			pages.AddLink(t.Titel, says, t.Pfad)
+			if einmalig[t.Pfad] {
+				einmal.AddLink(t.Titel, says, t.Pfad)
+			} else {
+				pages.AddLink(t.Titel, says, t.Pfad)
+			}
 		}
-		b.WriteString(pages.HTML())
-		b.WriteString(gesundheitKarte(cfg))
 		konto := cards.Card{Title: "Konto"}
-		if u := r.Header.Get("Remote-User"); u != "" {
-			konto.Add("Angemeldet als "+u, "")
-		}
-		konto.AddLink("Abmelden", "Danach meldet sich jemand anderes an", "/abmelden")
-		b.WriteString(konto.HTML())
+		konto.AddLink("Abmelden", strings.TrimSpace("Angemeldet als "+r.Header.Get("Remote-User")), "/abmelden")
+		b.WriteString(pages.HTML() + gesundheitKarte(cfg) + einmal.HTML() + konto.HTML() + `<style>.karte.leise li a{color:var(--muted)}</style>`)
 		b.WriteString(spurenKarte(r, cfg)) // what this box lacks, last and quiet (ADR 0001 §10)
 		writePage(w, http.StatusOK, b)
 	}

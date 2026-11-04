@@ -8,6 +8,11 @@
 // scripts/loc.sh); the logic here is. Standard library only (shared).
 package texte
 
+import (
+	"strconv"
+	"strings"
+)
+
 // ID is a word's stable key: the app and other languages refer to it.
 type ID string
 
@@ -31,3 +36,38 @@ func In(lang string, id ID) string {
 
 // Titel is a module's title.
 func Titel(modul string) string { return T(ID("modul." + modul)) }
+
+// Anzahl is "1 Datei", "12 Dateien".
+func Anzahl(n int, one, many string) string {
+	if n == 1 {
+		return "1 " + one
+	}
+	return Tausender(int64(n)) + " " + many
+}
+
+// Tausender is n with the German thousands point: 12.345.
+func Tausender(n int64) string {
+	s := strconv.FormatInt(n, 10)
+	for i := len(s) - 3; i > 0; i -= 3 {
+		s = s[:i] + "." + s[i:]
+	}
+	return s
+}
+
+// Groesse is a size as the family reads it: "3,2 GB", "450 MB", "12 KB".
+func Groesse(n int64) string {
+	units := []struct {
+		size int64
+		name string
+	}{{1 << 40, "TB"}, {1 << 30, "GB"}, {1 << 20, "MB"}, {1 << 10, "KB"}}
+	for _, u := range units {
+		if n >= u.size {
+			v := float64(n) / float64(u.size)
+			if v >= 10 {
+				return Tausender(int64(v+0.5)) + " " + u.name
+			}
+			return strings.Replace(strconv.FormatFloat(v, 'f', 1, 64), ".", ",", 1) + " " + u.name
+		}
+	}
+	return Tausender(n) + " Bytes"
+}

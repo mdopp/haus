@@ -161,6 +161,9 @@ const mirrorQuery = `<?xml version="1.0" encoding="utf-8"?>
 // the server); found is false when there is no such book. A read cut short
 // is an error, never fewer cards.
 func (c *Client) BookCards(ctx context.Context, book string) (cards []BookCard, found bool, err error) {
+	if c == nil {
+		return nil, false, ErrNoClient
+	}
 	u, err := c.resolve(strings.TrimRight(book, "/") + "/")
 	if err != nil {
 		return nil, false, err

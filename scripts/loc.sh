@@ -46,7 +46,10 @@ budget napi 5033 internal/napi        # the app's widgets' and share sheet's API
 # 2026-11-04, step H3: HOMES_MODULE_AUS switches the leaf modules off, 1,298; plus 5 %
 # 2026-11-04, steps H4–H6: HOMES_MODULE_AUS switches every module off (the switches, the
 # collections per module, the background work after the list), 1,379; plus 5 %
-budget cmd 1448 cmd                   # homes' wiring and the demo on fakes: 1,018
+# 2026-11-04, the owner (the caps count production code only): cmd/homesdemo is the demo on
+# fakes for the browser tests and the pictures, never run on a box; it is not counted. The
+# cap stays as it was, now for cmd/homes alone
+budget cmd 1448 cmd/homes             # homes' wiring: 1,018 with the demo then
 # 2026-11-04, the caps moved with the packages, none raised (sum 24,134 as before): abs and
 # musicbrainz (1,227 lines, 1,289 of cap) from household to connectors once merken's fetcher
 # was internal/abruf (235 lines of merken, 247 of cap, to shared) and jellyfin.Plain

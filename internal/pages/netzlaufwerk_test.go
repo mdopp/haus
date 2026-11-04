@@ -46,8 +46,15 @@ func TestNetzlaufwerkSaysWhatItIsAndWhetherYouHaveOne(t *testing.T) {
 	if rec.Code != 200 || rec.Header().Get("Cache-Control") != "no-store" || strings.Contains(page, "Passwörter der Familie") {
 		t.Fatalf("%d %q; only an admin sees the family's", rec.Code, rec.Header().Get("Cache-Control"))
 	}
-	if page := getNetzlaufwerk(cfg, "ben", "family", "").Body.String(); !strings.Contains(page, "Passwort gesetzt am") || strings.Contains(page, "Noch kein Passwort") {
+	before(t, page, "Passwort festlegen", "So verbindest du dich") // not set yet: the password first
+	// set (the Mehr audit, owner 2026-11-04): the addresses first with their copy buttons, the state in a line,
+	// the change folded, no lead any more
+	if page := getNetzlaufwerk(cfg, "ben", "family", "").Body.String(); !strings.Contains(page, "Passwort seit ") || strings.Contains(page, "Noch kein Passwort") ||
+		!strings.Contains(page, `data-kopie="smb://192.168.1.10/data"`) || !strings.Contains(page, "<details class=aendern><summary>Passwort ändern</summary>") || strings.Contains(page, "Explorer unter Windows, im Finder") {
 		t.Errorf("ben has one:\n%s", page)
+	} else {
+		before(t, page, "So verbindest du dich", "Passwort seit ")
+		before(t, page, "Passwort seit ", "Passwort ändern")
 	}
 	if page := getNetzlaufwerk(cfg, "gast", "gaeste", "").Body.String(); !strings.Contains(page, "nicht für das Netzlaufwerk freigegeben") || strings.Contains(page, "<form") {
 		t.Errorf("a guest gets no form:\n%s", page)
@@ -76,7 +83,7 @@ func TestNetzlaufwerkSetsYourOwnAndOnlyAnAdminSomeoneElses(t *testing.T) {
 	if l := <-fs.Lines; l != "set anna "+base64.StdEncoding.EncodeToString([]byte(pw)) {
 		t.Fatalf("file-share read %q", l)
 	}
-	if page := getNetzlaufwerk(cfg, "anna", "family", "?gespeichert=anna").Body.String(); !strings.Contains(page, "Gespeichert") || !strings.Contains(page, "Passwort gesetzt am") {
+	if page := getNetzlaufwerk(cfg, "anna", "family", "?gespeichert=anna").Body.String(); !strings.Contains(page, "Gespeichert") || !strings.Contains(page, "Passwort seit ") {
 		t.Errorf("the page says so:\n%s", page)
 	}
 	// someone else's: only an admin; from another site: nobody

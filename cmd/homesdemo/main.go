@@ -226,6 +226,9 @@ func main() {
 		discogsKonto(r.URL.Query().Get("discogs") != "0")
 	})
 	demoLaib.wishes.Status("beets", laibfake.DemoBeets(inbox, time.Now(), false))
+	seiten := mehr // Daten sichern, Netzlaufwerk, Box, Adresse (the Mehr audit)
+	seiten.Reitti = standort.Reitti
+	mehrSeiten(mux, seiten, dav, dir)
 	mux.HandleFunc("/demo/wunsch", func(w http.ResponseWriter, r *http.Request) { // a wish moved on in Laib: wartet, abgelehnt, …
 		demoLaib.wishes.Setze(r.URL.Query().Get("modul"), r.URL.Query().Get("stand"), "")
 		mehr.Laib.ForgetWuensche()
@@ -268,6 +271,10 @@ func main() {
 	anna := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		r.Header.Set("Remote-User", "anna")
 		r.Header.Set("Remote-Groups", "family,admins")
+		if c, err := r.Cookie("wer"); err == nil && c.Value != "" { // another person, in the family only
+			r.Header.Set("Remote-User", c.Value)
+			r.Header.Set("Remote-Groups", "family")
+		}
 		mux.ServeHTTP(w, r)
 	})
 	absFake.AddFeed("http://"+*addr+"/demo/feed.xml", "Demo-Podcast")
@@ -396,6 +403,10 @@ func (f *laibFake) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if fail {
 		http.Error(w, "laib is down", http.StatusBadGateway)
+		return
+	}
+	if text, ok := boxAntwort(req.Params.Name, req.Params.Arguments); ok {
+		json.NewEncoder(w).Encode(map[string]any{"result": map[string]any{"content": []map[string]string{{"text": text}}}})
 		return
 	}
 	if text, isErr, ok := f.wishes.Antwort(req.Params.Name, req.Params.Arguments); ok {
