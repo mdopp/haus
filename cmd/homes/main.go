@@ -445,7 +445,7 @@ func main() {
 		gesundheit: gesundheit, haPublic: haPublic, inverted: pages.InvertedFromList(os.Getenv("HOMES_COVER_INVERTED")),
 		radicale: radicalePublic, views: ansicht.Open(dataDir, os.Getenv("HOMES_RADICALE_USER")), dataDir: dataDir,
 		docsMail: docsMail, paperlessPublic: paperlessPublic, paperlessLAN: paperlessLAN}
-	logModule(st)
+	st.napi.Module = logModule(st)
 	mux := routes(st)
 	addr := env("HOMES_LISTEN", "127.0.0.1:8650")
 	log.Printf("homes %s: listening on %s as %s, laib %s, home assistant %v, haushalt %d tools, memory library %v (tidy-up %v), uploads %q, the Bote %v, counting %v (voice %v), pages only behind the proxy secret", Version, addr, assistent.Name(), ops.URL, cfg.HA != nil, len(haushalt.Tools(hh)), hh.Library != nil, hh.Judge != nil, cfg.UploadDir, b != nil, counter != nil, voice != nil)
