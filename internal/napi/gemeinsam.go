@@ -40,9 +40,9 @@ type gemeinsam struct {
 	now    func() time.Time
 }
 
-func (g *gemeinsam) routes(mux *http.ServeMux, auth func(http.HandlerFunc) http.HandlerFunc) {
-	mux.HandleFunc("GET /napi/gemeinsam/kontakte", auth(g.person(g.kontakte)))
-	mux.HandleFunc("GET /napi/gemeinsam/kalender", auth(g.person(g.kalender)))
+func (g *gemeinsam) routes(gs gruppen) {
+	gs.add("konto", "GET /napi/gemeinsam/kontakte", g.person(g.kontakte))
+	gs.add("konto", "GET /napi/gemeinsam/kalender", g.person(g.kalender))
 }
 
 // person lets a device of a person through, and only with Radicale set.

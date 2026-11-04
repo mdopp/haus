@@ -47,21 +47,20 @@ func newTools(hh haushalt.Config) *toolsAPI {
 	return &toolsAPI{hh: hh, loc: loc}
 }
 
-func (t *toolsAPI) routes(mux *http.ServeMux, auth func(http.HandlerFunc) http.HandlerFunc) {
-	mux.HandleFunc("GET /napi/defs/tool", auth(t.defs))
-	// Homes answers the actions it knows; any other is 404 unknown_action.
-	mux.HandleFunc("POST /napi/action-callback", auth(t.action))
+// routes are each tool's rows, in its module's group; the catalog and the
+// actions are the core's (napi.go).
+func (t *toolsAPI) routes(gs gruppen) {
 	if t.hh.Calendar != nil {
-		mux.HandleFunc("GET /napi/portal/tasks", auth(t.tasks))
+		gs.add("kalender", "GET /napi/portal/tasks", t.tasks)
 	}
 	if t.hh.Contacts != nil {
-		mux.HandleFunc("GET /napi/portal/contacts", auth(t.contacts))
+		gs.add("kontakte", "GET /napi/portal/contacts", t.contacts)
 	}
 	if t.hh.Documents != nil {
-		mux.HandleFunc("GET /napi/portal/documents", auth(t.documents))
+		gs.add("dokumente", "GET /napi/portal/documents", t.documents)
 	}
 	if t.hh.Notes != nil {
-		mux.HandleFunc("GET /napi/portal/notes", auth(t.notes))
+		gs.add("notizen", "GET /napi/portal/notes", t.notes)
 	}
 }
 

@@ -31,7 +31,11 @@ type Eintrag struct {
 }
 
 // Route is one path a module serves: a page behind the proxy secret, or a
-// /napi path the Liste puts behind the paired device's bearer.
+// /napi path behind the paired device's bearer. Each module's come by its
+// name from its surface's groups (napi.Gruppen; homes#243), which Homes
+// mounts with the core's. An off module's group is what its paths answer
+// without its backend: where a released app relies on that answer (ADR
+// 0001 §4) a sentence, else nothing, so the surface's 404.
 type Route struct {
 	Muster  string // a ServeMux pattern: "GET /napi/standort", "/standort"
 	Handler http.Handler
@@ -81,8 +85,6 @@ type Modul struct {
 	// Box page offers its switch only then
 	Schaltbar bool
 
-	Seiten []Route   // pages, behind the proxy secret
-	Napi   []Route   // /napi paths, behind the device's bearer
 	Nav    []Eintrag // its entries in the family's selection
 	Start  []string  // Start's parts it fills: "im-haus", "meine-geraete", "heute"
 	App    Angebot
@@ -92,9 +94,6 @@ type Modul struct {
 	Grund string
 	// Warum is the machine's word for Grund: Fehlt or Aus.
 	Warum string
-	// Aus is what its paths answer while it is off, only where a released
-	// app relies on that answer (ADR 0001 §4).
-	Aus []Route
 }
 
 // An: is the module on?
