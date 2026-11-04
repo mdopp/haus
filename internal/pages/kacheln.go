@@ -255,7 +255,7 @@ const zelle = 320
 // kachelStyle: the house palette, no outlines, a wash of the state's colour while on, open
 // or moving; grey under „Stand …“ without the box (html.weg, homesScript).
 var kachelStyle = `<style>.geraete{--pille:#1e1e25;--unterwegs:#7e9cff}@media (prefers-color-scheme:light){.geraete{--pille:#e6e8ee;--unterwegs:#4f6bd8}}.geraete .kopfzeile{display:flex;justify-content:space-between;align-items:center;gap:12px}.geraete .kopfzeile h2{margin:0}
-.geraete .alle{display:inline-flex;align-items:center;min-height:44px;font-weight:700;text-decoration:none}.karte.geraete .hinweis{margin:0 2px 10px}.geraete .stand{display:none;margin:0 0 14px;padding:12px 14px;background:var(--card);border:1px solid var(--edge);border-radius:14px}.weg .geraete .stand{display:block}
+.geraete .alle{display:inline-flex;align-items:center;min-height:44px;font-weight:700;text-decoration:none}.karte.geraete .hinweis{margin:0 2px 10px}.geraete .stand{display:none;margin:0 0 14px;padding:12px 14px;background:var(--card);border-radius:14px}.weg .geraete .stand{display:block}
 .karte.geraete{container:kacheln/inline-size}.karte ul.kacheln{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;background:none;border:0;border-radius:0}
 .karte .kachel{display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-areas:"bild stufe" "name name" "worte worte";align-items:center;column-gap:8px;padding:12px;--frei:0px;
 border:0;border-radius:20px;background:var(--card);overflow-wrap:normal;container-type:inline-size;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}

@@ -868,7 +868,7 @@ func stackDetail(s laib.Stack, now time.Time, loc *time.Location) string {
 }
 
 const scanStyle = `<style>.scannen .zustand{margin:10px 0 0}.scannen .knoepfe{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 0}.scannen .knoepfe button{margin:0;width:auto}
-.scan-start .tagwahl{margin:8px 0 0}.scan-start .tagwahl legend{font-size:.85rem;color:var(--muted);margin-bottom:6px}.scan-start .tag{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 14px;border:1px solid var(--edge);border-radius:999px;margin:0}.scan-start .tagwahl{border:0;padding:0;display:flex;flex-wrap:wrap;gap:8px}
+.scan-start .tagwahl{margin:8px 0 0}.scan-start .tagwahl legend{font-size:.85rem;color:var(--muted);margin-bottom:6px}.scan-start .tag{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 14px;background:var(--panel);border-radius:999px;margin:0}.scan-start .tag:has(:checked){background:var(--accent-soft);color:var(--accent)}.scan-start .tagwahl{border:0;padding:0;display:flex;flex-wrap:wrap;gap:8px}
 .trennblatt{display:flex;flex-wrap:wrap;align-items:end;gap:8px;margin:8px 0 0}.trennblatt label{width:100%}.trennblatt input{width:6em;margin:0}.trennblatt button{margin:0;width:auto}
 .scannen h3{font-size:.85rem;margin:18px 0 0;color:var(--muted);font-weight:600}.stapel{margin:6px 0 0;padding:0;list-style:none}.stapel>li{padding:8px 0;border-top:1px solid var(--line)}
 .stapel summary{cursor:pointer;min-height:44px;padding:6px 0}.stapel details>p{margin:4px 0 0}.stapel ul{margin:4px 0 0;padding-left:18px}.stapel li li{font-size:.9rem;overflow-wrap:anywhere}

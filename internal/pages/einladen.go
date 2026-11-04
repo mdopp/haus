@@ -24,7 +24,7 @@ const (
 	saysInviteWhat    = "Für jemanden, der neu dazukommt: Die Person bekommt ein eigenes Konto für alle Apps der Box und legt ihr Passwort selbst fest. Du siehst es nie."
 	saysUserHint      = "Damit meldet sich die Person an: Kleinbuchstaben, ohne Leerzeichen. Leer lassen, dann wird es der Vorname."
 	saysEmailHint     = "Dorthin schickt die Box den Link, mit dem die Person ihr Passwort festlegt."
-	saysFamilyOnly    = "Homes lädt nur in die Familie ein. Einen weiteren Admin legst du aus Sicherheitsgründen direkt an der Box an: laib person invite <benutzer> … --group admins"
+	saysFamilyOnly    = "Homes lädt nur in die Familie ein. Einen weiteren Admin legst du aus Sicherheitsgründen direkt an der Box an."
 	saysInviteMissing = "Einladen geht auf dieser Box noch nicht: Laib kann es hier noch nicht. Bis zum nächsten Laib-Update legst du neue Personen wie bisher in LLDAP an."
 	saysNeedFirst     = "Bitte den Vornamen eintragen."
 	saysBadEmail      = "Die E-Mail-Adresse sieht nicht vollständig aus."
@@ -217,9 +217,9 @@ func inviteProblem(err error) string {
 	return "Nicht eingeladen: " + familySentence("einladen", errors.New(msg), "Laib hat gerade nicht geantwortet. Versuch es gleich noch einmal.")
 }
 
-const inviteStyle = `<style>.einladen label{display:block;margin:.6rem 0 .15rem}.einladen input,.einladen select{font:inherit;width:100%;max-width:26rem;padding:.35rem .5rem;border:1px solid #c9c3b6;border-radius:.4rem;background:#fff;box-sizing:border-box}
-.einladen .k{display:block;font-size:.85rem}.einladen button{margin-top:.8rem}.erfolg{border-left:3px solid #2b7a3d;padding:.2rem .7rem;margin:.6rem 0}.problem{border-left:3px solid #b3261e;padding:.2rem .7rem;margin:.6rem 0}
-.link{display:flex;gap:.4rem;flex-wrap:wrap;max-width:40rem}.link input{flex:1;min-width:12rem;font:13px ui-monospace,Menlo,Consolas,monospace;padding:.35rem .5rem;border:1px solid #c9c3b6;border-radius:.4rem}</style>`
+const inviteStyle = `<style>.einladen label{display:block;margin:.6rem 0 .15rem}.einladen input,.einladen select{width:100%;max-width:26rem}
+.einladen .k{display:block;font-size:.85rem}.einladen button{margin-top:.8rem}.erfolg,.problem{padding:10px 14px;margin:.6rem 0;border-radius:12px;background:var(--ok-soft)}.problem{background:var(--danger-soft)}
+.link{display:flex;gap:.4rem;flex-wrap:wrap;max-width:40rem}.link input{flex:1;min-width:12rem;font:13px ui-monospace,Menlo,Consolas,monospace}.zeilen form{flex:none}</style>`
 
 // inviteCard is the Box card: what Laib just did, the form, and who is
 // invited but has no password yet, each with "Erneut senden".
@@ -297,7 +297,7 @@ func inviteCard(ctx context.Context, c *laib.Client, inv invitation) string {
 		log.Printf("homes: einladen: pending: %v", perr)
 		b.WriteString("<p class=k>" + html.EscapeString(saysPendingNone) + "</p>")
 	case len(pending) > 0:
-		b.WriteString("<h3>" + html.EscapeString(saysPendingTitle) + "</h3><table>")
+		b.WriteString("<h3>" + html.EscapeString(saysPendingTitle) + "</h3><ul class=zeilen>")
 		for _, p := range pending {
 			name := p.Name
 			if name == "" {
@@ -308,13 +308,13 @@ func inviteCard(ctx context.Context, c *laib.Client, inv invitation) string {
 			if t, err := time.Parse(time.RFC3339, p.InvitedAt); err == nil {
 				since = "eingeladen am " + dayWords(t, time.Local)
 			}
-			b.WriteString("<tr><td>" + html.EscapeString(name) + "<br><span class=k>" + html.EscapeString(p.User+" · "+p.Email) + "</span></td><td class=k>" + html.EscapeString(since) + "</td><td>" +
+			b.WriteString("<li><span class=was><b>" + html.EscapeString(name) + "</b><span class=text>" + html.EscapeString(p.User+" · "+p.Email) + "</span><span class=wann>" + html.EscapeString(since) + "</span></span>" +
 				"<form method=post action=" + invitePath + "><input type=hidden name=erneut value=1>" +
 				"<input type=hidden name=benutzer value=\"" + html.EscapeString(p.User) + "\"><input type=hidden name=email value=\"" + html.EscapeString(p.Email) + "\">" +
 				"<input type=hidden name=vorname value=\"" + html.EscapeString(first) + "\"><input type=hidden name=nachname value=\"" + html.EscapeString(last) + "\">" +
-				"<button aria-label=\"Link an " + html.EscapeString(name) + " erneut senden\" data-laeuft=\"Sendet …\">Erneut senden</button></form></td></tr>")
+				"<button aria-label=\"Link an " + html.EscapeString(name) + " erneut senden\" data-laeuft=\"Sendet …\">Erneut senden</button></form></li>")
 		}
-		b.WriteString("</table>")
+		b.WriteString("</ul>")
 	}
 	return b.String()
 }

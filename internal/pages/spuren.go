@@ -33,7 +33,7 @@ const (
 var wishWait = 20 * time.Second
 
 const spurenStyle = `<style>.spuren li{color:var(--muted)}.spuren .spur{font-weight:500}.spuren .k{color:var(--muted)}
-.spuren button{min-height:44px;padding:0 14px;background:none;color:var(--ink);border:1px solid var(--edge);border-radius:12px;font:inherit;font-size:.9rem}</style>`
+.spuren button{min-height:44px;padding:0 14px;background:var(--track);color:var(--ink);border-radius:12px;font:inherit;font-size:.9rem}</style>`
 
 // spurenKarte is Mehr's card of traces; "" on a box that lacks nothing.
 // Mehr never waits for Laib: with its stand kept (a minute) the card is
@@ -91,14 +91,17 @@ func spurenCard(r *http.Request, off []modul.Modul, ws modul.Wuensche, note stri
 	var b strings.Builder
 	b.WriteString(spurenStyle + `<section class="karte spuren" aria-labelledby=spuren><h2 id=spuren>` + html.EscapeString(texte.T(texte.SpurenTitel)) +
 		`</h2><p class=hinweis>` + html.EscapeString(texte.T(texte.SpurenHinweis)) + `</p><ul>`)
-	signedIn := r.Header.Get("Remote-User") != ""
+	signedIn, back := r.Header.Get("Remote-User") != "", ""
+	if r.URL.Path != mehrPath && r.URL.Path != SpurenPath { // a module's own page: the wish ends there (modulAus)
+		back = `<input type=hidden name=zurueck value="` + html.EscapeString(r.URL.Path) + `">`
+	}
 	for _, m := range off {
 		spur := texte.T(texte.ID("spur." + m.Spur(wunschVon(ws, m.Name))))
 		b.WriteString(`<li class=tu id="spur-` + html.EscapeString(m.Name) + `"><div><span class=spur>` + html.EscapeString(m.Titel) +
 			`</span> <span class=k>` + html.EscapeString(spur) + `</span></div>`)
 		if signedIn && m.Anfordern(ws) {
 			b.WriteString(`<form method=post action=` + AnfordernPath + `><input type=hidden name=modul value="` + html.EscapeString(m.Name) +
-				`"><button data-laeuft="` + html.EscapeString(texte.T(texte.Anfordernd)) + `" aria-label="` + html.EscapeString(m.Titel+": "+texte.T(texte.Anfordern)) +
+				`">` + back + `<button data-laeuft="` + html.EscapeString(texte.T(texte.Anfordernd)) + `" aria-label="` + html.EscapeString(m.Titel+": "+texte.T(texte.Anfordern)) +
 				`">` + html.EscapeString(texte.T(texte.Anfordern)) + `</button></form>`)
 		}
 		b.WriteString(`</li>`)
@@ -183,8 +186,35 @@ func Anfordern(cfg StartConfig) http.HandlerFunc {
 			}
 			log.Printf("homes: anfordern %s for %s", m.Name, user)
 		}
-		http.Redirect(w, r, mehrPath+"#spur-"+m.Name, http.StatusSeeOther)
+		to := mehrPath + "#spur-" + m.Name
+		if z := r.FormValue("zurueck"); strings.HasPrefix(z, "/") && !strings.HasPrefix(z, "//") && !strings.ContainsAny(z, `\?#`) {
+			to = z // back to the module's own page (modulAus)
+		}
+		http.Redirect(w, r, to, http.StatusSeeOther)
 	}
+}
+
+// modulAus is the page at path of a module this box lacks (the audit, owner 2026-11-04): its
+// trace and „Hier anfordern“, as on Mehr, for an admin the module's page; below path, a 404.
+func modulAus(w http.ResponseWriter, r *http.Request, cfg StartConfig, name, path string) {
+	if r.URL.Path != path {
+		Elsewhere(cfg)(w, r)
+		return
+	}
+	m, ok := modul.Modul{Name: name, Titel: texte.Titel(name), Warum: modul.Fehlt}, false
+	if x, found := cfg.Module.Eins(name); found && !x.An() { // on, its backend unset: nothing to wish for
+		m, ok = x, true
+	}
+	var ws modul.Wuensche
+	if ok {
+		ws, _ = wuensche(r.Context(), cfg)
+	}
+	b := familyHead(r, cfg, m.Titel, m.Titel)
+	b.WriteString("<h1>" + html.EscapeString(m.Titel) + "</h1>" + spurenCard(r, []modul.Modul{m}, ws, ""))
+	if ok && isAdmin(r) {
+		b.WriteString(`<p class=ruhig><a href="` + ModulPages + name + `">` + html.EscapeString(texte.T(texte.ModulSeiteTitel)) + `</a></p>`)
+	}
+	writePage(w, http.StatusOK, b)
 }
 
 // ModulSeite is /module/<name> (admins): one module, its backend, whether

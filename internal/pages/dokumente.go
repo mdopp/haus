@@ -20,7 +20,7 @@ const DokumentePath = "/dokumente"
 
 // What the Dokumente page says (haus#68), in the family's words.
 const (
-	saysDocsLead     = "Briefe, Rechnungen, Verträge: alles, was aufgehoben werden soll, kommt in Paperless, das Archiv des Hauses."
+	saysDocsLead     = "Briefe, Rechnungen, Verträge: alles, was aufgehoben werden soll, kommt ins Archiv des Hauses."
 	saysMailHow      = "Häng das PDF oder Foto an und schick die Mail ab. Abgelegt werden die Anhänge, der Betreff wird der Titel. Paperless holt die Mails alle zehn Minuten ab."
 	saysUploadHow    = "Fotos (JPG, PNG) und PDFs, bis 25 MB. Ohne Titel bekommt das Dokument den Namen der Datei."
 	saysFiled        = "Liegt in Paperless und wird gerade gelesen (Texterkennung). Das dauert ein paar Minuten."
@@ -66,7 +66,7 @@ func Dokumente(cfg StartConfig) http.HandlerFunc {
 			return
 		}
 		if !cfg.hasDocs() {
-			notSetDocuments.write(w, r, cfg, "Dokumente")
+			modulAus(w, r, cfg, "dokumente", DokumentePath)
 			return
 		}
 		switch r.Method {
@@ -115,8 +115,6 @@ func Dokumente(cfg StartConfig) http.HandlerFunc {
 		}
 	}
 }
-
-var notSetDocuments = notSet{"Die Dokumente sind hier noch nicht eingerichtet.", "Für Admins: Homes kennt weder die Adresse für Mails (HOMES_DOCUMENTS_MAIL) noch Paperless' Einwurf-Ordner (HOMES_UPLOAD_DIR) oder Adresse (HOMES_PAPERLESS_PUBLIC_URL)."}
 
 // hasDocs says the Dokumente page has at least one way in.
 func (cfg StartConfig) hasDocs() bool {
@@ -195,12 +193,11 @@ func atHome(r *http.Request) bool {
 	return ip != nil && (ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast())
 }
 
-const dokStyle = `<style>.lead{color:var(--muted)}.weg{margin:22px 0 0;padding:14px;background:var(--card);border:1px solid var(--edge);border-radius:14px}.weg h2{margin:0;font-size:1rem}
+const dokStyle = `<style>.lead{color:var(--muted)}.weg{margin:22px 0 0;padding:14px;background:var(--card);border-radius:14px}.weg h2{margin:0;font-size:1rem}
 .weg p.k{font-size:.85rem;margin:8px 0 0}.knopf{display:inline-flex;align-items:center;margin:12px 0 0;min-height:44px;padding:0 18px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-weight:600;text-decoration:none}
 .weg label{display:block;font-size:.85rem;color:var(--muted);margin:12px 0 6px}.weg input[type=text]{width:100%;font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--edge);border-radius:12px;padding:0 14px;min-height:44px}
 .weg input[type=file]{width:100%;font:inherit;color:var(--muted)}.weg button{margin:14px 0 0;width:100%}@media (min-width:36rem){.weg button{width:auto}}
-.adresse{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.9rem;color:var(--ink);overflow-wrap:anywhere}
-.gut{display:flex;gap:8px;align-items:flex-start;margin:16px 0 0;padding:12px 14px;border:1px solid var(--ok);border-radius:14px}.gut p{margin:0}</style>`
+.adresse{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.9rem;color:var(--ink);overflow-wrap:anywhere}</style>`
 
 func writeDokumente(w http.ResponseWriter, r *http.Request, cfg StartConfig, code int, done, see, problem string) {
 	scan := readScan(r, cfg)

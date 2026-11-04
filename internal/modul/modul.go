@@ -196,6 +196,9 @@ func (l *Liste) Module() []Modul { return slices.Clone(l.alle) }
 
 // Eins is the module of that name.
 func (l *Liste) Eins(name string) (Modul, bool) {
+	if l == nil { // a box without a module list
+		return Modul{}, false
+	}
 	i := slices.IndexFunc(l.alle, func(m Modul) bool { return m.Name == name })
 	if i < 0 {
 		return Modul{}, false

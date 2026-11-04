@@ -57,7 +57,7 @@ func TestBoxShowsWhatTheOperatorCan(t *testing.T) {
 		{"name": "eigen", "source": "state", "description": "Ein eigener.", "trigger": map[string]string{"every": "10m"}, "status": "refused", "refused": "das Werkzeug exec ist nicht erlaubt"},
 	}
 	body := getAt(BoxWith(skillLaib(t, list, true), "https://laib.box.test", nil), "/box/operator?ganz=1", "admins")
-	mustContain(t, body, "<h2>Was der Operator kann</h2>",
+	mustContain(t, body, "<h1>Was der Operator kann</h1>",
 		"<b>Routineblick</b><span class=text>Schaut täglich nach, ob alles läuft.</span><span class=text>täglich 06:30 · Ein Skript sammelt, das Modell urteilt.</span>",
 		"Zuletzt heute, ", ": lief, alles gut. eine Notiz",
 		"wenn ein Dienst rot wird · Das Modell löst das Problem selbst.", ": übersprungen (kein roter Dienst)",

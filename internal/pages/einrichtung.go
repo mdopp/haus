@@ -151,7 +151,7 @@ const MehrAufgabenPath = "/mehr/aufgaben"
 const (
 	saysAufgabenLesen = "Deine Aufgaben von der Box werden gerade gelesen …"
 	saysAufgabenNicht = "Die Aufgaben von der Box lassen sich gerade nicht lesen."
-	aufgabenRowTitle  = "Deine Aufgaben"
+	aufgabenRowTitle  = "Alle Aufgaben"
 )
 
 // einrichtungKarte is Mehr's „Einrichtung“: the open tasks only; none, no
@@ -203,7 +203,7 @@ func mehrAufgaben(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
 // einrichtungCard is the card for open; laibSays, when set, is a last row
 // for Laib's tasks not in hand, leading to Deine Aufgaben.
 func einrichtungCard(open []aufgabe, laibSays string) string {
-	c := cards.Card{Title: "Einrichtung"}
+	c := cards.Card{Title: "Deine Aufgaben"} // one name for them, Mehr's list and the page (the audit)
 	for _, a := range open {
 		says := a.warum
 		if a.stand != "" {
@@ -247,7 +247,7 @@ func DeineAufgaben(cfg StartConfig) http.HandlerFunc {
 		}
 		fetch(r, func(ctx context.Context) { cfg.Einrichtung.Pruefen(ctx, r.Header.Get("Remote-User")) }) // a module's own check (Jellyfin)
 		as := mitLaib(r, cfg)
-		b := familyHead(r, cfg, "Deine Aufgaben", "Aufgaben")
+		b := familyHead(r, cfg, "Deine Aufgaben", "Deine Aufgaben")
 		b.WriteString("<h1>Deine Aufgaben" + zahl(len(offen(as))) + "</h1><p class=k>Was du einmal einrichtest. Ist es erledigt, verschwindet es aus Mehr; hier kannst du es noch einmal machen.</p>")
 		if len(as) == 0 {
 			b.WriteString("<p class=k>Auf dieser Box gibt es für dich gerade nichts einzurichten.</p>")

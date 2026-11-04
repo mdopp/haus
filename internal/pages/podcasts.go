@@ -29,7 +29,7 @@ const (
 func Podcasts(cfg StartConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if cfg.Podcasts == nil || r.URL.Path != PodcastsPath {
-			missing{http.StatusNotFound, "Diese Seite gibt es nicht.", "Mehr", mehrPath, "Mehr"}.write(w, r, cfg)
+			modulAus(w, r, cfg, "podcasts", PodcastsPath)
 			return
 		}
 		person := r.Header.Get("Remote-User")

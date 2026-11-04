@@ -114,8 +114,8 @@ GET /discogs → /
 GET /discogs/zurueck → /
 GET /platte → /
 GET /platte/bild → /
-GET /podcasts → /
-GET /gesehen → /
+GET /podcasts → /podcasts
+GET /gesehen → /gesehen
 GET /daten-sichern → /daten-sichern
 GET /nachrichten-sichern → /nachrichten-sichern
 GET /standort → /standort
@@ -177,8 +177,8 @@ GET /discogs → /
 GET /discogs/zurueck → /
 GET /platte → /
 GET /platte/bild → /
-GET /podcasts → /
-GET /gesehen → /
+GET /podcasts → /podcasts
+GET /gesehen → /gesehen
 GET /daten-sichern → /daten-sichern
 GET /nachrichten-sichern → /nachrichten-sichern
 GET /standort → /standort
@@ -933,7 +933,7 @@ GET /discogs → /discogs
 GET /discogs/zurueck → /
 GET /platte → /
 GET /platte/bild → /
-GET /podcasts → /
+GET /podcasts → /podcasts
 GET /gesehen → /gesehen
 GET /daten-sichern → /daten-sichern
 GET /nachrichten-sichern → /nachrichten-sichern
@@ -997,7 +997,7 @@ GET /discogs/zurueck → /
 GET /platte → /
 GET /platte/bild → /
 GET /podcasts → /podcasts
-GET /gesehen → /
+GET /gesehen → /gesehen
 GET /daten-sichern → /daten-sichern
 GET /nachrichten-sichern → /nachrichten-sichern
 GET /standort → /standort

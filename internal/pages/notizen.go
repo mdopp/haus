@@ -288,14 +288,14 @@ var noteSaid = map[string]string{"angelegt": "Notiz angelegt.", "gespeichert": "
 // noteStyle is the note forms' look: a roomy field, phone first.
 const noteStyle = `<style>.notiz-weg{margin:18px 0 0}.notiz-weg .weg{background:var(--danger-soft);color:var(--danger)}.notiz-korb{list-style:none;padding:0;margin:8px 0}.notiz-korb li{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:6px 0}
 .notizform label{display:block;font-size:.85rem;color:var(--muted);margin:12px 0 6px}
-.notizform input[type=text],.notizform textarea{width:100%;font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--edge);border-radius:12px;padding:10px 14px}
-.notizform input[type=text],.notizform select{min-height:44px}.notizform select{width:100%;font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--edge);border-radius:12px;padding:0 10px}
-.tagwahl{border:0;padding:0;margin:12px 0 0;display:flex;flex-wrap:wrap;gap:8px}.tagwahl legend{font-size:.85rem;color:var(--muted);margin-bottom:6px}.tagwahl .tag{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 14px;border:1px solid var(--edge);border-radius:999px;margin:0;color:var(--ink)}
-.tagfilter{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 0}.tagfilter a{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 14px;border-radius:999px;background:var(--card);border:1px solid var(--edge);color:var(--ink);text-decoration:none}
-.tagfilter a[aria-current]{border-color:var(--accent);color:var(--accent);font-weight:600}.kopf a{text-decoration:none}.notizform button:disabled{opacity:.6}.notizform textarea{min-height:12rem;resize:vertical;line-height:1.45}.notizform button{margin:12px 0 0;min-height:44px}
+.notizform input:not([type=radio],[type=checkbox],[type=hidden],[type=file]),.notizform textarea{width:100%;font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--edge);border-radius:12px;padding:10px 14px}
+.notizform input:not([type=radio],[type=checkbox],[type=hidden],[type=file]),.notizform select{min-height:44px}.notizform select{width:100%;font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--edge);border-radius:12px;padding:0 10px}
+.tagwahl{border:0;padding:0;margin:12px 0 0;display:flex;flex-wrap:wrap;gap:8px}.tagwahl legend{font-size:.85rem;color:var(--muted);margin-bottom:6px}.tagwahl .tag{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 14px;background:var(--card);border-radius:999px;margin:0;color:var(--ink)}.tagwahl .tag:has(:checked){background:var(--accent-soft);color:var(--accent)}
+.tagfilter{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 0}.tagfilter a{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 14px;border-radius:999px;background:var(--card);color:var(--ink);text-decoration:none}
+.tagfilter a[aria-current]{background:var(--accent-soft);color:var(--accent);font-weight:600}.kopf a{text-decoration:none}.notizform button:disabled{opacity:.6}.notizform textarea{min-height:12rem;resize:vertical;line-height:1.45}.notizform button{margin:12px 0 0;min-height:44px}
 details.neu{margin:16px 0}details.neu summary{cursor:pointer;font-weight:600;min-height:44px;display:flex;align-items:center;color:var(--accent)}
 .wege{display:flex;gap:16px;align-items:center;flex-wrap:wrap}.wege .knopf{display:inline-flex;align-items:center;min-height:44px;padding:0 18px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-weight:600;text-decoration:none}
-.vorher{white-space:pre-wrap;border:1px solid var(--edge);border-radius:12px;padding:10px 14px;background:var(--card);font-size:.9rem;max-height:20rem;overflow:auto}</style>`
+.vorher{white-space:pre-wrap;border-radius:12px;padding:10px 14px;background:var(--card);font-size:.9rem;max-height:20rem;overflow:auto}</style>`
 
 // newNoteForm is „Neue Notiz“, folded unless asked for or after a problem.
 func newNoteForm(title, text, art string, tags []string, open bool) string {

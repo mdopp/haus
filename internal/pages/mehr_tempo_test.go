@@ -70,7 +70,7 @@ func TestMehrAufgabenFragment(t *testing.T) {
 	if code != 200 || h.Get("Content-Type") != "text/html; charset=utf-8" {
 		t.Fatalf("%s → %d %q", MehrAufgabenPath, code, h.Get("Content-Type"))
 	}
-	mustContain(t, card, "<h2 id=karte-einrichtung>Einrichtung</h2>", `<a href="/willkommen">Homes-App koppeln</a>`)
+	mustContain(t, card, "<h2 id=karte-deine-aufgaben>Deine Aufgaben</h2>", `<a href="/willkommen">Homes-App koppeln</a>`)
 	mustNotContain(t, card, "<!doctype", "data-nachladen", saysAufgabenLesen)
 	n := calls.Load()
 	familyPage(t, Mehr, cfg, "GET", MehrAufgabenPath, "family")
@@ -89,7 +89,7 @@ func TestMehrAufgabenFragment(t *testing.T) {
 // shows Laib's error.
 func TestMehrAufgabenFragmentWhenLaibFails(t *testing.T) {
 	_, card, _ := familyPage(t, Mehr, StartConfig{Laib: brokenLaib(t)}, "GET", MehrAufgabenPath, "family")
-	mustContain(t, card, `<a href="/aufgaben">Deine Aufgaben</a>`, saysAufgabenNicht)
+	mustContain(t, card, `<a href="/aufgaben">Alle Aufgaben</a>`, saysAufgabenNicht)
 	mustNotLeak(t, card, "500", "boom")
 
 	old := backendWait

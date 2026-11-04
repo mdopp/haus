@@ -45,7 +45,7 @@ func TestTheCounterIsTheOpenTasks(t *testing.T) {
 	nav = familyNav(req, cfg, "Start")
 	mustContain(t, nav, `Mehr <span class=anzahl aria-label="2 offen">2</span></a>`, `Aufgaben <span class=anzahl aria-label="2 offen">2</span></a>`)
 	_, body, _ = familyPage(t, Mehr, cfg, "GET", "/mehr", "family")
-	mustContain(t, body, "2 offen · "+mehrSays["Aufgaben"])
+	mustContain(t, body, "2 offen · "+mehrSays["Deine Aufgaben"])
 
 	if rec := tick(t, cfg, "fotos", "/aufgaben"); rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/aufgaben" {
 		t.Fatalf("tick: %d %q %s", rec.Code, rec.Header().Get("Location"), rec.Body)

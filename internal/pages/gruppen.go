@@ -58,12 +58,8 @@ func Gruppen(cfg StartConfig) map[string][]modul.Route {
 	gs.add("dokumente", TrennblattPath, Trennblatt(cfg)) // separator sheets to print, PATCH T (haus#161)
 	gs.add("dokumente", cards.DocumentPages, Dokument(cfg))
 	musikGruppe(gs, cfg)
-	if cfg.Podcasts != nil {
-		gs.add("podcasts", PodcastsPath, Podcasts(cfg)) // haus#123
-	}
-	if cfg.Gesehen != nil {
-		gs.add("gesehen", GesehenPath, Gesehen(cfg)) // haus#152
-	}
+	gs.add("podcasts", PodcastsPath, Podcasts(cfg))            // haus#123; off, its trace (modulAus)
+	gs.add("gesehen", GesehenPath, Gesehen(cfg))               // haus#152
 	gs.add("sicherung", DatenPath, Nachrichten(cfg))           // what goes into the person's archive and how to switch it on (haus#207)
 	gs.add("sicherung", NachrichtenPath, Nachrichten(cfg))     // the page's old address, a redirect
 	gs.add("standort", StandortPath, Standort(cfg))            // the person's Reitti token for the app's Standortverlauf (owner 2026-11-02)

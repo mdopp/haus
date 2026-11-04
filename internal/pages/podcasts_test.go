@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/mdopp/homes/internal/abruf"
@@ -61,7 +62,7 @@ func TestPodcastsPage(t *testing.T) {
 	if len(fake.Items()) != 0 {
 		t.Fatalf("still in ABS: %v", fake.Items())
 	}
-	if code, _, _ := familyPage(t, Podcasts, StartConfig{}, "GET", PodcastsPath, "family"); code != http.StatusNotFound {
-		t.Errorf("without ABS → %d", code)
+	if code, body, _ := familyPage(t, Podcasts, StartConfig{}, "GET", PodcastsPath, "family"); code != http.StatusOK || !strings.Contains(body, "Gibt es hier noch nicht") {
+		t.Errorf("without ABS → %d, want the trace", code)
 	}
 }

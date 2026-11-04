@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -118,8 +119,8 @@ func TestGesehenPage(t *testing.T) {
 	_, body, _ = familyPage(t, Gesehen, StartConfig{Gesehen: &gesehen.Service{Buecher: svc.Buecher}}, "GET", GesehenPath, "family")
 	mustContain(t, body, "Krabat")
 	mustNotContain(t, body, "Geschaut", "Was als Nächstes?")
-	if code, _, _ := familyPage(t, Gesehen, StartConfig{}, "GET", GesehenPath, "family"); code != http.StatusNotFound {
-		t.Errorf("without backends → %d", code)
+	if code, body, _ := familyPage(t, Gesehen, StartConfig{}, "GET", GesehenPath, "family"); code != http.StatusOK || !strings.Contains(body, "Gibt es hier noch nicht") {
+		t.Errorf("without backends → %d, want the trace", code)
 	}
 	if code, _, _ := familyPage(t, Gesehen, cfg, "GET", GesehenPath+"/x", "family"); code != http.StatusNotFound {
 		t.Errorf("below → %d", code)

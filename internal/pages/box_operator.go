@@ -86,7 +86,6 @@ func plainSkill(name string) string {
 
 func operatorCard(ctx context.Context, c *laib.Client, now time.Time, loc *time.Location) string {
 	var b strings.Builder
-	b.WriteString("<h2>Was der Operator kann</h2>")
 	ready, _, serr := c.Status(ctx)
 	runs := ready.OperatorWork.Skills
 	skills, err := c.Skills(ctx)

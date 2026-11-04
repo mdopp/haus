@@ -127,7 +127,7 @@ func TestStandortSaysWhenReittiIsDown(t *testing.T) {
 // Without Reitti the page says so, and Mehr does not list it; with it, Mehr does.
 func TestStandortOnlyWhereTheBoxHasReitti(t *testing.T) {
 	rec := getStandort(StartConfig{}, "anna", "")
-	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "noch nicht eingerichtet") || strings.Contains(rec.Body.String(), "<form") {
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "nicht eingerichtet") || strings.Contains(rec.Body.String(), "<form") {
 		t.Fatalf("%d\n%s", rec.Code, rec.Body.String())
 	}
 	mehr := func(cfg StartConfig) string {

@@ -507,13 +507,13 @@ test('ticking a setup by hand shrinks the counter in place', async ({ page }) =>
 });
 
 // owner 2026-10-30: the wake word the speaker reports, and „Hey Mycroft“ Laib selects
-test("Mehr's Einrichtung card fills itself after the page", async ({ page, request }) => {
+test("Mehr's Deine-Aufgaben card fills itself after the page", async ({ page, request }) => {
   await request.get('/demo/laib?ms=1500');
   await page.goto('/mehr');
   await mark(page);
-  const card = page.locator('section[aria-labelledby=karte-einrichtung]');
+  const card = page.locator('section[aria-labelledby=karte-deine-aufgaben]');
   await expect(card).toContainText('Deine Aufgaben von der Box werden gerade gelesen');
-  await expect(card.getByRole('link', { name: 'Deine Aufgaben' })).toHaveAttribute('href', '/aufgaben');
+  await expect(card.getByRole('link', { name: 'Alle Aufgaben' })).toHaveAttribute('href', '/aufgaben');
   await expect(card.getByRole('link', { name: 'Homes-App koppeln' })).toBeVisible();
   await expect(card).not.toContainText('werden gerade gelesen');
   await expect(page.locator('[data-nachladen]')).toHaveCount(0);
@@ -521,12 +521,12 @@ test("Mehr's Einrichtung card fills itself after the page", async ({ page, reque
   await request.get('/demo/laib?ms=0');
 });
 
-test("Mehr's Einrichtung card says so when Laib does not answer", async ({ page, request }) => {
+test("Mehr's Deine-Aufgaben card says so when Laib does not answer", async ({ page, request }) => {
   await request.get('/demo/laib?fehler=1');
   await page.goto('/mehr');
-  const card = page.locator('section[aria-labelledby=karte-einrichtung]');
+  const card = page.locator('section[aria-labelledby=karte-deine-aufgaben]');
   await expect(card).toContainText('Die Aufgaben von der Box lassen sich gerade nicht lesen.');
-  await expect(card.getByRole('link', { name: 'Deine Aufgaben' })).toHaveAttribute('href', '/aufgaben');
+  await expect(card.getByRole('link', { name: 'Alle Aufgaben' })).toHaveAttribute('href', '/aufgaben');
   await request.get('/demo/laib?ms=0');
 });
 

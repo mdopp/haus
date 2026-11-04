@@ -24,7 +24,7 @@ import (
 const GesehenPath = "/gesehen"
 
 const (
-	saysGesehenHow     = "Was du zuletzt in Jellyfin geschaut und in Audiobookshelf gehört hast. Die Box liest das selbst; eintragen musst du nichts."
+	saysGesehenHow     = "Was du zuletzt geschaut und gehört hast. Die Box liest das selbst; eintragen musst du nichts."
 	saysNaechstesHow   = "Ein Film, eine Serie oder ein Buch, das du als Nächstes willst: Es kommt auf die Wunschliste „" + gesehen.ListName + "“ – außer die Box hat es schon oder du hast es schon gesehen."
 	saysJellyfinDown   = "Jellyfin antwortet gerade nicht. Lade die Seite gleich noch einmal."
 	saysJellyfinNoUser = "In Jellyfin hast du noch kein Konto. Melde dich einmal in Jellyfin an; danach steht hier, was du schaust."
@@ -41,7 +41,7 @@ const (
 func Gesehen(cfg StartConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if cfg.Gesehen == nil || r.URL.Path != GesehenPath {
-			missing{http.StatusNotFound, "Diese Seite gibt es nicht.", "Mehr", mehrPath, "Mehr"}.write(w, r, cfg)
+			modulAus(w, r, cfg, "gesehen", GesehenPath)
 			return
 		}
 		if r.Method == http.MethodPost {
@@ -90,12 +90,7 @@ func writeGesehen(w http.ResponseWriter, r *http.Request, cfg StartConfig, code 
 	svc := cfg.Gesehen
 	b := familyHead(r, cfg, "Gesehen & Gehört", "Gesehen & Gehört")
 	b.WriteString(noteStyle + "<h1>Gesehen &amp; Gehört</h1><p class=k>" + html.EscapeString(saysGesehenHow) + "</p>")
-	if f.done != "" {
-		b.WriteString("<div class=gut role=status><span class=punkt></span><p>" + html.EscapeString(f.done) + "</p></div>")
-	}
-	if f.problem != "" {
-		b.WriteString("<div class=achtung role=alert><p>" + html.EscapeString(f.problem) + "</p></div>")
-	}
+	b.WriteString(gesagt(f.done, f.problem))
 	if person == "" {
 		b.WriteString("<p class=k>" + saysGesehenWho + "</p>")
 		writePage(w, code, b)

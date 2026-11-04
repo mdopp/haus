@@ -16,14 +16,14 @@ const mehrPath = "/mehr"
 // What Mehr says of each of its pages, in a line.
 var mehrSays = map[string]string{
 	"Dokumente":        "Briefe, Rechnungen und Verträge ablegen und wiederfinden",
-	"Aufgaben":         "Was du einmal einrichtest, offen und erledigt",
+	"Deine Aufgaben":   "Was du einmal einrichtest, offen und erledigt",
 	"Podcasts":         "Podcasts per Link abonnieren; Bescheid bei jeder neuen Folge",
 	"Gesehen & Gehört": "Was du geschaut und gehört hast; was als Nächstes auf die Wunschliste kommt",
 	"Platte erfassen":  "Eine Schallplatte fotografieren und in deine Discogs-Sammlung eintragen",
 	"Discogs":          "Dein Discogs-Konto verbinden: Sammlung, Wantlist, Platte erfassen",
 	"Musik":            "Hochladen, Platten erfassen, Discogs und die Musik-Wunschliste",
 	"Netzlaufwerk":     "Dein Passwort für das Netzlaufwerk",
-	"Standortverlauf":  "Wo du unterwegs warst, von der Homes-App in deinen Reitti-Zeitstrahl",
+	"Standortverlauf":  "Wo du unterwegs warst, in deiner eigenen Zeitleiste",
 	"Daten sichern":    "Nachrichten, Kontakte, Mails und Termine in dein Archiv",
 	"Box":              "Wie es der Box geht, für Admins",
 }

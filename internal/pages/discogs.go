@@ -111,7 +111,7 @@ func writeDiscogs(w http.ResponseWriter, r *http.Request, cfg StartConfig, said,
 	b := familyHead(r, cfg, "Discogs", "Discogs")
 	b.WriteString(noteStyle + gekoppeltStyle + "<h1>Discogs</h1>")
 	if k, ok := cfg.Discogs.Konto(r.Header.Get("Remote-User")); ok { // connected: Platte erfassen first, Trennen last and quiet
-		b.WriteString(gesagt(said, problem) + vorne(PlattePath, "Platte erfassen") + zustand("", "Verbunden mit „"+k.Name+"“ seit "+k.Seit.Format("02.01.2006")+".") +
+		b.WriteString(gesagt(said, problem) + vorne(PlattePath, "Platte erfassen") + zustand("", "Verbunden mit „"+k.Name+"“ seit "+dayWords(k.Seit, time.Local)+".") +
 			leiseTrennen(DiscogsPath, "Homes soll dein Discogs-Konto nicht mehr nutzen?"))
 	} else {
 		// data-ganz: the browser goes to Discogs itself, and comes back

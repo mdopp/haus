@@ -61,7 +61,7 @@ func TestBoxComesAtOnceAndFillsItsParts(t *testing.T) {
 	}
 	body := rec.Body.String()
 	mustContain(t, body, `<div id=box-stand data-teil=stand aria-busy=true><h1>Box</h1><p class=k>lädt …</p></div>`,
-		`<div id=box-inbox data-teil=inbox aria-busy=true><h2>Inbox</h2>`, `<div id=box-bericht data-teil=bericht aria-busy=true><h2>Morgenbericht</h2>`,
+		`<div id=box-inbox data-teil=inbox aria-busy=true><h2>Entscheidungen</h2>`, `<div id=box-bericht data-teil=bericht aria-busy=true><h2>Morgenbericht</h2>`,
 		`["stand","inbox","bericht"].forEach`, "fetch('/box/teil?was='+was", `<noscript><meta http-equiv=refresh content="0;url=/box?ganz=1"></noscript>`, saysPartFailed,
 		`<nav class=unter aria-label=Box><a href=/box aria-current=page>Übersicht</a><a href=/box/aufgaben>Aufgaben</a><a href=/box/dienste>Dienste</a><a href=/box/operator>Operator</a><a href=/box/personen>Personen</a><a href=/box/geraete>Geräte</a><a href=/adresse>Adresse</a></nav>`)
 	mustNotContain(t, body, "Was wird genutzt", "Werkstatt", "Operator:", "box-dienste", "box-journal", "box-einladen", "box-aufgaben", ">Nutzung</a>")
@@ -96,14 +96,15 @@ func TestBoxComesAtOnceAndFillsItsParts(t *testing.T) {
 		return got
 	}
 	got := parts("inbox")
-	mustContain(t, got["box-inbox"], "<h2>Inbox</h2>", "Keine Karte wartet")
+	mustContain(t, got["box-inbox"], "<h2>Entscheidungen</h2>", "Keine Karte wartet")
 	got = parts("bericht")
 	mustContain(t, got["box-bericht"], "<h2>Morgenbericht</h2>")
 	if _, ok := got["box-journal"]; ok {
 		t.Error("a journal copy on Box")
 	}
 	got = parts("stand")
-	mustContain(t, got["box-stand"], "<h1>Box · <span class=gruen>bereit</span>", "Operator:")
+	mustContain(t, got["box-stand"], "<h1>Box</h1>", `<p class=zustand role=status><span class="punkt "></span>bereit · `, "Operator:")
+	mustNotContain(t, got["box-stand"], "Drift")
 	mustContain(t, got["box-dienste"], "Alle Dienste laufen.", "Alle Dienste auf der Laib-Seite")
 
 	// a part that does not come in time says so in its place
@@ -127,7 +128,7 @@ func TestBoxWholeReadsThePartsTogether(t *testing.T) {
 	h := BoxPage(BoxConfig{Laib: slowStatusLaib(t, 300*time.Millisecond), LaibURL: "https://laib.box.test"})
 	rec := boxAt(h, "/box?ganz=1", "admins")
 	body := rec.Body.String()
-	mustContain(t, body, "<div id=box-stand data-teil=stand aria-busy=false>", "Operator:", "<h2>Inbox</h2><p class=k>Keine Karte wartet auf eine Entscheidung.</p>")
+	mustContain(t, body, "<div id=box-stand data-teil=stand aria-busy=false>", "Operator:", "<h2>Entscheidungen</h2><p class=k>Keine Karte wartet auf eine Entscheidung.</p>")
 	mustContain(t, boxAt(h, "/box/dienste?ganz=1", "admins").Body.String(), "Alle Dienste laufen.")
 	mustNotContain(t, body, "fetch('/box/teil", saysPartLoading)
 }

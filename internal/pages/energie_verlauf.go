@@ -698,8 +698,8 @@ const verlaufStyle = `<style>:root{--e-bezug:#4f8ff7;--e-einsp:#1fa592;--e-solar
 @media (prefers-color-scheme:light){:root{--e-bezug:#2f6fd6;--e-einsp:#0f8a78;--e-solar:#b07d00;--e-akku:#7c4ddb;--e-karte:var(--card);--e-wort:#334155;
 --e-gut:#00788a;--e-schlecht:#c4352b;--e-gut-soft:rgba(0,120,138,.08);--e-schlecht-soft:rgba(196,53,43,.08)}}
 .abschnitt{font-size:1.15rem;margin:34px 0 0}.zeitraum{display:flex;gap:6px;margin:12px 0 0;flex-wrap:wrap}
-.zeitraum a{min-height:44px;display:inline-flex;align-items:center;padding:0 16px;border-radius:999px;background:var(--card);border:1px solid var(--edge);color:var(--ink);text-decoration:none;font-size:.88rem}
-.zeitraum a[aria-current]{background:var(--accent-soft);border-color:transparent;color:var(--accent);font-weight:600}
+.zeitraum a{min-height:44px;display:inline-flex;align-items:center;padding:0 16px;border-radius:999px;background:var(--card);color:var(--ink);text-decoration:none;font-size:.88rem}
+.zeitraum a[aria-current]{background:var(--accent-soft);color:var(--accent);font-weight:600}
 .verlauf{margin:12px 0 0;padding:12px 10px 10px;background:var(--e-karte);border:0;border-radius:18px}
 .verlauf svg{display:block;width:100%;height:auto}.verlauf .solar{fill:var(--e-solar)}.verlauf .bezug{fill:var(--e-bezug)}.verlauf .einsp{fill:var(--e-einsp)}
 .verlauf .treffer{fill:transparent}.verlauf g:hover .treffer{fill:var(--line)}

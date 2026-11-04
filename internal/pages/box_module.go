@@ -32,7 +32,7 @@ func moduleCard(ctx context.Context, cfg StartConfig) string {
 			}
 		}
 	}
-	c := cards.Card{Title: texte.T(texte.ModulSeiteTitel)}
+	c := cards.Card{Title: texte.T(texte.ModuleSeite)} // the page's h1 says „Was Homes kann“
 	for _, m := range cfg.Module.Module() {
 		parts := []string{}
 		if m.Backend != "" {

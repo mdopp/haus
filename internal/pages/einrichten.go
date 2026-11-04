@@ -70,7 +70,7 @@ func einrichtenBlock(r *http.Request, a einrichten.Aufgabe) string {
 	return b.String() + `</section>` + einrichtenStyle
 }
 
-const einrichtenStyle = `<style>.einrichten ol{margin:0;padding:0 0 0 1.4em;background:var(--card);border:1px solid var(--edge);border-radius:14px}
+const einrichtenStyle = `<style>.einrichten ol{margin:0;padding:0 0 0 1.4em;background:var(--card);border-radius:14px}
 .einrichten ol li{padding:10px 14px 10px 4px;border-top:1px solid var(--line);overflow-wrap:anywhere}.einrichten ol li:first-child{border-top:0}.einrichten li .knopf{margin:8px 0 0}
 .einrichten .wege{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px}.einrichten .knopf{display:inline-flex;align-items:center;min-height:44px;padding:0 18px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-weight:600;text-decoration:none}
 .einrichten .adresse{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.9rem}.einrichten form{margin:12px 0 0}</style>`
@@ -83,7 +83,7 @@ func Einrichten(cfg StartConfig) http.HandlerFunc {
 		name, user := strings.TrimPrefix(r.URL.Path, EinrichtenPages), r.Header.Get("Remote-User")
 		a, ok := cfg.Einrichtung.Eine(user, name)
 		if !ok {
-			missing{http.StatusNotFound, "Diese Seite gibt es nicht.", "Aufgaben", aufgabenPath, "Deine Aufgaben"}.write(w, r, cfg)
+			missing{http.StatusNotFound, "Diese Seite gibt es nicht.", "Deine Aufgaben", aufgabenPath, "Deine Aufgaben"}.write(w, r, cfg)
 			return
 		}
 		if r.Method == http.MethodPost {
@@ -108,7 +108,7 @@ func Einrichten(cfg StartConfig) http.HandlerFunc {
 			return
 		}
 		fetch(r, func(ctx context.Context) { cfg.Einrichtung.Pruefen(ctx, user) })
-		b := familyHead(r, cfg, a.Titel, "Aufgaben")
+		b := familyHead(r, cfg, a.Titel, "Deine Aufgaben")
 		b.WriteString("<h1>" + html.EscapeString(a.Titel) + "</h1>" + einrichtenBlock(r, a))
 		writePage(w, http.StatusOK, b)
 	}
