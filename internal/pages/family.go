@@ -48,72 +48,6 @@ const (
 	saysFavsUnseen  = "Deine Favoriten sind gerade nicht zu sehen."
 )
 
-// tab is one entry of the family's selection: its name, where it is, its
-// icon (24×24, stroked).
-type tab struct{ name, href, icon string }
-
-// tabs are the bar (haus#67; owner 2026-10-24): Start, Geräte (the rooms,
-// what plays on top), Haushalt (Kalender, Einkauf, Notizen), Energie,
-// Mehr (Dokumente, the account and the settings; owner 2026-10-27:
-// Dokumente unter Mehr) — each only when its backend is set;
-// Mehr always, it holds the account. Every page is in exactly one.
-var tabs = []tab{
-	{"Start", "/start", `<path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z"/>`},
-	{"Geräte", "/raeume", `<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>`},
-	{"Haushalt", "/kalender", `<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>`},
-	{"Energie", "/energie", `<path d="M13 3L5 13.5h6L10 21l8-10.5h-6z"/>`},
-	{"Mehr", mehrPath, `<circle cx="5.5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="18.5" cy="12" r="1.3"/>`},
-}
-
-// haushaltPages is what the Haushalt tab holds, as pills on top of each of its
-// pages (owner 2026-10-24): the household's days, shopping and memory; the
-// papers are under Mehr (owner 2026-10-27: Dokumente unter Mehr, haus#159).
-var haushaltPages = []tab{
-	{"Kalender", "/kalender", ""},
-	{"Einkauf", EinkaufPath, ""},
-	{"Notizen", "/notizen", ""},
-}
-
-// mehr is what Mehr holds (haus#67; owner 2026-10-24): Dokumente (owner
-// 2026-10-27: Dokumente unter Mehr, haus#159), the music, the settings and,
-// for admins, the box — each only when this box has it; then the account
-// with Abmelden. What the family uses day to day has a tab of its own.
-var mehr = []tab{
-	{"Dokumente", DokumentePath, `<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/>`},
-	{"Platte erfassen", PlattePath, `<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/>`},
-	{"Discogs", DiscogsPath, `<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>`},
-	{"Podcasts", PodcastsPath, `<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>`},
-	{"Gesehen & Gehört", GesehenPath, `<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>`},
-	{"Musik", MusikPath, `<path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/>`},
-	{"Apps einrichten", willkommenPath, `<rect x="6" y="3" width="12" height="18" rx="2"/><path d="M11 18h2"/>`},
-	{"Daten sichern", DatenPath, `<path d="M4 5h16v11H9l-5 4z"/><path d="M12 7.5v5M9.5 10L12 12.5 14.5 10"/>`},
-	{"Standortverlauf", StandortPath, `<path d="M12 21s-6-5.5-6-11a6 6 0 0 1 12 0c0 5.5-6 11-6 11z"/><circle cx="12" cy="10" r="2.2"/>`},
-	{"Netzlaufwerk", "/netzlaufwerk", `<rect x="3" y="5" width="18" height="6" rx="1.5"/><rect x="3" y="13" width="18" height="6" rx="1.5"/><path d="M7 8h.01M7 16h.01"/>`},
-	{"Aufgaben", aufgabenPath, `<path d="M9 11l2 2 4-4"/><rect x="4" y="4" width="16" height="16" rx="3"/>`},
-	{"Box", "/box", `<rect x="3" y="7" width="18" height="12" rx="2"/><path d="M3 11h18M8 15h2"/>`},
-}
-
-// abmeldenIcon is the way out's.
-const abmeldenIcon = `<path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4M10 16l-4-4 4-4M6 12h10"/>`
-
-// tabOf is the bar entry a page belongs to: Räume and Medien are Geräte,
-// Kalender, Einkauf and Notizen Haushalt, what Mehr holds (Dokumente too,
-// owner 2026-10-27: Dokumente unter Mehr) is Mehr.
-func tabOf(page string) string {
-	switch page {
-	case "Räume", "Medien":
-		return "Geräte"
-	case "Kalender", "Einkauf", "Notizen":
-		return "Haushalt"
-	}
-	for _, m := range mehr {
-		if m.name == page {
-			return "Mehr"
-		}
-	}
-	return page
-}
-
 // shows says which entries this box and this person have.
 func shows(r *http.Request, cfg StartConfig) map[string]bool {
 	return map[string]bool{"Start": true, "Geräte": cfg.HA != nil, "Haushalt": cfg.Calendar != nil || cfg.Einkauf != nil || cfg.Notes != nil, "Mehr": true, "Einkauf": cfg.Einkauf != nil,
@@ -124,59 +58,6 @@ func shows(r *http.Request, cfg StartConfig) map[string]bool {
 		"Netzlaufwerk": cfg.Samba != nil && r.Header.Get("Remote-User") != "", "Box": isAdmin(r),
 		"Daten sichern":   cfg.Sicherung != nil && r.Header.Get("Remote-User") != "", // haus#207
 		"Standortverlauf": cfg.Reitti != nil && r.Header.Get("Remote-User") != ""}    // owner 2026-11-02
-}
-
-func navLink(b *strings.Builder, t tab, class string, current bool) {
-	b.WriteString("<a")
-	if class != "" {
-		b.WriteString(" class=" + class)
-	}
-	b.WriteString(" href=" + t.href)
-	if current {
-		b.WriteString(" aria-current=page")
-	}
-	b.WriteString("><svg viewBox=\"0 0 24 24\" aria-hidden=true>" + t.icon + "</svg>" + t.name + "</a>")
-}
-
-// familyNav is the family's selection (haus#35, haus#67): on the phone the
-// bar at the bottom, Start · Geräte · Haushalt · Mehr; on a wide window a
-// list on the right with Mehr open in it (its entries, who is signed in,
-// Abmelden), so Mehr's own entry is the phone's only. The page (current,
-// by name) is marked, and its bar entry.
-func familyNav(r *http.Request, cfg StartConfig, current string) string {
-	show, in := shows(r, cfg), tabOf(current)
-	var b strings.Builder
-	b.WriteString("<nav class=tabs aria-label=Seiten>")
-	for _, t := range tabs {
-		if !show[t.name] {
-			continue
-		}
-		class := ""
-		if t.name == "Mehr" {
-			class = "zu-mehr"
-		}
-		if t.name == "Haushalt" {
-			for _, h := range haushaltPages {
-				if show[h.name] {
-					t.href = h.href
-					break
-				}
-			}
-		}
-		navLink(&b, t, class, t.name == in)
-	}
-	b.WriteString("<div class=mehr><p class=mehr-titel>Mehr</p>")
-	for _, t := range mehr {
-		if show[t.name] {
-			navLink(&b, t, "", t.name == current)
-		}
-	}
-	if u := r.Header.Get("Remote-User"); u != "" {
-		b.WriteString("<p class=mehr-wer>Angemeldet als <span class=wer>" + html.EscapeString(u) + "</span></p>")
-	}
-	navLink(&b, tab{"Abmelden", "/abmelden", abmeldenIcon}, "", false)
-	b.WriteString("</div></nav>")
-	return b.String()
 }
 
 // frame is the family pages' look (haus#35): the house palette — the
@@ -250,29 +131,6 @@ func familyHead(r *http.Request, cfg StartConfig, title, current string) *string
 		b.WriteString(haushaltNav(r, cfg, current))
 	}
 	return b
-}
-
-// haushaltNav is the Haushalt tab's pages as pills, the current marked;
-// none for a box with only one of them.
-func haushaltNav(r *http.Request, cfg StartConfig, current string) string {
-	show := shows(r, cfg)
-	var b strings.Builder
-	n := 0
-	for _, t := range haushaltPages {
-		if !show[t.name] {
-			continue
-		}
-		n++
-		mark := ""
-		if t.name == current {
-			mark = " aria-current=page"
-		}
-		b.WriteString("<a href=" + t.href + mark + ">" + t.name + "</a>")
-	}
-	if n < 2 {
-		return ""
-	}
-	return `<nav class=unterseiten aria-label=Haushalt>` + b.String() + `</nav>`
 }
 
 // fromHomes is a POST the person sent from Homes' own page (haus#35): the

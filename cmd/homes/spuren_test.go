@@ -179,7 +179,7 @@ func TestSchliesseWuensche(t *testing.T) {
 	defer srv.Close()
 	f.Setze("geraete", "eingerichtet", "")
 	f.Setze("standort", "angefordert", "")
-	l, err := modul.Bauen(katalog(kannSite(t), ""))
+	l, err := modul.Bauen(katalog(kannSite(t)))
 	if err != nil {
 		t.Fatal(err)
 	}

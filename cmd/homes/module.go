@@ -29,6 +29,7 @@ var radicale = []string{"HOMES_RADICALE_URL", "HOMES_RADICALE_USER", "HOMES_RADI
 // what its trace names (ADR 0001 §10), never served.
 func bau(m modul.Modul, an bool, grund string) modul.Modul {
 	m.Titel = texte.Titel(m.Name)                           // the one table of words (internal/texte)
+	m.Nav = pages.Nav(m.Name)                               // its entries in the family's selection (ADR 0001 H6)
 	m.Admins = m.Name == "werkstatt" || m.Name == "nutzung" // their trace is on the Box page (ADR 0001 §10)
 	if !an {
 		m.Warum, m.Grund = modul.Fehlt, grund
@@ -36,15 +37,11 @@ func bau(m modul.Modul, an bool, grund string) modul.Modul {
 	return m
 }
 
-func mehrEintrag(titel, pfad string) []modul.Eintrag {
-	return []modul.Eintrag{{Titel: titel, Pfad: pfad, Ort: modul.Mehr}}
-}
-
 // katalog is Homes' areas (ADR 0001 §7) in catalog order, each on or off
 // by what the box gave Homes: today's checks of each backend, made
-// explicit. musicInbox is the music inbox's folder ("" without one).
-func katalog(s site, musicInbox string) []modul.Modul {
-	hh, n := s.hh, s.napi
+// explicit.
+func katalog(s site) []modul.Modul {
+	hh, n, musicInbox := s.hh, s.napi, s.musik
 	docs := s.docsMail != "" || n.UploadDir != "" || s.paperlessPublic != "" || hh.Documents != nil
 	var dokApp modul.Angebot
 	if hh.Documents != nil {
@@ -53,23 +50,20 @@ func katalog(s site, musicInbox string) []modul.Modul {
 	if n.UploadDir != "" {
 		dokApp.Teilen = []string{"dokument"}
 	}
-	return []modul.Modul{
+	ms := []modul.Modul{
 		bau(modul.Modul{Name: "geraete", Backend: "home-assistant",
 			Env:   []string{"HOMES_HA_URL", "HOMES_HA_TOKEN", "HOMES_HA_PUBLIC_URL", "HOMES_COVER_INVERTED"},
-			Nav:   []modul.Eintrag{{Titel: "Geräte", Pfad: "/raeume", Ort: modul.Leiste}},
 			Start: []string{"im-haus", "meine-geraete"}, App: modul.Angebot{Widgets: []string{"geraet"}}},
 			n.HA != nil, "Auf dieser Box läuft kein Home Assistant."),
 		bau(modul.Modul{Name: "energie", Backend: "home-assistant", Braucht: []string{"geraete"},
 			Env: []string{"HOMES_ENERGY_FLOW", "HOMES_ENERGY_TOTALS", "HOMES_ENERGY_STATS"},
-			Nav: []modul.Eintrag{{Titel: "Energie", Pfad: "/energie", Ort: modul.Leiste}},
 			App: modul.Angebot{Widgets: []string{"energie"}}},
 			n.HA != nil, "Auf dieser Box läuft kein Home Assistant."),
 		bau(modul.Modul{Name: "sprechen", Backend: "bote",
 			Env: []string{"HOMES_BOTE_URL", "HOMES_BOTE_KEY", "HOMES_STT_PROVIDER", "HOMES_STT_LANGUAGE", "HOMES_BOTE_SIGNAL"}},
 			s.bote != nil, "Auf dieser Box läuft kein Bote."),
 		bau(modul.Modul{Name: "kalender", Backend: "radicale", Standard: "caldav",
-			Env: append([]string{"HOMES_RADICALE_CALENDAR", "HOMES_RADICALE_PUBLIC_URL"}, radicale...),
-			Nav: []modul.Eintrag{{Titel: "Kalender", Pfad: "/kalender", Ort: modul.Haushalt}}, Start: []string{"heute"},
+			Env: append([]string{"HOMES_RADICALE_CALENDAR", "HOMES_RADICALE_PUBLIC_URL"}, radicale...), Start: []string{"heute"},
 			App: modul.Angebot{Widgets: []string{"tool:task"}}},
 			hh.Calendar != nil, "Auf dieser Box läuft kein Radicale."),
 		bau(modul.Modul{Name: "kontakte", Backend: "radicale", Standard: "carddav",
@@ -79,41 +73,36 @@ func katalog(s site, musicInbox string) []modul.Modul {
 		bau(modul.Modul{Name: "konto", Backend: "radicale", Env: radicale,
 			App: modul.Angebot{Konto: []string{"kontakte", "kalender"}}},
 			n.Konto != nil, "Auf dieser Box läuft kein Radicale."),
-		bau(modul.Modul{Name: "einkauf", Backend: "radicale", Env: radicale,
-			Nav: []modul.Eintrag{{Titel: "Einkauf", Pfad: pages.EinkaufPath, Ort: modul.Haushalt}}},
+		bau(modul.Modul{Name: "einkauf", Backend: "radicale", Env: radicale},
 			hh.Einkauf != nil, "Auf dieser Box läuft kein Radicale."),
 		bau(modul.Modul{Name: "notizen", Backend: "file-share",
 			Env: []string{"HOMES_NOTES_DIR", "HOMES_QMD_URL", "HOMES_QMD_COLLECTION", "HOMES_LLM_URL", "HOMES_LLM_KEY", "HOMES_LLM_MODEL"},
-			Nav: []modul.Eintrag{{Titel: "Notizen", Pfad: "/notizen", Ort: modul.Haushalt}},
 			App: modul.Angebot{Widgets: []string{"tool:note"}, Teilen: []string{"merken"}}},
 			hh.Notes != nil, "Auf dieser Box gibt es keinen Ordner für Notizen."),
 		bau(modul.Modul{Name: "dokumente", Backend: "paperless",
 			Env: []string{"HOMES_PAPERLESS_URL", "HOMES_PAPERLESS_TOKEN", "HOMES_PAPERLESS_PUBLIC_URL", "HOMES_PAPERLESS_LAN_ONLY",
 				"HOMES_UPLOAD_DIR", "HOMES_DOCUMENTS_MAIL", "HOMES_DOCUMENTS_DIR", "HOMES_QMD_DOCUMENTS", "HOMES_VERTRAG_ARTEN"},
-			Nav: mehrEintrag("Dokumente", pages.DokumentePath), App: dokApp},
+			App: dokApp},
 			docs, "Auf dieser Box läuft kein Paperless."),
 		bau(modul.Modul{Name: "musik", Backend: "beets",
-			Env: []string{"HOMES_MUSIC_INBOX", "HOMES_JELLYFIN_URL", "HOMES_JELLYFIN_TOKEN", "HOMES_DISCOGS_KEY", "HOMES_DISCOGS_SECRET", "HOMES_LLM_VISION_MODEL"},
-			Nav: append(mehrEintrag("Musik", pages.MusikPath), append(mehrEintrag("Platte erfassen", pages.PlattePath), mehrEintrag("Discogs", pages.DiscogsPath)...)...)},
+			Env: []string{"HOMES_MUSIC_INBOX", "HOMES_JELLYFIN_URL", "HOMES_JELLYFIN_TOKEN", "HOMES_DISCOGS_KEY", "HOMES_DISCOGS_SECRET", "HOMES_LLM_VISION_MODEL"}},
 			musicInbox != "" || hh.Wuensche != nil, "Auf dieser Box gibt es keinen Musik-Eingang."),
 		bau(modul.Modul{Name: "podcasts", Backend: "audiobookshelf",
-			Env: []string{"HOMES_ABS_URL", "HOMES_ABS_TOKEN"}, Nav: mehrEintrag("Podcasts", pages.PodcastsPath)},
+			Env: []string{"HOMES_ABS_URL", "HOMES_ABS_TOKEN"}},
 			s.podcasts != nil, "Auf dieser Box läuft kein Audiobookshelf."),
 		bau(modul.Modul{Name: "gesehen", Backend: "media",
-			Env: []string{"HOMES_JELLYFIN_URL", "HOMES_JELLYFIN_KEY", "HOMES_ABS_URL", "HOMES_ABS_TOKEN"},
-			Nav: mehrEintrag("Gesehen & Gehört", pages.GesehenPath)},
+			Env: []string{"HOMES_JELLYFIN_URL", "HOMES_JELLYFIN_KEY", "HOMES_ABS_URL", "HOMES_ABS_TOKEN"}},
 			s.gesehen != nil, "Auf dieser Box laufen weder Jellyfin noch Audiobookshelf."),
 		bau(modul.Modul{Name: "sicherung", Backend: "archiv",
 			Env: []string{"HOMES_ARCHIV_DIR", "HOMES_ARCHIV_INTERN", "HOMES_ARCHIV_SECRET_"},
-			Nav: mehrEintrag("Daten sichern", pages.DatenPath),
 			App: modul.Angebot{Sicherung: []string{"whatsapp", "signal", "sms"}, Mehr: []string{"daten-sichern"}}},
 			n.Sicherung != nil, "Auf dieser Box gibt es kein Archiv für Nachrichten."),
 		bau(modul.Modul{Name: "standort", Backend: "reitti",
-			Env: []string{"HOMES_REITTI_URL", "HOMES_REITTI_PUBLIC_URL"}, Nav: mehrEintrag("Standortverlauf", pages.StandortPath),
+			Env: []string{"HOMES_REITTI_URL", "HOMES_REITTI_PUBLIC_URL"},
 			App: modul.Angebot{Teilen: []string{"standort-import"}, Mehr: []string{"standortverlauf"}}},
 			n.Reitti != nil, "Auf dieser Box läuft kein Reitti."),
 		bau(modul.Modul{Name: "netzlaufwerk", Backend: "file-share",
-			Env: []string{"HOMES_SAMBA_DIR", "HOMES_SAMBA_HOST"}, Nav: mehrEintrag("Netzlaufwerk", "/netzlaufwerk")},
+			Env: []string{"HOMES_SAMBA_DIR", "HOMES_SAMBA_HOST"}},
 			s.samba != nil, "Auf dieser Box gibt es kein Netzlaufwerk."),
 		bau(modul.Modul{Name: "gesundheit", Backend: "gesundheit", Env: []string{"HOMES_GESUNDHEIT_URL"}},
 			s.gesundheit != "", "Auf dieser Box läuft Gesundheit nicht."),
@@ -123,13 +112,33 @@ func katalog(s site, musicInbox string) []modul.Modul {
 			Env: []string{"HOMES_USAGE_URL", "HOMES_USAGE_TOKEN"}},
 			s.usage != nil, "Auf dieser Box läuft kein usage-metrics."),
 	}
+	// what the box decides of the entries: Dokumente only with a way into the
+	// archive (haus#68); Musik with the inbox; Platte erfassen (with Discogs)
+	// and Discogs on their own only without one (owner 2026-10-26)
+	nurWo(ms, "dokumente", func(modul.Eintrag) bool { return s.docsMail != "" || n.UploadDir != "" || s.paperlessPublic != "" })
+	nurWo(ms, "musik", func(e modul.Eintrag) bool {
+		switch {
+		case e.Pfad == pages.MusikPath:
+			return musicInbox != ""
+		case musicInbox != "" || hh.Wuensche == nil:
+			return false
+		}
+		return e.Pfad != pages.PlattePath || hh.Wuensche.Regale != nil
+	})
+	return ms
+}
+
+// nurWo keeps of a module's entries those the box has.
+func nurWo(ms []modul.Modul, name string, hat func(modul.Eintrag) bool) {
+	i := slices.IndexFunc(ms, func(m modul.Modul) bool { return m.Name == name })
+	ms[i].Nav = slices.DeleteFunc(ms[i].Nav, func(e modul.Eintrag) bool { return !hat(e) })
 }
 
 // logModule builds the box's module list, switches off what
 // HOMES_MODULE_AUS names, and logs it (ADR 0001): what this box can do,
 // and why not. A broken catalog stops Homes.
 func logModule(s *site) *modul.Liste {
-	l, err := modul.Bauen(ausschalten(s, katalog(*s, s.musik), os.Getenv("HOMES_MODULE_AUS")))
+	l, err := modul.Bauen(ausschalten(s, katalog(*s), os.Getenv("HOMES_MODULE_AUS")))
 	if err != nil {
 		log.Fatalf("homes: %v", err)
 	}

@@ -26,6 +26,7 @@ const (
 type Eintrag struct {
 	Titel, Pfad, Icon string
 	Ort               Ort
+	Rang              int                      // its place at Ort among the core's and the modules' entries, lowest first
 	Fuer              func(*http.Request) bool // who sees it (signed in, admins); nil: everyone
 }
 
@@ -152,6 +153,30 @@ func (l *Liste) String() string {
 		}
 	}
 	return "Module an: " + strings.Join(an, ", ") + "; aus: " + strings.Join(aus, ", ")
+}
+
+// Eintraege are the entries at o of the modules that are on, with kern
+// (the core's own) among them: those r may see, by Rang, in catalog order
+// where two share one. A nil Liste has the core's only.
+func (l *Liste) Eintraege(r *http.Request, o Ort, kern ...Eintrag) []Eintrag {
+	var es []Eintrag
+	for _, e := range kern {
+		if e.Ort == o {
+			es = append(es, e)
+		}
+	}
+	if l != nil {
+		for _, m := range l.alle {
+			for _, e := range m.Nav {
+				if m.An() && e.Ort == o {
+					es = append(es, e)
+				}
+			}
+		}
+	}
+	es = slices.DeleteFunc(es, func(e Eintrag) bool { return e.Fuer != nil && !e.Fuer(r) })
+	slices.SortStableFunc(es, func(a, b Eintrag) int { return a.Rang - b.Rang })
+	return es
 }
 
 // Module are the box's modules in catalog order, on and off.
