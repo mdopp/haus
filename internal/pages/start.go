@@ -3,7 +3,6 @@ package pages
 import (
 	"context"
 	"fmt"
-	"math"
 	"net/http"
 	"sort"
 	"strconv"
@@ -36,6 +35,7 @@ import (
 	"github.com/mdopp/homes/internal/reitti"
 	"github.com/mdopp/homes/internal/samba"
 	"github.com/mdopp/homes/internal/schalter"
+	"github.com/mdopp/homes/internal/texte"
 	"github.com/mdopp/homes/internal/usage"
 )
 
@@ -115,7 +115,7 @@ var backendWait = 4 * time.Second
 const (
 	maxNames   = 5  // lamp names in the lights' row
 	maxPlaying = 3  // media players in Im Haus
-	maxGeraete = 12 // tiles in Meine Geräte
+	maxGeraete = 12 // tiles in Deine Geräte
 	maxAgenda  = 6  // rows in Heute und demnächst
 	horizon    = 14 // days ahead for appointments and reminders
 )
@@ -125,7 +125,6 @@ const (
 const (
 	saysNoSwitching = "Schalten geht im Moment nicht."
 	saysPinHow      = "Tippe unter Geräte bei einem Gerät auf ☆, dann erscheint es hier."
-	saysPinMore     = "Mit ☆ legst du Geräte auf die Startseite."
 	saysNothingDue  = "Nichts in den nächsten zwei Wochen."
 	saysAgendaHow   = "Termine und Erinnerungen aus dem Kalender stehen hier."
 )
@@ -146,8 +145,8 @@ var marke = func() string {
 
 // Start is the family's page (haus#12, haus#35): Homes' mark, name and claim (as in the app, owner 2026-11-03) and the day,
 // then each part answering one question a family member has — who is
-// home and what is on (Im Haus, one action a row), my own things (Meine
-// Geräte, switched in place), what comes up (Heute und demnächst) — and
+// home and what is on (Im Haus, one action a row), my own things (Deine
+// Geräte, the app's tiles, switched in place), what comes up (Heute und demnächst) — and
 // the box in one calm line at the bottom, at the top when something is
 // wrong. A backend that is not configured is not mentioned; one not
 // answering is one plain line where its rows would be, its error in the
@@ -232,7 +231,7 @@ func Start(cfg StartConfig) http.HandlerFunc {
 			b.WriteString(agenda(events, evErr, todos, todoErr, now, loc).HTML())
 		}
 		if pins {
-			b.WriteString(meineGeraete(favs, favErr, states, haErr, reg).HTML())
+			b.WriteString(deineGeraete(favs, favErr, states, haErr, reg, now.In(loc).Format("15:04")))
 		}
 		if cfg.HA != nil {
 			b.WriteString(imHaus(states, haErr, reg).HTML())
@@ -367,26 +366,26 @@ func andList(xs []string) string {
 	return strings.Join(xs[:len(xs)-1], ", ") + " und " + xs[len(xs)-1]
 }
 
-// meineGeraete answers "where are my things?": the person's own, in their
-// order, as tiles like the phone widget, a lamp's or a switch's switch
-// right there. Only what a thing's page shows: a thing of a card domain
-// that HA knows and does not hide. None says how to get one.
-func meineGeraete(ids []string, err error, states []ha.State, haErr error, reg ha.Registry) cards.Card {
-	c := cards.Card{Title: "Meine Geräte", Look: cards.Tiles}
+// deineGeraete answers "where are my things?": the person's own, in their
+// order, as the app's tiles (kacheln); only a thing of a card domain HA
+// knows and does not hide. None says how to get one.
+func deineGeraete(ids []string, err error, states []ha.State, haErr error, reg ha.Registry, stand string) string {
+	c := cards.Card{Title: texte.T(texte.Geraete)}
 	switch {
 	case err != nil:
 		c.Add(saysNoFavorites, "")
-		return c
+		return c.HTML()
 	case haErr != nil && len(ids) > 0:
 		c.Add(saysFavsUnseen, "")
-		return c
+		return c.HTML()
 	case haErr != nil:
-		return c // Im Haus says the house does not answer; how to pin can wait
+		return "" // Im Haus says the house does not answer; how to pin can wait
 	}
 	byID := make(map[string]ha.State, len(states))
 	for _, s := range states {
 		byID[s.EntityID] = s
 	}
+	var ks []kachel
 	n := 0
 	for _, id := range ids {
 		s, ok := byID[id]
@@ -395,95 +394,14 @@ func meineGeraete(ids []string, err error, states []ha.State, haErr error, reg h
 			continue
 		}
 		if n++; n <= maxGeraete {
-			row := tile(domain, s, reg.TempUnit, "/start")
-			row.Pin = &cards.Pin{Entity: id, Name: row.Text, On: true, Back: "/start"} // ★ takes it off again (haus#64)
-			c.Rows = append(c.Rows, row)
+			ks = append(ks, neueKachel(s, reg.TempUnit, "/start"))
 		}
 	}
-	more(&c, n-maxGeraete)
 	if n == 0 {
 		c.AddLink(saysPinHow, "", "/raeume")
-	} else {
-		c.Note, c.NoteHref = saysPinMore, "/raeume" // how more get here, at the top (haus#64)
+		return c.HTML()
 	}
-	return c
-}
-
-// tile is one thing as a tile: its name leading to its page, its state in
-// a word, on or off, a level for the bar, and a lamp's or a switch's
-// switch, which lands back on back.
-func tile(domain string, s ha.State, houseUnit, back string) cards.Row {
-	r := cards.Row{Text: friendly(s), Href: cards.ThingPage(s.EntityID)}
-	switch s.State {
-	case "unavailable":
-		r.State, r.Off = "Nicht erreichbar", true
-		return r
-	case "unknown", "":
-		r.State, r.Off = "Unbekannt", true
-		return r
-	}
-	switch domain {
-	case "light", "switch":
-		r.On, r.Off = s.State == "on", s.State == "off"
-		r.State = capital(roomDetail(domain, s, houseUnit))
-		if v, ok := number(s.Attributes["brightness"]); ok && r.On && domain == "light" {
-			r.State, r.Level = "An", percent(v/255*100)
-			r.Detail = strconv.Itoa(r.Level) + " %"
-		}
-		if r.On || r.Off {
-			do := domain + ".turn_on"
-			if r.On {
-				do = domain + ".turn_off"
-			}
-			r.Action = &cards.Action{Label: friendly(s), Entity: s.EntityID, Do: do, Back: back, Switch: true, On: r.On}
-		}
-	case "cover":
-		r.On, r.Off = s.State == "open" || s.State == "opening", s.State == "closed"
-		r.State = capital(map[string]string{"open": "offen", "closed": "zu", "opening": "öffnet", "closing": "schließt", "stopped": "angehalten"}[s.State])
-		if r.State == "" {
-			r.State = capital(trimRunes(oneLine(s.State), 40))
-		}
-		if v, ok := number(s.Attributes["current_position"]); ok && r.On {
-			r.Level = percent(v)
-			r.Detail = strconv.Itoa(r.Level) + " %"
-		}
-	case "climate":
-		unit := tempUnit(s, houseUnit)
-		r.On, r.Off = s.State != "off", s.State == "off"
-		cur, hasCur := number(s.Attributes["current_temperature"])
-		target, hasTarget := number(s.Attributes["temperature"])
-		switch {
-		case r.Off:
-			r.State = "Aus"
-			if hasCur {
-				r.Detail = decimal(cur) + " " + unit
-			}
-		case hasCur:
-			r.State = decimal(cur) + " " + unit
-			if hasTarget {
-				r.Detail = "→ " + decimal(target) + " " + unit
-			}
-		case hasTarget:
-			r.State = "→ " + decimal(target) + " " + unit
-		default:
-			r.State = "An"
-		}
-	case "media_player":
-		r.On, r.Off = s.State == "playing", s.State == "off" || s.State == "standby"
-		word := roomDetail(domain, s, houseUnit)
-		if head, rest, ok := strings.Cut(word, ": "); ok {
-			word, r.Detail = head, rest
-		}
-		r.State = capital(word)
-	default: // a sensor, a door, a lock: its reading
-		r.State = capital(roomDetail(domain, s, houseUnit))
-	}
-	return r
-}
-
-// percent is a share in whole percent, 1–100: what is on shows a bar.
-func percent(v float64) int {
-	return max(1, min(100, int(math.Round(v))))
+	return kachelnHTML(c.ID(), ks, n-maxGeraete, stand)
 }
 
 // capital is the word with its first letter upper case: "an" → "An".

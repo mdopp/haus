@@ -27,6 +27,9 @@ var pageDoes = map[string]bool{"light.turn_on": true, "light.turn_off": true, "s
 // position. set_cover_position wants one; turn_on goes without.
 var takesWert = map[string]string{"light.turn_on": "brightness_pct", "cover.set_cover_position": "position"}
 
+// asked is a call sent from its question's Ja (cards.Frage): a garage opens only so, as the app asks first.
+var asked = map[string]bool{"cover.open_cover/ja": true}
+
 // allLightsOff is Im Haus's "Alle aus": every lamp Start counted as on.
 const allLightsOff = "alle-lichter-aus"
 
@@ -106,7 +109,7 @@ func Schalten(cfg StartConfig) http.HandlerFunc {
 				data = map[string]any{takesWert[call]: wert}
 			}
 			var said string
-			if said, err = schalter.Do(r.Context(), cfg.HA, id, call, data, false); err == nil {
+			if said, err = schalter.Do(r.Context(), cfg.HA, id, call, data, asked[do+"/"+r.PostForm.Get("bestaetigt")]); err == nil {
 				cfg.Witness.Saw(r.Header.Get("Remote-User"), call, id, said) // who it was (haus#82, haus#89)
 			}
 		default:

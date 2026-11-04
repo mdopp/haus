@@ -33,12 +33,12 @@ func TestTheLevelOpensASheet(t *testing.T) {
 		`<input type=hidden name=wert value=0><button data-laeuft="…" aria-label="Position Zu">Zu</button>`,
 		`<button type=button class=fertig popovertarget=regler-light-bambi popovertargetaction=hide>Fertig</button></div>`)
 	// no slider on the card itself: every range is inside a sheet
-	for _, part := range strings.Split(ess, "<div popover")[1:] {
+	for _, part := range strings.Split(ess, "<div popover id=regler")[1:] {
 		if i := strings.Index(part, "Fertig</button></div>"); i < 0 || !strings.Contains(part[:i], "<input type=range") {
 			t.Fatalf("a sheet without its slider and Fertig:\n%s", part)
 		}
 	}
-	if n, m := strings.Count(ess, "<div popover"), strings.Count(ess, "<input type=range"); n != m || n != 4 { // Bambi, the Dimmer (off), Rollo, Esszimmerjalousie
+	if n, m := strings.Count(ess, "<div popover id=regler"), strings.Count(ess, "<input type=range"); n != m || n != 4 { // Bambi, the Dimmer (off), Rollo, Esszimmerjalousie
 		t.Fatalf("%d sheets for %d sliders, want 4:\n%s", n, m, ess)
 	}
 	_, own, _ := familyPage(t, Ding, StartConfig{HA: hc}, "GET", "/raeume/light.bambi", "family")

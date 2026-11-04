@@ -209,6 +209,60 @@ test('a lamp HA does not reach has nothing to tap', async ({ page, request }) =>
   await expect(level(page, 'Flurlicht'), 'the same lamp, off, says aus').toHaveText('aus');
 });
 
+// owner 2026-11-04 („Das Design ist großartig! Bitte auf der Webseite genau so umsetzen!“): Deine
+// Geräte as the app's tiles. On a 360 px phone no name is cut and ▲ ■ ▼ stay inside their tile; a
+// lamp's tile switches in place and says „schaltet …“; a blind's tile opens its sheet with Stopp; a
+// garage asks before it opens; a long press opens the thing's page. Wider, every tile is one cell.
+test('Deine Geräte are the app\'s tiles', async ({ page }, info) => {
+  await page.setViewportSize({ width: 360, height: 800 });
+  await page.goto('/start');
+  await mark(page);
+  const tiles = page.locator('.kachel');
+  await expect(tiles).toHaveCount(6);
+  const fit = await page.evaluate(() => [...document.querySelectorAll('.kachel')].map((k) => {
+    const n = k.querySelector('.name'), r = k.getBoundingClientRect();
+    const out = [...k.querySelectorAll('.knoepfe > form button, .knoepfe > button')].filter((b) => { const x = b.getBoundingClientRect(); return x.left < r.left || x.right > r.right; });
+    return n.scrollWidth > n.clientWidth || out.length ? n.textContent : '';
+  }).filter(Boolean));
+  expect(fit, 'cut names or buttons outside their tile').toEqual([]);
+  const wide = await page.evaluate(() => [...document.querySelectorAll('.kachel')].map((k) => Math.round(k.getBoundingClientRect().width)));
+  expect(wide[0], 'Bürolicht, alone before a blind, takes the row').toBe(wide[1]);
+  expect(wide[4], 'Küchenlicht and Haustür share a row').toBeLessThan(wide[1] / 2 + 1);
+  await page.screenshot({ path: info.outputPath('kacheln-360.png'), fullPage: true });
+
+  const buero = page.getByRole('switch', { name: 'Bürolicht' });
+  await expect(buero).toHaveAttribute('aria-checked', 'false');
+  await buero.click();
+  await expect(page.getByRole('switch', { name: 'Bürolicht' })).toHaveAttribute('aria-checked', 'true');
+  await expect(page.locator('[data-seite="/raeume/light.buero"] .bild path')).toHaveCount(2); // the lit lamp
+  await page.getByRole('switch', { name: 'Bürolicht' }).click();
+  await expect(page.getByRole('switch', { name: 'Bürolicht' })).toHaveAttribute('aria-checked', 'false');
+
+  await page.getByRole('button', { name: 'Esszimmerjalousien', exact: true }).click();
+  const blatt = page.getByRole('dialog', { name: 'Esszimmerjalousien' });
+  await expect(blatt).toBeVisible();
+  for (const b of ['Position Auf', 'Position ½', 'Position Zu', 'Stopp']) await expect(blatt.getByRole('button', { name: b })).toBeVisible();
+  await blatt.getByRole('button', { name: 'Fertig' }).click();
+
+  const sent = posts(page);
+  await page.locator('.knoepfe').getByRole('button', { name: 'Garagentor: Hoch' }).click();
+  await expect(page.getByRole('dialog', { name: 'Garagentor öffnen?' })).toBeVisible();
+  expect(sent, 'asking sends nothing').toEqual([]);
+  await page.getByRole('dialog', { name: 'Garagentor öffnen?' }).getByRole('button', { name: 'Abbrechen' }).click();
+  expect(await stays(page)).toBe(true);
+
+  const lock = await page.locator('[data-seite="/raeume/lock.haustuer"]').boundingBox();
+  await page.mouse.move(lock.x + 30, lock.y + 30);
+  await page.mouse.down();
+  await page.waitForURL(/\/raeume\/lock\.haustuer$/);
+  await page.mouse.up();
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/start');
+  const cells = await page.evaluate(() => [...new Set([...document.querySelectorAll('.kachel')].map((k) => Math.round(k.getBoundingClientRect().width)))]);
+  expect(cells, 'one width for every tile').toHaveLength(1);
+});
+
 test('a player pauses in place', async ({ page }) => {
   await page.goto('/medien');
   await mark(page);

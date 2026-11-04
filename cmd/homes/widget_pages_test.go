@@ -341,7 +341,7 @@ func TestStartShowsTheFavoritesFromTheDataFolder(t *testing.T) {
 	if rec.Code != 200 {
 		t.Fatalf("/start → %d", rec.Code)
 	}
-	for _, w := range []string{"Meine Geräte", `<a href="/raeume/switch.kaffee">Kaffeemaschine</a>`, `<a href="/raeume/light.decke">Deckenlampe</a>`} {
+	for _, w := range []string{"Deine Geräte", `href="/raeume/switch.kaffee" style="--n:14">Kaffeemaschine</a>`, `href="/raeume/light.decke" style="--n:11">Deckenlampe</a>`} {
 		if !strings.Contains(body, w) {
 			t.Errorf("/start lacks %q:\n%s", w, body)
 		}
@@ -435,7 +435,7 @@ func TestPinAndSwitchThroughTheRoutes(t *testing.T) {
 		t.Fatalf("pin → %d %s", rec.Code, rec.Body.String())
 	}
 	body := page(h, "/start").Body.String()
-	if !strings.Contains(body, `<a href="/raeume/light.decke">Deckenlampe</a>`) || !strings.Contains(body, `name=geraet value="light.decke"`) {
+	if !strings.Contains(body, `href="/raeume/light.decke" style="--n:11">Deckenlampe</a>`) || !strings.Contains(body, `name=geraet value="light.decke"`) {
 		t.Fatalf("/start lacks the pinned lamp and its switch:\n%s", body)
 	}
 	if rec := send("/schalten", off, "geheim"); rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/start" {

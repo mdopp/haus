@@ -101,7 +101,7 @@ func Raeume(cfg StartConfig) http.HandlerFunc {
 }
 
 // saysPinWhat is what Räume's ☆ does, once above the rooms.
-const saysPinWhat = "Mit ☆ steht ein Gerät auf Start unter „Meine Geräte“."
+const saysPinWhat = "Mit ☆ steht ein Gerät auf Start unter „Deine Geräte“."
 
 // saysInHA is what Home Assistant has that Homes does not (haus#64).
 const saysInHA = "Für alles, was Homes nicht kann: Automationen, Einstellungen, Verlauf."
@@ -166,7 +166,7 @@ func roomCards(states []ha.State, reg ha.Registry, pinned, playing map[string]bo
 			row := cards.Row{Text: t.name, Detail: t.detail, Href: cards.ThingPage(t.id)}
 			switch domain, _, _ := strings.Cut(t.id, "."); domain {
 			case "light": // a tap switches; a dimmer has its slider too (haus#64)
-				row.Action = tile(domain, t.state, reg.TempUnit, back).Action
+				row.Action = umschalten(t.state, back)
 				row.Slider = dimmer(t.state, back)
 			case "cover": // Hoch, Stopp, Runter and the position (haus#64)
 				if bs := coverButtons(t.state, back); len(bs) > 0 {

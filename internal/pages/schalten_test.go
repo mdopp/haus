@@ -267,7 +267,7 @@ func TestDingPinsAndUnpins(t *testing.T) {
 	}
 	body := page("anna")
 	mustContain(t, body, `<form method=post action="/raeume/light.buero">`, `name=stern value=an`, "☆ Auf Start zeigen",
-		"Dann steht es auf Start unter „Meine Geräte“.",
+		"Dann steht es auf Start unter „Deine Geräte“.",
 		`<form method=post action=/schalten>`, `name=tun value="light.turn_off"`, `name=zurueck value="/raeume/light.buero"`, ">Ausschalten</button>")
 	mustNotContain(t, body, "<script>alert", "★")
 
@@ -279,10 +279,10 @@ func TestDingPinsAndUnpins(t *testing.T) {
 		t.Fatalf("anna: %v", got)
 	}
 	body = page("anna")
-	mustContain(t, body, `name=stern value=aus`, "★ Von Start nehmen", "Steht auf Start unter „Meine Geräte“.")
+	mustContain(t, body, `name=stern value=aus`, "★ Von Start nehmen", "Steht auf Start unter „Deine Geräte“.")
 	mustNotContain(t, body, "☆ Auf Start zeigen")
 	_, start := startPage(t, cfg, "family")
-	mustContain(t, section(t, start, "karte-meine-geraete"), `<a href="/raeume/light.buero">Bürolicht</a>`)
+	mustContain(t, section(t, start, "karte-deine-geraete"), `href="/raeume/light.buero" style="--n:9">Bürolicht</a>`)
 
 	rec = post(t, Ding(cfg), "/raeume/light.buero", url.Values{"stern": {"aus"}}, "anna", nil)
 	if rec.Code != http.StatusSeeOther {

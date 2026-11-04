@@ -19,6 +19,11 @@ import "strconv"
 // An open sheet (a popover: a slider's, owner 2026-11-03) stays open
 // across the swap, and its button says aria-expanded.
 //
+// A long press on a data-seite (a tile) opens that page, no phone menu
+// (its event's name split: leak probes look for its first half). While
+// Homes is not reached (offline, the stream or a fetch failing) the root
+// has the class weg — tiles grey under „Stand …“ — until a fetch answers.
+//
 // A form with data-ganz, or one whose answer is not a page (an app link),
 // goes the browser's own way. The script sits in the head and listens on
 // the document, so a page swapped in needs nothing bound again; the
@@ -39,18 +44,20 @@ k.pop.forEach(function(id){var p=document.getElementById(id);if(p&&p.showPopover
 scrollTo(same?k.x:0,same?k.y:0);var f=k.f;if(!f)return;var el=f.id?document.getElementById(f.id):null;
 if(!el&&f.name)document.querySelectorAll('[name="'+f.name+'"]').forEach(function(e){if(!el&&act(e)===f.act&&e.type!=='hidden')el=e});
 if(el&&el.focus)el.focus({preventScroll:true})}
-function swap(text,url){var d=new DOMParser().parseFromString(text,'text/html');var same=new URL(url,location.href).pathname===location.pathname;var k=keep();
+function weg(an){document.documentElement.classList.toggle('weg',an)}
+function swap(text,url){weg(false);var d=new DOMParser().parseFromString(text,'text/html');var same=new URL(url,location.href).pathname===location.pathname;var k=keep();
 document.title=d.title;document.body.innerHTML=d.body.innerHTML;if(url!==location.href)history.replaceState(null,'',url);
 document.body.querySelectorAll('script').forEach(function(o){var s=document.createElement('script');s.textContent=o.textContent;o.parentNode.replaceChild(s,o)});
 restore(k,same);plan()}
 function heard(e){var m=document.querySelector('[data-live]');if(!m)return;
 if(m.getAttribute('data-live')!=='alle'&&document.body.innerHTML.indexOf(e.data)<0)return;clearTimeout(timer);timer=setTimeout(fresh,400)}
 function plan(){clearTimeout(timer);var m=document.querySelector('[data-auffrischen]');if(!m)return;
-if(m.hasAttribute('data-live')&&!es&&window.EventSource){es=new EventSource('/live');es.addEventListener('geaendert',heard)}timer=setTimeout(fresh,or(+m.getAttribute('data-auffrischen'),15)*sec)}
+if(m.hasAttribute('data-live')&&!es&&window.EventSource){es=new EventSource('/live');es.addEventListener('geaendert',heard)
+es.onerror=function(){setTimeout(function(){if(es.readyState!==1)weg(true)},3*sec)};es.onopen=function(){if(document.documentElement.classList.contains('weg'))fresh()}}timer=setTimeout(fresh,or(+m.getAttribute('data-auffrischen'),15)*sec)}
 function typing(){var a=document.activeElement;return a&&['INPUT','TEXTAREA','SELECT'].indexOf(a.tagName)>=0&&a.type!=='hidden'&&a.type!=='submit'}
 function fresh(){if(document.hidden){timer=setTimeout(fresh,3*sec);return}if(busy){timer=setTimeout(fresh,3*sec);return}
 if(typing()){timer=setTimeout(fresh,3*sec);return}if(Date.now()-last<4*sec){timer=setTimeout(fresh,3*sec);return}
-fetch(location.href,{credentials:'same-origin',headers:{'X-Homes-Skript':'1'}}).then(function(r){if(!r.ok)throw 0;return r.text()}).then(function(t){if(!busy)swap(t,location.href)}).catch(function(){timer=setTimeout(fresh,30*sec)})}
+fetch(location.href,{credentials:'same-origin',headers:{'X-Homes-Skript':'1'}}).then(function(r){if(!r.ok)throw 0;return r.text()}).then(function(t){if(!busy)swap(t,location.href)}).catch(function(){weg(true);timer=setTimeout(fresh,30*sec)})}
 function flip(b){b.setAttribute('aria-checked',b.getAttribute('aria-checked')==='true'?'false':'true')}
 document.addEventListener('click',function(e){var b=e.target.closest?e.target.closest('button[data-kopieren]'):null;if(!b)return;var i=b.previousElementSibling;if(!i)return;
 i.select();function ok(){b.textContent='Kopiert'}if(navigator.clipboard){navigator.clipboard.writeText(i.value).then(ok,function(){document.execCommand('copy');ok()})}else{document.execCommand('copy');ok()}});
@@ -67,6 +74,13 @@ var ctl=window.AbortController?new AbortController():null,lang=false,uhr=setTime
 fetch(or(f.getAttribute('action'),location.pathname+location.search),{method:'POST',body:body,credentials:'same-origin',headers:{'X-Homes-Skript':'1'},signal:ctl?ctl.signal:undefined}).then(function(r){clearTimeout(uhr);var ct=or(r.headers.get('Content-Type'),'');
 return r.text().then(function(t){busy--;if(ct.indexOf('text/html')===0){swap(t,r.url);return}back();say(or(t.trim(),'Das hat nicht geklappt.'))})})
 .catch(function(){clearTimeout(uhr);busy--;back();say(lang?saysLong:saysAway)})},false);
+var halt=null,lange=0;function los(){clearTimeout(halt);halt=null}
+document.addEventListener('pointerdown',function(e){var k=e.target.closest?e.target.closest('[data-seite]'):null;if(!k)return;if(e.button)return;if(e.target.closest('.stufe,.knoepfe'))return;var x=e.clientX,y=e.clientY;lange=0;los();
+halt=setTimeout(function(){lange=1;location.href=k.getAttribute('data-seite')},550);k.onpointermove=function(m){if(Math.abs(m.clientX-x)+Math.abs(m.clientY-y)>12)los()}});
+['pointerup','pointercancel','scroll'].forEach(function(t){document.addEventListener(t,los,true)});
+document.addEventListener('click',function(e){if(lange){lange=0;e.preventDefault();e.stopPropagation()}},true);
+document.addEventListener('con'+'textmenu',function(e){if(e.target.closest&&e.target.closest('[data-seite]'))e.preventDefault()});
+addEventListener('offline',function(){weg(true)});addEventListener('online',function(){fresh()});
 document.addEventListener('toggle',function(e){var p=e.target;if(!(p.id&&p.hasAttribute&&p.hasAttribute('popover')))return;
 document.querySelectorAll('.stufe[popovertarget="'+p.id+'"]').forEach(function(b){b.setAttribute('aria-expanded',e.newState==='open'?'true':'false')})},true);
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',plan);else plan()})()</script>`

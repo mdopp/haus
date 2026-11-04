@@ -61,7 +61,8 @@ func main() {
 	defer fake.Close()
 	fake.ApplyCalls(true)
 	fake.SetRegistries(
-		[]map[string]any{{"area_id": "flur", "name": "Flur"}, {"area_id": "kueche", "name": "Küche"}, {"area_id": "wohnzimmer", "name": "Wohnzimmer"}},
+		[]map[string]any{{"area_id": "flur", "name": "Flur"}, {"area_id": "kueche", "name": "Küche"}, {"area_id": "wohnzimmer", "name": "Wohnzimmer"},
+			{"area_id": "buero", "name": "Büro"}, {"area_id": "esszimmer", "name": "Esszimmer"}, {"area_id": "garage", "name": "Garage"}},
 		nil,
 		[]map[string]any{
 			{"entity_id": "light.flur", "area_id": "flur"},
@@ -69,6 +70,9 @@ func main() {
 			{"entity_id": "switch.kaffee", "area_id": "kueche"},
 			{"entity_id": "cover.rollo", "area_id": "wohnzimmer"},
 			{"entity_id": "media_player.wz", "area_id": "wohnzimmer"},
+			// Anna's favourites on Start, the app's preview of the tiles (homes-android#245)
+			{"entity_id": "light.buero", "area_id": "buero"}, {"entity_id": "cover.esszimmer", "area_id": "esszimmer"},
+			{"entity_id": "cover.wohnzimmer", "area_id": "wohnzimmer"}, {"entity_id": "cover.garage", "area_id": "garage"}, {"entity_id": "lock.haustuer", "area_id": "flur"},
 			// a Voice PE still on its factory word: the Aktivierungswort page says Laib selects „Hey Mycroft“ (owner 2026-10-30)
 			{"entity_id": "select.voice_pe_aktivierungswort", "area_id": "kueche", "translation_key": "wake_word", "entity_category": "config"},
 		})
@@ -77,6 +81,11 @@ func main() {
 	fake.Set("light.kueche", "on", map[string]any{"friendly_name": "Küchenlicht", "brightness": 153, "supported_color_modes": []string{"brightness"}, "color_mode": "brightness"})
 	fake.Set("switch.kaffee", "off", map[string]any{"friendly_name": "Kaffeemaschine"})
 	fake.Set("cover.rollo", "open", map[string]any{"friendly_name": "Rollo", "device_class": "shutter", "current_position": 60, "supported_features": 15.0})
+	fake.Set("light.buero", "off", map[string]any{"friendly_name": "Bürolicht", "supported_color_modes": []string{"brightness"}})
+	fake.Set("cover.esszimmer", "open", map[string]any{"friendly_name": "Esszimmerjalousien", "device_class": "blind", "current_position": 32, "supported_features": 15.0})
+	fake.Set("cover.wohnzimmer", "open", map[string]any{"friendly_name": "Wohnzimmerjalousien", "device_class": "blind", "current_position": 15, "supported_features": 15.0})
+	fake.Set("cover.garage", "closed", map[string]any{"friendly_name": "Garagentor Garage", "device_class": "garage", "supported_features": 3.0})
+	fake.Set("lock.haustuer", "locked", map[string]any{"friendly_name": "Haustür", "supported_features": 1.0})
 	power := func(name string) map[string]any {
 		return map[string]any{"friendly_name": name, "device_class": "power", "unit_of_measurement": "W"}
 	}
@@ -94,6 +103,7 @@ func main() {
 		log.Fatal(err)
 	}
 	defer os.RemoveAll(dir)
+	os.WriteFile(filepath.Join(dir, favoriten.File), []byte(`{"anna": ["light.buero", "cover.esszimmer", "cover.wohnzimmer", "cover.garage", "light.kueche", "lock.haustuer"]}`), 0o600)
 	notesDir := filepath.Join(dir, "notes")
 	os.MkdirAll(notesDir, 0o755)
 	os.WriteFile(filepath.Join(notesDir, "einkaufsliste.md"), []byte("# Einkaufsliste\n\nMilch\nBrot\n"), 0o644)
@@ -145,6 +155,7 @@ func main() {
 	cfg.Module = demoModule(false)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/start", pages.Start(cfg))
+	mux.HandleFunc("/schrift/", pages.Font()) // Geist, as on the box: the pictures and the layout gate in the family's font
 	mux.HandleFunc("/raeume", pages.Raeume(cfg))
 	mux.HandleFunc(cards.ThingPages, pages.Ding(cfg))
 	mux.HandleFunc(cards.SwitchPath, pages.Schalten(cfg))
