@@ -3,7 +3,6 @@ package pages
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/mdopp/homes/internal/papierkorb"
 	"log"
 	"net/http"
 	"net/http/httptest"
@@ -13,6 +12,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/mdopp/homes/internal/papierkorb"
 
 	"github.com/mdopp/homes/internal/ansicht"
 	"github.com/mdopp/homes/internal/caldav"

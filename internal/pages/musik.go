@@ -87,16 +87,21 @@ func beetsLesen(ctx context.Context, cfg StartConfig) beetsStand {
 			json.Unmarshal(own, &st)
 		}
 	}
+	st.wartet, st.kept = musikWartet(cfg.MusicInbox), zurueck(cfg.MusicInbox)
+	return st
+}
+
+// musikWartet are the uploads at the inbox's top or in .in-arbeit/, not taken yet.
+func musikWartet(inbox string) (out []os.FileInfo) {
 	for _, dir := range []string{"", ".in-arbeit/"} {
-		es, _ := os.ReadDir(cfg.MusicInbox + "/" + dir)
+		es, _ := os.ReadDir(inbox + "/" + dir)
 		for _, e := range es {
 			if fi, err := e.Info(); err == nil && !strings.HasPrefix(e.Name(), ".") && e.Name() != keptBack {
-				st.wartet = append(st.wartet, fi)
+				out = append(out, fi)
 			}
 		}
 	}
-	st.kept = zurueck(cfg.MusicInbox)
-	return st
+	return out
 }
 
 // musikDazu is Hinzufügen: how music gets in, from the phone and, with the network drive,

@@ -236,7 +236,7 @@ type Stand struct {
 // Stand is person's ledger, what waits in their inbox, and the room left.
 func (s *Sicherung) Stand(person string) (Stand, error) {
 	st := Stand{Quellen: map[string]QuelleStand{}}
-	if !validPerson(person) {
+	if s == nil || !validPerson(person) { // nil: a box without the archive's inbox
 		return st, errors.New("no person")
 	}
 	var root *os.Root

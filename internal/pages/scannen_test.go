@@ -99,7 +99,7 @@ func TestScannenAfterAJamSaysWhereToGoOn(t *testing.T) {
 		`<form method=post action=/scannen><input type=hidden name=tun value=weiter><button data-laeuft="Scannt weiter …">Weiter</button></form>`,
 		`value=abschliessen><button>Abschließen</button>`, `value=verwerfen><button>Verwerfen</button>`)
 	mustNotContain(t, body, "Stapel scannen", "sane_start", "device I/O", "<div hidden data-auffrischen")
-	before(t, body, "<h2>Scannen</h2>", "Per E-Mail ablegen")
+	before(t, body, "<h2>Scannen</h2>", "Oder per Mail an")
 }
 
 // haus#76: „Stapel scannen“ only with a SANE scanner (scanner: true) and
@@ -109,7 +109,7 @@ func TestScannenOffersAStackOnlyWithAScanner(t *testing.T) {
 	for _, z := range []string{"bereit", "fertig", "fehler"} {
 		body := scanPage(t, &scanLaib{status: map[string]any{"zustand": z, "scanner": true}}, "family")
 		mustContain(t, body, `data-laeuft="Startet …">Stapel scannen</button>`)
-		before(t, body, "Dokument ablegen", "<h2>Scannen</h2>")
+		before(t, body, "Foto machen oder Datei ablegen", "<h2>Scannen</h2>")
 		body = scanPage(t, &scanLaib{status: map[string]any{"zustand": z, "scanner": false}}, "family")
 		mustNotContain(t, body, "Stapel scannen", "action=/scannen>")
 		mustContain(t, body, `\\kraftwerk\data\scan-eingang`, "nur zu Hause im WLAN")
@@ -146,7 +146,7 @@ func TestScannenShowsTheLastStacks(t *testing.T) {
 func TestScannenWithoutTheService(t *testing.T) {
 	body := scanPage(t, &scanLaib{unset: true}, "family")
 	mustNotContain(t, body, "Scannen", "scan-eingang", "Scannen einrichten", "name=geraet")
-	mustContain(t, body, "Dokument ablegen")
+	mustContain(t, body, "Foto machen oder Datei ablegen")
 	body = scanPage(t, &scanLaib{unset: true}, "family,admins")
 	mustContain(t, body, `<section class="weg scannen" id=scanner><h2>Scannen</h2>`, saysScanUnset,
 		`value=einrichten><button>Scannen einrichten</button>`, `name=geraet`, "Adresse von Hand")
@@ -474,7 +474,7 @@ func TestScannenListsAStackFromPaperless(t *testing.T) {
 		`<a href="https://paperless.box.test/documents?custom_field_query=%5B%22AND%22%2C%5B%5B7%2C%22exact%22%2C%222026-10-29T17-07-46%22%5D%5D%5D">Den ganzen Stapel in Paperless öffnen</a>`,
 		`<details data-stapel="2026-10-29T10-00-00"><summary><b>1 Dokument</b>`, "aus dem Ordner · Ben",
 		`<a href="https://paperless.box.test/documents/20/details">Brief</a>`, "localStorage")
-	mustNotContain(t, body, "Anderer Stapel", "2026-10-01 Strom AG - Rechnung", "title_content=Brief", "nur für Ben")
+	mustNotContain(t, body[strings.Index(body, "<h2>Scannen</h2>"):], "Anderer Stapel", "2026-10-01 Strom AG - Rechnung", "title_content=Brief", "nur für Ben") // Zuletzt abgelegt lists it, above
 	before(t, body, "Stromrechnung Teil 1", "Stromrechnung Teil 2")
 }
 

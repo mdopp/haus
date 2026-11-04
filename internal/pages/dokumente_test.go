@@ -11,7 +11,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mdopp/homes/internal/assistent"
 	"github.com/mdopp/homes/internal/napi"
 	"github.com/mdopp/homes/internal/paperless"
 	"github.com/mdopp/homes/internal/paperless/paperlessfake"
@@ -42,16 +41,19 @@ func getDokumente(cfg StartConfig, path string, hdr map[string]string) *httptest
 func TestDokumenteShowsTheWaysIn(t *testing.T) {
 	_, cfg := dokumente(t)
 	home := getDokumente(cfg, "/dokumente", map[string]string{"X-Forwarded-For": "192.168.1.23"}).Body.String()
-	for _, want := range []string{"<h1>Dokumente</h1>", `href="mailto:dokumente@box.test"`, "Per E-Mail ablegen", "der Betreff wird der Titel",
-		`enctype=multipart/form-data`, `type=file name=file`, "application/pdf", "Dokument ablegen", "Datei wählen oder Foto machen",
-		`href="https://paperless.box.test/documents?sort=added&amp;reverse=1"`, "In Paperless öffnen", "Die neuesten zuerst", "Nur zu Hause im WLAN.", "Texterkennung", assistent.Name() + " findet es"} {
+	for _, want := range []string{"<h1>Dokumente</h1>", `href="mailto:dokumente@box.test"`, "Oder per Mail an", "der Betreff wird der Titel",
+		`enctype=multipart/form-data`, `type=file name=file`, "application/pdf", "<label class=vorne>Foto machen oder Datei ablegen", "Titel (wenn du magst)",
+		`href="https://paperless.box.test/documents?sort=added&amp;reverse=1"`, "In Paperless öffnen", "Nur zu Hause im WLAN."} {
 		if !strings.Contains(home, want) {
 			t.Errorf("the page lacks %q", want)
 		}
 	}
+	// the Mehr audit (owner 2026-11-04): filing first and big, the mail one quiet line, then Paperless
+	before(t, home, "Foto machen oder Datei ablegen", "Oder per Mail an")
+	before(t, home, "Oder per Mail an", "In Paperless öffnen")
 	// from outside the house: Paperless is LAN-only, so a word instead of a dead link; filing still works
 	away := getDokumente(cfg, "/dokumente", map[string]string{"X-Forwarded-For": "203.0.113.7"}).Body.String()
-	if strings.Contains(away, "paperless.box.test") || !strings.Contains(away, "nur zu Hause im WLAN") || !strings.Contains(away, "Dokument ablegen") {
+	if strings.Contains(away, "paperless.box.test") || !strings.Contains(away, "nur zu Hause im WLAN") || !strings.Contains(away, "Foto machen oder Datei ablegen") {
 		t.Errorf("away from home:\n%s", away)
 	}
 	// Paperless reachable from anywhere: the link, no hint
@@ -64,6 +66,24 @@ func TestDokumenteShowsTheWaysIn(t *testing.T) {
 	if strings.Contains(only, "<form") || strings.Contains(only, "In Paperless öffnen") || !strings.Contains(only, "mailto:") {
 		t.Errorf("mail only:\n%s", only)
 	}
+	// with Paperless's API: the five it got last, each to its page; away from home, without a link
+	fake := paperlessfake.New("pl")
+	t.Cleanup(fake.Close)
+	fake.Correspondent(1, "Strom AG")
+	for i, title := range []string{"Rechnung Oktober", "Brief", "Vertrag", "Bescheid", "Quittung", "Alt"} {
+		fake.Add(paperlessfake.Doc{ID: i + 1, Title: title, Created: "2026-10-0" + string(rune('9'-i)), Correspondent: 1})
+	}
+	cfg.Docs, cfg.PaperlessLANOnly = &paperless.Client{URL: fake.URL, Token: "pl"}, true
+	home = getDokumente(cfg, "/dokumente", map[string]string{"X-Forwarded-For": "192.168.1.23"}).Body.String()
+	mustContain(t, home, "<h2 id=karte-zuletzt-abgelegt>Zuletzt abgelegt</h2>", `<a href="/dokumente/1">Rechnung Oktober</a>`, "Strom AG · ")
+	if strings.Count(home[strings.Index(home, "Zuletzt abgelegt"):], "<li>") != 5 {
+		t.Errorf("not five:\n%s", home)
+	}
+	before(t, home, "Oder per Mail an", "Zuletzt abgelegt")
+	before(t, home, "Zuletzt abgelegt", "In Paperless öffnen")
+	away = getDokumente(cfg, "/dokumente", map[string]string{"X-Forwarded-For": "203.0.113.7"}).Body.String()
+	mustContain(t, away, "Rechnung Oktober")
+	mustNotContain(t, away, `href="/dokumente/1"`)
 	// nothing set: the module's trace, no setting's name (laib#418, the audit)
 	rec := getDokumente(StartConfig{}, "/dokumente", map[string]string{"Remote-Groups": "admins"})
 	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "Gibt es hier noch nicht") || strings.Contains(rec.Body.String(), "HOMES_DOCUMENTS_MAIL") {

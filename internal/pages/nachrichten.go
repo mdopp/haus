@@ -1,13 +1,17 @@
 package pages
 
 import (
+	"context"
 	"html"
 	"log"
 	"net/http"
-	"strconv"
+	"net/url"
 	"strings"
 	"time"
 
+	"github.com/mdopp/homes/internal/texte"
+
+	"github.com/mdopp/homes/internal/einrichten"
 	"github.com/mdopp/homes/internal/napi"
 )
 
@@ -19,53 +23,23 @@ const DatenPath = "/daten-sichern"
 // leads to DatenPath, so a bookmark or an older app still lands.
 const NachrichtenPath = "/nachrichten-sichern"
 
-// What the page says, in the family's words.
+// What the page says, in the family's words. The backups themselves are the
+// Homes app's (Mehr → Daten sichern, with its guide per source); the page
+// shows what has arrived, from a computer too, and what the app cannot do
+// (owner 2026-11-04: shrink it, the six guides were a copy of the app's).
 const (
-	saysDatenLead     = "Deine Nachrichten, Kontakte, Mails und Termine kommen in dein eigenes Archiv auf der Box. Öffnen kannst nur du es, mit deinem Archiv-Passwort."
-	saysWieSieLiegen  = "Auf der Box liegen die Sicherungen so verschlüsselt, wie WhatsApp und Signal sie schreiben. Lesbar werden sie erst in deinem Archiv, mit deinen Schlüsseln."
-	saysSchluessel    = "Archiv-Passwort, Signal-Passphrase und WhatsApp-Schlüssel gehören in Bitwarden. Wer einen davon verliert, kann diese Sicherungen nicht mehr lesen."
-	saysStandFehlt    = "Der Stand lässt sich gerade nicht lesen. Später noch einmal versuchen."
-	saysStandortNicht = "Dein Standortverlauf gehört nicht dazu: er geht in deine Zeitleiste (Mehr → Standortverlauf)."
-	saysMenues        = "Die Menüs heißen je nach App-Version etwas anders. Findest du einen Punkt nicht, such in den Einstellungen der App nach „Backup“."
+	saysDatenLead    = "Was von deinem Handy in deinem Archiv auf der Box ankommt. Öffnen kannst nur du es, mit deinem Archiv-Passwort."
+	saysDatenApp     = "Das Sichern macht die Homes-App: Mehr → Daten sichern."
+	saysSchluessel   = "Archiv-Passwort, Signal-Passphrase und WhatsApp-Schlüssel gehören in Bitwarden. Wer einen davon verliert, kann diese Sicherungen nicht mehr lesen."
+	saysStandFehlt   = "Der Stand lässt sich gerade nicht lesen. Später noch einmal versuchen."
+	saysDatenMail    = "Trag in deinem Archiv einmal dein Postfach ein (Server, Benutzername, App-Passwort); es holt jede Stunde neue Mails, auch wenn es zu ist."
+	saysDatenTermine = "das Archiv übernimmt sie, während es offen ist"
 )
 
 // quelleName is how the page names a quelle.
 var quelleName = map[string]string{"whatsapp": "WhatsApp", "signal": "Signal", "sms": "SMS und Anrufe"}
 
-// the guide, per source: what the person does, then what happens
-var datenAnleitung = []struct {
-	title string
-	steps []string
-	note  string
-}{
-	{"Signal", []string{
-		"In Signal: Einstellungen → Chats → Chat-Backups (je nach Version: Backups → Auf dem Gerät) einschalten und einen Ordner wählen, zum Beispiel „Signal-Backups“.",
-		"Die 30-stellige Passphrase in Bitwarden ablegen. Signal zeigt sie nur dieses eine Mal.",
-		"In der Homes-App: Mehr → Daten sichern → bei Signal den Ordner freigeben, den du gewählt hast.",
-		"In deinem Archiv die Passphrase eingeben.",
-	}, "Signal legt jede Nacht eine Sicherung an, die App bringt sie auf die Box. Gelesen wird sie, während dein Archiv offen ist."},
-	{"WhatsApp", []string{
-		"In WhatsApp: Einstellungen → Chats → Chat-Backup → „Ende-zu-Ende-verschlüsseltes Backup“ einschalten.",
-		"„64-stelligen Schlüssel verwenden“ wählen, nicht Passwort und nicht Passkey: aus einem Passkey lässt sich der Schlüssel nicht auslesen. Nutzt WhatsApp schon einen Passkey: das Backup aus- und gleich wieder einschalten, diesmal mit dem 64-stelligen Schlüssel.",
-		"Den Schlüssel in Bitwarden ablegen.",
-		"In der Homes-App: Mehr → Daten sichern → bei WhatsApp den Ordner freigeben (Android → media → com.whatsapp → WhatsApp).",
-		"In deinem Archiv den Schlüssel eingeben.",
-	}, "Die Nachrichten kommen ins Archiv, sobald es offen ist. Fotos und Videos bringt die App verschlüsselt mit auf die Box; durchsuchen kannst du im Archiv vorerst die Nachrichten."},
-	{"SMS und Anrufe", []string{
-		"In der Homes-App: Mehr → Daten sichern → „SMS und Anrufe übertragen“ einschalten.",
-	}, "Die App verschlüsselt sie schon auf dem Handy. Ins Archiv kommen sie, während es offen ist."},
-	{"Kontakte", []string{
-		"In der Homes-App: Mehr → Daten sichern → „Kontakte übertragen“ einschalten.",
-	}, "Die Kontakte kommen in dein Adressbuch „Handy-Kontakte“ auf der Box und von dort ins Archiv, während es offen ist. Löschst du einen Kontakt auf dem Handy, bleibt er im Archiv."},
-	{"E-Mail", []string{
-		"In deinem Archiv den Zugang zu deinem Postfach eintragen: Server, Benutzername und ein App-Passwort.",
-	}, "Das Archiv holt jede Stunde neue Mails ab, auch wenn es zu ist. Im Postfach ändert es nichts."},
-	{"Kalender", []string{
-		"In Homes unter Kalender deine Google-Kalender verbinden; eigene private Kalender legst du dort auch an.",
-	}, "Das Archiv übernimmt jeden Termin, während es offen ist. Gelöschte Termine bleiben im Archiv."},
-}
-
-// the phone change (haus#209, homes-android#197): three steps, the app's words
+// the phone change (haus#209, homes-android#197): three steps, folded at the page's end
 var neuesHandy = []string{
 	"Auf dem neuen Handy die Homes-App installieren und mit deinem Namen koppeln.",
 	"In der Homes-App: Mehr → Daten sichern → „Sicherung zurückholen“. Für Signal einen Ordner wählen, etwa „Dokumente/Signal“. WhatsApp vorher installieren, aber noch nicht öffnen, und den Ordner „Android/media/com.whatsapp/WhatsApp“ freigeben (gibt es ihn noch nicht: „Android/media“).",
@@ -74,20 +48,14 @@ var neuesHandy = []string{
 
 const saysNeuesHandyMedien = "Fotos und Sprachnachrichten kommen nur zurück, während dein Archiv offen ist. Die App überschreibt nichts, ohne zu fragen."
 
-// datenNie is what never reaches an archive, whatever the phone does.
-var datenNie = []string{
-	"Nachrichten, die sich selbst löschen (verschwindende Nachrichten): sie stehen in keiner Sicherung.",
-	"Fotos und Videos zur einmaligen Ansicht.",
-}
-
-const nachrichtenStyle = `<style>.lead{color:var(--muted)}.schritte ol{margin:0;padding:10px 14px 10px 34px;background:var(--card);border-radius:14px}
-.schritte ol li{margin:6px 0;overflow-wrap:anywhere}.schritte p.k{font-size:.85rem;margin:8px 2px 0}</style>`
+const nachrichtenStyle = `<style>.lead{color:var(--muted)}.quelle{display:flex;gap:10px;align-items:flex-start}.quelle .punkt{margin-top:.55em}
+.wechsel{margin:22px 0 0}.wechsel summary{font-weight:700}.wechsel ol{margin:8px 0 0;padding:10px 14px 10px 34px;background:var(--card);border-radius:14px}.wechsel ol li{margin:6px 0}</style>`
 
 // Nachrichten is the page „Daten sichern“: the person's state — what
 // arrived from each phone source, what waits for their archive, the room
-// left — from the same ledger the app's /napi/sicherung/stand reads, and
-// per source what to do and what then happens. Its old address
-// (NachrichtenPath) leads here.
+// left — from the same ledger the app's /napi/sicherung/stand reads; that
+// the app does the backing up; what goes without the phone; the phone
+// change, folded. Its old address (NachrichtenPath) leads here.
 func Nachrichten(cfg StartConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == NachrichtenPath {
@@ -108,38 +76,23 @@ func Nachrichten(cfg StartConfig) http.HandlerFunc {
 		}
 		w.Header().Set("Cache-Control", "no-store")
 		b := familyHead(r, cfg, "Daten sichern", "Daten sichern")
-		b.WriteString(nachrichtenStyle)
-		b.WriteString("<h1>Daten sichern</h1><p class=lead>" + html.EscapeString(saysDatenLead) + "</p>")
-		b.WriteString(nachrichtenStand(cfg, person))
-		b.WriteString(nachrichtenZurueck(cfg, person))
-		keys := cardsList("Deine Schlüssel")
-		keys.row(saysSchluessel, "", false)
-		b.WriteString(keys.html())
-		for _, a := range datenAnleitung {
-			b.WriteString("<section class=\"karte schritte\"><h2>" + html.EscapeString(a.title) + "</h2><ol>")
-			for _, s := range a.steps {
-				b.WriteString("<li>" + html.EscapeString(s) + "</li>")
-			}
-			b.WriteString("</ol>")
-			if a.note != "" {
-				b.WriteString("<p class=k>" + html.EscapeString(a.note) + "</p>")
-			}
-			b.WriteString("</section>")
+		b.WriteString(nachrichtenStyle + "<h1>Daten sichern</h1><p class=lead>" + html.EscapeString(saysDatenLead) + "</p>" + nachrichtenStand(r, cfg, person))
+		app := ""
+		if a, ok := cfg.Einrichtung.Eine(person, einrichten.Homes); ok && a.Erledigt == nil { // no app yet: the way to it
+			app = ` <a href="` + einrichtenHref(einrichten.Homes) + `">` + html.EscapeString(a.Titel) + `</a>`
 		}
-		b.WriteString("<p class=k>" + html.EscapeString(saysStandortNicht) + "</p>")
-		nie := cardsList("Was nie ins Archiv kommt")
-		for _, n := range datenNie {
-			nie.row(n, "", false)
-		}
-		b.WriteString(nie.html())
-		b.WriteString("<p class=k>" + html.EscapeString(saysMenues) + "</p>")
+		b.WriteString("<p>" + html.EscapeString(saysDatenApp) + app + "</p>")
+		ohne := cardsList("Ohne Handy")
+		ohne.row("E-Mail", saysDatenMail, true)
+		b.WriteString(ohne.html() + "<p class=k>" + html.EscapeString(saysSchluessel) + "</p>" + nachrichtenZurueck(cfg, person))
 		writePage(w, http.StatusOK, b)
 	}
 }
 
-// nachrichtenStand is the card „Dein Stand“: per messenger what arrived and
-// what waits, then the room on the box; one plain line when it cannot be read.
-func nachrichtenStand(cfg StartConfig, person string) string {
+// nachrichtenStand is the card „Dein Stand“: per source a dot and a line —
+// grey, nothing yet; amber, files wait for the archive; green, arrived —
+// then the room on the box; one plain line when it cannot be read.
+func nachrichtenStand(r *http.Request, cfg StartConfig, person string) string {
 	c := cardsList("Dein Stand")
 	st, err := cfg.Sicherung.Stand(person)
 	if err != nil {
@@ -147,38 +100,71 @@ func nachrichtenStand(cfg StartConfig, person string) string {
 		c.row(saysStandFehlt, "", false)
 		return c.html()
 	}
-	_, loc := cfg.clock()
+	now, loc := cfg.clock()
 	for _, q := range napi.Quellen {
 		qs := st.Quellen[q]
-		var says []string
-		if qs.Zuletzt != nil {
-			if t, err := time.Parse(time.RFC3339, *qs.Zuletzt); err == nil {
-				says = append(says, "zuletzt am "+dayWords(t, loc)+" um "+t.In(loc).Format("15:04"))
-			}
-			says = append(says, anzahl(qs.Dateien, "Datei", "Dateien")+", "+groesseWorte(qs.Bytes))
-		} else {
-			says = append(says, "noch nichts angekommen")
+		dot, says := "grau", []string{"noch nichts angekommen"}
+		if t := am(qs); !t.IsZero() {
+			dot, says = "", []string{"zuletzt " + dayWord(t, now, loc) + " " + t.In(loc).Format("15:04"), texte.Anzahl(qs.Dateien, "Datei", "Dateien") + ", " + texte.Groesse(qs.Bytes)}
 		}
 		if qs.Wartend > 0 {
-			verb := " warten"
-			if qs.Wartend == 1 {
-				verb = " wartet"
-			}
-			says = append(says, anzahl(qs.Wartend, "Datei", "Dateien")+verb+" auf dein Archiv")
+			dot, says = "gelb", append(says, texte.Anzahl(qs.Wartend, "Datei", "Dateien")+map[bool]string{true: " wartet", false: " warten"}[qs.Wartend == 1]+" auf dein Archiv")
 		}
-		c.row(quelleName[q], strings.Join(says, " · "), true)
+		c.items = append(c.items, quelle(dot, html.EscapeString(quelleName[q]), strings.Join(says, " · ")))
 	}
-	c.row("Auf der Box sind noch "+groesseWorte(st.FreiBytes)+" frei.", "", false)
-	c.row(saysWieSieLiegen, "", false)
+	c.items = append(c.items, mitgesichert(r, cfg, person, now, loc)...)
+	c.row("Auf der Box sind noch "+texte.Groesse(st.FreiBytes)+" frei.", "", false)
 	return c.html()
 }
 
-// nachrichtenZurueck is the card „Für ein neues Handy“: what the archive
-// keeps of the newest backup (napi's Letzte, the same as the app's
-// /napi/sicherung/letzte), with date and size, and the phone change in
-// three steps.
+// am is when a source's last file came; zero before the first.
+func am(q napi.QuelleStand) (t time.Time) {
+	if q.Zuletzt != nil {
+		t, _ = time.Parse(time.RFC3339, *q.Zuletzt)
+	}
+	return t
+}
+
+// quelle is one line of „Dein Stand“: its dot, its name (markup), what is known.
+func quelle(dot, name, says string) string {
+	return `<li class=quelle><span class="punkt ` + dot + `"></span><div>` + name + `<span class=k>` + html.EscapeString(says) + `</span></div></li>`
+}
+
+// mitgesichert are what the archive keeps besides the phone's files (owner 2026-11-04): the
+// location from Reitti's last point; the contacts the app mirrors into Handy-Kontakte and the
+// calendars the archive takes over, each a count (neither tells Homes a time).
+func mitgesichert(r *http.Request, cfg StartConfig, person string, now time.Time, loc *time.Location) (out []string) {
+	if k, ok := cfg.Reitti.Konto(person); cfg.Reitti != nil {
+		dot, says := map[bool]string{true: "gelb", false: "grau"}[ok], "noch nichts aufgezeichnet"
+		if !k.Zuletzt.IsZero() {
+			dot, says = "", "zuletzt aufgezeichnet "+dayWord(k.Zuletzt, now, loc)+" "+k.Zuletzt.In(loc).Format("15:04")
+		}
+		out = append(out, quelle(dot, `<a href=`+StandortPath+`>Standort</a>`, says))
+	}
+	kn, kal := -1, 0 // how many; -1: not known
+	fetch(r, func(ctx context.Context) {
+		if cs, _, err := cfg.Contacts.BookCards(ctx, "/"+url.PathEscape(person)+"/handy-kontakte/"); err == nil {
+			kn = len(cs)
+		}
+	}, func(ctx context.Context) {
+		if ks, err := cfg.Calendar.PersonCalendars(ctx, person); err == nil {
+			kal = len(ks)
+		}
+	})
+	if kn >= 0 {
+		out = append(out, quelle(map[bool]string{true: "", false: "grau"}[kn > 0], "Kontakte", map[bool]string{true: texte.Anzahl(kn, "Kontakt", "Kontakte") + " im Adressbuch „Handy-Kontakte“", false: "noch nichts angekommen"}[kn > 0]))
+	}
+	if kal > 0 {
+		out = append(out, quelle("grau", "Kalender", texte.Anzahl(kal, "Kalender", "Kalender")+"; "+saysDatenTermine))
+	}
+	return out
+}
+
+// nachrichtenZurueck is „Handy wechseln“, folded: what the archive keeps
+// of the newest backup (napi's Letzte, the same as the app's
+// /napi/sicherung/letzte), with date and size, and the change in three steps.
 func nachrichtenZurueck(cfg StartConfig, person string) string {
-	c := cardsList("Für ein neues Handy")
+	c := cardsList("Zum Zurückholen")
 	letzte, err := cfg.Sicherung.Letzte(person)
 	if err != nil {
 		log.Printf("homes: nachrichten: letzte of %s: %v", person, err)
@@ -189,77 +175,31 @@ func nachrichtenZurueck(cfg StartConfig, person string) string {
 			t := time.UnixMilli(ms)
 			return "vom " + dayWords(t, loc) + ", " + t.In(loc).Format("15:04")
 		}
-		var signal *napi.LetzteDatei
-		for i, d := range letzte["signal"] {
-			if signal == nil || d.Geaendert > signal.Geaendert {
-				signal = &letzte["signal"][i]
+		signal, neu := "noch keine Sicherung zum Zurückholen", int64(0)
+		for _, d := range letzte["signal"] { // the newest
+			if d.Geaendert > neu {
+				neu, signal = d.Geaendert, "Sicherung "+am(d.Geaendert)+" · "+texte.Groesse(d.Groesse)
 			}
 		}
-		if signal != nil {
-			c.row("Signal", "Sicherung "+am(signal.Geaendert)+" · "+groesseWorte(signal.Groesse), true)
-		} else {
-			c.row("Signal", "noch keine Sicherung zum Zurückholen", true)
-		}
+		c.row("Signal", signal, true)
 		var says []string
-		var medien int
-		var medienBytes int64
+		medien, medienBytes := 0, int64(0)
 		for _, d := range letzte["whatsapp"] {
 			if strings.HasPrefix(d.Pfad, "Media/") {
 				medien++
 				medienBytes += d.Groesse
 			} else if d.Pfad == "Databases/msgstore.db.crypt15" {
-				says = append(says, "Chats "+am(d.Geaendert)+" · "+groesseWorte(d.Groesse))
+				says = append(says, "Chats "+am(d.Geaendert)+" · "+texte.Groesse(d.Groesse))
 			}
 		}
 		if medien > 0 {
-			says = append(says, anzahl(medien, "Foto oder Sprachnachricht", "Fotos und Sprachnachrichten")+", "+groesseWorte(medienBytes))
+			says = append(says, texte.Anzahl(medien, "Foto oder Sprachnachricht", "Fotos und Sprachnachrichten")+", "+texte.Groesse(medienBytes))
 		}
 		if len(says) == 0 {
 			says = append(says, "noch nichts zum Zurückholen")
 		}
 		c.row("WhatsApp", strings.Join(says, " · "), true)
 	}
-	var b strings.Builder
-	b.WriteString(c.html())
-	b.WriteString("<section class=\"karte schritte\"><h2>Handy wechseln</h2><ol>")
-	for _, s := range neuesHandy {
-		b.WriteString("<li>" + html.EscapeString(s) + "</li>")
-	}
-	b.WriteString("</ol><p class=k>" + html.EscapeString(saysNeuesHandyMedien) + "</p></section>")
-	return b.String()
-}
-
-// anzahl is "1 Datei", "12 Dateien".
-func anzahl(n int, one, many string) string {
-	if n == 1 {
-		return "1 " + one
-	}
-	return tausender(int64(n)) + " " + many
-}
-
-// tausender is n with the German thousands point: 12.345.
-func tausender(n int64) string {
-	s := strconv.FormatInt(n, 10)
-	for i := len(s) - 3; i > 0; i -= 3 {
-		s = s[:i] + "." + s[i:]
-	}
-	return s
-}
-
-// groesseWorte is a size as the family reads it: "3,2 GB", "450 MB", "12 KB".
-func groesseWorte(n int64) string {
-	units := []struct {
-		size int64
-		name string
-	}{{1 << 40, "TB"}, {1 << 30, "GB"}, {1 << 20, "MB"}, {1 << 10, "KB"}}
-	for _, u := range units {
-		if n >= u.size {
-			v := float64(n) / float64(u.size)
-			if v >= 10 {
-				return tausender(int64(v+0.5)) + " " + u.name
-			}
-			return strings.Replace(strconv.FormatFloat(v, 'f', 1, 64), ".", ",", 1) + " " + u.name
-		}
-	}
-	return tausender(n) + " Bytes"
+	return "<details class=wechsel><summary>Handy wechseln</summary>" + c.html() + "<ol><li>" + strings.ReplaceAll(html.EscapeString(strings.Join(neuesHandy, "\n")), "\n", "</li><li>") + "</li></ol><p class=k>" +
+		html.EscapeString(saysNeuesHandyMedien) + "</p></details>"
 }

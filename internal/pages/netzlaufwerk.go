@@ -131,14 +131,18 @@ const netzStyle = `<style>.lead{color:var(--muted)}.feld{margin:14px 0 0}.feld l
 .feld input,.feld select{width:100%;font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--edge);border-radius:12px;padding:0 14px;min-height:44px}
 .passwort{margin:22px 0 0;padding:14px;background:var(--card);border-radius:14px}.passwort h2{margin:0;font-size:1rem}
 .passwort .feld:first-of-type{margin-top:10px}.passwort p.k{font-size:.85rem;margin:10px 0 0}.passwort button{margin:14px 0 0;width:100%}
-@media (min-width:36rem){.passwort button{width:auto}}.adresse{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.9rem;color:var(--ink)}</style>`
+@media (min-width:36rem){.passwort button{width:auto}}.kopie{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:2px}.aendern{margin:18px 0 0}.aendern summary{color:var(--muted);text-decoration:underline}.adresse{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.9rem;color:var(--ink)}</style>`
 
 func writeNetzlaufwerk(w http.ResponseWriter, r *http.Request, cfg StartConfig, code int, done, problem string) {
 	person := r.Header.Get("Remote-User")
 	b := familyHead(r, cfg, "Netzlaufwerk", "Netzlaufwerk")
-	b.WriteString(netzStyle)
-	b.WriteString("<h1>Netzlaufwerk</h1><p class=lead>" + html.EscapeString(saysWhatItIs) + "</p>" + gesagt(done, problem))
+	b.WriteString(netzStyle + gekoppeltStyle + "<h1>Netzlaufwerk</h1>")
 	acc, err := cfg.Samba.Accounts()
+	since, member := acc[person]
+	if err != nil || since.IsZero() { // once set up, the addresses say it (the Mehr audit, owner 2026-11-04)
+		b.WriteString("<p class=lead>" + html.EscapeString(saysWhatItIs) + "</p>")
+	}
+	b.WriteString(gesagt(done, problem))
 	if err != nil {
 		if !errors.Is(err, samba.ErrNoShare) {
 			log.Printf("homes: netzlaufwerk: status: %v", err)
@@ -147,34 +151,26 @@ func writeNetzlaufwerk(w http.ResponseWriter, r *http.Request, cfg StartConfig, 
 		writePage(w, code, b)
 		return
 	}
-	since, member := acc[person]
 	if !member {
 		b.WriteString("<p>" + html.EscapeString(saysNotFreed) + "</p>")
 		writePage(w, code, b)
 		return
 	}
 	_, loc := cfg.clock()
-	mine := cardsList("Dein Zugang")
-	mine.row("Benutzername", person, true)
-	if since.IsZero() {
-		mine.row(saysNoneYet, "", false)
+	how := ""
+	if h := cfg.SambaHost; h != "" { // each address with its copy button: what a set-up person comes back for
+		c := cardsList("So verbindest du dich")
+		c.row("Benutzername", person, true)
+		c.raw("Windows", `Explorer, oben in die Adresszeile: `+kopieren(`\\`+h+`\data`))
+		c.raw("Mac", `Finder → Gehe zu → Mit Server verbinden: `+kopieren("smb://"+h+"/data"))
+		c.raw("Handy", `Dateien-App → Mit Server verbinden: `+kopieren("smb://"+h+"/data"))
+		c.row("Nur zu Hause im WLAN.", "", false)
+		how = c.html()
+	}
+	if since.IsZero() { // the password first, then how
+		b.WriteString(zustand("gelb", saysNoneYet) + passwordForm("Passwort festlegen", person, nil, saysSameIsFine) + how)
 	} else {
-		mine.row("Passwort gesetzt am "+dayWords(since, loc), "", false)
-	}
-	b.WriteString(mine.html())
-	title := "Passwort festlegen"
-	if !since.IsZero() {
-		title = "Neues Passwort"
-	}
-	b.WriteString(passwordForm(title, person, nil, saysSameIsFine))
-	if cfg.SambaHost != "" {
-		h := html.EscapeString(cfg.SambaHost)
-		how := cardsList("So verbindest du dich")
-		how.raw("Windows", `Explorer, oben in die Adresszeile: <span class=adresse>\\`+h+`\data</span>`)
-		how.raw("Mac", `Finder → Gehe zu → Mit Server verbinden: <span class=adresse>smb://`+h+`/data</span>`)
-		how.raw("Handy", `Dateien-App → Mit Server verbinden: <span class=adresse>smb://`+h+`/data</span>`)
-		how.row("Nur zu Hause im WLAN.", "", false)
-		b.WriteString(how.html())
+		b.WriteString(how + zustand("", "Passwort seit "+dayWords(since, loc)) + "<details class=aendern><summary>Passwort ändern</summary>" + passwordForm("Neues Passwort", person, nil, saysSameIsFine) + "</details>")
 	}
 	if isAdmin(r) {
 		names := make([]string, 0, len(acc))
@@ -191,7 +187,7 @@ func writeNetzlaufwerk(w http.ResponseWriter, r *http.Request, cfg StartConfig, 
 			row := "<div>" + html.EscapeString(n) + "<span class=k>" + html.EscapeString(state) + "</span></div>"
 			if !acc[n].IsZero() {
 				row += "<form method=post action=" + netzlaufwerkPath + " data-frage=\"Das Netzlaufwerk-Passwort von " + html.EscapeString(n) + " entfernen? Die Person kommt dann nicht mehr auf das Netzlaufwerk.\"><input type=hidden name=tun value=entfernen><input type=hidden name=wer value=\"" + html.EscapeString(n) + "\">" +
-					"<button aria-label=\"Passwort von " + html.EscapeString(n) + " entfernen\">Entfernen</button></form>"
+					"<button class=leise data-laeuft=\"Entfernt …\" aria-label=\"Passwort von " + html.EscapeString(n) + " entfernen\">Entfernen</button></form>"
 			}
 			fam.items = append(fam.items, "<li class=tu>"+row+"</li>")
 		}
@@ -280,6 +276,12 @@ func zustand(punkt, text string) string {
 // leiseTrennen is the way out at the page's end, asked before it is done.
 func leiseTrennen(action, frage string) string {
 	return `<form class=leise-weg method=post action=` + action + ` data-frage="` + html.EscapeString(frage) + `"><input type=hidden name=tun value=trennen><button data-laeuft="Trennt …">Trennen</button></form>`
+}
+
+// kopieren is an address and its copy button, which says „Kopiert“ once done.
+func kopieren(addr string) string {
+	a := html.EscapeString(addr)
+	return `<span class=kopie><span class=adresse>` + a + `</span><button type=button class=leise data-kopie="` + a + `" onclick="navigator.clipboard.writeText(this.dataset.kopie).then(()=>{this.textContent='Kopiert'})">Kopieren</button></span>`
 }
 
 // dayWords is a day as the family says it: "17. Oktober 2026".

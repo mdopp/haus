@@ -54,6 +54,9 @@ var name = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,31}$`) // as samba-account
 // Accounts is the status: each member, and since when they have a password
 // (zero: none). ErrNoShare without file-share.
 func (d *Dir) Accounts() (map[string]time.Time, error) {
+	if d == nil {
+		return nil, ErrNoShare
+	}
 	f, err := os.Open(filepath.Join(d.Path, "status"))
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, ErrNoShare

@@ -125,7 +125,10 @@ func TestPlatteErfassen(t *testing.T) {
 	cfg.Module = modulListe(t, "musik")
 	_, body, _ = familyPage(t, Mehr, cfg, "GET", "/mehr", "family")
 	mustNotContain(t, body, "Platte erfassen", "Discogs-Konto verbinden")
-	mustContain(t, body, "Hinzufügen und was beim Einsortieren hängt, Platten erfassen")
+	mustContain(t, body, `<a href="/musik">Musik</a> <span class=k>Alles einsortiert</span>`) // the Mehr audit: its state, from the inbox
+	os.WriteFile(filepath.Join(cfg.MusicInbox, "Amore.mp3"), []byte("x"), 0o644)
+	_, body, _ = familyPage(t, Mehr, cfg, "GET", "/mehr", "family")
+	mustContain(t, body, `<a href="/musik">Musik</a> <span class=k>1 Datei wird einsortiert</span>`)
 	_, body, _ = familyPage(t, Musik, cfg, "GET", MusikPath, "family")
 	mustContain(t, body, "<h2 id=m-p>Platten</h2>", `href=/platte>Platte erfassen</a>`, `?liste=liste-musik">Wunschliste · 0</a>`,
 		`</section><p class=ruhig><span class=punkt></span><a href=/discogs>Discogs: verbunden mit „mdopp“</a></p>`)

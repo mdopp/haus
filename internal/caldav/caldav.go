@@ -81,6 +81,9 @@ const (
 // never followed, the account's Basic auth stays home.
 var ErrForeignHost = errors.New("Radicale: Adresse auf einem anderen Host")
 
+// ErrNoClient is a read on no client: a box without Radicale.
+var ErrNoClient = errors.New("Radicale: nicht eingerichtet")
+
 // ErrStatus is an answer the client did not expect.
 type ErrStatus struct {
 	Method string

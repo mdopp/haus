@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/mdopp/homes/internal/papierkorb"
 	"html"
 	"log"
 	"net/http"
@@ -12,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/mdopp/homes/internal/papierkorb"
 
 	"github.com/mdopp/homes/internal/ansicht"
 	"github.com/mdopp/homes/internal/caldav"

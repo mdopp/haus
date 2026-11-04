@@ -326,9 +326,61 @@ test('a podcast is subscribed by its link and can be ended', async ({ page, base
   await page.getByRole('button', { name: 'Abonnieren' }).click();
   await expect(page.getByRole('status')).toContainText('Abonniert: „Demo-Podcast“');
   await expect(page.locator('#k-meine')).toBeVisible();
+  // the Mehr audit (owner 2026-11-04): with a subscription the newest episodes first, subscribing last
+  await expect(page.locator('#karte-neueste-folgen')).toBeVisible();
+  expect(await above(page, '#karte-neueste-folgen', '#k-meine')).toBe(true);
+  expect(await above(page, '#k-meine', '#k-abo')).toBe(true);
   page.once('dialog', (d) => d.accept());
   await page.getByRole('button', { name: 'Abo beenden' }).click();
   await expect(page.getByRole('status')).toContainText('Abo beendet');
+});
+
+// above says a's top is above b's on the page.
+async function above(page, a, b) {
+  const [ya, yb] = [await page.locator(a).first().boundingBox(), await page.locator(b).first().boundingBox()];
+  return ya.y < yb.y;
+}
+
+// The Mehr audit (owner 2026-11-04): filing is the first and biggest thing on Dokumente; the title
+// asks once a file is chosen; the mail is one quiet line below.
+// Daten sichern: the state first, one line per source with a dot, the app's one sentence, the change folded last.
+test('Daten sichern leads with the state, the phone change folded', async ({ page }) => {
+  await page.goto('/daten-sichern');
+  const stand = page.locator('#karte-dein-stand, section:has(h2:text-is("Dein Stand"))').first();
+  for (const q of ['WhatsApp', 'Signal', 'SMS und Anrufe', 'Standort', 'Kontakte', 'Kalender']) await expect(stand.locator('li.quelle', { hasText: q })).toHaveCount(1);
+  expect(await above(page, 'li.quelle', 'text=Das Sichern macht die Homes-App')).toBe(true);
+  await expect(page.locator('details.wechsel')).not.toHaveAttribute('open', '');
+  expect(await above(page, 'text=Das Sichern macht die Homes-App', 'details.wechsel')).toBe(true);
+});
+
+// Netzlaufwerk once the password is set: the addresses first, the state in a line, the change folded.
+test('Netzlaufwerk leads with the addresses once set up', async ({ page, request }) => {
+  await request.get('/demo/samba?gesetzt=1');
+  await page.goto('/netzlaufwerk');
+  expect(await above(page, 'text=So verbindest du dich', '.zustand')).toBe(true);
+  await expect(page.locator('.zustand')).toContainText('Passwort seit');
+  await expect(page.getByRole('button', { name: 'Kopieren' })).toHaveCount(3);
+  await expect(page.locator('details.aendern')).not.toHaveAttribute('open', '');
+});
+
+test('Dokumente leads with filing, the title after a file', async ({ page }) => {
+  await page.goto('/dokumente');
+  const big = page.locator('label.vorne', { hasText: 'Foto machen oder Datei ablegen' });
+  await expect(big).toBeVisible();
+  expect(await above(page, 'label.vorne', 'text=Oder per Mail an')).toBe(true);
+  await expect(page.getByLabel('Titel (wenn du magst)')).toBeHidden();
+  await page.locator('input[type=file]').setInputFiles({ name: 'brief.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4') });
+  await expect(page.getByLabel('Titel (wenn du magst)')).toBeVisible();
+  await expect(page.locator('.gewaehlt')).toHaveText('brief.pdf');
+});
+
+// Mehr: what a person uses day to day, then what is set up once, then the account in one row.
+test('Mehr lists the everyday pages first, the setup quieter, the account in a row', async ({ page }) => {
+  await page.goto('/mehr');
+  expect(await above(page, '#karte-seiten', '#karte-einrichten')).toBe(true);
+  expect(await above(page, '#karte-einrichten', '#karte-konto')).toBe(true);
+  await expect(page.locator('#karte-einrichten').locator('..')).toContainText('Deine Aufgaben');
+  await expect(page.locator('section[aria-labelledby=karte-konto] li')).toHaveCount(1);
 });
 
 test('a film goes on the wish list from Gesehen & Gehört, one the box has does not', async ({ page }) => {
@@ -580,6 +632,7 @@ test('Standortverlauf, connected, leads with the timeline and ends with a quiet 
 // finger, and no text runs out of its box.
 const PAGES = ['/start', '/raeume', '/raeume/light.kueche', '/medien', '/energie', '/energie?zeitraum=jahr', '/kalender', '/kalender/verwalten',
   '/notizen', '/notizen?tag=kochen', '/notizen/einkaufsliste.md', '/notizen/markdown.md', '/notizen/einkaufsliste.md?bearbeiten=1', '/mehr', '/musik', '/platte', '/discogs', '/aktivierungswort', '/aufgaben', '/dokumente', '/willkommen', '/einrichten/fotos', '/box/geraete', '/pair-device', '/podcasts', '/gesehen', '/standort',
+  '/daten-sichern', '/netzlaufwerk', '/box', '/box/aufgaben', '/box/dienste', '/box/operator', '/box/personen', '/box/module', '/adresse',
   '/einkauf', '/einkauf?liste=liste-baumarkt', '/einkauf?liste=liste-musik', '/einkauf/rezepte', '/einkauf/rezepte?n=rezepte%2Flasagne.md', '/notizen/rezepte/lasagne.md'];
 for (const path of PAGES) {
   test(`layout of ${path}`, async ({ page }) => {

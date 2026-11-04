@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/mdopp/homes/internal/papierkorb"
 	"html"
 	"log"
 	"net/http"
@@ -16,6 +15,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/mdopp/homes/internal/papierkorb"
 
 	"github.com/mdopp/homes/internal/caldav"
 	"github.com/mdopp/homes/internal/discogs"

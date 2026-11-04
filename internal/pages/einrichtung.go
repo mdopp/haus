@@ -209,9 +209,6 @@ func einrichtungCard(open []aufgabe, laibSays string) string {
 		if a.stand != "" {
 			says = a.stand + " · " + says
 		}
-		if !a.wichtig {
-			says = "Wenn du magst: " + says
-		}
 		c.AddLink(a.titel, says, a.href)
 	}
 	if laibSays != "" {
