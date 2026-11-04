@@ -10,29 +10,21 @@ import (
 	"strings"
 )
 
-// A Google Takeout comes as a ZIP (owner 2026-11-04): Homes reads every file in it that it
-// knows, wherever it sits — Records.json under whatever the folder is called in the person's
-// language, the Semantic Location History's monthly files, Timeline.json, GPX, GeoJSON —
-// known by what is in it, never by its folder's name. The ZIP is read from the staged file,
+// A Google Takeout comes as a ZIP, in parts of 2 GB by default, each file whole in one (owner
+// 2026-11-04): Homes reads every file in it it knows, wherever it sits, known by what is in it,
+// never by its folder's name (Takeout's is in the person's language) — from the staged file,
 // one member at a time, never whole.
-
-// FormatZIP is a ZIP of histories.
-const FormatZIP Format = "zip"
-
-// ErrZIPLeer is a ZIP with no history Homes reads in it.
-var ErrZIPLeer = errors.New("reitti: no location history Homes reads in the zip")
-
 const (
-	zipMaxDateien  = 20000           // members looked at, a Takeout's own few hundred and room
-	zipMaxEntpackt = int64(40) << 30 // what is unpacked in all, against a ZIP that claims less than it holds
+	FormatZIP      Format = "zip"
+	zipMaxDateien         = 20000           // members looked at, a Takeout's own few hundred and room
+	zipMaxEntpackt        = int64(40) << 30 // unpacked in all, against a ZIP that claims less than it holds
 )
 
-// ErrTakeoutTeil is a part of a Google Takeout with no history in it (owner 2026-11-04: Takeout
-// splits at 2 GB, each file whole in one part): the history is in another part.
-var ErrTakeoutTeil = errors.New("reitti: no location history in this part of the takeout")
-
-// errGenug stops a look at a file once its format is known.
-var errGenug = errors.New("reitti: enough")
+var (
+	ErrZIPLeer     = errors.New("reitti: no location history Homes reads in the zip")
+	ErrTakeoutTeil = errors.New("reitti: no location history in this part of the takeout") // the history is in another part
+	errGenug       = errors.New("reitti: enough")                                          // stops a look once the format is known
+)
 
 // Roh are the hours a person's raw points came for (Records.json, Timeline.json, GPX,
 // GeoJSON), kept across imports — a Takeout in two parts is two imports: the Semantic
