@@ -102,7 +102,7 @@ func routes(s site) http.Handler {
 		Samba: s.samba, SambaHost: s.sambaHost, Usage: s.usage, PublicURL: s.publicURL, Welcome: s.welcome, STT: s.stt,
 		HAPublicURL: s.haPublic, Inverted: s.inverted, RadicalePublicURL: s.radicale, Views: s.views, GesundheitURL: s.gesundheit,
 		DocumentsMail: s.docsMail, PaperlessPublicURL: s.paperlessPublic, PaperlessLANOnly: s.paperlessLAN, Sicherung: s.napi.Sicherung,
-		Reitti: s.napi.Reitti}
+		Reitti: s.napi.Reitti, Module: s.napi.Module}
 	// the lists, the music wish list and the shelf, before any page takes its copy of family
 	family.Einkauf, family.Wuensche = s.hh.Einkauf, s.hh.Wuensche
 	if s.hh.Wuensche != nil {
@@ -150,6 +150,9 @@ func routes(s site) http.Handler {
 	pagesMux.HandleFunc(pages.StartBoxPath, start)
 	pagesMux.HandleFunc("/mehr", pages.Mehr(family))
 	pagesMux.HandleFunc(pages.MehrAufgabenPath, pages.Mehr(family)) // its Einrichtung card, after the page
+	pagesMux.HandleFunc(pages.SpurenPath, pages.Mehr(family))       // its traces of what the box lacks (ADR 0001 §10)
+	pagesMux.HandleFunc(pages.AnfordernPath, pages.Anfordern(family))
+	pagesMux.HandleFunc(pages.ModulPages, pages.ModulSeite(family)) // a module, admins: where a wish leads
 	pagesMux.HandleFunc("/aufgaben", pages.DeineAufgaben(family))   // haus#188: Deine Aufgaben // the bar's fourth entry, with Abmelden (haus#67)
 	pagesMux.HandleFunc("/raeume", pages.Raeume(family))
 	pagesMux.HandleFunc("/energie", pages.Energie(family))
@@ -446,6 +449,7 @@ func main() {
 		radicale: radicalePublic, views: ansicht.Open(dataDir, os.Getenv("HOMES_RADICALE_USER")), dataDir: dataDir,
 		docsMail: docsMail, paperlessPublic: paperlessPublic, paperlessLAN: paperlessLAN}
 	st.napi.Module = logModule(st)
+	go schliesseWuensche(ctx, ops, st.napi.Module, time.Minute) // a wish for what is on now is done (ADR 0001 §10)
 	mux := routes(st)
 	addr := env("HOMES_LISTEN", "127.0.0.1:8650")
 	log.Printf("homes %s: listening on %s as %s, laib %s, home assistant %v, haushalt %d tools, memory library %v (tidy-up %v), uploads %q, the Bote %v, counting %v (voice %v), pages only behind the proxy secret", Version, addr, assistent.Name(), ops.URL, cfg.HA != nil, len(haushalt.Tools(hh)), hh.Library != nil, hh.Judge != nil, cfg.UploadDir, b != nil, counter != nil, voice != nil)

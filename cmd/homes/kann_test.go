@@ -91,7 +91,7 @@ func TestKannWidgetsAreTheToolDefs(t *testing.T) {
 	}()} {
 		h := routes(s)
 		var tools []string
-		for _, w := range s.napi.Module.Kann().App.Widgets {
+		for _, w := range s.napi.Module.Kann(modul.Wuensche{}).App.Widgets {
 			if id, ok := strings.CutPrefix(w, "tool:"); ok {
 				tools = append(tools, id)
 			}

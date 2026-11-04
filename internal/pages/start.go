@@ -27,6 +27,7 @@ import (
 	"github.com/mdopp/homes/internal/ha"
 	"github.com/mdopp/homes/internal/judge"
 	"github.com/mdopp/homes/internal/laib"
+	"github.com/mdopp/homes/internal/modul"
 	"github.com/mdopp/homes/internal/napi"
 	"github.com/mdopp/homes/internal/notes"
 	"github.com/mdopp/homes/internal/paperless"
@@ -43,6 +44,7 @@ import (
 // about it.
 type StartConfig struct {
 	Laib      *laib.Client
+	Module    *modul.Liste      // the box's areas (ADR 0001): Mehr's traces of what it lacks (§10); nil: none
 	Witness   *schalter.Witness // who switched what, into the log and Laib's journal (haus#89); nil: the log only
 	Fetcher   abruf.Fetcher     // how Notizen fetches a page to keep (haus#117); the tests' allows their 127.0.0.1
 	Podcasts  *podcasts.Service // the family's podcasts in Audiobookshelf (haus#123); nil: no page

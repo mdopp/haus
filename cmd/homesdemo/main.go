@@ -43,10 +43,13 @@ import (
 	"github.com/mdopp/homes/internal/ha/hafake"
 	"github.com/mdopp/homes/internal/jellyfin"
 	"github.com/mdopp/homes/internal/laib"
+	"github.com/mdopp/homes/internal/laib/laibfake"
 	"github.com/mdopp/homes/internal/merken"
+	"github.com/mdopp/homes/internal/modul"
 	"github.com/mdopp/homes/internal/notes"
 	"github.com/mdopp/homes/internal/pages"
 	"github.com/mdopp/homes/internal/podcasts"
+	"github.com/mdopp/homes/internal/texte"
 )
 
 func main() {
@@ -182,16 +185,26 @@ func main() {
 	mux.HandleFunc(cards.NotePages, pages.Notizen(cfg))
 	// Mehr with a Laib whose task list takes a while: the Einrichtung card
 	// fills itself after the page (owner 2026-11-03)
-	demoLaib := &laibFake{}
+	demoLaib := &laibFake{wishes: laibfake.New()}
 	mux.Handle("/demo/laib/mcp", demoLaib)
 	mehr := cfg
 	mehr.Laib = &laib.Client{URL: "http://" + *addr + "/demo/laib", Token: "demo"}
+	// what the box lacks (ADR 0001 §10): Standortverlauf missing, Podcasts switched off, a wish to Laib
+	mehr.Module = demoModule()
 	mux.HandleFunc("/mehr", pages.Mehr(mehr))
 	mux.HandleFunc(pages.MehrAufgabenPath, pages.Mehr(mehr))
+	mux.HandleFunc(pages.SpurenPath, pages.Mehr(mehr))
+	mux.HandleFunc(pages.AnfordernPath, pages.Anfordern(mehr))
+	mux.HandleFunc(pages.ModulPages, pages.ModulSeite(mehr))
+	mux.HandleFunc("/demo/wunsch", func(w http.ResponseWriter, r *http.Request) { // a wish moved on in Laib: wartet, abgelehnt, …
+		demoLaib.wishes.Setze(r.URL.Query().Get("modul"), r.URL.Query().Get("stand"), "")
+		mehr.Laib.ForgetWuensche()
+	})
 	mux.HandleFunc("/demo/laib", func(w http.ResponseWriter, r *http.Request) {
 		ms, _ := strconv.Atoi(r.URL.Query().Get("ms"))
 		demoLaib.set(time.Duration(ms)*time.Millisecond, r.URL.Query().Get("fehler") == "1")
 		mehr.Laib.ForgetAufgaben()
+		mehr.Laib.ForgetWuensche()
 	})
 	mux.HandleFunc(pages.PodcastsPath, pages.Podcasts(cfg))
 	mux.HandleFunc(pages.GesehenPath, pages.Gesehen(cfg))
@@ -288,11 +301,28 @@ func sunOf(t time.Time) float64 {
 	return (1 - math.Cos(2*math.Pi*float64(t.YearDay()-10)/365)) / 2
 }
 
-// laibFake is Laib's MCP for Mehr: one task for everyone, after delay.
+// laibFake is Laib's MCP for Mehr: one task for everyone, after delay,
+// and the modules' wishes (laibfake).
 type laibFake struct {
-	mu    sync.Mutex
-	delay time.Duration
-	fail  bool
+	mu     sync.Mutex
+	delay  time.Duration
+	fail   bool
+	wishes *laibfake.Laib
+}
+
+// demoModule is a box without Reitti and with Podcasts switched off.
+func demoModule() *modul.Liste {
+	m := func(name, backend, warum, grund string) modul.Modul {
+		return modul.Modul{Name: name, Titel: texte.Titel(name), Backend: backend, Warum: warum, Grund: grund}
+	}
+	l, err := modul.Bauen([]modul.Modul{m("geraete", "home-assistant", "", ""), m("kalender", "radicale", "", ""),
+		m("standort", "reitti", modul.Fehlt, "Auf dieser Box läuft kein Reitti."),
+		m("podcasts", "audiobookshelf", modul.Aus, "Auf dieser Box ausgeschaltet."),
+		m("gesundheit", "gesundheit", modul.Fehlt, "Auf dieser Box läuft Gesundheit nicht.")})
+	if err != nil {
+		log.Fatal(err)
+	}
+	return l
 }
 
 func (f *laibFake) set(d time.Duration, fail bool) {
@@ -303,11 +333,17 @@ func (f *laibFake) set(d time.Duration, fail bool) {
 
 func (f *laibFake) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var req struct {
+		Method string `json:"method"`
 		Params struct {
-			Name string `json:"name"`
+			Name      string         `json:"name"`
+			Arguments map[string]any `json:"arguments"`
 		} `json:"params"`
 	}
 	json.NewDecoder(r.Body).Decode(&req)
+	if req.Method == "tools/list" {
+		json.NewEncoder(w).Encode(map[string]any{"result": map[string]any{"tools": f.wishes.Tools()}})
+		return
+	}
 	f.mu.Lock()
 	delay, fail := f.delay, f.fail
 	f.mu.Unlock()
@@ -318,6 +354,10 @@ func (f *laibFake) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if fail {
 		http.Error(w, "laib is down", http.StatusBadGateway)
+		return
+	}
+	if text, isErr, ok := f.wishes.Antwort(req.Params.Name, req.Params.Arguments); ok {
+		json.NewEncoder(w).Encode(map[string]any{"result": map[string]any{"content": []map[string]string{{"text": text}}, "isError": isErr}})
 		return
 	}
 	text, isErr := "unknown tool "+req.Params.Name, true
