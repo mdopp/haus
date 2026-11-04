@@ -1,6 +1,7 @@
 package napi
 
 import (
+	"archive/zip"
 	"bytes"
 	"encoding/json"
 	"io"
@@ -156,6 +157,20 @@ func (ih *importHouse) upload(bearer, name string, file []byte, piece int) (stri
 	return id, ih.wait(bearer, id)
 }
 
+// takeout is a Google Takeout as a ZIP: Records.json and a month of the Semantic Location
+// History under Spanish folder names, and a file Homes does not know.
+func takeout(t *testing.T, files ...string) []byte {
+	var b bytes.Buffer
+	zw := zip.NewWriter(&b)
+	for _, f := range files { // "<place in the ZIP>=<testdata file>"
+		place, from, _ := strings.Cut(f, "=")
+		w, _ := zw.Create("Takeout/Historial de ubicaciones/" + place)
+		w.Write(testdata(t, from))
+	}
+	zw.Close()
+	return b.Bytes()
+}
+
 func testdata(t *testing.T, name string) []byte {
 	t.Helper()
 	b, err := os.ReadFile(filepath.Join("..", "reitti", "testdata", name))
@@ -179,11 +194,16 @@ func TestImportBringsEachFormatToTheirReitti(t *testing.T) {
 		{"timeline-ios.json", "timeline-ios", 4, 1, "4 Orte aus dem Juli 2021 übernommen"},
 		{"punkte.geojson", "geojson", 2, 0, "2 Orte aus dem Januar 2022 übernommen."},
 		{"spur.gpx", "gpx", 3, 0, "3 Orte aus dem Juni 2023 übernommen."},
+		// owner 2026-11-04: the whole Takeout; the Semantic file's hour Records has is Records'
+		{"takeout.zip", "zip", 10, 1, "Aus 2 Dateien 10 Orte von März 2014 bis Dezember 2024 übernommen, darunter 1 Aufenthalt."},
 	} {
 		t.Run(c.file, func(t *testing.T) {
 			f := newFakeImport(t)
 			ih := newImportHouse(t, f)
-			file := testdata(t, c.file)
+			file := takeout(t, "Records.json=records.json", "Semantic Location History/2014/2014_MARCH.json=semantic-2014-03.json", "Settings.json=fremd.json")
+			if c.file != "takeout.zip" {
+				file = testdata(t, c.file)
+			}
 			id, out := ih.upload("anna1", c.file, file, 100)
 			if out["stand"] != standFertig || out["format"] != c.format || out["punkte"] != c.punkte || out["besuche"] != c.besuche ||
 				out["gelesen"] != float64(len(file)) || !strings.HasPrefix(out["text"].(string), c.text) {
@@ -284,6 +304,7 @@ func TestImportEndsInWords(t *testing.T) {
 	}{
 		{"fremd.json", testdata(t, "fremd.json"), nil, "format", "kein Standortverlauf, den Homes kennt"},
 		{"leer.json", []byte(`{"locations":[]}`), nil, "keine_orte", "keine Orte"},
+		{"leer.zip", takeout(t, "Settings.json=fremd.json"), nil, "format", "In der ZIP ist kein Standortverlauf, den Homes kennt. Es gehen:"},
 		{"abgeschnitten.json", testdata(t, "abgeschnitten.json"), nil, "format", "Reitti hat bis dahin 1 Ort übernommen"},
 		{"records.json", testdata(t, "records.json"), func(int) (int, string) { return 401, "" }, grundAbgelehnt, "Reitti kennt deinen Schlüssel nicht mehr"},
 		{"records.json", testdata(t, "records.json"), func(int) (int, string) { return 503, "" }, grundReittiWeg, "Reitti nimmt gerade nichts an"},

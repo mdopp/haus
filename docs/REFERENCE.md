@@ -819,8 +819,21 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
 - An old location history, shared to the app (owner 2026-11-03,
   *In den Standortverlauf übernehmen*): Google Maps' on-device export
   (`Timeline.json`, Android `{semanticSegments}` and the iPhone's array),
-  Google Takeout's `Records.json` (`{locations}`), GPX (`<trkpt>`) and
-  GeoJSON (a FeatureCollection of Points with a time). Reitti reads the
+  Google Takeout's `Records.json` (`{locations}`) and, from older
+  Takeouts, the Semantic Location History's monthly files
+  (`YYYY/YYYY_MONTH.json`, `{timelineObjects}`: a `placeVisit` is its
+  place at start and end, an `activitySegment` its start, its
+  `simplifiedRawPath` points with their times or else its waypoints spread
+  evenly over its time, and its end), GPX (`<trkpt>`) and GeoJSON (a
+  FeatureCollection of Points with a time) — or a ZIP of them, a whole
+  Google Takeout (owner 2026-11-04). In a ZIP every `.json`, `.gpx` and
+  `.geojson` is looked at, in any folder and known by its content, never by
+  the folder's name (Takeout names it in the person's language); the raw
+  formats are read first and the Semantic files last, and an hour one file
+  gave points for is taken from no later one, so where `Records.json` and
+  the Semantic files overlap, Records' points come over. The ZIP is read
+  from the staged file member by member, never whole (at most 20,000
+  members and 40 GB unpacked). Reitti reads the
   Google formats only on its logged-in settings page (`/settings/import/…`,
   session and CSRF; its token filter covers `/api/` only), so Homes reads
   each file itself, point by point as Reitti's own importers do (v5.9.0:
@@ -839,10 +852,13 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   and `application/offset+octet-stream` (≤ 16 MB a piece) → `{offset,
   fertig}`; the piece that makes the file whole starts the import. `GET
   /napi/standort/import/{id}` → `{stand: hochladen|laeuft|fertig|fehler,
-  name, groesse, gelesen, format, punkte, besuche, von?, bis?, text?,
-  fehler?, grund?}`: `text` is the end in one sentence („12.345 Orte von
-  März 2014 bis Dezember 2024 übernommen …“), `fehler` why not (`grund`
-  `format`, `keine_orte`, `schluessel_abgelehnt`, `reitti_weg`,
+  name, groesse, gelesen, format, dateien?, punkte, besuche, von?, bis?,
+  text?, fehler?, grund?}`: `format` is `zip` for a ZIP and `dateien` how
+  many of its files gave points; `text` is the end in one sentence
+  („12.345 Orte von März 2014 bis Dezember 2024 übernommen …“, from a ZIP
+  „Aus 3 Dateien 48.210 Orte …“), `fehler` why not (`grund`
+  `format` — also a ZIP with no history Homes knows, „In der ZIP ist kein
+  Standortverlauf, den Homes kennt. Es gehen: …“ —, `keine_orte`, `schluessel_abgelehnt`, `reitti_weg`,
   `kein_schluessel`). One import runs at a time; a Homes restarted
   mid-import goes on at the next GET. The file
   (`HOMES_DATA/standort-import/<person>/<id>.teil`) is deleted when the

@@ -67,7 +67,8 @@ const (
 	saysImportTooBig    = "Die Datei ist zu groß: höchstens 5 GB."
 	saysImportName      = "Der Dateiname fehlt oder ist zu lang. Aktualisiere die Homes-App."
 	saysImportUnknown   = "Diesen Import gibt es auf der Box nicht (mehr). Teile die Datei noch einmal."
-	saysImportFormat    = "Das ist kein Standortverlauf, den Homes kennt. Es gehen: die Zeitachse aus Google Maps (Timeline.json), Google Takeout (Records.json), GPX und GeoJSON."
+	saysImportFormat    = "Das ist kein Standortverlauf, den Homes kennt." + saysImportGehen
+	saysImportGehen     = " Es gehen: die Zeitachse aus Google Maps (Timeline.json), Google Takeout (Records.json und die Monatsdateien des Standortverlaufs, auch die ganze ZIP), GPX und GeoJSON."
 	saysImportNoPoints  = "In der Datei stehen keine Orte mit Zeit, die Reitti übernehmen kann."
 	saysImportStoreFail = "Die Box konnte die Datei nicht speichern. Versuch es später noch einmal; hilft das nicht, sag dem Admin Bescheid."
 )
@@ -78,9 +79,10 @@ type importStand struct {
 	Groesse   int64      `json:"groesse"`
 	Stand     string     `json:"stand"`
 	Format    string     `json:"format,omitempty"`
-	Gelesen   int64      `json:"gelesen"` // bytes of the file read so far
-	Punkte    int        `json:"punkte"`  // points Reitti took
-	Besuche   int        `json:"besuche"` // of them, stays at a place (two points each)
+	Dateien   int        `json:"dateien,omitempty"` // a ZIP's files that gave points
+	Gelesen   int64      `json:"gelesen"`           // bytes of the file read so far
+	Punkte    int        `json:"punkte"`            // points Reitti took
+	Besuche   int        `json:"besuche"`           // of them, stays at a place (two points each)
 	Von       *time.Time `json:"von,omitempty"`
 	Bis       *time.Time `json:"bis,omitempty"`
 	Text      string     `json:"text,omitempty"`   // the end, one German sentence
@@ -452,18 +454,6 @@ func (im *importer) start(person, id string) {
 	}()
 }
 
-// zaehler counts the bytes read, for the progress.
-type zaehler struct {
-	r io.Reader
-	n int64
-}
-
-func (z *zaehler) Read(p []byte) (int, error) {
-	n, err := z.r.Read(p)
-	z.n += int64(n)
-	return n, err
-}
-
 // run reads the file and hands its points to Reitti in batches; at the end
 // the file is gone and the state says what came over, or why not.
 func (im *importer) run(ctx context.Context, person, id string) {
@@ -492,7 +482,6 @@ func (im *importer) run(ctx context.Context, person, id string) {
 	}
 	defer f.Close()
 	st.Punkte, st.Besuche, st.Von, st.Bis = 0, 0, nil, nil
-	z := &zaehler{r: f}
 	batch := make([]reitti.Punkt, 0, importStapel)
 	besuche, gesendet := 0, 0
 	last := im.now()
@@ -519,7 +508,7 @@ func (im *importer) run(ctx context.Context, person, id string) {
 		return nil
 	}
 	var von, bis time.Time
-	format, err := reitti.Lesen(z, func(fd reitti.Fund) error {
+	format, dateien, err := reitti.LesenDatei(f, st.Groesse, func(n int64) { st.Gelesen = n }, func(fd reitti.Fund) error {
 		batch = append(batch, fd.Punkt)
 		if fd.Besuch {
 			besuche++
@@ -538,19 +527,17 @@ func (im *importer) run(ctx context.Context, person, id string) {
 		}
 		if now := im.now(); now.Sub(last) >= importStandAlle {
 			last = now
-			st.Gelesen = z.n
 			im.write(person, id, st)
 		}
 		return nil
 	})
-	st.Format = string(format)
+	st.Format, st.Dateien = string(format), map[bool]int{true: dateien}[format == reitti.FormatZIP]
 	var fe *reitti.FormatError
 	if err == nil || errors.As(err, &fe) { // what came before a cut goes over too
 		if ferr := flush(); ferr != nil {
 			err = ferr
 		}
 	}
-	st.Gelesen = z.n
 	if gesendet > 0 {
 		st.Von, st.Bis = &von, &bis
 	}
@@ -562,6 +549,8 @@ func (im *importer) run(ctx context.Context, person, id string) {
 		end(standFertig, uebernommen(st), "", "")
 	case errors.Is(err, reitti.ErrFormat):
 		end(standFehler, "", saysImportFormat, "format")
+	case errors.Is(err, reitti.ErrZIPLeer):
+		end(standFehler, "", "In der ZIP ist kein Standortverlauf, den Homes kennt."+saysImportGehen, "format")
 	case errors.As(err, &fe):
 		log.Printf("homes: standort-import: %s/%s: %v", person, id, err)
 		end(standFehler, "", "Die Datei ist nicht vollständig lesbar"+schonDa(st)+". Wurde sie beim Kopieren abgeschnitten? Teile sie dann noch einmal.", "format")
@@ -607,6 +596,9 @@ func monat(t time.Time) string { return monate[t.Month()-1] + " " + strconv.Itoa
 // März 2014 bis Dezember 2024 übernommen.“
 func uebernommen(st importStand) string {
 	s := orte(st.Punkte)
+	if st.Dateien > 1 {
+		s = "Aus " + zahl(st.Dateien) + " Dateien " + s
+	}
 	if st.Von != nil && st.Bis != nil {
 		if a, b := monat(*st.Von), monat(*st.Bis); a == b {
 			s += " aus dem " + a

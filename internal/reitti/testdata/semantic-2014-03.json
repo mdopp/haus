@@ -1,0 +1,16 @@
+{
+  "timelineObjects": [
+    {"placeVisit": {"location": {"latitudeE7": 470000000, "longitudeE7": 80000000, "name": "Zuhause"},
+      "duration": {"startTimestamp": "2014-03-02T06:00:00Z", "endTimestamp": "2014-03-02T07:30:00Z"}}},
+    {"activitySegment": {"startLocation": {"latitudeE7": 470000000, "longitudeE7": 80000000},
+      "endLocation": {"latitudeE7": 470100000, "longitudeE7": 80100000},
+      "duration": {"startTimestampMs": "1393743600000", "endTimestampMs": "1393747200000"},
+      "waypointPath": {"waypoints": [{"latE7": 470050000, "lngE7": 80050000}]}}},
+    {"activitySegment": {"startLocation": {"latitudeE7": 470100000, "longitudeE7": 80100000},
+      "endLocation": {"latitudeE7": 470200000, "longitudeE7": 80200000},
+      "duration": {"startTimestamp": "2014-03-02T12:00:00Z", "endTimestamp": "2014-03-02T13:00:00Z"},
+      "waypointPath": {"waypoints": [{"latE7": 470150000, "lngE7": 80150000}]},
+      "simplifiedRawPath": {"points": [{"latE7": 470120000, "lngE7": 80120000, "timestamp": "2014-03-02T12:20:00Z"}]}}},
+    {"placeVisit": {"location": {"name": "ohne Ort"}, "duration": {"startTimestamp": "2014-03-02T14:00:00Z", "endTimestamp": "2014-03-02T15:00:00Z"}}}
+  ]
+}
