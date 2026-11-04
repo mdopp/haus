@@ -76,6 +76,9 @@ type Modul struct {
 	Env      []string // the variables it reads (a test holds every HOMES_* to a module or the core)
 	Braucht  []string // modules it needs on: energie needs geraete
 	Admins   bool     // only admins use it: its trace is on the Box page, not on Mehr (§10)
+	// Schaltbar: HOMES_MODULE_AUS can switch it off (ADR 0001 H3–H6); the
+	// Box page offers its switch only then
+	Schaltbar bool
 
 	Seiten []Route   // pages, behind the proxy secret
 	Napi   []Route   // /napi paths, behind the device's bearer

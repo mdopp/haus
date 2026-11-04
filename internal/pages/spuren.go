@@ -3,9 +3,11 @@ package pages
 import (
 	"context"
 	"errors"
+	"fmt"
 	"html"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -186,8 +188,9 @@ func Anfordern(cfg StartConfig) http.HandlerFunc {
 }
 
 // ModulSeite is /module/<name> (admins): one module, its backend, whether
-// it is on and why not, and its wish — where a wish's Box-Aufgabe leads
-// (its weg, laib#1038). Homes decides nothing: switching is H7's proposal.
+// it is on and why not, its wish — where a wish's Box-Aufgabe leads (its
+// weg, laib#1038) — and its switch (H7): a proposal to Laib, which the
+// owner approves in Laib's Inbox. Homes decides nothing (haus#1).
 func ModulSeite(cfg StartConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var m modul.Modul
@@ -199,26 +202,105 @@ func ModulSeite(cfg StartConfig) http.HandlerFunc {
 			Elsewhere(cfg)(w, r)
 			return
 		}
+		if r.Method == http.MethodPost {
+			modulSchalten(w, r, cfg, m)
+			return
+		}
 		if !showOnly(w, r, m.Titel) {
 			return
 		}
 		b := familyHead(r, cfg, texte.T(texte.ModulSeiteTitel)+": "+m.Titel, "Mehr")
 		b.WriteString("<h1>" + html.EscapeString(m.Titel) + "</h1>")
+		if nr := r.URL.Query().Get("vorgeschlagen"); nr != "" {
+			b.WriteString(`<p class=hinweis role=status>` + html.EscapeString(texte.T(texte.Vorgeschlagen)) + ` <a href="` +
+				html.EscapeString(strings.TrimRight(cfg.LaibURL, "/")+"/inbox") + `">` + html.EscapeString(texte.T(texte.ZurInbox)) + `</a></p>`)
+		}
 		c := cards.Card{Title: texte.T(texte.ModulSeiteTitel)}
 		if m.Backend != "" {
-			c.Add("Dienst", m.Backend)
+			c.Add(texte.T(texte.ModulDienst), m.Backend)
 		}
 		if m.An() {
-			c.Add("Stand", "an")
+			c.Add(texte.T(texte.ModulStand), texte.T(texte.ModulAn))
 		} else {
-			c.Add("Stand", texte.T(texte.ID("spur."+m.Warum))+" · "+m.Grund)
+			c.Add(texte.T(texte.ModulStand), texte.T(texte.ID("spur."+m.Warum))+" · "+m.Grund)
 		}
 		ws, _ := wuensche(r.Context(), cfg)
 		if x := wunschVon(ws, m.Name); x != nil {
-			c.Add("Wunsch", texte.T(texte.ID("spur."+m.Spur(x)))+" · seit "+x.Seit)
+			c.Add(texte.T(texte.ModulWunsch), texte.T(texte.ID("spur."+m.Spur(x)))+" · "+x.Seit)
 		}
-		c.AddLink("Box-Aufgaben", "Wer sich was gewünscht hat", AufgabenPath)
+		c.AddLink("Box-Aufgaben", "", AufgabenPath)
 		b.WriteString(c.HTML())
+		b.WriteString(schalterForm(m))
 		writePage(w, http.StatusOK, b)
 	}
+}
+
+// schalterForm is the module's switch for an admin: off for one that is
+// on, on again for one switched off; none for one whose backend is
+// missing (its reason says what to install) or that cannot be switched.
+func schalterForm(m modul.Modul) string {
+	tun, label := "", ""
+	switch {
+	case !m.Schaltbar:
+		return ""
+	case m.An():
+		tun, label = "aus", texte.T(texte.AusVorschlagen)
+	case m.Warum == modul.Aus:
+		tun, label = "an", texte.T(texte.AnVorschlagen)
+	default:
+		return ""
+	}
+	return `<form method=post action="` + html.EscapeString(ModulPages+m.Name) + `"><input type=hidden name=tun value=` + tun +
+		`><button data-laeuft="` + html.EscapeString(texte.T(texte.Vorschlagend)) + `">` + html.EscapeString(label) + `</button></form>`
+}
+
+// modulSchalten proposes MODULE_AUS with m switched (laib#1036): the list
+// of modules switched off now, with m added or taken out. Then back to
+// the module's page, which says the proposal waits; a refusal is one
+// sentence, said on the page.
+func modulSchalten(w http.ResponseWriter, r *http.Request, cfg StartConfig, m modul.Modul) {
+	say := func(code int, id texte.ID) { http.Error(w, texte.T(id), code) }
+	an := r.FormValue("tun") == "an"
+	switch {
+	case !fromHomes(r):
+		http.Error(w, "Das geht nur von Homes' eigener Seite.", http.StatusForbidden)
+		return
+	case !m.Schaltbar || an == (m.Warum != modul.Aus) || !an && !m.An():
+		say(http.StatusConflict, texte.NichtSchaltbar)
+		return
+	case cfg.Laib == nil:
+		say(http.StatusServiceUnavailable, texte.VorschlagKeinLaib)
+		return
+	}
+	var aus []string
+	for _, x := range cfg.Module.Module() {
+		if x.Warum == modul.Aus && x.Name != m.Name {
+			aus = append(aus, x.Name)
+		}
+	}
+	grund := fmt.Sprintf(texte.T(texte.GrundVorschlagAn), m.Titel)
+	if !an {
+		aus, grund = append(aus, m.Name), fmt.Sprintf(texte.T(texte.GrundVorschlagAus), m.Titel)
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), wishWait)
+	defer cancel()
+	if geht, err := cfg.Laib.NimmtModulAus(ctx); !geht && err == nil {
+		say(http.StatusServiceUnavailable, texte.VorschlagKeinLaib)
+		return
+	}
+	p, err := cfg.Laib.ModulAusVorschlagen(ctx, strings.Join(aus, ","), grund)
+	switch {
+	case errors.Is(err, laib.ErrNoTool):
+		say(http.StatusServiceUnavailable, texte.VorschlagKeinLaib)
+		return
+	case errors.Is(err, context.DeadlineExceeded):
+		say(http.StatusGatewayTimeout, texte.VorschlagStumm)
+		return
+	case err != nil:
+		log.Printf("homes: modul %s %s vorschlagen: %v", m.Name, r.FormValue("tun"), err)
+		say(http.StatusBadGateway, texte.VorschlagNicht)
+		return
+	}
+	log.Printf("homes: %s schlägt vor: %s %s, Vorschlag #%d", r.Header.Get("Remote-User"), m.Name, r.FormValue("tun"), p.Proposal)
+	http.Redirect(w, r, ModulPages+m.Name+"?vorgeschlagen="+strconv.Itoa(max(p.Proposal, 1)), http.StatusSeeOther)
 }

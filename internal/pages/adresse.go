@@ -62,7 +62,7 @@ func Adresse(cfg StartConfig) http.HandlerFunc {
 			fetch(r, func(ctx context.Context) { z, err = cfg.Laib.ZuhauseShow(ctx) })
 		}
 		b := familyHead(r, cfg, "Adresse", "Box")
-		b.WriteString(unterNav("Adresse", cfg.Usage != nil) + adresseStyle + "<h1>Adresse</h1><p class=k>" + saysAdresseFor + "</p>")
+		b.WriteString(unterNav("Adresse", cfg) + adresseStyle + "<h1>Adresse</h1><p class=k>" + saysAdresseFor + "</p>")
 		q := r.URL.Query()
 		if key := q.Get("gesagt"); adresseSaid[key] != "" && !(key == "kein-laib" && errors.Is(err, laib.ErrNoTool)) {
 			class := "gesagt"
