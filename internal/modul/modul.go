@@ -39,11 +39,26 @@ type Route struct {
 // Angebot is what a module offers the app, in the app's keys
 // (GET /napi/kann "app"; the keys are listed in ADR 0001 §2).
 type Angebot struct {
-	Widgets   []string // "geraet", "energie", "tool:note"
-	Teilen    []string // share targets: "merken", "dokument", "standort-import"
-	Konto     []string // the Homes account's parts: "kontakte", "kalender"
-	Sicherung []string // the backup's parts: "whatsapp", "signal", "sms", "kontakte"
-	Mehr      []string // the app's own Mehr rows: "daten-sichern", "standortverlauf"
+	Widgets   []string `json:"widgets"`   // "geraet", "energie", "tool:note"
+	Teilen    []string `json:"teilen"`    // share targets: "merken", "dokument", "standort-import"
+	Konto     []string `json:"konto"`     // the Homes account's parts: "kontakte", "kalender"
+	Sicherung []string `json:"sicherung"` // the backup's parts: "whatsapp", "signal", "sms", "kontakte"
+	Mehr      []string `json:"mehr"`      // the app's own Mehr rows: "daten-sichern", "standortverlauf"
+}
+
+// plus is a with b's keys it lacks added, in order; every list non-nil,
+// so the JSON says [] and never null.
+func (a Angebot) plus(b Angebot) Angebot {
+	add := func(to, from []string) []string {
+		to = append([]string{}, to...)
+		for _, k := range from {
+			if !slices.Contains(to, k) {
+				to = append(to, k)
+			}
+		}
+		return to
+	}
+	return Angebot{add(a.Widgets, b.Widgets), add(a.Teilen, b.Teilen), add(a.Konto, b.Konto), add(a.Sicherung, b.Sicherung), add(a.Mehr, b.Mehr)}
 }
 
 // Why a module is off (Modul.Warum).
@@ -133,4 +148,38 @@ func (l *Liste) String() string {
 		}
 	}
 	return "Module an: " + strings.Join(an, ", ") + "; aus: " + strings.Join(aus, ", ")
+}
+
+// Kann is GET /napi/kann (ADR 0001 §2, §10): the box's modules for words,
+// and what the app may offer, the union of the offers of those on.
+type Kann struct {
+	Version int        `json:"version"`
+	Module  []KannEins `json:"module"`
+	App     Angebot    `json:"app"`
+}
+
+// KannEins is one module as the app reads it. Bietet is its offer, on or
+// off, so the app knows where an off module leaves its trace (§10).
+type KannEins struct {
+	Name     string  `json:"name"`
+	Titel    string  `json:"titel"`
+	An       bool    `json:"an"`
+	Backend  string  `json:"backend,omitempty"`
+	Standard string  `json:"standard,omitempty"`
+	Warum    string  `json:"warum,omitempty"`
+	Grund    string  `json:"grund,omitempty"`
+	Bietet   Angebot `json:"bietet"`
+}
+
+// Kann is the list as the app reads it.
+func (l *Liste) Kann() Kann {
+	k := Kann{Version: 1, Module: []KannEins{}, App: Angebot{}.plus(Angebot{})}
+	for _, m := range l.alle {
+		k.Module = append(k.Module, KannEins{Name: m.Name, Titel: m.Titel, An: m.An(), Backend: m.Backend, Standard: m.Standard,
+			Warum: m.Warum, Grund: m.Grund, Bietet: Angebot{}.plus(m.App)})
+		if m.An() {
+			k.App = k.App.plus(m.App)
+		}
+	}
+	return k
 }

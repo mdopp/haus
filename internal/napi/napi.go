@@ -24,6 +24,7 @@ import (
 	"github.com/mdopp/homes/internal/ha"
 	"github.com/mdopp/homes/internal/haushalt"
 	"github.com/mdopp/homes/internal/laib"
+	"github.com/mdopp/homes/internal/modul"
 	"github.com/mdopp/homes/internal/reitti"
 	"github.com/mdopp/homes/internal/schalter"
 	"github.com/mdopp/homes/internal/usage"
@@ -66,6 +67,8 @@ type Config struct {
 	// Usage counts each paired phone's request by path (haus#50): which
 	// widgets refresh how often, never which phone; nil counts nothing
 	Usage *usage.Counter
+	// Module: the box's areas (ADR 0001), GET /napi/kann; nil = 404
+	Module *modul.Liste
 }
 
 // refreshed is the event a /napi request counts as: its pattern's path,
@@ -220,6 +223,7 @@ func Handler(c Config) http.Handler {
 	})
 	mux.HandleFunc("POST "+prefix+"/approvals/{id}/approve", verdict)
 	mux.HandleFunc("POST "+prefix+"/approvals/{id}/deny", verdict)
+	mux.HandleFunc("GET /napi/kann", auth(c.kann)) // what this box can do, for the app (ADR 0001 §2)
 	mux.HandleFunc("GET /napi/whoami", func(w http.ResponseWriter, r *http.Request) {
 		if bearer, ok := bearerOf(r); ok && c.Whoami != nil {
 			if uid, ok := c.Whoami(bearer); ok {
