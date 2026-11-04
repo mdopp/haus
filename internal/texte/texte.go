@@ -27,6 +27,7 @@ const (
 	AnfordernStumm      ID = "anfordern.stumm"       // Laib did not answer in time
 	AnfordernGibtsNicht ID = "anfordern.gibts-nicht" // no such module, or it is on
 	AnfordernKeinLaib   ID = "anfordern.kein-laib"   // this Laib takes no wish yet
+	GrundAus            ID = "grund.aus"             // why a module is off: the owner switched it off
 	ModulSeiteTitel     ID = "modul.seite.titel"     // /module/<name>, admins
 )
 
@@ -65,6 +66,7 @@ var de = map[ID]string{
 	AnfordernStumm:      "Die Box hat nicht rechtzeitig geantwortet. Schau gleich nach, ob der Wunsch angekommen ist, bevor du es noch einmal versuchst.",
 	AnfordernGibtsNicht: "Das gibt es hier schon, oder es gibt es gar nicht.",
 	AnfordernKeinLaib:   "Diese Box nimmt noch keine Wünsche an.",
+	GrundAus:            "Auf dieser Box ausgeschaltet.",
 	ModulSeiteTitel:     "Was Homes kann",
 }
 
