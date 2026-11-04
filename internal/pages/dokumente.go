@@ -29,7 +29,7 @@ const (
 	saysFiledMany    = " Dokumente liegen in Paperless und werden gerade gelesen (Texterkennung). Das dauert ein paar Minuten."
 	saysSeeFiled     = "Im Paperless ansehen"
 	saysSeeNewest    = "Die neuesten in Paperless ansehen"
-	saysPaperlessLAN = "Paperless öffnet sich nur zu Hause im WLAN. Ablegen geht hier auch von unterwegs."
+	saysPaperlessLAN = "Paperless öffnet sich nur zu Hause im WLAN; gerade bist du unterwegs. Ablegen geht hier auch von unterwegs."
 	saysOnlyAtHome   = "Nur zu Hause im WLAN."
 )
 
@@ -188,7 +188,7 @@ func atHome(r *http.Request) bool {
 	return ip != nil && (ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast())
 }
 
-const dokStyle = `<style>.lead{color:var(--muted)}.ablegen{margin:18px 0 0}.ablegen .vorne{margin:0;cursor:pointer}.ablegen .vorne input{position:absolute;width:1px;height:1px;opacity:0}.ablegen .danach{display:none}.ablegen:has(input[type=file]:valid) .danach{display:block}
+const dokStyle = `<style>.lead{color:var(--muted)}.ablegen{margin:18px 0 0}.ablegen .vorne{margin:0;cursor:pointer;background:var(--accent-soft);color:var(--accent)}.ablegen .vorne input{position:absolute;width:1px;height:1px;opacity:0}.ablegen .danach{display:none}.ablegen:has(input[type=file]:valid) .danach{display:block}
 .ablegen label[for]{display:block;font-size:.85rem;color:var(--muted);margin:12px 0 6px}.ablegen input[type=text]{width:100%}.ablegen button{margin:12px 0 0}.ablegen p.k{font-size:.85rem}
 .weg{margin:22px 0 0;padding:14px;background:var(--card);border-radius:14px}.weg h2{margin:0;font-size:1rem}
 .weg p.k{font-size:.85rem;margin:8px 0 0}.knopf{display:inline-flex;align-items:center;margin:12px 0 0;min-height:44px;padding:0 18px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-weight:600;text-decoration:none}
@@ -207,6 +207,12 @@ func writeDokumente(w http.ResponseWriter, r *http.Request, cfg StartConfig, cod
 		b.WriteString("<div class=gut role=status><span class=punkt></span><p>" + html.EscapeString(done) + " " + see + "</p></div>")
 	}
 	b.WriteString(gesagt("", problem))
+	if p := cfg.paperless(); p.Set() { // owner 2026-11-04: the archive itself leads, its way in big; LAN-only, said in one line, away from home too
+		b.WriteString(vorne(p.href(newestPath), "In Paperless öffnen"))
+		if cfg.PaperlessLANOnly {
+			b.WriteString(zustand(map[bool]string{false: "gelb"}[atHome(r)], map[bool]string{true: saysOnlyAtHome, false: saysPaperlessLAN}[atHome(r)]))
+		}
+	}
 	scanning := scanSection(r, cfg, scan)
 	if scan.active() { // a stack running or waiting comes first
 		b.WriteString(scanning)
@@ -223,13 +229,6 @@ func writeDokumente(w http.ResponseWriter, r *http.Request, cfg StartConfig, cod
 		b.WriteString(`<p class=k>Oder per Mail an <a href="mailto:` + addr + `">` + addr + `</a>. ` + html.EscapeString(saysMailHow) + `</p>`)
 	}
 	b.WriteString(zuletztAbgelegt(r, cfg) + scanning)
-	if p := cfg.paperless(); p.Set() {
-		if !cfg.paperlessOpens(r) {
-			b.WriteString(`<p class=weiter-in><span class=k>` + html.EscapeString(saysPaperlessLAN) + `</span></p>`)
-		} else {
-			b.WriteString(p.Weiter(newestPath, map[bool]string{true: saysOnlyAtHome}[cfg.PaperlessLANOnly]))
-		}
-	}
 	writePage(w, code, b)
 }
 

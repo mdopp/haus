@@ -180,6 +180,7 @@ func main() {
 	os.MkdirAll(upload, 0o755)
 	doku := cfg
 	doku.Ablage, doku.DocumentsMail, doku.Module = napi.NewUploads(upload), "dokumente@example.org", demoModule(true)
+	doku.PaperlessPublicURL, doku.PaperlessLANOnly = "https://paperless.example", true // the archive's way in, at home only
 	mux.HandleFunc("/dokumente", pages.Dokumente(doku))
 	mux.HandleFunc("/willkommen", pages.Willkommen(cfg))
 	mux.HandleFunc("/sprechen", pages.Sprechen(cfg))

@@ -363,10 +363,16 @@ test('Netzlaufwerk leads with the addresses once set up', async ({ page, request
   await expect(page.locator('details.aendern')).not.toHaveAttribute('open', '');
 });
 
-test('Dokumente leads with filing, the title after a file', async ({ page }) => {
+// Owner 2026-11-04 (no link to Paperless on the web): the archive's way in leads, with its LAN-only line.
+test('Dokumente leads with Paperless, then filing, the title after a file', async ({ page }, info) => {
   await page.goto('/dokumente');
+  await expect(page.locator('a.vorne', { hasText: 'In Paperless öffnen' })).toHaveAttribute('href', /^https:\/\/paperless\.example\//);
+  expect(await above(page, 'a.vorne', '.zustand')).toBe(true);
+  await expect(page.locator('.zustand').first()).toContainText('Nur zu Hause im WLAN');
   const big = page.locator('label.vorne', { hasText: 'Foto machen oder Datei ablegen' });
   await expect(big).toBeVisible();
+  expect(await above(page, 'a.vorne', 'label.vorne')).toBe(true);
+  await page.screenshot({ path: info.outputPath('dokumente.png'), fullPage: true });
   expect(await above(page, 'label.vorne', 'text=Oder per Mail an')).toBe(true);
   await expect(page.getByLabel('Titel (wenn du magst)')).toBeHidden();
   await page.locator('input[type=file]').setInputFiles({ name: 'brief.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4') });
