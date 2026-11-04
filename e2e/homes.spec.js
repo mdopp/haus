@@ -119,23 +119,31 @@ test('a swipe over a card sends nothing; the level opens its sheet', async ({ pa
   expect(sent, 'opening and closing send nothing').toEqual([]);
 });
 
-test('a quick step sends exactly one request, the slider one when let go', async ({ page }) => {
+// the lamp back at 60 %, for the next test
+const kuecheAt60 = (request, info) => request.post('/schalten', { form: { geraet: 'light.kueche', tun: 'light.turn_on', wert: '60' }, headers: { 'X-Homes-Skript': '1', Origin: info.project.use.baseURL } });
+
+test('a quick step sends exactly one request, the slider one when let go', async ({ page, request }, info) => {
   const sent = posts(page);
   await page.goto('/raeume');
-  await level(page, 'Küchenlicht').tap();
-  await sheet(page, 'Küchenlicht').getByRole('button', { name: 'Helligkeit 25 %' }).tap();
-  await expect.poll(() => sent.length).toBe(1);
-  await page.waitForTimeout(800);
-  expect(sent).toHaveLength(1);
-  expect(sent[0]).toContain('/schalten');
-  expect(sent[0]).toContain('geraet=light.kueche');
-  expect(sent[0]).toContain('wert=25');
-  await expect(sheet(page, 'Küchenlicht'), 'the sheet stays open after the answer').toBeVisible();
-  const s = slider(page, 'Küchenlicht Helligkeit');
-  await s.focus();
-  await s.press('ArrowRight');
-  await expect.poll(() => sent.length).toBe(2);
-  expect(sent[1]).toContain('wert=61');
+  try {
+    await level(page, 'Küchenlicht').tap();
+    await sheet(page, 'Küchenlicht').getByRole('button', { name: 'Helligkeit 25 %' }).tap();
+    await expect.poll(() => sent.length).toBe(1);
+    await page.waitForTimeout(800);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toContain('/schalten');
+    expect(sent[0]).toContain('geraet=light.kueche');
+    expect(sent[0]).toContain('wert=25');
+    await expect(sheet(page, 'Küchenlicht'), 'the sheet stays open after the answer').toBeVisible();
+    const s = slider(page, 'Küchenlicht Helligkeit');
+    await expect(s, 'the sheet shows the level the step set').toHaveValue('25');
+    await s.focus();
+    await s.press('ArrowRight');
+    await expect.poll(() => sent.length).toBe(2);
+    expect(sent[1]).toContain('wert=26');
+  } finally {
+    await kuecheAt60(request, info);
+  }
 });
 
 // owner 2026-11-04 (a screenshot of /raeume): a lamp that is off said
@@ -184,7 +192,7 @@ test('a dimmer that is off says aus as its level; a step turns it on', async ({ 
     await expect(level(page, 'Küchenlicht')).toHaveText('25 %');
     await sheet(page, 'Küchenlicht').getByRole('button', { name: 'Fertig' }).tap();
   } finally {
-    await request.post('/schalten', { form: { geraet: 'light.kueche', tun: 'light.turn_on', wert: '60' }, headers: { 'X-Homes-Skript': '1', Origin: info.project.use.baseURL } });
+    await kuecheAt60(request, info);
   }
   await page.goto('/raeume');
   await expect(level(page, 'Küchenlicht')).toHaveText('60 %');
