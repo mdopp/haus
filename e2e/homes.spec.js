@@ -407,18 +407,27 @@ test("a list of one's own is made, switched to, and deleted", async ({ page }) =
   await expect(page.getByRole('link', { name: name })).toHaveCount(0);
 });
 
-test('music goes up in pieces and arrives whole', async ({ page, request }) => {
+// Musik verwalten (owner 2026-11-04: „nur Dateien darstellen, aber nichts Komplexes“): how music
+// gets in, one list of the files under it, a failed one with its actions on its row; Platten
+// by whether one's Discogs is connected; with nothing uploaded only Hinzufügen and nothing refreshes.
+test('Musik is how music gets in, its files, and the records by Discogs', async ({ page, request }, info) => {
+  await request.get('/demo/musik?leer=0');
   await page.goto('/musik');
-  const big = Buffer.alloc(9 * 1024 * 1024, 7); // two pieces
-  await page.setInputFiles('#musik-dateien', [
-    { name: 'lied.mp3', mimeType: 'audio/mpeg', buffer: big },
-    { name: 'notiz.txt', mimeType: 'text/plain', buffer: Buffer.from('nein') },
-  ]);
-  await expect(page.locator('#musik-stand')).toContainText('1 von 2 Dateien hochgeladen', { timeout: 20_000 });
-  await expect(page.locator('#musik-liste')).toContainText('keine Musikdatei');
-  const got = await (await request.get('/demo/musik')).json();
-  expect(got['lied.mp3']).toBe(big.length);
-  expect(Object.keys(got).filter((k) => k.includes('.part'))).toEqual([]);
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Musik');
+  await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Hinzufügen', 'Platten']);
+  const rows = page.locator('.musik-liste li');
+  await expect(rows).toHaveText([/Sommerplatte.zip\s*wird einsortiert/, /kassette-1994.rar\s*nicht einsortiert: RAR/, /Erfundenes Album.zip\s*fertig: 2 Alben, 24 Titel/]);
+  await expect(rows.nth(1).getByRole('button')).toHaveText(['Noch einmal einsortieren', 'Löschen']);
+  await expect(page.locator('.musik-platten')).toContainText('Platte erfassen');
+  await expect(page.locator('p.ruhig').last()).toContainText('Discogs: verbunden mit');
+  await page.screenshot({ path: info.outputPath('musik-demo.png'), fullPage: true });
+  await request.get('/demo/musik?leer=1&discogs=0');
+  await page.reload();
+  await expect(rows).toHaveCount(0);
+  await expect(page.locator('[data-auffrischen]')).toHaveCount(0);
+  await expect(page.locator('.musik-platten a')).toHaveText([/Wunschliste · \d+/, 'Mit Discogs verbinden']);
+  await page.screenshot({ path: info.outputPath('musik-leer.png'), fullPage: true });
+  await request.get('/demo/musik?leer=0');
 });
 
 // owner 2026-10-26: after the photo the page stood still at „1 Foto(s)

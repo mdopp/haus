@@ -76,6 +76,20 @@ const (
 	ZurStartseite ID = "willkommen.weiter"
 	GrundDienst   ID = "grund.dienst"        // a link module's service is not on the box: „%s“ is its name
 	GrundUnklar   ID = "grund.dienst-unklar" // … or Laib did not say at start
+	// Musik, managing the music (owner 2026-11-04: „Musik verwalten“, not what is playing)
+	MusikDazu             ID = "musik.dazu"              // the section how music gets in
+	MusikHandy            ID = "musik.handy"             // from the phone: Teilen → Homes
+	MusikComputer         ID = "musik.computer"          // from a computer at home; its word „Netzlaufwerk“ links to the page
+	MusikWirdEinsortiert  ID = "musik.wird-einsortiert"  // a file beets has not finished
+	MusikDauert           ID = "musik.dauert"            // an upload waits longer than ten minutes
+	MusikFertig           ID = "musik.fertig"            // „%s“ what went in
+	MusikNicht            ID = "musik.nicht"             // a file beets kept back; its reason after
+	MusikPlatten          ID = "musik.platten"           // the records
+	MusikPlatteErfassen   ID = "musik.platte-erfassen"   // its button
+	MusikWunschliste      ID = "musik.wunschliste"       // the music wish list's link, its open wishes after
+	MusikDiscogsVerbunden ID = "musik.discogs-verbunden" // „%s“ the Discogs account
+	MusikDiscogsVerbinden ID = "musik.discogs-verbinden" // not connected yet: the quiet way to connect
+	MusikDiscogsBringt    ID = "musik.discogs-bringt"    // what connecting brings
 )
 
 var de = map[ID]string{
@@ -177,4 +191,17 @@ var de = map[ID]string{
 	"schritt.signal":          "Tippe unten auf „Öffnen“ und schreib „Hallo“. {name} antwortet, sobald ein Admin dich einmal freigegeben hat.",
 	"schritt.homes":           "Öffne die App, trag {adresse} ein und melde dich an. Die App richtet sich dann selbst ein.",
 	"schritt.homes-iphone":    "iPhone: Öffne {adresse} in Safari, tippe auf „Teilen“ und dann auf „Zum Home-Bildschirm“.",
+	"musik.dazu":              "Hinzufügen",
+	"musik.handy":             "Auf dem Handy: Lieder oder ein ganzes Album als ZIP teilen und Homes wählen. Die Box sortiert sie selbst ein.",
+	"musik.computer":          "Am Computer, zu Hause: in den Ordner „musik-eingang“ auf dem Netzlaufwerk legen.",
+	"musik.wird-einsortiert":  "wird einsortiert …",
+	"musik.dauert":            "Das dauert länger als sonst; sobald es fertig ist, bekommst du eine Nachricht.",
+	"musik.fertig":            "fertig: %s in der Musik",
+	"musik.nicht":             "nicht einsortiert",
+	"musik.platten":           "Platten",
+	"musik.platte-erfassen":   "Platte erfassen",
+	"musik.wunschliste":       "Wunschliste",
+	"musik.discogs-verbunden": "Discogs: verbunden mit „%s“",
+	"musik.discogs-verbinden": "Mit Discogs verbinden",
+	"musik.discogs-bringt":    "dann erfasst du Platten mit einem Foto in deine Sammlung.",
 }

@@ -464,3 +464,36 @@ func TestSweepUploads(t *testing.T) {
 		t.Fatalf("after the sweep: %v", keys(fs))
 	}
 }
+
+// Teilen → Homes → Musik (owner 2026-11-04): POST /napi/musik takes songs and ZIPs into beets'
+// inbox for the paired phone's person, behind its bearer; without an inbox it is 404.
+func TestMusikFromThePhone(t *testing.T) {
+	var calls []string
+	lb := fakeLaib(t, &calls)
+	defer lb.Close()
+	inbox := t.TempDir()
+	cfg := Config{Laib: &laib.Client{URL: lb.URL, Token: "ops"}, Validate: StaticValidator([]string{"dev1"}), MusicInbox: inbox,
+		Whoami: func(b string) (string, bool) { return "anna", b == "dev1" }}
+	send := func(bearer string) int {
+		ct, body := multipartBody(t, part{name: "file", filename: "Album.zip", ctype: "application/zip", body: []byte("PK..")})
+		req := httptest.NewRequest("POST", "/napi/musik", body)
+		req.Header.Set("Content-Type", ct)
+		req.Header.Set("Authorization", "Bearer "+bearer)
+		rec := httptest.NewRecorder()
+		Handler(cfg).ServeHTTP(rec, req)
+		return rec.Code
+	}
+	if code := send("dev1"); code != 200 {
+		t.Fatalf("%d", code)
+	}
+	if b, _ := os.ReadFile(filepath.Join(inbox, "._Album.zip.von")); string(b) != "anna\n" {
+		t.Errorf("sidecar %q", b)
+	}
+	if code := send("fremd"); code != http.StatusUnauthorized {
+		t.Errorf("no device → %d", code)
+	}
+	cfg.MusicInbox = ""
+	if code := send("dev1"); code != http.StatusNotFound {
+		t.Errorf("no inbox → %d", code)
+	}
+}

@@ -73,8 +73,6 @@ func Gruppen(cfg StartConfig) map[string][]modul.Route {
 func musikGruppe(gs gruppen, cfg StartConfig) {
 	if cfg.MusicInbox != "" {
 		gs.add("musik", MusikPath, Musik(cfg))
-		gs.add("musik", MusikTeilPath, Musik(cfg))
-		gs.add("musik", MusikStandPath, Musik(cfg)) // haus#113: the import's line
 	}
 	if cfg.Wuensche != nil {
 		gs.add("musik", DiscogsPath, Discogs(cfg)) // connect one's own Discogs; without the app's keys, how to set them

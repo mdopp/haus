@@ -52,6 +52,7 @@ import (
 	"github.com/mdopp/homes/internal/pages"
 	"github.com/mdopp/homes/internal/podcasts"
 	"github.com/mdopp/homes/internal/reitti"
+	"github.com/mdopp/homes/internal/samba"
 	"github.com/mdopp/homes/internal/texte"
 )
 
@@ -121,7 +122,6 @@ func main() {
 	}
 
 	inbox := filepath.Join(dir, "musik-eingang")
-	os.MkdirAll(inbox, 0o755)
 	dav := davfake.New("homes", "demo")
 	defer dav.Close()
 	dav.AddCalendar("/homes/haushalt/", "Haushalt")
@@ -143,7 +143,10 @@ func main() {
 		log.Fatal(err)
 	}
 	// Anna's Discogs is connected (owner 2026-10-26: Platte erfassen on a phone is checked too); the app reaches no Discogs
-	os.WriteFile(filepath.Join(dir, "discogs-konten.json"), []byte(`{"anna":{"name":"anna","token":"t","secret":"s","seit":"2026-10-26T10:00:00Z"}}`), 0o600)
+	discogsKonto := func(an bool) {
+		os.WriteFile(filepath.Join(dir, "discogs-konten.json"), []byte(map[bool]string{true: `{"anna":{"name":"anna","token":"t","secret":"s","seit":"2026-10-26T10:00:00Z"}}`, false: `{}`}[an]), 0o600)
+	}
+	discogsKonto(true)
 	shelves := &discogs.Regale{App: &discogs.App{Key: "demo", Secret: "demo", Base: "http://127.0.0.1:1", Web: "https://www.discogs.test"}, Dir: dir}
 	// haus#152: what Anna watched and heard, and the film and book wish list
 	absFake.Hoert("anna", "Krabat", 0.4, false, time.Now().Add(-time.Hour))
@@ -169,7 +172,6 @@ func main() {
 	mux.HandleFunc("/energie", pages.Energie(cfg))
 	mux.HandleFunc("/kalender", pages.Kalender(cfg))
 	mux.HandleFunc("/kalender/verwalten", pages.KalenderVerwalten(cfg))
-	mux.HandleFunc(pages.MusikPath, pages.Musik(cfg))
 	mux.HandleFunc(pages.PlattePath, pages.Platte(cfg))
 	mux.HandleFunc(pages.AktivierungswortPath, pages.Aktivierungswort(cfg))
 	mux.HandleFunc("/aufgaben", pages.DeineAufgaben(cfg))
@@ -201,21 +203,6 @@ func main() {
 	standort.Reitti = &reitti.Reitti{URL: "http://127.0.0.1:1", PublicURL: "https://reitti.example", Dir: dir}
 	mux.HandleFunc(pages.StandortPath, pages.Standort(standort))
 	mux.HandleFunc("/demo/standort", func(w http.ResponseWriter, r *http.Request) { reittiKonto(r.URL.Query().Get("punkte") != "0") })
-	mux.HandleFunc(pages.MusikTeilPath, pages.Musik(cfg))
-	mux.HandleFunc(pages.MusikStandPath, pages.Musik(cfg))                       // haus#113: the import's line
-	mux.HandleFunc("/demo/musik", func(w http.ResponseWriter, r *http.Request) { // what arrived in the inbox, name → size
-		got := map[string]int64{}
-		filepath.WalkDir(inbox, func(p string, d os.DirEntry, err error) error {
-			if err == nil && !d.IsDir() {
-				if fi, err := d.Info(); err == nil {
-					rel, _ := filepath.Rel(inbox, p)
-					got[rel] = fi.Size()
-				}
-			}
-			return nil
-		})
-		json.NewEncoder(w).Encode(got)
-	})
 	mux.HandleFunc("/notizen", pages.Notizen(cfg))
 	mux.HandleFunc(cards.NotePages, pages.Notizen(cfg))
 	// Mehr with a Laib whose task list takes a while: the Einrichtung card
@@ -229,6 +216,16 @@ func main() {
 	mux.HandleFunc(pages.SpurenPath, pages.Mehr(mehr))
 	mux.HandleFunc(pages.AnfordernPath, pages.Anfordern(mehr))
 	mux.HandleFunc(pages.ModulPages, pages.ModulSeite(mehr))
+	// Musik (owner 2026-11-04: „nur Dateien darstellen“): a file being sorted in, one done, one beets
+	// kept back; /demo/musik?leer=1 empties the inbox and beets' status, ?discogs=0 is Anna without Discogs
+	musikCfg := mehr
+	musikCfg.Samba = &samba.Dir{Path: dir}
+	mux.HandleFunc(pages.MusikPath, pages.Musik(musikCfg))
+	mux.HandleFunc("/demo/musik", func(w http.ResponseWriter, r *http.Request) {
+		demoLaib.wishes.Status("beets", laibfake.DemoBeets(inbox, time.Now(), r.URL.Query().Get("leer") == "1"))
+		discogsKonto(r.URL.Query().Get("discogs") != "0")
+	})
+	demoLaib.wishes.Status("beets", laibfake.DemoBeets(inbox, time.Now(), false))
 	mux.HandleFunc("/demo/wunsch", func(w http.ResponseWriter, r *http.Request) { // a wish moved on in Laib: wartet, abgelehnt, …
 		demoLaib.wishes.Setze(r.URL.Query().Get("modul"), r.URL.Query().Get("stand"), "")
 		mehr.Laib.ForgetWuensche()

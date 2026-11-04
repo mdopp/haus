@@ -105,7 +105,7 @@ type StartConfig struct {
 	// the page says the box has no archive
 	Sicherung          *napi.Sicherung
 	Papierkorb         *papierkorb.Korb // what the family deleted, for 30 days (haus#174); nil: deletes go at once
-	MusicInbox         string           // laib's music inbox, which beets sorts in (haus#107); "": no Musik hinzufügen
+	MusicInbox         string           // laib's music inbox, which beets sorts in (haus#107); "": no Musik page
 	PaperlessPublicURL string
 	PaperlessLANOnly   bool
 }

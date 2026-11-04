@@ -95,7 +95,7 @@ func TestEachLeafModuleOff(t *testing.T) {
 		"notizen": {{wunschliste, `href=/notizen`, `!href=/notizen`}, {"/notizen", "Neue Notiz", "noch nicht eingerichtet"},
 			{"napi:/napi/defs/tool", `"tool-id":"note"`, `!"tool-id":"note"`}, {"napi:/napi/portal/notes", "#200", "#404"},
 			{"napi:POST /napi/merken", "#400", "#404"}, {"mcp:", `"notiz_anlegen"`, `!"notiz_anlegen"`}},
-		"musik": {{"/mehr", `href="/musik"`, `!href="/musik"`}, {"/musik", "Musik hinzufügen", "#404"}, {"/discogs", "#200", "#404"}},
+		"musik": {{"/mehr", `href="/musik"`, `!href="/musik"`}, {"/musik", "Auf dem Handy: Lieder", "#404"}, {"/discogs", "#200", "#404"}},
 		// the music wish list is musik's: it stays with einkauf off, the other lists go
 		"einkauf": {{wunschliste, `href=/einkauf`, `!href=/einkauf`}, {"/einkauf", "<h1>Einkauf</h1>", "#404"},
 			{"/einkauf?liste=liste-musik", "<h1>Musik</h1>", "<h1>Musik</h1>"}, {"/einkauf?liste=liste-musik", "Listen verwalten", "!Listen verwalten"},

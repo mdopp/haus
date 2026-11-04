@@ -45,8 +45,7 @@ GET /scannen/trennblatt → /scannen/trennblatt
 GET /einkauf → /einkauf
 GET /einkauf/rezepte → /einkauf/rezepte
 GET /musik → /musik
-GET /musik/teil → /musik/teil
-GET /musik/stand → /musik/stand
+GET /musik/bild → /
 GET /discogs → /discogs
 GET /discogs/zurueck → /
 GET /platte → /
@@ -108,8 +107,7 @@ GET /scannen/trennblatt → /scannen/trennblatt
 GET /einkauf → /
 GET /einkauf/rezepte → /
 GET /musik → /
-GET /musik/teil → /
-GET /musik/stand → /
+GET /musik/bild → /
 GET /discogs → /
 GET /discogs/zurueck → /
 GET /platte → /
@@ -171,8 +169,7 @@ GET /scannen/trennblatt → /scannen/trennblatt
 GET /einkauf → /
 GET /einkauf/rezepte → /
 GET /musik → /
-GET /musik/teil → /
-GET /musik/stand → /
+GET /musik/bild → /
 GET /discogs → /
 GET /discogs/zurueck → /
 GET /platte → /
@@ -234,8 +231,7 @@ GET /scannen/trennblatt → /scannen/trennblatt
 GET /einkauf → /einkauf
 GET /einkauf/rezepte → /einkauf/rezepte
 GET /musik → /
-GET /musik/teil → /
-GET /musik/stand → /
+GET /musik/bild → /
 GET /discogs → /discogs
 GET /discogs/zurueck → /discogs/zurueck
 GET /platte → /platte
@@ -297,8 +293,7 @@ GET /scannen/trennblatt → /scannen/trennblatt
 GET /einkauf → /einkauf
 GET /einkauf/rezepte → /einkauf/rezepte
 GET /musik → /musik
-GET /musik/teil → /musik/teil
-GET /musik/stand → /musik/stand
+GET /musik/bild → /
 GET /discogs → /discogs
 GET /discogs/zurueck → /
 GET /platte → /
@@ -360,8 +355,7 @@ GET /scannen/trennblatt → /scannen/trennblatt
 GET /einkauf → /einkauf
 GET /einkauf/rezepte → /einkauf/rezepte
 GET /musik → /musik
-GET /musik/teil → /musik/teil
-GET /musik/stand → /musik/stand
+GET /musik/bild → /
 GET /discogs → /discogs
 GET /discogs/zurueck → /
 GET /platte → /
@@ -423,8 +417,7 @@ GET /scannen/trennblatt → /scannen/trennblatt
 GET /einkauf → /einkauf
 GET /einkauf/rezepte → /einkauf/rezepte
 GET /musik → /musik
-GET /musik/teil → /musik/teil
-GET /musik/stand → /musik/stand
+GET /musik/bild → /
 GET /discogs → /discogs
 GET /discogs/zurueck → /
 GET /platte → /
@@ -486,8 +479,7 @@ GET /scannen/trennblatt → /scannen/trennblatt
 GET /einkauf → /einkauf
 GET /einkauf/rezepte → /einkauf/rezepte
 GET /musik → /musik
-GET /musik/teil → /musik/teil
-GET /musik/stand → /musik/stand
+GET /musik/bild → /
 GET /discogs → /discogs
 GET /discogs/zurueck → /
 GET /platte → /
@@ -549,8 +541,7 @@ GET /scannen/trennblatt → /scannen/trennblatt
 GET /einkauf → /einkauf
 GET /einkauf/rezepte → /einkauf/rezepte
 GET /musik → /musik
-GET /musik/teil → /musik/teil
-GET /musik/stand → /musik/stand
+GET /musik/bild → /
 GET /discogs → /discogs
 GET /discogs/zurueck → /
 GET /platte → /
@@ -612,8 +603,7 @@ GET /scannen/trennblatt → /scannen/trennblatt
 GET /einkauf → /einkauf
 GET /einkauf/rezepte → /einkauf/rezepte
 GET /musik → /musik
-GET /musik/teil → /musik/teil
-GET /musik/stand → /musik/stand
+GET /musik/bild → /
 GET /discogs → /discogs
 GET /discogs/zurueck → /
 GET /platte → /
@@ -675,8 +665,7 @@ GET /scannen/trennblatt → /scannen/trennblatt
 GET /einkauf → /einkauf
 GET /einkauf/rezepte → /einkauf/rezepte
 GET /musik → /musik
-GET /musik/teil → /musik/teil
-GET /musik/stand → /musik/stand
+GET /musik/bild → /
 GET /discogs → /discogs
 GET /discogs/zurueck → /
 GET /platte → /
@@ -738,8 +727,7 @@ GET /scannen/trennblatt → /scannen/trennblatt
 GET /einkauf → /einkauf
 GET /einkauf/rezepte → /einkauf/rezepte
 GET /musik → /musik
-GET /musik/teil → /musik/teil
-GET /musik/stand → /musik/stand
+GET /musik/bild → /
 GET /discogs → /discogs
 GET /discogs/zurueck → /
 GET /platte → /
@@ -801,8 +789,7 @@ GET /scannen/trennblatt → /scannen/trennblatt
 GET /einkauf → /einkauf
 GET /einkauf/rezepte → /einkauf/rezepte
 GET /musik → /musik
-GET /musik/teil → /musik/teil
-GET /musik/stand → /musik/stand
+GET /musik/bild → /
 GET /discogs → /discogs
 GET /discogs/zurueck → /
 GET /platte → /
@@ -864,8 +851,7 @@ GET /scannen/trennblatt → /scannen/trennblatt
 GET /einkauf → /einkauf
 GET /einkauf/rezepte → /einkauf/rezepte
 GET /musik → /
-GET /musik/teil → /
-GET /musik/stand → /
+GET /musik/bild → /
 GET /discogs → /
 GET /discogs/zurueck → /
 GET /platte → /
@@ -927,8 +913,7 @@ GET /scannen/trennblatt → /scannen/trennblatt
 GET /einkauf → /einkauf
 GET /einkauf/rezepte → /einkauf/rezepte
 GET /musik → /musik
-GET /musik/teil → /musik/teil
-GET /musik/stand → /musik/stand
+GET /musik/bild → /
 GET /discogs → /discogs
 GET /discogs/zurueck → /
 GET /platte → /
@@ -990,8 +975,7 @@ GET /scannen/trennblatt → /scannen/trennblatt
 GET /einkauf → /einkauf
 GET /einkauf/rezepte → /einkauf/rezepte
 GET /musik → /musik
-GET /musik/teil → /musik/teil
-GET /musik/stand → /musik/stand
+GET /musik/bild → /
 GET /discogs → /discogs
 GET /discogs/zurueck → /
 GET /platte → /
@@ -1053,8 +1037,7 @@ GET /scannen/trennblatt → /scannen/trennblatt
 GET /einkauf → /einkauf
 GET /einkauf/rezepte → /einkauf/rezepte
 GET /musik → /musik
-GET /musik/teil → /musik/teil
-GET /musik/stand → /musik/stand
+GET /musik/bild → /
 GET /discogs → /discogs
 GET /discogs/zurueck → /
 GET /platte → /
@@ -1116,8 +1099,7 @@ GET /scannen/trennblatt → /scannen/trennblatt
 GET /einkauf → /einkauf
 GET /einkauf/rezepte → /einkauf/rezepte
 GET /musik → /musik
-GET /musik/teil → /musik/teil
-GET /musik/stand → /musik/stand
+GET /musik/bild → /
 GET /discogs → /discogs
 GET /discogs/zurueck → /
 GET /platte → /
@@ -1179,8 +1161,7 @@ GET /scannen/trennblatt → /scannen/trennblatt
 GET /einkauf → /einkauf
 GET /einkauf/rezepte → /einkauf/rezepte
 GET /musik → /musik
-GET /musik/teil → /musik/teil
-GET /musik/stand → /musik/stand
+GET /musik/bild → /
 GET /discogs → /discogs
 GET /discogs/zurueck → /
 GET /platte → /
@@ -1242,8 +1223,7 @@ GET /scannen/trennblatt → /scannen/trennblatt
 GET /einkauf → /einkauf
 GET /einkauf/rezepte → /einkauf/rezepte
 GET /musik → /musik
-GET /musik/teil → /musik/teil
-GET /musik/stand → /musik/stand
+GET /musik/bild → /
 GET /discogs → /discogs
 GET /discogs/zurueck → /
 GET /platte → /
@@ -1305,8 +1285,7 @@ GET /scannen/trennblatt → /scannen/trennblatt
 GET /einkauf → /einkauf
 GET /einkauf/rezepte → /einkauf/rezepte
 GET /musik → /musik
-GET /musik/teil → /musik/teil
-GET /musik/stand → /musik/stand
+GET /musik/bild → /
 GET /discogs → /discogs
 GET /discogs/zurueck → /
 GET /platte → /
@@ -1368,8 +1347,7 @@ GET /scannen/trennblatt → /scannen/trennblatt
 GET /einkauf → /einkauf
 GET /einkauf/rezepte → /einkauf/rezepte
 GET /musik → /musik
-GET /musik/teil → /musik/teil
-GET /musik/stand → /musik/stand
+GET /musik/bild → /
 GET /discogs → /discogs
 GET /discogs/zurueck → /
 GET /platte → /
@@ -1431,8 +1409,7 @@ GET /scannen/trennblatt → /scannen/trennblatt
 GET /einkauf → /einkauf
 GET /einkauf/rezepte → /einkauf/rezepte
 GET /musik → /musik
-GET /musik/teil → /musik/teil
-GET /musik/stand → /musik/stand
+GET /musik/bild → /
 GET /discogs → /discogs
 GET /discogs/zurueck → /
 GET /platte → /
@@ -1494,8 +1471,7 @@ GET /scannen/trennblatt → /scannen/trennblatt
 GET /einkauf → /einkauf
 GET /einkauf/rezepte → /einkauf/rezepte
 GET /musik → /musik
-GET /musik/teil → /musik/teil
-GET /musik/stand → /musik/stand
+GET /musik/bild → /
 GET /discogs → /discogs
 GET /discogs/zurueck → /
 GET /platte → /
@@ -1557,8 +1533,7 @@ GET /scannen/trennblatt → /scannen/trennblatt
 GET /einkauf → /einkauf
 GET /einkauf/rezepte → /einkauf/rezepte
 GET /musik → /musik
-GET /musik/teil → /musik/teil
-GET /musik/stand → /musik/stand
+GET /musik/bild → /
 GET /discogs → /discogs
 GET /discogs/zurueck → /
 GET /platte → /

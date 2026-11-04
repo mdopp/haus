@@ -95,7 +95,7 @@ type site struct {
 // Bote, and the pages behind the proxy secret.
 func routes(s site) http.Handler {
 	mux := http.NewServeMux()
-	s.napi.Usage = s.usage
+	s.napi.Usage, s.napi.MusicInbox = s.usage, s.musik // the app's songs and ZIPs go where the Musik page looks (haus#107)
 	mux.Handle("/napi/", napi.Handler(s.napi))
 	// the Bote's bearer, not the proxy secret: the Bote calls the host port from its pod
 	// (laib ADR 0012 §4; the template publishes 8650 lan:false, the firewall keeps
