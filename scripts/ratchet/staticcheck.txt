@@ -1,8 +1,6 @@
 # scripts/ratchet.py staticcheck: the number is how often
 # written by `scripts/ratchet.py --update`; lowered in the PR that fixes one, raised only with --accept
-# total 5
+# total 3
 1 internal/abs/finden_test.go: should merge variable declaration with assignment on next line (S1021)
 1 internal/caldav/spiegel_test.go: identical expressions on the left and right side of the '!=' operator (SA4000)
 1 internal/napi/sicherung_letzte_test.go: should use constant http.StatusUnauthorized instead of numeric literal 401 (ST1013)
-1 internal/pages/satz.go: func dauerWorte is unused (U1000)
-1 internal/paperless/vertraege.go: var vertragFelder is unused (U1000)

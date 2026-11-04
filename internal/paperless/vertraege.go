@@ -41,9 +41,6 @@ type Vertrag struct {
 	Unsicher     bool
 }
 
-// order is the fields as they are said.
-var vertragFelder = []string{"Anbieter", "Vertragsnummer", "Vertragsbeginn", "Vertragsende", "Kündigungsfrist", "Nächster Kündigungstermin", "Betrag", "Zahlungsintervall"}
-
 type named struct {
 	ID       int    `json:"id"`
 	Name     string `json:"name"`
