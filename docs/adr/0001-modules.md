@@ -1,0 +1,472 @@
+# ADR 0001 — Homes is built from modules, and the app asks what the box can do
+
+Applies when you add an area to Homes (a page, a nav entry, a Start part, a
+`/napi` route, a widget type, a share target) or a `HOMES_*` variable; when
+the app should show or hide something depending on the box; when a box
+should run Homes without one of its areas; or when someone asks for a
+second backend for an area (Nextcloud instead of Radicale, Plex instead of
+Jellyfin).
+
+- **Status:** Accepted, 2026-11-04. The plan; nothing is built yet. The
+  steps are issues (below), done in the order given.
+- **Deciders:** the owner (mdopp), 2026-11-04: „sollte es nicht ein Plugin
+  sein, so dass man in anderen Installationen mehr/andere Tools nutzen
+  kann; dass man auswählen kann, was der Server und damit die App kann und
+  womit sie es macht“. The direction was accepted the same day: modules
+  compiled in with an explicit list, no runtime plugins. The app reads
+  what the server has, and Laib chooses.
+- **Relates to:** laib ADR 0004 (templates: `${VAR}`, no logic), 0014
+  (three programs), 0017 (data in standard backends), 0022 (the app is a
+  widget client), 0026 (household verbs: values proposals).
+
+## Context
+
+Homes already switches about twenty areas on and off. It does this
+implicitly, by asking whether a backend is set:
+
+- About 60 `HOMES_*`/`LAIB_*` variables are read in `cmd/homes/main.go`
+  and in a dozen `FromEnv` functions (`haushalt`, `ha`, `abs`, `jellyfin`,
+  `reitti`, `samba`, `bote`, `usage`, `werkstatt`, `discogs`, `judge`,
+  `energie`). Each one leaves a pointer nil or a string empty.
+- `pages.StartConfig` (`internal/pages/start.go`) has about twenty fields
+  documented as „nil: no page“. `shows()` in `internal/pages/family.go`
+  turns them into the nav, and the hard-coded `tabs`, `haushaltPages` and
+  `mehr` tables give each entry its place and icon.
+- `routes()` in `cmd/homes/main.go` mounts the pages, partly behind
+  `if s.x != nil`. `napi.Handler` (`internal/napi/napi.go`) mounts the
+  `/napi` groups the same way.
+- A missing backend is answered in four different ways. A page is either
+  missing from the nav, says `notSet`, or is a 404. A `/napi` path is
+  either missing (404 `not_found`) or answers 503 with a sentence
+  (`sicherung`, `standort`, `gemeinsam`, `kontakte`).
+
+**Nothing lists which areas exist.** You have to read `main.go`,
+`StartConfig`, `shows()` and `napi.Handler` together to know what an area
+is. The app cannot ask at all. homes-android hard-codes its widget types
+(`WidgetTypes.ALL`), its Mehr rows (`HomeActivity.renderMehr`), its share
+targets (manifest), its account parts and its backup parts. It finds a
+missing area only when the person uses it and gets the error.
+
+On the Laib side, a template has no conditionals (laib ADR 0004), and a
+value is flat text. Homes learns that a backend exists only because that
+service's post-deploy minted a token for it (HA, ABS, Jellyfin), or
+because someone typed a URL into `values.yml` (`REITTI_URL`,
+`GESUNDHEIT_URL`).
+
+## Decision
+
+### 1. A module is a Go value, compiled in; the list is explicit
+
+There are no runtime plugins. Go's `plugin` package needs the same
+toolchain and the same versions of every dependency, does not work on a
+scratch image, and cannot unload. A plugin process per area would bring
+its own API, its own auth, its own health and its own release, which
+multiplies everything Laib watches. Every area stays in the one binary,
+but each one *declares itself*. Homes builds one list from those
+declarations, and everything else reads that list: the routes, the nav,
+Start, the log line, `/napi/kann` and the Box page.
+
+Homes' import rules (`scripts/loc.sh`) decide where the code goes:
+
+- **`internal/modul`** holds the types and the list. It goes in the
+  *shared* area and imports only the standard library.
+- **`internal/napi`** and **`internal/pages`** export one route group per
+  area, `func Standort(c Config) []modul.Route`, in place of today's
+  `if c.Reitti != nil { … routes(mux, auth) }`. Both may import shared
+  packages.
+- **`cmd/homes/module.go`** is the catalog. It has one builder per
+  module, because only `cmd` may import `pages`. A builder reads its
+  variables, builds its connection, and returns the module, either on
+  with handlers or off with a reason.
+
+```go
+// Package modul is what one area of Homes says about itself (ADR 0001):
+// what it is called, what it talks to, what it serves and what it offers
+// the app. Homes builds one Liste from them at start; it never changes
+// while Homes runs. Standard library only (scripts/loc.sh: shared).
+package modul
+
+// Ort is where a module's entry sits in the family's selection.
+type Ort uint8
+
+const (
+	Nirgends Ort = iota // no entry: a field, a card or a part of another page
+	Leiste              // a tab of its own in the bar (Geräte, Energie)
+	Haushalt            // a pill under the Haushalt tab (Kalender, Einkauf, Notizen)
+	Mehr                // an entry under Mehr (Dokumente, Podcasts, …)
+)
+
+// Eintrag is one entry of the family's selection.
+type Eintrag struct {
+	Titel, Pfad, Icon string
+	Ort               Ort
+	Fuer              func(*http.Request) bool // who sees it (signed in, admins); nil: everyone
+}
+
+// Route is one path a module serves: a page behind the proxy secret, or a
+// /napi path the Liste puts behind the paired device's bearer.
+type Route struct {
+	Muster  string // a ServeMux pattern: "GET /napi/standort", "/standort"
+	Handler http.Handler
+}
+
+// Angebot is what a module offers the app, in the app's keys
+// (GET /napi/kann "app"; the keys are listed in ADR 0001 §2).
+type Angebot struct {
+	Widgets   []string // "geraet", "energie", "tool:note"
+	Teilen    []string // share targets: "merken", "dokument", "standort-import"
+	Konto     []string // the Homes account's parts: "kontakte", "kalender"
+	Sicherung []string // the backup's parts: "whatsapp", "signal", "sms", "kontakte"
+	Mehr      []string // the app's own Mehr rows: "daten-sichern", "standortverlauf"
+}
+
+// Modul is one area of Homes.
+type Modul struct {
+	Name     string   // the key: /napi/kann, HOMES_MODULE_AUS, the log. Never renamed.
+	Titel    string   // German, as the family reads it: "Standortverlauf"
+	Backend  string   // the Laib template it talks to: "reitti"; "" for Homes' own folder
+	Standard string   // the open protocol, where there is one: "caldav", "carddav"
+	Env      []string // the variables it reads (the catalog test holds every HOMES_* to one module)
+	Braucht  []string // modules it needs on: energie needs geraete
+
+	Seiten []Route   // pages, behind the proxy secret
+	Napi   []Route   // /napi paths, behind the device's bearer
+	Nav    []Eintrag // its entries in the family's selection
+	Start  []string  // Start's parts it fills: "im-haus", "meine-geraete", "heute"
+	App    Angebot
+	Laeuft []func(context.Context) // its background work, started only while it is on
+
+	// Grund is why it is off, one German sentence; "" while it is on.
+	Grund string
+	// Warum is the machine's word for Grund: "fehlt" (the box does not run
+	// its backend) or "aus" (switched off in Laib although it does).
+	Warum string
+	// Aus is what its paths answer while it is off, only where a released
+	// app relies on that answer (today: a 503 with a sentence for
+	// sicherung, standort, gemeinsam, kontakte) or a page says notSet.
+	// Every other path of an off module is the 404 of its surface.
+	Aus []Route
+}
+
+// Liste is the box's modules in catalog order, on and off.
+type Liste struct{ alle []Modul }
+
+func Bauen(ms []Modul) (*Liste, error) // checks: unique names, Braucht on, no pattern twice
+func (l *Liste) An(name string) bool
+func (l *Liste) Eintraege(r *http.Request, o Ort) []Eintrag
+func (l *Liste) Seiten(mux *http.ServeMux)                               // Seiten of those on, Aus of those off
+func (l *Liste) Napi(mux *http.ServeMux, device func(http.HandlerFunc) http.HandlerFunc)
+func (l *Liste) Starten(ctx context.Context)                             // each Laeuft of those on
+func (l *Liste) Kann() Kann                                              // GET /napi/kann
+func (l *Liste) String() string                                          // the start log line
+```
+
+A builder in `cmd/homes/module.go` looks like this. The example is the
+smallest whole module of today:
+
+```go
+// standort is the Standortverlauf (owner 2026-11-02): the app's positions
+// and imports into the person's Reitti, the page with the person's token.
+func standort(b *bau) modul.Modul {
+	m := modul.Modul{Name: "standort", Titel: "Standortverlauf", Backend: "reitti",
+		Env: []string{"HOMES_REITTI_URL", "HOMES_REITTI_PUBLIC_URL"}}
+	r := reitti.FromEnv(b.dataDir)
+	if r == nil {
+		return b.fehlt(m, "Auf dieser Box läuft kein Reitti.", napi.StandortAus()...)
+	}
+	if b.aus(m.Name) { // HOMES_MODULE_AUS
+		return b.ausgeschaltet(m, napi.StandortAus()...)
+	}
+	b.family.Reitti = r // the only way a page learns of it: off, the field stays nil
+	m.Seiten = pages.StandortSeiten(&b.family)
+	m.Napi = napi.Standort(r, b.whoami)
+	m.Nav = []modul.Eintrag{{Titel: "Standortverlauf", Pfad: pages.StandortPath, Ort: modul.Mehr,
+		Icon: pages.IconStandort, Fuer: pages.Angemeldet}}
+	m.App = modul.Angebot{Teilen: []string{"standort-import"}, Mehr: []string{"standortverlauf"}}
+	return m
+}
+```
+
+`main` reduces to: read the core (Laib, the proxy secret, the data
+folder), run every builder in catalog order, call `modul.Bauen`, log
+`l.String()` („Module an: geraete (home-assistant), kalender (radicale),
+…; aus: standort (fehlt: kein Reitti), podcasts (aus)“), then
+`l.Starten`, `l.Seiten`, `l.Napi`. The **core** is always on and is no
+module: Start's frame and box line, Mehr, Aufgaben, Box (Einladen,
+Geräte, pairing), Willkommen, Adresse, Abmelden, the Papierkorb, font and
+icon, `/napi/{assistent,app,persona,whoami,kann}`, the Box keys under
+`/napi/box`, and `/mcp/haushalt` (its tools come from the modules that
+are on).
+
+**The rule that makes „off“ true:** a page learns of a module only through
+the `StartConfig` field its builder sets. An off module's field stays nil,
+so every existing `cfg.X != nil` check keeps working. Its routes are not
+mounted, its nav entries are not in the list, its background work does
+not start, and its Bote tools are not in `haushalt.Tools`.
+
+### 2. `GET /napi/kann`: what this box can do, for the app
+
+The endpoint needs a paired device (401 otherwise), like every `/napi`
+path, so a stranger cannot learn which backends the box runs. The answer
+carries an `ETag` and is a 304 on `If-None-Match`.
+
+```json
+{
+  "version": 1,
+  "module": [
+    {"name": "geraete",  "titel": "Geräte",          "an": true,  "backend": "home-assistant"},
+    {"name": "kalender", "titel": "Kalender",        "an": true,  "backend": "radicale", "standard": "caldav"},
+    {"name": "standort", "titel": "Standortverlauf", "an": false, "backend": "reitti",
+     "warum": "fehlt", "grund": "Auf dieser Box läuft kein Reitti."},
+    {"name": "podcasts", "titel": "Podcasts",        "an": false, "backend": "audiobookshelf",
+     "warum": "aus",   "grund": "Auf dieser Box ausgeschaltet."}
+  ],
+  "app": {
+    "widgets":   ["geraet", "energie", "tool:note", "tool:doc"],
+    "teilen":    ["merken", "dokument"],
+    "konto":     ["kontakte", "kalender"],
+    "sicherung": ["whatsapp", "signal", "sms", "kontakte"],
+    "mehr":      ["daten-sichern"]
+  }
+}
+```
+
+`app` is the union of the `Angebot`s of the modules that are on. The app
+reads the lists and never maps modules to features itself, so a server
+can move a widget from one module to another without an app release. The
+`module` list is for words: the Box page, the app's „gibt es hier nicht“
+sentence, and support.
+
+The keys the app knows today are:
+
+| list | keys |
+|---|---|
+| `widgets` | `geraet`, `energie`, and `tool:<id>` for each tool def (`note`, `doc`, `contacts`, `task`) |
+| `teilen` | `merken` (text), `dokument` (images), `standort-import` (GPX/GeoJSON) |
+| `konto` | `kontakte`, `kalender` |
+| `sicherung` | `whatsapp`, `signal`, `sms`, `kontakte` |
+| `mehr` | `daten-sichern`, `standortverlauf` |
+
+**Compatibility rules:**
+
+- Fields and keys are only ever added. A key's meaning never changes. A
+  change that cannot be made by adding becomes `version: 2`, and the
+  server answers the old shape to an app that sends no `?version=2`.
+- `/napi/defs/tool` stays as it is. It is the tool widgets' catalog and
+  agrees with `widgets` by construction, because both come from the same
+  modules.
+
+### 3. What the app does with it
+
+- **When it reads:** at app start and resume (at most once a minute,
+  with `If-None-Match`); when the live stream connects again (a restarted
+  Homes may have a new list); and in the account's hourly sync. The last
+  answer is cached and the app works from it while offline.
+- **An unknown key** (a newer server) is ignored. **A known key that is
+  missing** means the box does not have it. Its Mehr row is hidden, the
+  widget type is not offered, the share target is disabled, the account
+  part's switch is hidden, and the backup part is skipped.
+- **An unknown module** in `module` is only shown in words.
+- **The server has no `/napi/kann`** (404 `not_found`, an older Homes):
+  the app behaves exactly as today and shows everything. The same applies
+  when no answer has ever arrived. The app never hides a feature on a
+  guess.
+- **Share targets are static in the manifest.** Each one becomes its own
+  component: an `activity-alias` per filter for `ShareActivity` (`merken`
+  for text, `dokument` for images), plus `StandortImportActivity`. The
+  app switches them with
+  `PackageManager.setComponentEnabledSetting(…, DONT_KILL_APP)`, which is
+  allowed for the app's own components with no permission. The dynamic
+  Direct Share shortcut (`ShareTarget.kt`) follows the same keys. While
+  `kann` is unknown, everything stays enabled, as today.
+- **Widget providers** are disabled the same way, but only while none of
+  that type is placed. Disabling a provider takes its placed widgets off
+  the home screen. A placed widget whose type the box lost shows the
+  module's `grund` in its body instead of an error.
+- **Account parts:** a missing `konto` key stops that part's sync
+  (`setIsSyncable(…, 0)`) and says why in `HomesKontoActivity`. It never
+  deletes what is already on the phone without asking.
+
+### 4. Older apps against a newer Homes
+
+An app that never calls `/napi/kann` keeps working. Every path of a
+module that is on answers exactly as before. A path of a module that is
+off answers what it answers today with the backend unset: a 503 with the
+sentence released apps show (`Modul.Aus`) for `sicherung`, `standort`,
+`gemeinsam` and `kontakte`, and the 404 `not_found` everywhere else. The
+one new behaviour is that a module switched off *in Laib* answers like
+one whose backend is missing.
+
+### 5. Laib chooses: derived from what the box runs, overridden by one value
+
+- **The default comes from what the box runs.** A module is on when its
+  backend's wiring is there. The wiring is the token the backend's
+  post-deploy mints for Homes (HA, ABS, Jellyfin), the password the auth
+  template seeds (Radicale), the folder the template mounts (notes,
+  music inbox, archive inbox), or a value. This is today's behaviour,
+  now explicit and logged. Backends whose address is still typed by hand
+  (`REITTI_URL`, `GESUNDHEIT_URL`) should reach Homes the same way the
+  token-minted ones do (laib issue below).
+- **The override is one value:**
+  `MODULE_AUS: ""  # podcasts,energie,…` in
+  `templates/homes/values.example.yml`, rendered as `HOMES_MODULE_AUS`.
+  - *One* key, because values are flat text, a template update appends
+    keys, and a key per module would grow the file with every module.
+  - An *off*-list, not an on-list, so that a new module in a Homes
+    release appears on every box that runs its backend without a values
+    change (as today), and an older box's list stays right.
+  - An unknown name in the list is logged and ignored, never fatal: Laib
+    and Homes release apart.
+- **How the owner switches.** Homes' Box page (admins) lists the modules
+  with their backend, on or off, and the reason. A button proposes the
+  change: `laib propose --set services/homes/values.yml:MODULE_AUS=…`
+  (laib ADR 0026). The owner approves it in Laib's inbox, and Homes
+  restarts with the new list. Homes decides nothing (haus#1).
+- **`uses:` names every backend.** The homes template lists all its
+  backends, not only `home-assistant` and `reitti`, so `laib planned` and
+  `laib net` explain a module that is off.
+- **The backend choice comes later.** When a second backend for a module
+  exists, choosing it is one more value per module
+  (`KALENDER_BACKEND: radicale`) and one more builder branch. That is not
+  built now (laib CLAUDE.md: no switch for a case that cannot happen).
+
+### 6. Alternative backends: the seams, not built
+
+Open standards already cover most of the household: CalDAV/CardDAV
+(Radicale, also Nextcloud), Home Assistant as the hub for every device,
+Markdown files for notes, and an OpenAI-compatible chat API for the Bote.
+An interface is added only when a real second backend is wanted, at
+these places:
+
+| module | backend today | where the interface would go |
+|---|---|---|
+| kalender, kontakte, einkauf, konto | Radicale (`caldav.Client`) | likely none: Nextcloud speaks CalDAV/CardDAV. Collection discovery in `caldav` and the account in `haushalt.FromEnv` |
+| dokumente | Paperless (`paperless.Client`) | `haushalt.Config.Documents`, `StartConfig.Docs`, `napi` tools: an `Ablage` {Suchen, Dokument, Ablegen} |
+| gesehen, musik („hast du schon“) | Jellyfin | already interfaces: `gesehen.Filme`, `einkauf.Bibliothek` (Plex fits behind them) |
+| podcasts | Audiobookshelf (`abs.Client`) | `podcasts.Service.ABS` |
+| standort | Reitti | `napi.standort.r`, `pages.Standort` (Dawarich, OwnTracks Recorder) |
+| geraete, energie | Home Assistant | none foreseen; HA is the integration layer |
+
+### 7. The modules
+
+All of today's optional areas, with what they talk to and read. „Radicale“
+means `HOMES_RADICALE_URL`, `_USER`, `_PASSWORD` (+ `_CALENDAR`,
+`_ADDRESSBOOK`, `_PUBLIC_URL` where named). Core variables, not in a
+module: `LAIB_URL`, `LAIB_TOKEN`, `LAIB_PUBLIC_URL`, `LAIB_DOMAIN`,
+`HOMES_PROXY_SECRET`, `HOMES_DATA`, `HOMES_LISTEN`, `HOMES_PUBLIC_URL`,
+`HOMES_ASSISTANT`, `HOMES_HAUSHALT_TOKEN`, `HOMES_PHONE_COUNTRY`, `TZ`.
+
+| module | Titel | backend (Laib template) | env | pages · nav | Start | /napi | app |
+|---|---|---|---|---|---|---|---|
+| `geraete` | Geräte | home-assistant | `HOMES_HA_URL`, `HOMES_HA_TOKEN`; opt. `HOMES_HA_PUBLIC_URL`, `HOMES_COVER_INVERTED` | `/raeume`, `/raeume/…`, `/medien`, `/schalten`, `/aktivierungswort`, `/live` · Leiste | im-haus, meine-geraete | `ha/call`, `portal/{state,active,entity-history,camera/…,start/addable,favorites,watch,events}` | widgets `geraet`; favourites |
+| `energie` | Energie | home-assistant (needs `geraete`) | opt. `HOMES_ENERGY_FLOW`, `_TOTALS`, `_STATS` | `/energie` · Leiste | – | `portal/energy` | widgets `energie` |
+| `sprechen` | Sprechen | bote | `HOMES_BOTE_URL`, `HOMES_BOTE_KEY`; opt. `HOMES_STT_PROVIDER`, `HOMES_STT_LANGUAGE` (HA), `HOMES_BOTE_SIGNAL` | `/sprechen`, `/sprechen/hoeren` · none | the field | – | – |
+| `kalender` | Kalender | radicale (CalDAV) | Radicale, `_CALENDAR`, `_PUBLIC_URL` | `/kalender`, `/kalender/{verwalten,hinzufuegen,aendern,erinnerung/…}` · Haushalt | heute | `portal/tasks`, def `task` | widgets `tool:task`; Bote `termine`, `erinnerungen`, … |
+| `kontakte` | Kontakte | radicale (CardDAV) | Radicale, `_ADDRESSBOOK` | `/kontakte/…` · none | – | `portal/contacts`, def `contacts`, `POST kontakte` | widgets `tool:contacts`; sicherung `kontakte` |
+| `konto` | Homes-Konto | radicale | Radicale | – | – | `gemeinsam/{kontakte,kalender}`, live frame `gemeinsam` | konto `kontakte`, `kalender` |
+| `einkauf` | Einkauf | radicale (VTODO lists) | Radicale | `/einkauf`, `/einkauf/rezepte` · Haushalt | – | – | Bote list tools |
+| `notizen` | Notizen | file-share (folder); opt. qmd, the house model | `HOMES_NOTES_DIR`; opt. `HOMES_QMD_URL`, `_COLLECTION`, `HOMES_LLM_URL`, `_KEY`, `_MODEL` | `/notizen`, `/notizen/…` · Haushalt | – | `portal/notes`, def `note`, `POST merken` | widgets `tool:note`; teilen `merken` |
+| `dokumente` | Dokumente | paperless | `HOMES_PAPERLESS_URL`, `_TOKEN`; opt. `_PUBLIC_URL`, `_LAN_ONLY`, `HOMES_UPLOAD_DIR`, `HOMES_DOCUMENTS_MAIL`, `HOMES_DOCUMENTS_DIR`, `HOMES_QMD_DOCUMENTS` | `/dokumente`, `/dokumente/…`, `/scannen`, `/scannen/trennblatt` · Mehr | – | `portal/documents`, def `doc`, `POST upload` | widgets `tool:doc`; teilen `dokument` |
+| `musik` | Musik | music inbox (beets), radicale (wishes), MusicBrainz; opt. media (Jellyfin), Discogs, the house model | `HOMES_MUSIC_INBOX` (or the `/musik-eingang` mount); opt. `HOMES_JELLYFIN_URL`, `_TOKEN`, `HOMES_DISCOGS_KEY`, `_SECRET`, `HOMES_LLM_VISION_MODEL` | `/musik`, `/musik/{teil,stand}`, `/discogs`, `/discogs/zurueck`, `/platte`, `/platte/bild` · Mehr | – | – | Bote wish tools |
+| `podcasts` | Podcasts | audiobookshelf | `HOMES_ABS_URL`, `HOMES_ABS_TOKEN` | `/podcasts` · Mehr | – | – | Bote podcast tool; new episodes told |
+| `gesehen` | Gesehen & Gehört | media (Jellyfin) and/or audiobookshelf; radicale (wishes) | `HOMES_JELLYFIN_URL`, `HOMES_JELLYFIN_KEY`; `HOMES_ABS_*` | `/gesehen` · Mehr | – | – | – |
+| `sicherung` | Daten sichern | archiv (each person's inbox) | `HOMES_ARCHIV_DIR`; opt. `HOMES_ARCHIV_INTERN`, `HOMES_ARCHIV_SECRET_<PERSON>` | `/daten-sichern`, `/nachrichten-sichern` · Mehr | – | `sicherung/*` (503 while off) | sicherung `whatsapp`, `signal`, `sms`; mehr `daten-sichern` |
+| `standort` | Standortverlauf | reitti | `HOMES_REITTI_URL`; opt. `HOMES_REITTI_PUBLIC_URL` | `/standort` · Mehr | – | `standort`, `standort/import/*` (503 while off) | teilen `standort-import`; mehr `standortverlauf` |
+| `netzlaufwerk` | Netzlaufwerk | file-share (Samba) | `HOMES_SAMBA_DIR`, `HOMES_SAMBA_HOST` | `/netzlaufwerk` · Mehr | – | – | – |
+| `gesundheit` | Gesundheit | gesundheit (a link only) | `HOMES_GESUNDHEIT_URL` | the card on Mehr | – | – | – |
+| `werkstatt` | Werkstatt | GitHub (admins) | `HOMES_WERKSTATT_REPOS`; opt. `HOMES_GITHUB_API` | the card on Box | – | – | – |
+| `nutzung` | Was wird genutzt | usage-metrics (admins) | `HOMES_USAGE_URL`, `HOMES_USAGE_TOKEN` | Box's „Was wird genutzt“ | – | counts `/napi` | – |
+
+Known couplings that the migration has to take care of:
+
+- **One Radicale account serves five modules** (`kalender`, `kontakte`,
+  `konto`, `einkauf`, and the wish lists in `musik`/`gesehen`). The
+  connection is built once. Each builder decides on its own module, and
+  `ensureHaushalt` makes only the collections of the modules that are on.
+- **The live stream (`/napi/portal/events`) is mounted only with HA**,
+  but it also carries `konto`'s `gemeinsam` frames. It moves to the core
+  when `geraete` becomes a module (step H6).
+- **`musik`'s Discogs and Platte entries appear on their own under Mehr
+  only on a box without a music inbox** (`shows()`). That stays as an
+  `Eintrag.Fuer` rule inside the module.
+
+### 8. Tests
+
+- **Every module off, one at a time** (`cmd/homes`, a table over the
+  catalog). Build `fullSite` (every backend from its fake) with
+  `HOMES_MODULE_AUS=<name>`, then check:
+  - each pattern the module serves when on answers its `Aus` route or
+    the surface's 404 (`Elsewhere`, `not_found`), never the handler;
+  - none of its `Nav` titles appears on `/start` or `/mehr`;
+  - `/napi/kann` lists it as `an:false`, and none of its `Angebot` keys
+    is left in `app` unless another module that is on offers it;
+  - every other module's routes still answer as with everything on.
+- **Every declared route is served.** With everything on, each `Seiten`
+  and `Napi` pattern of each module is mounted. The test fails when a
+  pattern is declared but the route was never built.
+- **Every variable has an owner.** A test greps the production code for
+  `"HOMES_…"` and fails on a variable that is in no module's `Env` and
+  not in the core list, so the table in §7 cannot go stale.
+- **`modul.Bauen`** refuses a duplicate name, a pattern served twice, or
+  a `Braucht` whose module is off.
+- **`/napi/kann`:** 401 without a device; the shape (a golden JSON for
+  `fullSite`); 304 on the ETag; an unknown name in `HOMES_MODULE_AUS` is
+  logged and harmless.
+- **During migration only:** for a set of env combinations, the nav that
+  the list builds equals what `shows()` builds today. This test goes
+  away with `shows()`.
+- **App:** the `kann` parser handles unknown keys, missing keys, a 404
+  (meaning „as today“) and the cache. An emulator test switches a share
+  alias and checks it disappears from the share sheet.
+- **Laib:** `laib template lint templates/homes` with `MODULE_AUS` set,
+  and the rendered unit carries `HOMES_MODULE_AUS`.
+
+### 9. Order, smallest risk first
+
+| step | repo | issue | what changes for a person | estimate (production lines · PRs · risk) |
+|---|---|---|---|---|
+| H1 | homes | [homes#241](https://github.com/mdopp/homes/issues/241) | nothing; Homes logs its module list | +330 · 1 · low |
+| H2 | homes | [homes#242](https://github.com/mdopp/homes/issues/242) | nothing; the app can ask | +90 · 1 · low |
+| A1 | homes-android | [homes-android#231](https://github.com/mdopp/homes-android/issues/231) | Mehr rows and widget types follow the box | +350 · 1–2 · medium |
+| H3 | homes | [homes#243](https://github.com/mdopp/homes/issues/243) | leaf modules can be switched off | +250/−120 · 1–2 · medium-low |
+| L1 | laib | [laib#1036](https://github.com/mdopp/laib/issues/1036) | the owner's switch exists in `values.yml` | +30–150 · 1 · low |
+| H4 | homes | [homes#244](https://github.com/mdopp/homes/issues/244) | dokumente, notizen, musik, einkauf too | +220/−150 · 1 · medium |
+| H5 | homes | [homes#245](https://github.com/mdopp/homes/issues/245) | kalender, kontakte, konto too | +180/−120 · 1 · medium |
+| H6 | homes | [homes#246](https://github.com/mdopp/homes/issues/246) | geraete, energie, sprechen too; the nav comes only from modules | +250/−280 · 1–2 · medium-high |
+| A2 | homes-android | [homes-android#232](https://github.com/mdopp/homes-android/issues/232) | share targets follow the box | +160 · 1 · medium |
+| A3 | homes-android | [homes-android#233](https://github.com/mdopp/homes-android/issues/233) | account and backup parts follow the box | +200 · 1 · medium-high |
+| H7 | homes | [homes#247](https://github.com/mdopp/homes/issues/247) | the Box page lists modules and proposes a switch | +200 · 1 · low-medium |
+| L2 | laib | [laib#1037](https://github.com/mdopp/laib/issues/1037) | Reitti and Gesundheit are found, not typed | +50–150 · 1 · medium |
+
+Total: about 13–16 PRs, about 2,500 production lines touched (Homes
+about 1,500 of them moves out of `main.go`, `family.go` and
+`napi.Handler`; the app about 700; Laib about 200). Tests add about as
+much again.
+
+Why this order:
+
+- H1 and H2 change no behaviour. They give the app something to read
+  early, so A1 can start while the server side moves.
+- H3 to H6 move areas from the ones with their own paths and backend
+  (`gesundheit`, `werkstatt`, `netzlaufwerk`, `podcasts`, `gesehen`,
+  `standort`, `sicherung`) to the ones that share a connection or fill
+  Start (Radicale, then HA). HA comes last because Start, favourites and
+  the live stream hang on it.
+
+## Consequences
+
+- An area is one builder plus its route groups. Adding one means adding
+  a builder, and the tests fail until its routes, variables and nav are
+  declared.
+- Homes' start log and the Box page say what this box can do and why
+  not. Today that is read off nil pointers.
+- The app stops offering what the box cannot do, and it stops failing
+  on first use.
+- `cmd` and the shared area grow. `internal/modul` adds about 180 lines
+  to *shared* (cap 1379, at 1336), and the catalog adds about 250 to
+  *cmd* (cap 1069, at 1021), while about 100 move out of `main.go`'s
+  `routes()`. Both caps are raised in the PR that crosses them, with the
+  reason, and need the owner's yes (`scripts/loc.sh`).
+- No runtime plugins, so an area from outside the repo still needs a PR
+  to Homes. That is the cost of one binary, one image, one release, and
+  one thing for Laib to watch.

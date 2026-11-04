@@ -14,6 +14,10 @@ is marked where it is defined. The program's own logins are `homes` (owner,
 2026-11-03): a collection path Homes stored under `/haus/` is read as
 `/<HOMES_RADICALE_USER>/` (`caldav.LegacyAccountPath`, ends laib#1021 step 9).
 
+Homes' own decisions are in `docs/adr/` (Laib's stay in laib's): read
+ADR 0001 (modules: the list of areas, `GET /napi/kann`, `HOMES_MODULE_AUS`)
+before adding an area, a page, a `/napi` route or a `HOMES_*` variable.
+
 Rules: no framework, one page per file, every Laib call is one MCP tool call
 (`internal/laib`), Homes never decides — there is no verdict in Homes at all (haus#1): the
 Box page links to Laib's inbox, `/napi/…/approve|deny` answer 403, and Homes
