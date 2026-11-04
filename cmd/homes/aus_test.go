@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -8,7 +10,10 @@ import (
 	"testing"
 
 	"github.com/mdopp/homes/internal/abs"
+	"github.com/mdopp/homes/internal/caldav"
+	"github.com/mdopp/homes/internal/einkauf"
 	"github.com/mdopp/homes/internal/gesehen"
+	"github.com/mdopp/homes/internal/haushalt"
 	"github.com/mdopp/homes/internal/modul"
 	"github.com/mdopp/homes/internal/napi"
 	"github.com/mdopp/homes/internal/podcasts"
@@ -31,6 +36,18 @@ func leafSite(t *testing.T) site {
 	s.gesundheit = "https://gesundheit.example"
 	s.tickets = &werkstatt.Tickets{API: "http://127.0.0.1:1", Repos: []string{"mdopp/homes"}}
 	s.napi.Whoami = func(b string) (string, bool) { return "anna", b == "dev1" }
+	// H4: the lists and the music wish list on the one Radicale, the music
+	// inbox, Paperless's inbox and its mail address
+	ctx := context.Background()
+	if err := errors.Join(s.hh.Calendar.EnsureList(ctx, caldav.Einkauf, einkauf.Name),
+		s.hh.Calendar.EnsureList(ctx, einkauf.MusikListe, einkauf.MusikName)); err != nil {
+		t.Fatal(err)
+	}
+	s.haushalt(func(h *haushalt.Config) {
+		h.Einkauf = einkauf.Open(s.hh.Calendar)
+		h.Wuensche = &einkauf.Wuensche{Listen: h.Einkauf, Dir: t.TempDir()}
+	})
+	s.musik, s.napi.UploadDir, s.docsMail = t.TempDir(), t.TempDir(), "scan@example.org"
 	return s
 }
 
@@ -49,7 +66,8 @@ func switched(t *testing.T, s site, aus string) (site, *modul.Liste) {
 // or the surface's 404, never its handler; its entries are gone; /napi/kann
 // has it an:false, warum aus; every other leaf module is as before.
 func TestEachLeafModuleOff(t *testing.T) {
-	leaves := []string{"gesundheit", "werkstatt", "netzlaufwerk", "podcasts", "gesehen", "standort", "sicherung"}
+	leaves := []string{"gesundheit", "werkstatt", "netzlaufwerk", "podcasts", "gesehen", "standort", "sicherung",
+		"dokumente", "notizen", "musik", "einkauf"}
 	// what each serves while on, and what it answers off: a path and a word on it
 	type probe struct{ path, on, off string }
 	probes := map[string][]probe{
@@ -60,6 +78,18 @@ func TestEachLeafModuleOff(t *testing.T) {
 		"gesehen":      {{"/mehr", `href="/gesehen"`, `!href="/gesehen"`}, {"/gesehen", "Gesehen", "#404"}},
 		"standort":     {{"/mehr", `href="/standort"`, `!href="/standort"`}, {"/standort", "Reitti", "noch nicht eingerichtet"}, {"napi:/napi/standort", "#200", "#503"}},
 		"sicherung":    {{"/mehr", `href="/daten-sichern"`, `!href="/daten-sichern"`}, {"/daten-sichern", "WhatsApp", "nicht eingerichtet"}, {"napi:/napi/sicherung/stand", "#200", "#503"}},
+		// H4: the tool widgets' catalog, the app's paths and the Bote's tools follow
+		"dokumente": {{"/mehr", `href="/dokumente"`, `!href="/dokumente"`}, {"/dokumente", "scan@example.org", "noch nicht eingerichtet"},
+			{"napi:/napi/defs/tool", `"tool-id":"doc"`, `!"tool-id":"doc"`}, {"napi:/napi/portal/documents", "#200", "#404"},
+			{"napi:POST /napi/upload", "#400", "#404"}, {"mcp:", `"dokumente_suchen"`, `!"dokumente_suchen"`}},
+		"notizen": {{"/kalender", `href=/notizen`, `!href=/notizen`}, {"/notizen", "Neue Notiz", "noch nicht eingerichtet"},
+			{"napi:/napi/defs/tool", `"tool-id":"note"`, `!"tool-id":"note"`}, {"napi:/napi/portal/notes", "#200", "#404"},
+			{"napi:POST /napi/merken", "#400", "#404"}, {"mcp:", `"notiz_anlegen"`, `!"notiz_anlegen"`}},
+		"musik": {{"/mehr", `href="/musik"`, `!href="/musik"`}, {"/musik", "Musik hinzufügen", "#404"}, {"/discogs", "#200", "#404"}},
+		// the music wish list is musik's: it stays with einkauf off, the other lists go
+		"einkauf": {{"/kalender", `href=/einkauf`, `!href=/einkauf`}, {"/einkauf", "<h1>Einkauf</h1>", "#404"},
+			{"/einkauf?liste=liste-musik", "<h1>Musik</h1>", "<h1>Musik</h1>"}, {"/einkauf?liste=liste-musik", "Listen verwalten", "!Listen verwalten"},
+			{"mcp:", `"einkaufsliste_dazu"`, `!"einkaufsliste_dazu"`}},
 	}
 	check := func(t *testing.T, s site, p probe, want string) {
 		t.Helper()
@@ -68,6 +98,13 @@ func TestEachLeafModuleOff(t *testing.T) {
 		var body string
 		if path, ok := strings.CutPrefix(p.path, "napi:"); ok {
 			code, body = napiRaw(h, path)
+		} else if p.path == "mcp:" { // the Bote's tools
+			req := httptest.NewRequest("POST", "/mcp/haushalt", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
+			req.Header.Set("Authorization", "Bearer bote")
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, req)
+			code, body = rec.Code, rec.Body.String()
 		} else {
 			rec := as(h, "GET", p.path, "anna", "family,admins", nil)
 			code, body = rec.Code, rec.Body.String()
@@ -124,8 +161,17 @@ func TestLeafWorkOnlyWhileOn(t *testing.T) {
 		t.Errorf("an off module kept its backend: podcasts %v %v %v, sicherung %v", off.podcasts, off.hh.Podcasts, off.napi.Haushalt.Podcasts, off.napi.Sicherung)
 	}
 	on, _ := switched(t, leafSite(t), "")
-	if on.podcasts == nil || on.napi.Sicherung == nil {
+	if on.podcasts == nil || on.napi.Sicherung == nil || on.hh.Wuensche == nil {
 		t.Error("nothing switched off, and still a backend is gone")
+	}
+	// tickWishes looks only while musik is on; einkauf off leaves the wishes their lists
+	off, _ = switched(t, leafSite(t), "musik")
+	if off.hh.Wuensche != nil || off.napi.Haushalt.Wuensche != nil || off.hh.Einkauf == nil {
+		t.Errorf("musik off: wishes %v %v, einkauf %v", off.hh.Wuensche, off.napi.Haushalt.Wuensche, off.hh.Einkauf)
+	}
+	off, _ = switched(t, leafSite(t), "einkauf")
+	if off.hh.Wuensche == nil || off.hh.Wuensche.Listen == nil || off.hh.Einkauf != nil || off.napi.Haushalt.Einkauf != nil {
+		t.Errorf("einkauf off: wishes %v, einkauf %v %v", off.hh.Wuensche, off.hh.Einkauf, off.napi.Haushalt.Einkauf)
 	}
 }
 
@@ -147,8 +193,13 @@ func TestModuleAusIgnoresWhatItCannot(t *testing.T) {
 	}
 }
 
+// napiRaw is a paired phone's request: "GET" without a method in path.
 func napiRaw(h http.Handler, path string) (int, string) {
-	req := httptest.NewRequest("GET", path, nil)
+	method, p, ok := strings.Cut(path, " ")
+	if !ok {
+		method, p = "GET", path
+	}
+	req := httptest.NewRequest(method, p, nil)
 	req.Header.Set("Authorization", "Bearer dev1")
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)

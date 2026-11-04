@@ -82,6 +82,7 @@ type site struct {
 	paperlessLAN              bool
 	podcasts                  *podcasts.Service // haus#123: the family's podcasts in Audiobookshelf; nil, no page
 	gesehen                   *gesehen.Service  // haus#152: what each person watched and heard; nil, no page
+	musik                     string            // haus#107: the music inbox's folder (musicInbox); "", no Musik page
 }
 
 // routes is Homes' whole surface: /napi for the app, /mcp/haushalt for the
@@ -110,7 +111,7 @@ func routes(s site) http.Handler {
 	}
 	family.BoteSignal = strings.TrimSpace(os.Getenv("HOMES_BOTE_SIGNAL")) // haus#175: Willkommen's chat card
 	family.Papierkorb = &papierkorb.Korb{Dir: s.dataDir}                  // haus#174: family deletes, for 30 days
-	family.MusicInbox = musicInbox()
+	family.MusicInbox = s.musik
 	if family.MusicInbox != "" { // haus#107: the music inbox beets sorts in
 		if fi, err := os.Stat(family.MusicInbox); err != nil || !fi.IsDir() {
 			log.Printf("homes: HOMES_MUSIC_INBOX %s is not a folder (yet): uploads answer 503 until it is", family.MusicInbox)
@@ -136,16 +137,21 @@ func routes(s site) http.Handler {
 		s.gesehen.Changed = func(r caldav.ListRef) { live.Tell(pages.ListeLive(r)) }
 		pagesMux.HandleFunc(pages.GesehenPath, pages.Gesehen(family))
 	}
-	if s.hh.Einkauf != nil { // haus#118: the list, ticked on one phone, fetched again on the others
-		s.hh.Einkauf.Changed = func(r caldav.ListRef) { live.Tell(pages.ListeLive(r)) }
+	if l := s.hh.Einkauf; l != nil || s.hh.Wuensche != nil { // haus#118: the list, ticked on one phone, fetched again on the others
+		if l == nil { // einkauf off: the music wish list's lists are musik's own (ADR 0001 H4)
+			l = s.hh.Wuensche.Listen
+		}
+		l.Changed = func(r caldav.ListRef) { live.Tell(pages.ListeLive(r)) }
+		pagesMux.HandleFunc(pages.EinkaufPath, pages.Einkauf(family)) // with einkauf off, the music wish list only
+		pagesMux.HandleFunc(pages.EinkaufRezeptePath, pages.Einkauf(family))
+	}
+	if s.hh.Wuensche != nil { // musik's records: Discogs and Platte erfassen (owner 2026-10-26)
 		pagesMux.HandleFunc(pages.DiscogsPath, pages.Discogs(family)) // connect one's own Discogs; without the app's keys, how to set them
 		if family.Discogs != nil {
 			pagesMux.HandleFunc(pages.DiscogsZurueckPath, pages.Discogs(family)) // the way back from Discogs
 			pagesMux.HandleFunc(pages.PlattePath, pages.Platte(family))
 			pagesMux.HandleFunc(pages.PlatteBildPath, pages.Platte(family))
 		}
-		pagesMux.HandleFunc(pages.EinkaufPath, pages.Einkauf(family))
-		pagesMux.HandleFunc(pages.EinkaufRezeptePath, pages.Einkauf(family))
 	}
 	pagesMux.HandleFunc(pages.StartBoxPath, start)
 	pagesMux.HandleFunc("/mehr", pages.Mehr(family))
@@ -422,7 +428,6 @@ func main() {
 	defer stop()
 	if hh.Calendar != nil { // the household's calendar and address book there from the start (owner 2026-10-24)
 		go ensureHaushalt(ctx, hh.Calendar)
-		go tickWishes(ctx, hh.Wuensche, ops)
 	}
 	counter := usage.FromEnv(os.Getenv)
 	var voice *usage.Voice
@@ -443,7 +448,7 @@ func main() {
 		stt:        pages.STT{Provider: os.Getenv("HOMES_STT_PROVIDER"), Language: env("HOMES_STT_LANGUAGE", "de")},
 		gesundheit: gesundheit, haPublic: haPublic, inverted: pages.InvertedFromList(os.Getenv("HOMES_COVER_INVERTED")),
 		radicale: radicalePublic, views: ansicht.Open(dataDir, os.Getenv("HOMES_RADICALE_USER")), dataDir: dataDir,
-		docsMail: docsMail, paperlessPublic: paperlessPublic, paperlessLAN: paperlessLAN}
+		docsMail: docsMail, paperlessPublic: paperlessPublic, paperlessLAN: paperlessLAN, musik: musicInbox()}
 	st.napi.Module = logModule(&st) // HOMES_MODULE_AUS takes what it switches off out of st
 	startLeaf(ctx, st)
 	go schliesseWuensche(ctx, ops, st.napi.Module, time.Minute) // a wish for what is on now is done (ADR 0001 §10)

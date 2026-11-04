@@ -38,7 +38,7 @@
 36 internal/pages/discogs.go: pages.Discogs
 34 internal/pages/dokumente.go: pages.Dokumente
 102 internal/pages/einkauf.go: pages.Einkauf
-44 internal/pages/einkauf.go: pages.writeEinkauf
+42 internal/pages/einkauf.go: pages.writeEinkauf
 65 internal/pages/einkauf.go: pages.writeRezepte
 40 internal/pages/einkauf.go: pages.wunschKarte
 35 internal/pages/einladen.go: pages.Einladen
