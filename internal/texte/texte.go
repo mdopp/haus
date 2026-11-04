@@ -23,12 +23,29 @@ const (
 	SpurenTitel         ID = "spuren.titel"      // Mehr's card of traces
 	SpurenHinweis       ID = "spuren.hinweis"    // its quiet line
 	SpurenStandNicht    ID = "spuren.stand-nicht"
-	AnfordernNicht      ID = "anfordern.nicht"       // Laib refused or failed
-	AnfordernStumm      ID = "anfordern.stumm"       // Laib did not answer in time
-	AnfordernGibtsNicht ID = "anfordern.gibts-nicht" // no such module, or it is on
-	AnfordernKeinLaib   ID = "anfordern.kein-laib"   // this Laib takes no wish yet
-	GrundAus            ID = "grund.aus"             // why a module is off: the owner switched it off
-	ModulSeiteTitel     ID = "modul.seite.titel"     // /module/<name>, admins
+	AnfordernNicht      ID = "anfordern.nicht"        // Laib refused or failed
+	AnfordernStumm      ID = "anfordern.stumm"        // Laib did not answer in time
+	AnfordernGibtsNicht ID = "anfordern.gibts-nicht"  // no such module, or it is on
+	AnfordernKeinLaib   ID = "anfordern.kein-laib"    // this Laib takes no wish yet
+	GrundAus            ID = "grund.aus"              // why a module is off: the owner switched it off
+	ModulSeiteTitel     ID = "modul.seite.titel"      // /module/<name>, admins
+	ModulAn             ID = "modul.an"               // a module that is on
+	ModulDienst         ID = "modul.dienst"           // the row naming its backend
+	ModulStand          ID = "modul.stand"            // the row saying on or off
+	ModulWunsch         ID = "modul.wunsch"           // the row with its wish
+	WunschVon           ID = "wunsch.von"             // „%s, gewünscht von %s seit %s“
+	AusVorschlagen      ID = "schalten.aus"           // the admin's button: switch it off
+	AnVorschlagen       ID = "schalten.an"            // the admin's button: switch it on again
+	Vorschlagend        ID = "schalten.laeuft"        // the pressed button
+	Vorgeschlagen       ID = "schalten.vorgeschlagen" // the proposal waits in Laib's Inbox
+	ZurInbox            ID = "schalten.inbox"         // the link to it
+	VorschlagNicht      ID = "schalten.nicht"         // Laib refused or failed
+	VorschlagStumm      ID = "schalten.stumm"         // Laib did not answer in time
+	VorschlagKeinLaib   ID = "schalten.kein-laib"     // this Laib takes no such proposal yet
+	GrundVorschlagAus   ID = "schalten.grund.aus"     // the proposal's reason, the owner's notification: „%s verschwindet …“
+	GrundVorschlagAn    ID = "schalten.grund.an"
+	NichtSchaltbar      ID = "schalten.nicht-schaltbar"
+	ModuleSeite         ID = "box.module" // the Box pill
 )
 
 var de = map[ID]string{
@@ -68,6 +85,23 @@ var de = map[ID]string{
 	AnfordernKeinLaib:   "Diese Box nimmt noch keine Wünsche an.",
 	GrundAus:            "Auf dieser Box ausgeschaltet.",
 	ModulSeiteTitel:     "Was Homes kann",
+	ModulAn:             "an",
+	ModulDienst:         "Dienst",
+	ModulStand:          "Stand",
+	ModulWunsch:         "Wunsch",
+	WunschVon:           "%s, gewünscht von %s seit %s",
+	AusVorschlagen:      "Ausschalten vorschlagen",
+	AnVorschlagen:       "Wieder einschalten vorschlagen",
+	Vorschlagend:        "Wird vorgeschlagen …",
+	Vorgeschlagen:       "Vorgeschlagen. Der Vorschlag wartet in Laibs Inbox auf Freigabe.",
+	ZurInbox:            "Zur Inbox",
+	VorschlagNicht:      "Laib hat den Vorschlag nicht angenommen. Versuch es später noch einmal; sonst weiß laib diag mehr.",
+	VorschlagStumm:      "Laib hat nicht rechtzeitig geantwortet. Schau in Laibs Inbox nach, ob der Vorschlag angekommen ist, bevor du es noch einmal versuchst.",
+	VorschlagKeinLaib:   "Diese Box nimmt diesen Vorschlag noch nicht an: Laib braucht dafür ein Update.",
+	GrundVorschlagAus:   "%s verschwindet aus Homes und der App.",
+	GrundVorschlagAn:    "%s kommt in Homes und die App zurück.",
+	NichtSchaltbar:      "Dieses Modul lässt sich noch nicht ausschalten.",
+	ModuleSeite:         "Module",
 }
 
 // sprachen are the tables by language; a missing word falls back to German.

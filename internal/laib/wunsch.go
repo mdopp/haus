@@ -114,3 +114,23 @@ func ModulWuensche(je map[string]Wunsch, geht bool) modul.Wuensche {
 	}
 	return w
 }
+
+// NimmtModulAus: does this Laib take Homes' module switch (laib#1036)?
+// laib_module is on the homes hand's tools/list. An error: Laib did not say.
+func (c *Client) NimmtModulAus(ctx context.Context) (bool, error) {
+	return c.Takes(ctx, "module", "liste")
+}
+
+// ModulAusVorschlagen proposes services/homes/values.yml MODULE_AUS = liste
+// (homes ADR 0001 §5, laib#1036) through Laib's door verb laib_module:
+// grund is what the owner reads first, in the family's words. The
+// proposal waits in Laib's Inbox for a human, the dial never takes it;
+// Homes decides nothing (haus#1).
+func (c *Client) ModulAusVorschlagen(ctx context.Context, liste, grund string) (Proposed, error) {
+	var out Proposed
+	text, err := c.CallTyped(ctx, "module", map[string]any{"action": "aus", "liste": liste, "grund": grund})
+	if err == nil {
+		err = decodeJSON("module", text, &out)
+	}
+	return out, err
+}

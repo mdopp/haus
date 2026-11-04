@@ -192,6 +192,9 @@ var schaltbar = map[string]func(*site){
 // s. A name Homes does not know, or cannot switch off yet, is logged and
 // ignored, never fatal: Laib and Homes release apart.
 func ausschalten(s *site, ms []modul.Modul, liste string) []modul.Modul {
+	for i := range ms {
+		ms[i].Schaltbar = schaltbar[ms[i].Name] != nil
+	}
 	for _, name := range strings.Split(liste, ",") {
 		name = strings.TrimSpace(name)
 		i := slices.IndexFunc(ms, func(m modul.Modul) bool { return m.Name == name })

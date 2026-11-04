@@ -26,6 +26,7 @@ type Laib struct {
 	Warte    time.Duration // laib_wish waits this long first
 	Gefragt  []string      // the stand questions, in order
 	Erledigt []int         // the Box-Aufgaben ticked off
+	Modul    []string      // laib_module's proposals: "<liste>|<grund>" (laib#1036)
 }
 
 // New is a fake with no wish yet.
@@ -84,10 +85,14 @@ func (f *Laib) Tools() []map[string]any {
 	if !f.Ohne {
 		wish["modul"], wish["stand"], wish["von"] = map[string]any{}, map[string]any{}, map[string]any{}
 	}
-	return []map[string]any{
+	tools := []map[string]any{
 		{"name": "laib_wish", "inputSchema": map[string]any{"properties": wish}},
 		{"name": "laib_aufgabe", "inputSchema": map[string]any{"properties": map[string]any{"action": map[string]any{}, "id": map[string]any{}, "von": map[string]any{}}}},
 	}
+	if !f.Ohne {
+		tools = append(tools, map[string]any{"name": "laib_module", "inputSchema": map[string]any{"properties": map[string]any{"action": map[string]any{}, "liste": map[string]any{}, "grund": map[string]any{}}}})
+	}
+	return tools
 }
 
 // Antwort answers one tools/call; ok is false for a tool it does not fake.
@@ -105,6 +110,15 @@ func (f *Laib) Antwort(name string, args map[string]any) (text string, isErr, ok
 			}
 		}
 		return `{"message":"Box-Aufgabe erledigt."}`, false, true
+	case name == "laib_module" && !f.Ohne:
+		time.Sleep(f.Warte)
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		if f.Kaputt {
+			return "laib-haushalt antwortet nicht", true, true
+		}
+		f.Modul = append(f.Modul, str("liste")+"|"+str("grund"))
+		return fmt.Sprintf(`{"proposal":%d,"class":"values","message":"Vorschlag #%d: nach der Freigabe in der Inbox startet Homes mit der neuen Auswahl."}`, 16+len(f.Modul), 16+len(f.Modul)), false, true
 	case name != "laib_wish" || f.Ohne:
 		return "unknown tool " + name, true, name == "laib_wish"
 	}

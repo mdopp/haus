@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/mdopp/homes/internal/laib"
+	"github.com/mdopp/homes/internal/texte"
 	"github.com/mdopp/homes/internal/usage"
 	"github.com/mdopp/homes/internal/werkstatt"
 )
@@ -55,6 +56,7 @@ var boxPages = []boxPage{
 	{"/box/operator", "Operator", "Was der Operator kann"},
 	{"/box/personen", "Personen", "Personen"},
 	{"/box/nutzung", "Nutzung", "Nutzung"},
+	{moduleBoxPath, "Module", "Was Homes kann"}, // ADR 0001 H7: every module, its backend, its wish, its switch
 }
 
 // boxPageOf is the page a path shows; a POST's answer shows the page its
@@ -64,7 +66,7 @@ func boxPageOf(path string, cfg BoxConfig) (boxPage, bool) {
 		path = "/box/personen"
 	}
 	for _, p := range boxPages {
-		if p.path == path && (p.path != "/box/nutzung" || cfg.Family.Usage != nil) {
+		if p.path == path && (p.path != "/box/nutzung" || cfg.Family.Usage != nil) && (p.path != moduleBoxPath || cfg.Family.Module != nil) {
 			return p, true
 		}
 	}
@@ -72,13 +74,15 @@ func boxPageOf(path string, cfg BoxConfig) (boxPage, bool) {
 }
 
 // unterNav is Box's pages, the current one marked; Nutzung only where it
-// is counted. It scrolls sideways on a phone.
-func unterNav(current string, usage bool) string {
+// is counted, Module only where Homes has its list. It scrolls sideways
+// on a phone.
+func unterNav(current string, cfg StartConfig) string {
+	usage := cfg.Usage != nil
 	var b strings.Builder
 	b.WriteString("<nav class=unter aria-label=Box>")
 	// Adresse is set once, when the box is set up: an admin's page, under Box (owner 2026-10-27)
 	for _, p := range append(append([]boxPage{}, boxPages...), boxPage{"/box/geraete", "Geräte", ""}, boxPage{adressePath, "Adresse", ""}) {
-		if p.name == "Nutzung" && !usage {
+		if p.name == "Nutzung" && !usage || p.path == moduleBoxPath && cfg.Module == nil {
 			continue
 		}
 		b.WriteString("<a href=" + p.path)
@@ -158,6 +162,8 @@ func boxSlotsOn(cfg BoxConfig, page string) []boxSlot {
 		return []boxSlot{{"box-einladen", "Person einladen", "einladen"}}
 	case "/box/operator": // owner 2026-10-27: the skills, read only (laib#839)
 		return []boxSlot{{"box-operator", "Was der Operator kann", "operator"}}
+	case moduleBoxPath:
+		return []boxSlot{{"box-module", texte.T(texte.ModulSeiteTitel), "module"}}
 	case "/box/nutzung":
 		if cfg.Family.Usage != nil {
 			return []boxSlot{{"box-genutzt", "Was wird genutzt", "genutzt"}}
@@ -248,6 +254,8 @@ func boxPart(ctx context.Context, r *http.Request, cfg BoxConfig, part string, i
 		return map[string]string{"box-bericht": morningReport(reports, err) + "<p>" + laibLink(cfg, "/journal", "Das Journal auf der Laib-Seite") + "</p>"}
 	case "genutzt":
 		return map[string]string{"box-genutzt": usageCard(ctx, cfg.Family, cfg.Voice)}
+	case "module":
+		return map[string]string{"box-module": moduleCard(ctx, cfg.Family)}
 	case "werkstatt":
 		if cfg.Tickets != nil {
 			return map[string]string{"box-werkstatt": werkstattCard(ctx, cfg.Tickets)}
@@ -324,7 +332,7 @@ func writeBoxWith(w http.ResponseWriter, r *http.Request, cfg BoxConfig, code in
 		title = page.title
 	}
 	b := adminHead(r, cfg.Family, title)
-	b.WriteString(unterNav(page.name, cfg.Family.Usage != nil))
+	b.WriteString(unterNav(page.name, cfg.Family))
 	if page.title != "" {
 		b.WriteString("<h1>" + html.EscapeString(page.title) + "</h1>")
 	}
