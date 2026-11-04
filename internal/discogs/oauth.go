@@ -16,6 +16,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/mdopp/homes/internal/jsonfile"
 )
 
 // App is the household's Discogs app ("Joshua", its consumer key and
@@ -165,12 +167,7 @@ func (r *Regale) load() map[string]Konto {
 }
 
 func (r *Regale) save(all map[string]Konto) error {
-	b, _ := json.MarshalIndent(all, "", "  ")
-	p := filepath.Join(r.Dir, kontenFile)
-	if err := os.WriteFile(p+".tmp", b, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(p+".tmp", p)
+	return jsonfile.Save(filepath.Join(r.Dir, kontenFile), all)
 }
 
 // Konto is the person's connected account, if any.

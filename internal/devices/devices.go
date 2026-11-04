@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/mdopp/homes/internal/app"
+	"github.com/mdopp/homes/internal/jsonfile"
 )
 
 // Device is one paired phone.
@@ -56,12 +57,7 @@ func Open(dir string) (*Store, error) {
 }
 
 func (s *Store) save() error {
-	b, _ := json.MarshalIndent(s.list, "", "  ")
-	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, s.path)
+	return jsonfile.Save(s.path, s.list)
 }
 
 func hash(token string) string {

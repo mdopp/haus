@@ -19,6 +19,7 @@ import (
 	"sync"
 
 	"github.com/mdopp/homes/internal/caldav"
+	"github.com/mdopp/homes/internal/jsonfile"
 )
 
 // File is the store's name in Homes' data folder.
@@ -152,21 +153,5 @@ func (s *Store) Set(person, path string, hide *bool, color string) error {
 		o.Colors[path] = color
 	}
 	all[person] = o
-	b, err := json.MarshalIndent(all, "", "  ")
-	if err != nil {
-		return err
-	}
-	tmp, err := os.CreateTemp(filepath.Dir(s.path), "."+File+"-*")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tmp.Name())
-	if _, err := tmp.Write(b); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmp.Name(), s.path)
+	return jsonfile.Save(s.path, all)
 }

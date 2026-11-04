@@ -17,6 +17,7 @@ import (
 	"github.com/mdopp/homes/internal/caldav"
 	"github.com/mdopp/homes/internal/discogs"
 	"github.com/mdopp/homes/internal/jellyfin"
+	"github.com/mdopp/homes/internal/jsonfile"
 	"github.com/mdopp/homes/internal/merken"
 	"github.com/mdopp/homes/internal/musicbrainz"
 	"github.com/mdopp/homes/internal/namen"
@@ -318,13 +319,8 @@ func (w *Wuensche) save(all map[string]Stand) {
 	if w.Dir == "" {
 		return
 	}
-	b, _ := json.MarshalIndent(all, "", "  ")
-	p := filepath.Join(w.Dir, wishFile)
-	if err := os.WriteFile(p+".tmp", b, 0o600); err == nil {
-		err = os.Rename(p+".tmp", p)
-		if err != nil {
-			log.Printf("homes: musikwünsche: %v", err)
-		}
+	if err := jsonfile.Save(filepath.Join(w.Dir, wishFile), all); err != nil {
+		log.Printf("homes: musikwünsche: %v", err)
 	}
 }
 

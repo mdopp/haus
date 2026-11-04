@@ -19,6 +19,7 @@ import (
 
 	"github.com/mdopp/homes/internal/abruf"
 	"github.com/mdopp/homes/internal/abs"
+	"github.com/mdopp/homes/internal/jsonfile"
 )
 
 // File is the store's name in HOMES_DATA.
@@ -75,15 +76,7 @@ func (s *Service) load() (state, error) {
 }
 
 func (s *Service) save(st state) error {
-	b, err := json.MarshalIndent(st, "", "  ")
-	if err != nil {
-		return err
-	}
-	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, s.path)
+	return jsonfile.Save(s.path, st)
 }
 
 // Ergebnis is what subscribing did, in a sentence to say.

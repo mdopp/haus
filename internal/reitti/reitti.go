@@ -23,6 +23,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/mdopp/homes/internal/jsonfile"
 )
 
 // IngestPath is Reitti's Overland endpoint (controller/api/ingestion/overland).
@@ -121,12 +123,7 @@ func (r *Reitti) load() (map[string]Konto, error) {
 }
 
 func (r *Reitti) save(all map[string]Konto) error {
-	b, _ := json.MarshalIndent(all, "", "  ")
-	p := filepath.Join(r.Dir, kontenFile)
-	if err := os.WriteFile(p+".tmp", b, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(p+".tmp", p)
+	return jsonfile.Save(filepath.Join(r.Dir, kontenFile), all)
 }
 
 // Konto is the person's connection, if they made one.

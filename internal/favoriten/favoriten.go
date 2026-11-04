@@ -17,6 +17,7 @@ import (
 	"sync"
 
 	"github.com/mdopp/homes/internal/ha"
+	"github.com/mdopp/homes/internal/jsonfile"
 )
 
 // File is the store's name in Homes' data folder.
@@ -120,35 +121,5 @@ func (s *Store) Set(person, entityID string, on bool) error {
 	default:
 		all[person] = slices.DeleteFunc(list, func(id string) bool { return id == entityID })
 	}
-	b, err := json.MarshalIndent(all, "", "  ")
-	if err != nil {
-		return err
-	}
-	return writeFile(s.path, b)
-}
-
-// writeFile replaces path with b: written beside it, synced, renamed over
-// it, so a reader sees the old file or the new one, never half.
-func writeFile(path string, b []byte) error {
-	tmp, err := os.CreateTemp(filepath.Dir(path), "."+File+"-*")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tmp.Name()) // gone after the rename; left over only on failure
-	if err := tmp.Chmod(0o600); err != nil {
-		tmp.Close()
-		return err
-	}
-	if _, err := tmp.Write(b); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmp.Name(), path)
+	return jsonfile.Save(s.path, all)
 }
