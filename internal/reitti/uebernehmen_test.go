@@ -42,6 +42,7 @@ func TestUebernehmenSendsReittisGeoJSONImport(t *testing.T) {
 		{Zeit: time.Date(2014, 3, 2, 8, 0, 0, 500, time.UTC), Breite: 47, Laenge: 8, Genauigkeit: 12, Hoehe: &h},
 		{Zeit: time.Date(2024, 12, 30, 17, 0, 0, 0, time.UTC), Breite: 47.5, Laenge: 8.5, Genauigkeit: 10},
 	}
+	var f *ImportFehler
 	n, err := r.Uebernehmen(t.Context(), "anna-token", "Timeline.json", ps)
 	if err != nil || n != 2 {
 		t.Fatalf("%d, %v", n, err)
@@ -56,6 +57,19 @@ func TestUebernehmenSendsReittisGeoJSONImport(t *testing.T) {
 		t.Fatalf("body\n%s\nwant\n%s", b, want)
 	}
 
+	// Reitti's real yes (v5.9.0, main): its controller asks for "pointsImported", its importer
+	// says "pointsReceived", so pointsScheduled is null — a yes for what was sent (the box,
+	// 2026-11-04: Reitti queued the first batch and Homes stopped)
+	answer = func(w http.ResponseWriter) {
+		io.WriteString(w, `{"success":true,"message":"Successfully imported GeoJSON file","pointsScheduled":null}`)
+	}
+	if n, err := r.Uebernehmen(t.Context(), "anna-token", "a", ps); err != nil || n != 2 {
+		t.Errorf("a yes with pointsScheduled null: %d, %v", n, err)
+	}
+	answer = func(w http.ResponseWriter) { io.WriteString(w, `{"success":false}`) }
+	if _, err := r.Uebernehmen(t.Context(), "x", "a", ps); !errors.As(err, &f) {
+		t.Errorf("a 200 that is no yes: %v", err)
+	}
 	answer = func(w http.ResponseWriter) { w.WriteHeader(401) }
 	if _, err := r.Uebernehmen(t.Context(), "x", "a", ps); !errors.Is(err, ErrToken) {
 		t.Errorf("401: %v", err)
@@ -64,7 +78,6 @@ func TestUebernehmenSendsReittisGeoJSONImport(t *testing.T) {
 		w.WriteHeader(400)
 		io.WriteString(w, `{"error":"Token has no device attached."}`)
 	}
-	var f *ImportFehler
 	if _, err := r.Uebernehmen(t.Context(), "x", "a", ps); !errors.As(err, &f) || !strings.Contains(f.Grund, "no device") {
 		t.Errorf("Reitti's no: %v", err)
 	}

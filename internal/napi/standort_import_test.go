@@ -57,7 +57,7 @@ func newFakeImport(t *testing.T) *fakeImport {
 		f.tokens = append(f.tokens, strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
 		ans := f.answer
 		f.mu.Unlock()
-		code, body := 200, `{"success":true,"pointsScheduled":`+strconv.Itoa(len(fc.Features))+`}`
+		code, body := 200, `{"success":true,"message":"Successfully imported GeoJSON file","pointsScheduled":null}` // Reitti's real yes (v5.9.0)
 		if ans != nil {
 			code, body = ans(len(fc.Features))
 		}

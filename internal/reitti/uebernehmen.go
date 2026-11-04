@@ -71,10 +71,12 @@ func (r *Reitti) Uebernehmen(ctx context.Context, token, name string, ps []Punkt
 	switch {
 	case resp.StatusCode >= 200 && resp.StatusCode < 300 && jerr == nil && ans.Success && ans.Scheduled != nil:
 		return *ans.Scheduled, nil
+	case resp.StatusCode >= 200 && resp.StatusCode < 300 && jerr == nil && ans.Success: // Reitti's yes has pointsScheduled null (v5.9.0 and main: its controller asks the importer for "pointsImported", which says "pointsReceived"): it took what was sent
+		return len(ps), nil
 	case jerr == nil && ans.Error != "": // Reitti's own no: a token with no device, a file it could not read
 		return 0, &ImportFehler{Status: resp.StatusCode, Grund: ans.Error}
 	case resp.StatusCode >= 200 && resp.StatusCode < 300:
-		return 0, &ImportFehler{Status: resp.StatusCode, Grund: "a yes without pointsScheduled"}
+		return 0, &ImportFehler{Status: resp.StatusCode, Grund: "a 2xx that is no yes"}
 	}
 	return 0, &Unavailable{Status: resp.StatusCode}
 }
