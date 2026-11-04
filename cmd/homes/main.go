@@ -110,10 +110,7 @@ func routes(s site) http.Handler {
 	}
 	family.BoteSignal = strings.TrimSpace(os.Getenv("HOMES_BOTE_SIGNAL")) // haus#175: Willkommen's chat card
 	family.Papierkorb = &papierkorb.Korb{Dir: s.dataDir}                  // haus#174: family deletes, for 30 days
-	family.MusicInbox = os.Getenv("HOMES_MUSIC_INBOX")
-	if fi, err := os.Stat(musicInboxMount); family.MusicInbox == "" && err == nil && fi.IsDir() {
-		family.MusicInbox = musicInboxMount // where laib's homes template mounts it (laib#639)
-	}
+	family.MusicInbox = musicInbox()
 	if family.MusicInbox != "" { // haus#107: the music inbox beets sorts in
 		if fi, err := os.Stat(family.MusicInbox); err != nil || !fi.IsDir() {
 			log.Printf("homes: HOMES_MUSIC_INBOX %s is not a folder (yet): uploads answer 503 until it is", family.MusicInbox)
@@ -204,6 +201,18 @@ func routes(s site) http.Handler {
 // musicInboxMount is where laib's homes template mounts the music inbox
 // (laib#639); Homes takes it when HOMES_MUSIC_INBOX names none.
 const musicInboxMount = "/musik-eingang"
+
+// musicInbox is the music inbox's folder: HOMES_MUSIC_INBOX, else the
+// template's mount when it is there; "" without one.
+func musicInbox() string {
+	if d := os.Getenv("HOMES_MUSIC_INBOX"); d != "" {
+		return d
+	}
+	if fi, err := os.Stat(musicInboxMount); err == nil && fi.IsDir() {
+		return musicInboxMount
+	}
+	return ""
+}
 
 // episodeEvery is how often Homes looks for new podcast episodes.
 const episodeEvery = 15 * time.Minute
@@ -428,14 +437,16 @@ func main() {
 	flushed := make(chan struct{})
 	go func() { counter.Run(counting, 5*time.Minute); close(flushed) }()
 	go voice.Run(ctx, time.Minute)
-	mux := routes(site{napi: cfg, hh: hh, store: store, ops: ops, proxySecret: proxySecret, laibURL: laibURL,
+	st := site{napi: cfg, hh: hh, store: store, ops: ops, proxySecret: proxySecret, laibURL: laibURL,
 		publicURL: os.Getenv("HOMES_PUBLIC_URL"), tickets: werkstatt.FromEnv(), favorites: cfg.Favorites, bote: b, podcasts: pods, gesehen: gs,
 		samba: samba.FromEnv(), sambaHost: os.Getenv("HOMES_SAMBA_HOST"),
 		usage: counter, voice: voice, welcome: true,
 		stt:        pages.STT{Provider: os.Getenv("HOMES_STT_PROVIDER"), Language: env("HOMES_STT_LANGUAGE", "de")},
 		gesundheit: gesundheit, haPublic: haPublic, inverted: pages.InvertedFromList(os.Getenv("HOMES_COVER_INVERTED")),
 		radicale: radicalePublic, views: ansicht.Open(dataDir, os.Getenv("HOMES_RADICALE_USER")), dataDir: dataDir,
-		docsMail: docsMail, paperlessPublic: paperlessPublic, paperlessLAN: paperlessLAN})
+		docsMail: docsMail, paperlessPublic: paperlessPublic, paperlessLAN: paperlessLAN}
+	logModule(st)
+	mux := routes(st)
 	addr := env("HOMES_LISTEN", "127.0.0.1:8650")
 	log.Printf("homes %s: listening on %s as %s, laib %s, home assistant %v, haushalt %d tools, memory library %v (tidy-up %v), uploads %q, the Bote %v, counting %v (voice %v), pages only behind the proxy secret", Version, addr, assistent.Name(), ops.URL, cfg.HA != nil, len(haushalt.Tools(hh)), hh.Library != nil, hh.Judge != nil, cfg.UploadDir, b != nil, counter != nil, voice != nil)
 	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}

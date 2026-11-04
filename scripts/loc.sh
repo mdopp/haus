@@ -25,7 +25,7 @@ cd "$(dirname "$0")/.."
 bad=0
 p() { for x in "$@"; do printf 'internal/%s ' "$x"; done; }
 connectors=$(p abs bote caldav discogs ha jellyfin judge laib musicbrainz paperless qmd reitti samba werkstatt)
-shared=$(p abruf app assistent cards code128 jsonfile markdown mcpserver namen)
+shared=$(p abruf app assistent cards code128 jsonfile markdown mcpserver modul namen)
 household=$(p ansicht devices dokumente einkauf energie favoriten gesehen haushalt library merken notes papierkorb podcasts schalter takeout usage)
 
 budget() { # budget <name> <cap> <dir…>
@@ -39,7 +39,9 @@ budget() { # budget <name> <cap> <dir…>
 # area       cap    dirs              reason (2026-11-03: the size that day, plus 5 %)
 budget pages 15419 internal/pages     # the family's pages, one per file: 14,684
 budget napi 5033 internal/napi        # the app's widgets' and share sheet's API: 4,793
-budget cmd 1069 cmd                   # homes' wiring and the demo on fakes: 1,018
+# 2026-11-04, homes ADR 0001 step H1 (owner: „ganz durchziehen“): the module catalog,
+# cmd/homes/module.go, 1,150 with it; plus 5 %. H3–H6 move the routes out of main.go into it
+budget cmd 1208 cmd                   # homes' wiring and the demo on fakes: 1,018
 # 2026-11-04, the caps moved with the packages, none raised (sum 24,134 as before): abs and
 # musicbrainz (1,227 lines, 1,289 of cap) from household to connectors once merken's fetcher
 # was internal/abruf (235 lines of merken, 247 of cap, to shared) and jellyfin.Plain
@@ -48,7 +50,9 @@ budget connectors 13171 $connectors   # one client per service, with its fake: 1
 # 2026-11-04, internal/jsonfile (47 lines, 50 of cap) from household's cap to shared's: it
 # replaces nine copies of a save, 62 of their lines in household
 budget household 9584 $household      # the household's own logic: 10,638, 9,176 without them and the fetcher
-budget shared 1379 $shared            # the card, Markdown, the app's names: 1,019; abruf, namen: 1,287; jsonfile: 1,334
+# 2026-11-04, homes ADR 0001 step H1 (owner: „ganz durchziehen“): internal/modul, what an area
+# says about itself and the list Homes builds from them, 1,472 with it; plus 5 %
+budget shared 1546 $shared            # the card, Markdown, the app's names: 1,019; abruf, namen: 1,287; jsonfile: 1,334
 
 # every package in one area
 for d in internal/*/; do
