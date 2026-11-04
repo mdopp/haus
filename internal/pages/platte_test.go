@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"html"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -199,6 +200,12 @@ func TestDiscogsVerbinden(t *testing.T) {
 	post(t, h, DiscogsPath, url.Values{"tun": {"verbinden"}}, "anna", nil)
 	_, body, _ = familyPageAs(t, Discogs, cfg, "GET", DiscogsZurueckPath+"?oauth_token=rt&oauth_verifier=v", "anna", "family")
 	mustContain(t, body, "Verbunden: Homes nutzt jetzt dein Discogs-Konto „mdopp“.", "Verbunden mit „mdopp“ seit", ">Trennen</button>")
+	// connected (owner 2026-11-04): Platte erfassen first, then the state, Trennen last and quiet; no setup text
+	_, body, _ = familyPageAs(t, Discogs, cfg, "GET", DiscogsPath, "anna", "family")
+	before(t, body, "<h1>Discogs</h1>", `<a class=vorne href="`+PlattePath+`">Platte erfassen</a>`)
+	before(t, body, "class=vorne", "Verbunden mit „mdopp“ seit")
+	mustNotContain(t, body, html.EscapeString(saysDiscogsHow), "Nicht verbunden")
+	trennenLast(t, body)
 	if _, ok := dc.For("anna"); !ok {
 		t.Fatal("not kept")
 	}

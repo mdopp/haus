@@ -692,7 +692,12 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   Mehr when the box has Reitti); Homes checks it with an empty batch
   (Reitti says yes only to a token it knows with a device attached), keeps
   it in `HOMES_DATA/reitti-konten.json` (0600) for that person alone, never
-  logs or shows it (*Verbunden seit …* and Trennen).
+  logs or shows it. With it Homes keeps the newest point's time of each
+  batch Reitti took (`zuletzt`, never past now; an imported history does
+  not count). Once connected the page leads with *Zeitleiste öffnen* (into
+  Reitti), then one line of state (*Verbunden · zuletzt aufgezeichnet
+  heute 17:40*, or *Verbunden seit …* with the step in the app while no
+  point has come), and ends with a quiet, asked *Trennen*.
 - An old location history, shared to the app (owner 2026-11-03,
   *In den Standortverlauf übernehmen*): Google Maps' on-device export
   (`Timeline.json`, Android `{semanticSegments}` and the iPhone's array),
@@ -1028,7 +1033,9 @@ Discogs verbinden" sends the person to Discogs, which asks whether the
 app may use their account, and back to `/discogs/zurueck`; Homes keeps
 their token in `discogs-konten.json` (HOMES_DATA, 0600, never shown) for
 them alone, and only for the connection it started for them (OAuth 1.0a,
-PLAINTEXT over https). *Trennen* forgets it. Per person then: a wish already
+PLAINTEXT over https). Once connected the page leads with *Platte
+erfassen*, then *Verbunden mit „…“ seit …*, and ends with a quiet, asked
+*Trennen*, which forgets it. Per person then: a wish already
 on their shelf is "Hast du schon auf Vinyl"; *Auf die Discogs-Wantlist*
 puts a wish's album on the wantlist of who presses it; a wish whose album
 arrives on its wisher's shelf is ticked off and leaves the wantlist.

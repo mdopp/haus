@@ -271,3 +271,25 @@ func TestStandortSaysWhetherConnected(t *testing.T) {
 		}
 	}
 }
+
+// A batch Reitti took keeps its newest point's time for the page
+// Standortverlauf (never past now); a batch it did not take keeps nothing.
+func TestStandortKeepsWhenTheNewestPointCame(t *testing.T) {
+	f := newFakeReitti(t)
+	r, h := standortHouse(t, f)
+	if rec, _ := sendStandort(t, h, "POST", "anna1", zweiPunkte); rec.Code != 200 {
+		t.Fatalf("→ %d", rec.Code)
+	}
+	if k, _ := r.Konto("anna"); !k.Zuletzt.Equal(time.Date(2026, 11, 2, 7, 15, 0, 0, time.UTC)) {
+		t.Fatalf("anna's newest point: %v", k.Zuletzt)
+	}
+	f.mu.Lock()
+	f.answer = func(string) (int, string) { return 503, "" }
+	f.mu.Unlock()
+	if rec, _ := sendStandort(t, h, "POST", "ben1", `{"punkte":[{"zeit":"2026-11-02T08:00:00Z","breite":48.1,"laenge":11.5,"genauigkeit":8}]}`); rec.Code != 503 {
+		t.Fatalf("ben, Reitti down → %d", rec.Code)
+	}
+	if k, _ := r.Konto("ben"); !k.Zuletzt.IsZero() {
+		t.Fatalf("a batch Reitti did not take counts: %v", k.Zuletzt)
+	}
+}

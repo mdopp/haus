@@ -81,12 +81,7 @@ func writePodcasts(w http.ResponseWriter, r *http.Request, cfg StartConfig, code
 	person := r.Header.Get("Remote-User")
 	b := familyHead(r, cfg, "Podcasts", "Podcasts")
 	b.WriteString(noteStyle + "<h1>Podcasts</h1><p class=k>" + html.EscapeString(saysPodcastsHow) + "</p>")
-	if done != "" {
-		b.WriteString("<div class=gut role=status><span class=punkt></span><p>" + html.EscapeString(done) + "</p></div>")
-	}
-	if problem != "" {
-		b.WriteString("<div class=achtung role=alert><p>" + html.EscapeString(problem) + "</p></div>")
-	}
+	b.WriteString(gesagt(done, problem))
 	b.WriteString(`<section class=karte aria-labelledby=k-abo><h2 id=k-abo>Podcast abonnieren</h2><form class=notizform method=post action=` + PodcastsPath + `>` +
 		`<input type=hidden name=tun value=abonnieren><label for=link>Link zum Podcast</label><input id=link type=url name=link required inputmode=url autocomplete=off placeholder="https://podcasts.apple.com/…" value="` + html.EscapeString(link) + `">` +
 		`<button data-laeuft="Sucht den Feed …">Abonnieren</button></form><p class=k>` + html.EscapeString(saysPodcastsHear) + `</p></section>`)

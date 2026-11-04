@@ -138,13 +138,7 @@ func writeNetzlaufwerk(w http.ResponseWriter, r *http.Request, cfg StartConfig, 
 	person := r.Header.Get("Remote-User")
 	b := familyHead(r, cfg, "Netzlaufwerk", "")
 	b.WriteString(netzStyle)
-	b.WriteString("<h1>Netzlaufwerk</h1><p class=lead>" + html.EscapeString(saysWhatItIs) + "</p>")
-	if done != "" {
-		b.WriteString("<div class=gut role=status><span class=punkt></span><p>" + html.EscapeString(done) + "</p></div>")
-	}
-	if problem != "" {
-		b.WriteString("<div class=achtung role=alert><p>" + html.EscapeString(problem) + "</p></div>")
-	}
+	b.WriteString("<h1>Netzlaufwerk</h1><p class=lead>" + html.EscapeString(saysWhatItIs) + "</p>" + gesagt(done, problem))
 	acc, err := cfg.Samba.Accounts()
 	if err != nil {
 		if !errors.Is(err, samba.ErrNoShare) {
@@ -255,6 +249,38 @@ func (c *netzCard) raw(label, markup string) {
 
 func (c *netzCard) html() string {
 	return "<section class=karte><h2>" + html.EscapeString(c.title) + "</h2><ul>" + strings.Join(c.items, "") + "</ul></section>"
+}
+
+// gesagt is what an action ended with, done or failed, at the page's top.
+func gesagt(said, problem string) string {
+	out := ""
+	if said != "" {
+		out = "<div class=gut role=status><span class=punkt></span><p>" + html.EscapeString(said) + "</p></div>"
+	}
+	if problem != "" {
+		out += "<div class=achtung role=alert><p>" + html.EscapeString(problem) + "</p></div>"
+	}
+	return out
+}
+
+// A page once something is connected (owner 2026-11-04: „Ab dem Moment der Koppelung ist es
+// aber das wichtigste“): what the person came for first and big (vorne), its state in one
+// line (zustand), a step only while it is still needed, the quiet Trennen last.
+const gekoppeltStyle = `<style>.vorne{display:flex;align-items:center;justify-content:center;min-height:52px;margin:18px 0 0;padding:0 20px;border-radius:999px;background:var(--accent);color:var(--card);font-size:1.05rem;font-weight:600;text-decoration:none}
+.zustand{display:flex;gap:8px;margin:14px 2px 0;color:var(--muted)}.schritt{margin:14px 0 0;padding:12px 14px;border-radius:14px;background:var(--accent-soft)}.leise-weg{margin:40px 0 0;text-align:center}.leise-weg button{background:none;color:var(--muted);font-weight:400;text-decoration:underline}</style>`
+
+func vorne(href, label string) string {
+	return `<a class=vorne href="` + html.EscapeString(href) + `">` + html.EscapeString(label) + `</a>`
+}
+
+// zustand is the state's line; punkt "gelb" while something is still to do.
+func zustand(punkt, text string) string {
+	return `<p class=zustand role=status><span class="punkt ` + punkt + `"></span>` + html.EscapeString(text) + `</p>`
+}
+
+// leiseTrennen is the way out at the page's end, asked before it is done.
+func leiseTrennen(action, frage string) string {
+	return `<form class=leise-weg method=post action=` + action + ` data-frage="` + html.EscapeString(frage) + `"><input type=hidden name=tun value=trennen><button data-laeuft="Trennt …">Trennen</button></form>`
 }
 
 // dayWords is a day as the family says it: "17. Oktober 2026".

@@ -574,9 +574,7 @@ var merkenWait = 90 * time.Second
 func merkenForm(link, hint, problem string) string {
 	var b strings.Builder
 	b.WriteString(`<section class=karte aria-labelledby=k-merken><h2 id=k-merken>Aus Link merken</h2>`)
-	if problem != "" {
-		b.WriteString(`<div class=achtung role=alert><p>` + html.EscapeString(problem) + `</p></div>`)
-	}
+	b.WriteString(gesagt("", problem))
 	b.WriteString(`<form class=notizform method=post action=/notizen/merken>` +
 		`<label for=link>Link zu einem Rezept, einer Rezension, einer Reise …</label><input id=link type=url name=link required inputmode=url autocomplete=off placeholder="https://…" value="` + html.EscapeString(link) + `">` +
 		`<label for=hinweis>Dazu, wenn du magst</label><input id=hinweis type=text name=hinweis maxlength=200 autocomplete=off placeholder="z. B. #weihnachten für die Feiertage" value="` + html.EscapeString(hint) + `">` +

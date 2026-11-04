@@ -108,22 +108,15 @@ func publicBase(r *http.Request, cfg StartConfig) string {
 }
 
 func writeDiscogs(w http.ResponseWriter, r *http.Request, cfg StartConfig, said, problem string) {
-	user := r.Header.Get("Remote-User")
 	b := familyHead(r, cfg, "Discogs", "Discogs")
-	b.WriteString(noteStyle + "<h1>Discogs</h1><p class=k>" + html.EscapeString(saysDiscogsHow) + "</p>")
-	if said != "" {
-		b.WriteString("<div class=gut role=status><span class=punkt></span><p>" + html.EscapeString(said) + "</p></div>")
-	}
-	if problem != "" {
-		b.WriteString("<div class=achtung role=alert><p>" + html.EscapeString(problem) + "</p></div>")
-	}
-	if k, ok := cfg.Discogs.Konto(user); ok {
-		b.WriteString(`<section class=karte aria-labelledby=k-dc><h2 id=k-dc>Dein Konto</h2><p>Verbunden mit „` + html.EscapeString(k.Name) + `“ seit ` + k.Seit.Format("02.01.2006") + `.</p>` +
-			`<p class=wege><a class=knopf href=` + PlattePath + `>Platte erfassen</a></p>` +
-			`<form method=post action=` + DiscogsPath + ` data-frage="Homes soll dein Discogs-Konto nicht mehr nutzen?"><input type=hidden name=tun value=trennen><button data-laeuft="Trennt …">Trennen</button></form></section>`)
+	b.WriteString(noteStyle + gekoppeltStyle + "<h1>Discogs</h1>")
+	if k, ok := cfg.Discogs.Konto(r.Header.Get("Remote-User")); ok { // connected: Platte erfassen first, Trennen last and quiet
+		b.WriteString(gesagt(said, problem) + vorne(PlattePath, "Platte erfassen") + zustand("", "Verbunden mit „"+k.Name+"“ seit "+k.Seit.Format("02.01.2006")+".") +
+			leiseTrennen(DiscogsPath, "Homes soll dein Discogs-Konto nicht mehr nutzen?"))
 	} else {
 		// data-ganz: the browser goes to Discogs itself, and comes back
-		b.WriteString(`<section class=karte aria-labelledby=k-dc><h2 id=k-dc>Nicht verbunden</h2><p class=k>Discogs fragt dich gleich, ob die App „Joshua“ deines Haushalts dein Konto nutzen darf. Danach kommst du hierher zurück.</p>` +
+		b.WriteString("<p class=k>" + html.EscapeString(saysDiscogsHow) + "</p>" + gesagt(said, problem) +
+			`<section class=karte aria-labelledby=k-dc><h2 id=k-dc>Nicht verbunden</h2><p class=k>Discogs fragt dich gleich, ob die App „Joshua“ deines Haushalts dein Konto nutzen darf. Danach kommst du hierher zurück.</p>` +
 			`<form method=post action=` + DiscogsPath + ` data-ganz><input type=hidden name=tun value=verbinden><button data-laeuft="Öffnet Discogs …">Mit Discogs verbinden</button></form></section>`)
 	}
 	writePage(w, http.StatusOK, b)

@@ -32,7 +32,7 @@
 45 internal/napi/upload.go: napi.(*uploads).store
 32 internal/notes/kopf.go: notes.(*Dir).byHead
 31 internal/notes/notes.go: notes.(*Dir).Read
-39 internal/pages/box_aufgaben.go: pages.aufgabenCard
+37 internal/pages/box_aufgaben.go: pages.aufgabenCard
 40 internal/pages/box_operator.go: pages.operatorCard
 40 internal/pages/ding.go: pages.Ding
 36 internal/pages/discogs.go: pages.Discogs

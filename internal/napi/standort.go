@@ -127,7 +127,8 @@ func (s *standort) get(w http.ResponseWriter, r *http.Request, person string) {
 }
 
 // POST /napi/standort {punkte: [{zeit, breite, laenge, genauigkeit, hoehe, tempo}]}
-// → {angenommen, verworfen} once Reitti took them.
+// → {angenommen, verworfen} once Reitti took them; the newest point's time
+// is kept for the page Standortverlauf (reitti.Angekommen).
 func (s *standort) post(w http.ResponseWriter, r *http.Request, person string) {
 	var body struct {
 		Punkte []punkt `json:"punkte"`
@@ -155,9 +156,13 @@ func (s *standort) post(w http.ResponseWriter, r *http.Request, person string) {
 		return
 	}
 	ps := make([]reitti.Punkt, 0, len(body.Punkte))
+	var neuester time.Time
 	for _, p := range body.Punkte {
 		if q, ok := p.lesbar(); ok {
 			ps = append(ps, q)
+			if q.Zeit.After(neuester) {
+				neuester = q.Zeit
+			}
 		}
 	}
 	verworfen := len(body.Punkte) - len(ps)
@@ -173,6 +178,9 @@ func (s *standort) post(w http.ResponseWriter, r *http.Request, person string) {
 			w.Header().Set("Retry-After", "300")
 			standortFehler(w, http.StatusServiceUnavailable, grundReittiWeg, saysReittiDown)
 			return
+		}
+		if err := s.r.Angekommen(person, neuester); err != nil { // the page's „zuletzt aufgezeichnet“; the points are in Reitti all the same
+			log.Printf("homes: standort: %s: keeping when the last point came: %v", person, err)
 		}
 	}
 	if verworfen > 0 {
