@@ -123,7 +123,7 @@ func TestNotizenSearchIsCapped(t *testing.T) {
 func TestNotizShowsItsTextEscaped(t *testing.T) {
 	_, nd := shelf(t)
 	for _, path := range []string{"/notizen/einkaufsliste.md", "/notizen/einkaufsliste", "/notizen/Einkaufsliste"} {
-		code, body, _ := familyPage(t, Notizen, StartConfig{Notes: nd}, "GET", path, "family")
+		code, body, _ := familyPage(t, Notizen, StartConfig{Notes: nd, Module: modulListe(t, "notizen")}, "GET", path, "family")
 		if code != 200 {
 			t.Fatalf("%s → %d", path, code)
 		}

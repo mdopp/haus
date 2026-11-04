@@ -16,7 +16,7 @@ func TestTheAdminPagesWearTheFamilyFrame(t *testing.T) {
 	named(t, "Ada")
 	store, _ := devices.Open(t.TempDir())
 	_, hc := house(t)
-	family := StartConfig{HA: hc}
+	family := StartConfig{HA: hc, Module: modulListe(t, "geraete", "energie")}
 	for _, p := range []struct {
 		h     http.HandlerFunc
 		path  string

@@ -141,6 +141,8 @@ func main() {
 	cfg := pages.StartConfig{Gesehen: seen, Einkauf: list, Wuensche: wishes, Discogs: shelves, Podcasts: pods, HA: &ha.Client{URL: fake.URL, Token: "demo"}, Notes: nd, Favorites: favoriten.Open(dir), MusicInbox: inbox,
 		Calendar: cal, Views: ansicht.Open(dir, "homes"),
 		RadicalePublicURL: "https://caldav.example", Fetcher: abruf.Fetcher{AllowPrivate: true}}
+	// what the box lacks (ADR 0001 §10): Standortverlauf missing, Podcasts switched off, a wish to Laib
+	cfg.Module = demoModule(false)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/start", pages.Start(cfg))
 	mux.HandleFunc("/raeume", pages.Raeume(cfg))
@@ -158,7 +160,7 @@ func main() {
 	upload := filepath.Join(dir, "upload")
 	os.MkdirAll(upload, 0o755)
 	doku := cfg
-	doku.Ablage, doku.DocumentsMail = napi.NewUploads(upload), "dokumente@example.org"
+	doku.Ablage, doku.DocumentsMail, doku.Module = napi.NewUploads(upload), "dokumente@example.org", demoModule(true)
 	mux.HandleFunc("/dokumente", pages.Dokumente(doku))
 	mux.HandleFunc("/willkommen", pages.Willkommen(cfg))
 	mux.HandleFunc("/sprechen", pages.Sprechen(cfg))
@@ -190,8 +192,6 @@ func main() {
 	mux.Handle("/demo/laib/mcp", demoLaib)
 	mehr := cfg
 	mehr.Laib = &laib.Client{URL: "http://" + *addr + "/demo/laib", Token: "demo"}
-	// what the box lacks (ADR 0001 §10): Standortverlauf missing, Podcasts switched off, a wish to Laib
-	mehr.Module = demoModule()
 	mux.HandleFunc("/mehr", pages.Mehr(mehr))
 	mux.HandleFunc(pages.MehrAufgabenPath, pages.Mehr(mehr))
 	mux.HandleFunc(pages.SpurenPath, pages.Mehr(mehr))
@@ -314,17 +314,18 @@ type laibFake struct {
 // demoModule is the demo's box: the modules its pages have, with their
 // entries in the family's selection as the catalog gives them on a box
 // with a music inbox (Musik, not Platte erfassen or Discogs on their own);
-// no Reitti, and Podcasts switched off.
-func demoModule() *modul.Liste {
+// no Reitti, and Podcasts switched off; Dokumente on its own page only,
+// which has a way into the archive.
+func demoModule(docs bool) *modul.Liste {
 	m := func(name, backend, warum, grund string) modul.Modul {
 		nav := slices.DeleteFunc(pages.Nav(name), func(e modul.Eintrag) bool {
-			return e.Pfad == pages.PlattePath || e.Pfad == pages.DiscogsPath
+			return e.Pfad == pages.PlattePath || e.Pfad == pages.DiscogsPath || (e.Pfad == pages.DokumentePath && !docs)
 		})
 		return modul.Modul{Name: name, Titel: texte.Titel(name), Backend: backend, Warum: warum, Grund: grund, Nav: nav}
 	}
 	l, err := modul.Bauen([]modul.Modul{m("geraete", "home-assistant", "", ""), m("energie", "home-assistant", "", ""),
 		m("kalender", "radicale", "", ""), m("einkauf", "radicale", "", ""), m("notizen", "file-share", "", ""),
-		m("musik", "beets", "", ""), m("gesehen", "media", "", ""),
+		m("musik", "beets", "", ""), m("gesehen", "media", "", ""), m("dokumente", "paperless", "", ""),
 		m("standort", "reitti", modul.Fehlt, "Auf dieser Box läuft kein Reitti."),
 		m("podcasts", "audiobookshelf", modul.Aus, "Auf dieser Box ausgeschaltet."),
 		m("gesundheit", "gesundheit", modul.Fehlt, "Auf dieser Box läuft Gesundheit nicht.")})

@@ -155,7 +155,7 @@ func TestEnergieUnknownPathIsA404(t *testing.T) {
 	fake, hc := house(t)
 	energyHouse(t, fake)
 	for _, p := range []string{"/energie/", "/energie/heute", "/energie/x/y"} {
-		code, body, _ := familyPage(t, Energie, StartConfig{HA: hc}, "GET", p, "family")
+		code, body, _ := familyPage(t, Energie, StartConfig{HA: hc, Module: modulListe(t, "geraete", "energie")}, "GET", p, "family")
 		if code != 404 {
 			t.Fatalf("%s → %d, want 404", p, code)
 		}

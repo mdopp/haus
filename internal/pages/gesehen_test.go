@@ -58,7 +58,7 @@ func TestGesehenPage(t *testing.T) {
 	dav := davfake.New("homes", "pw")
 	defer dav.Close()
 	svc := &gesehen.Service{Filme: filme, Buecher: &abs.Client{URL: books.URL, Token: "k"}, DAV: &caldav.Client{URL: dav.URL, User: "homes", Password: "pw"}}
-	cfg := StartConfig{Gesehen: svc, Loc: berlin(t), Now: func() time.Time { return now }}
+	cfg := StartConfig{Gesehen: svc, Loc: berlin(t), Now: func() time.Time { return now }, Module: modulListe(t, "gesehen")}
 
 	code, body, _ := familyPage(t, Gesehen, cfg, "GET", GesehenPath, "family")
 	if code != 200 {

@@ -23,7 +23,7 @@ func TestDatenSichernShowsTheStandAndTheGuide(t *testing.T) {
 	os.WriteFile(filepath.Join(inbox, "anna", "whatsapp", "Databases", "msgstore.db.crypt15"), []byte("x"), 0o644)
 	os.MkdirAll(filepath.Join(inbox, "anna", ".teil"), 0o755)
 	os.WriteFile(filepath.Join(inbox, "anna", ".teil", "halb"), []byte("x"), 0o644) // a part does not wait
-	cfg := StartConfig{Sicherung: napi.NewSicherung(inbox, data)}
+	cfg := StartConfig{Sicherung: napi.NewSicherung(inbox, data), Module: modulListe(t, "sicherung")}
 
 	code, body, hdr := familyPage(t, Nachrichten, cfg, "GET", DatenPath, "family")
 	if code != 200 || hdr.Get("Cache-Control") != "no-store" {

@@ -27,7 +27,7 @@ func TestPodcastsPage(t *testing.T) {
 	fake.AddFeed(feeds.URL+"/lage", "Lage der Nation")
 	svc := podcasts.Open(&abs.Client{URL: fake.URL, Token: "k"}, t.TempDir())
 	svc.Fetch = abruf.Fetcher{AllowPrivate: true}
-	cfg := StartConfig{Podcasts: svc}
+	cfg := StartConfig{Podcasts: svc, Module: modulListe(t, "podcasts")}
 	h := Podcasts(cfg)
 
 	_, body, _ := familyPage(t, Podcasts, cfg, "GET", PodcastsPath, "family")
