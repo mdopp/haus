@@ -8,7 +8,9 @@ second backend for an area (Nextcloud instead of Radicale, Plex instead of
 Jellyfin).
 
 - **Status:** Accepted, 2026-11-04. The plan; nothing is built yet. The
-  steps are issues (below), done in the order given.
+  steps are issues (below), done in the order given. Amended 2026-11-04
+  (below, §10): no function is hidden. An area this box lacks leaves a
+  quiet trace with „Hier anfordern“, and the trace shows the wish's state.
 - **Deciders:** the owner (mdopp), 2026-11-04: „sollte es nicht ein Plugin
   sein, so dass man in anderen Installationen mehr/andere Tools nutzen
   kann; dass man auswählen kann, was der Server und damit die App kann und
@@ -263,9 +265,9 @@ The keys the app knows today are:
   Homes may have a new list); and in the account's hourly sync. The last
   answer is cached and the app works from it while offline.
 - **An unknown key** (a newer server) is ignored. **A known key that is
-  missing** means the box does not have it. Its Mehr row is hidden, the
-  widget type is not offered, the share target is disabled, the account
-  part's switch is hidden, and the backup part is skipped.
+  missing** means the box does not have it. Its Mehr row, its widget type,
+  its account part and its backup part become a quiet trace (§10), never
+  hidden; the share target is disabled, and its trace sits in Mehr.
 - **An unknown module** in `module` is only shown in words.
 - **The server has no `/napi/kann`** (404 `not_found`, an older Homes):
   the app behaves exactly as today and shows everything. The same applies
@@ -470,3 +472,138 @@ Why this order:
 - No runtime plugins, so an area from outside the repo still needs a PR
   to Homes. That is the cost of one binary, one image, one release, and
   one thing for Laib to watch.
+
+## 10. Amendment 2026-11-04 — nothing is hidden: a trace, „Hier anfordern“, the wish's state
+
+The owner, on the plan (2026-11-04): „Ich würde es ganz durchziehen. Aber
+ich würde in der App und im Frontend kleine Spuren hinterlassen, was die
+App kann. Gleich mit der Option ‚hier bitte anfordern‘, was dann ein Wish
+anlegt. Und das auch im Link darstellen (wurde angefordert, wartet, wurde
+abgelehnt, …). Keine Funktion soll versteckt werden.“
+
+This replaces „hidden“ in §1 and §3. A module that is off keeps its routes
+unmounted (§1, §4: its paths still answer 404 or its `Aus`), but it is not
+silent: it leaves **a trace**, one quiet line where its entry would be.
+
+### What a trace is
+
+- **One muted line**: the module's title and where it stands, „Standortverlauf
+  — auf dieser Box nicht eingerichtet“. Grey text and a grey icon in the
+  house's palette; no red, no warning sign, no error words. It must read as
+  „gibt es hier noch nicht“, never as something broken.
+- **Its words, by `warum` and the wish:**
+
+  | the module | the trace says |
+  |---|---|
+  | `fehlt`, nobody asked | „auf dieser Box nicht eingerichtet“ |
+  | `aus` (the owner switched it off), nobody asked | „ausgeschaltet“ |
+  | a wish, open | „angefordert“ |
+  | a wish, a proposal for it in the owner's Inbox | „wartet auf Freigabe“ |
+  | a wish, the proposal rejected, or the wish closed without it | „abgelehnt“ |
+  | a wish, the proposal approved, the module not on yet | „wird eingerichtet“ |
+  | the module is on | no trace: the module's own entry is there |
+
+  „umgesetzt“ is the wish's last state (Homes closes it when the module
+  comes on); a person never sees it on a trace, because the trace has
+  given way to the module itself.
+- **One action, „Hier anfordern“**, on every trace a signed-in person
+  sees, also on „ausgeschaltet“ and again after „abgelehnt“. While a wish
+  is open (angefordert, wartet, wird eingerichtet) the trace shows the
+  state instead of the button. Pressing it answers at once and ends
+  visibly (Homes CLAUDE.md): „angefordert“, or the reason in plain German
+  when Laib refuses or does not answer.
+
+### Where traces are
+
+- **Web:** Mehr ends with a quiet card, „Gibt es hier noch nicht“, one
+  trace per module that is off and has no admin-only entry. That covers
+  modules with a Leiste or Haushalt entry too (Geräte, Kalender, …) and
+  those without one (Sprechen, Kontakte, Homes-Konto). `werkstatt` and
+  `nutzung` (admins) leave theirs on the Box page's „Was Homes kann“
+  (H7), which lists every module.
+- **App:** its Mehr list has the same quiet section from `/napi/kann`.
+  The widget picker shows a type the box lacks as a muted entry with its
+  trace instead of leaving it out. The account and the backup show a
+  missing part as a switch that is off and disabled, with the trace
+  below. A share target cannot be shown disabled in Android's share
+  sheet, so its component stays disabled (§3) and its trace is the
+  module's line in Mehr.
+
+### `/napi/kann` grows (version stays 1, §2's rules: only added)
+
+Each entry of `module` gains:
+
+- `bietet`: the module's `Angebot` in the keys of `app`, on or off, so the
+  app knows which widget type, share target, account or backup part an
+  off module would bring and puts its trace there. The app still never
+  maps a module to a feature itself.
+- `spur`: the trace's words for an off module („auf dieser Box nicht
+  eingerichtet“, „ausgeschaltet“, or the wish's state), absent while on.
+- `wunsch`, only while there is one: `{"stand": "angefordert" | "wartet" |
+  "abgelehnt" | "eingerichtet" | "umgesetzt", "seit": "2026-11-04"}`.
+- `anfordern`: `true` when the trace offers „Hier anfordern“.
+
+`POST /napi/kann/anfordern` `{"modul": "<name>"}` files the wish for the
+device's person and answers the module's new entry. 401 without a device;
+404 for a module that is on or does not exist; a wish already open answers
+200 with that one, never a second.
+
+### The wish, through Laib
+
+Homes holds no GitHub token and decides nothing (haus#1); the wish and its
+state are Laib's (laib ADR 0026: household verbs live behind the verb
+door, in laib-haushalt). The new verb is laib's issue
+[laib#1038](https://github.com/mdopp/laib/issues/1038):
+
+- **Filing:** `laib_wish` with `modul` and `von`. laib-haushalt files it
+  the way the Bote's wish is filed (laib #883), as a Box-Aufgabe for the
+  admins, never a GitHub issue (the family's words stay in the house, and
+  issues are for program bugs only). Its title is „Wunsch aus Homes:
+  <Titel>“. Who asked is its `von`. Its `weg` is the Homes page
+  `/module/<name>`, where an admin sees the module, its backend and the
+  switch (H7). The `weg` is also how Laib knows which module the wish is
+  for.
+- **Reading:** `laib_wish` with `stand` and the off modules' names with
+  their backends answers the state of each one's latest wish. laib-haushalt
+  joins the Box-Aufgabe with the owner's Inbox, which it reads as the
+  `haushalt` hand. A proposal is „for“ a module when it adds the module's
+  backend as a service, or when it changes `services/homes/values.yml`
+  `MODULE_AUS` so that the module leaves the list. Only proposals filed
+  since the wish count. An open one is `wartet`, a rejected one
+  `abgelehnt` (its reason comes along), and an approved one
+  `eingerichtet`. „Später“ is no answer and leaves the wish `angefordert`,
+  as does a run that rolled the change back. A Box-Aufgabe ticked off by
+  Homes itself is `umgesetzt`. One ticked off by a person while the
+  module is still off is `abgelehnt`; the task's text says so to the
+  admin.
+- **Closing:** when Homes starts with a module on that has an open wish,
+  it ticks the Box-Aufgabe off (`laib_aufgabe erledigt`, as the `homes`
+  hand).
+- Homes reads the states in one call, keeps them a minute, and shows the
+  last known state, unmarked, while Laib does not answer. Without the
+  verb (an older Laib) the trace has no button and says only
+  „nicht eingerichtet“ or „ausgeschaltet“.
+
+### Steps this adds
+
+| step | repo | issue | what changes for a person |
+|---|---|---|---|
+| L3 | laib | [laib#1038](https://github.com/mdopp/laib/issues/1038) | a wish for a Homes module, and its state, through Laib |
+| H8 | homes | [homes#251](https://github.com/mdopp/homes/issues/251) | Mehr shows what the box lacks, with „Hier anfordern“ and the state; `/napi/kann` carries `bietet`, `spur`, `wunsch`, `anfordern` |
+
+H8 follows H2 and L3 and can go before H3: the modules that are `fehlt`
+already exist on every box. A1, A2, A3 and H7 change with it:
+
+- **A1:** the app's Mehr rows and the widget picker show traces with
+  „Hier anfordern“ instead of hiding.
+- **A2:** a disabled share target leaves its trace in Mehr.
+- **A3:** account and backup parts show disabled with their trace.
+- **H7:** the Box card shows each module's wish and its state, and
+  `/module/<name>` is the page a wish's Box-Aufgabe leads to.
+
+Weighed against the plan before this amendment: the family learns what
+the box could do, and asks for it where they miss it, instead of a feature
+that silently is not there. Maintenance gets no worse: the trace comes
+from the same module list, and the wish is Laib's existing Box-Aufgabe
+with one more read. What it costs: one more card on Mehr and one more call
+to Laib per Mehr view (cached), and about 150 lines in laib-haushalt.
