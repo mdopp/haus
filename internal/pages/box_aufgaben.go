@@ -188,12 +188,7 @@ func aufgabenCard(ctx context.Context, c *laib.Client, now time.Time, said, prob
 		extra += fmt.Sprintf(" · <span class=gelb>%d fällig</span>", due)
 	}
 	head(extra + "</span>")
-	if said != "" {
-		b.WriteString("<div class=gut role=status><span class=punkt></span><p>" + html.EscapeString(said) + "</p></div>")
-	}
-	if problem != "" {
-		b.WriteString("<div class=achtung role=alert><p>" + html.EscapeString(problem) + "</p></div>")
-	}
+	b.WriteString(gesagt(said, problem))
 	if len(open) == 0 {
 		b.WriteString("<p class=k>" + saysAufgabenNone + "</p>")
 	}

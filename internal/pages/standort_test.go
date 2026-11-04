@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/mdopp/homes/internal/reitti"
+	"github.com/mdopp/homes/internal/texte"
 )
 
 // Standortverlauf (owner 2026-11-02): each person pastes their Reitti
@@ -142,5 +143,59 @@ func TestStandortOnlyWhereTheBoxHasReitti(t *testing.T) {
 	cfg, _ := standortCfg(t)
 	if !strings.Contains(mehr(cfg), "Standortverlauf") {
 		t.Error("Mehr lacks Standortverlauf")
+	}
+}
+
+// Once connected the page leads with what the person came for (owner
+// 2026-11-04: „Ab dem Moment der Koppelung ist es aber das wichtigste“):
+// the timeline first and big, then the state; the step in the app only
+// while no point has come; Trennen last, quiet and asked.
+func TestStandortConnectedLeadsWithTheTimeline(t *testing.T) {
+	cfg, _ := standortCfg(t)
+	if err := cfg.Reitti.Verbinden(t.Context(), "anna", "gut-0123"); err != nil {
+		t.Fatal(err)
+	}
+	cfg.Now = func() time.Time { return time.Date(2026, 11, 2, 18, 0, 0, 0, time.UTC) }
+	open := `<a class=vorne href="https://reitti.box.test">` + texte.T(texte.StandortOeffnen) + `</a>`
+	step := html.EscapeString(texte.T(texte.StandortEinschalten))
+
+	// connected, no point yet: the button, the state, the step, Trennen
+	page := getStandort(cfg, "anna", "").Body.String()
+	mustContain(t, page, html.EscapeString(texte.T(texte.StandortKurz)), `<span class="punkt gelb"></span>Verbunden seit 2. November 2026`, `data-frage=`)
+	mustNotContain(t, page, html.EscapeString(saysStandortWas), html.EscapeString(saysStandortApp), "Reitti öffnen")
+	before(t, page, "<h1>Standortverlauf</h1>", open)
+	before(t, page, open, "class=zustand")
+	before(t, page, "class=zustand", step)
+	before(t, page, step, "class=leise-weg")
+	trennenLast(t, page)
+
+	// a point came: the state says when, the step is gone
+	if err := cfg.Reitti.Angekommen("anna", time.Date(2026, 11, 2, 8, 40, 0, 0, time.UTC)); err != nil {
+		t.Fatal(err)
+	}
+	page = getStandort(cfg, "anna", "").Body.String()
+	mustContain(t, page, "Verbunden · zuletzt aufgezeichnet heute 08:40")
+	mustNotContain(t, page, step, "Verbunden seit")
+	before(t, page, open, "zuletzt aufgezeichnet")
+	trennenLast(t, page)
+
+	// without Reitti's own address there is no button; the state leads
+	cfg.Reitti.PublicURL = ""
+	page = getStandort(cfg, "anna", "").Body.String()
+	mustNotContain(t, page, "class=vorne")
+	before(t, page, "zuletzt aufgezeichnet", "class=leise-weg")
+}
+
+// trennenLast says the quiet Trennen ends the page: nothing to do after it.
+func trennenLast(t *testing.T, page string) {
+	t.Helper()
+	i := strings.Index(page, "<form class=leise-weg")
+	if i < 0 || !strings.Contains(page[i:], `<button data-laeuft="Trennt …">Trennen</button></form>`) {
+		t.Fatalf("no quiet Trennen:\n%s", page)
+	}
+	for _, after := range []string{"<form", "class=vorne", "class=zustand", "class=schritt", "<section", "role=alert"} {
+		if strings.Contains(page[i+len("<form"):], after) {
+			t.Errorf("%q after Trennen:\n%s", after, page[i:])
+		}
 	}
 }

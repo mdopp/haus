@@ -50,6 +50,7 @@ import (
 	"github.com/mdopp/homes/internal/notes"
 	"github.com/mdopp/homes/internal/pages"
 	"github.com/mdopp/homes/internal/podcasts"
+	"github.com/mdopp/homes/internal/reitti"
 	"github.com/mdopp/homes/internal/texte"
 )
 
@@ -141,7 +142,7 @@ func main() {
 		log.Fatal(err)
 	}
 	// Anna's Discogs is connected (owner 2026-10-26: Platte erfassen on a phone is checked too); the app reaches no Discogs
-	os.WriteFile(filepath.Join(dir, "discogs-konten.json"), []byte(`{"anna":{"name":"anna","token":"t","secret":"s"}}`), 0o600)
+	os.WriteFile(filepath.Join(dir, "discogs-konten.json"), []byte(`{"anna":{"name":"anna","token":"t","secret":"s","seit":"2026-10-26T10:00:00Z"}}`), 0o600)
 	shelves := &discogs.Regale{App: &discogs.App{Key: "demo", Secret: "demo", Base: "http://127.0.0.1:1", Web: "https://www.discogs.test"}, Dir: dir}
 	// haus#152: what Anna watched and heard, and the film and book wish list
 	absFake.Hoert("anna", "Krabat", 0.4, false, time.Now().Add(-time.Hour))
@@ -180,6 +181,21 @@ func main() {
 		mux.HandleFunc("/pair-device", pages.PairDevice(store, cfg))
 	}
 	mux.HandleFunc(pages.DiscogsPath, pages.Discogs(cfg))
+	// Standortverlauf, Anna connected (owner 2026-11-04): her newest point came 20 minutes ago;
+	// /demo/standort?punkte=0: none has come yet. The demo's Reitti takes nothing.
+	reittiKonto := func(punkte bool) {
+		k := reitti.Konto{Token: "demo", Seit: time.Now().Add(-26 * time.Hour)}
+		if punkte {
+			k.Zuletzt = time.Now().Add(-20 * time.Minute)
+		}
+		b, _ := json.Marshal(map[string]reitti.Konto{"anna": k})
+		os.WriteFile(filepath.Join(dir, "reitti-konten.json"), b, 0o600)
+	}
+	reittiKonto(true)
+	standort := cfg
+	standort.Reitti = &reitti.Reitti{URL: "http://127.0.0.1:1", PublicURL: "https://reitti.example", Dir: dir}
+	mux.HandleFunc(pages.StandortPath, pages.Standort(standort))
+	mux.HandleFunc("/demo/standort", func(w http.ResponseWriter, r *http.Request) { reittiKonto(r.URL.Query().Get("punkte") != "0") })
 	mux.HandleFunc(pages.MusikTeilPath, pages.Musik(cfg))
 	mux.HandleFunc(pages.MusikStandPath, pages.Musik(cfg))                       // haus#113: the import's line
 	mux.HandleFunc("/demo/musik", func(w http.ResponseWriter, r *http.Request) { // what arrived in the inbox, name → size

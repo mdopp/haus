@@ -3,6 +3,7 @@ package pages
 import (
 	"context"
 	"errors"
+	"fmt"
 	"html"
 	"log"
 	"net/http"
@@ -10,18 +11,20 @@ import (
 	"time"
 
 	"github.com/mdopp/homes/internal/reitti"
+	"github.com/mdopp/homes/internal/texte"
 )
 
 // Standortverlauf (owner 2026-11-02): the Homes app can record where its
 // person was and Homes passes the points on to the household's Reitti,
 // into that person's own timeline. For that Homes needs the person's Reitti
 // token once: pasted here, checked with Reitti, kept for them alone and
-// never shown back — the page says only since when it is connected, and
-// offers Trennen.
+// never shown back. Once connected the page leads with the timeline, says
+// when the newest point came (or the step while none has), and ends with a
+// quiet Trennen (owner 2026-11-04).
 const (
 	StandortPath = "/standort"
 
-	saysStandortWas       = "Die Homes-App kann aufzeichnen, wo du unterwegs warst, und schickt es in deinen eigenen Zeitstrahl in Reitti. Der Verlauf bleibt auf eurer Box, in deinem Reitti-Konto."
+	saysStandortWas       = "Die Homes-App kann aufzeichnen, wo du unterwegs warst, und schickt es in deine eigene Zeitleiste in Reitti. Der Verlauf bleibt auf eurer Box, in deinem Reitti-Konto."
 	saysStandortHow       = "Dafür braucht Homes einmal einen Schlüssel aus deinem Reitti-Konto: In Reitti unter Einstellungen → API-Token einen neuen Token erstellen, ihn mit einem Gerät verbinden („Mit Gerät verbinden“), dann den Token hier einfügen."
 	saysStandortApp       = "Danach in der Homes-App unter „Standortverlauf“ die Aufzeichnung einschalten."
 	saysStandortVerbunden = "Verbunden: die Homes-App schickt deine Punkte jetzt an Reitti."
@@ -120,37 +123,32 @@ func Standort(cfg StartConfig) http.HandlerFunc {
 }
 
 func writeStandort(w http.ResponseWriter, r *http.Request, cfg StartConfig, code int, said, problem string) {
-	user := r.Header.Get("Remote-User")
+	k, verbunden := cfg.Reitti.Konto(r.Header.Get("Remote-User"))
+	reittiURL := AppURL(OnDomain(cfg.Reitti.PublicURL, cfg.PublicURL))
 	b := familyHead(r, cfg, "Standortverlauf", "")
-	b.WriteString(netzStyle + keyHintStyle)
-	b.WriteString("<h1>Standortverlauf</h1><p class=lead>" + html.EscapeString(saysStandortWas) + "</p>")
-	if said != "" {
-		b.WriteString("<div class=gut role=status><span class=punkt></span><p>" + html.EscapeString(said) + "</p></div>")
-	}
-	if problem != "" {
-		b.WriteString("<div class=achtung role=alert><p>" + html.EscapeString(problem) + "</p></div>")
-	}
-	_, loc := cfg.clock()
-	if k, ok := cfg.Reitti.Konto(user); ok {
-		mine := cardsList("Reitti")
-		mine.row("Verbunden seit "+dayWords(k.Seit, loc), "", true)
-		mine.row(saysStandortApp, "", false)
-		b.WriteString(mine.html())
-		if u := AppURL(OnDomain(cfg.Reitti.PublicURL, cfg.PublicURL)); u != "" {
-			// connected, the timeline is what a person comes back for
-			b.WriteString(`<p class=wege><a class=knopf href="` + html.EscapeString(u) + `">Reitti öffnen</a></p>`)
+	b.WriteString(netzStyle + keyHintStyle + gekoppeltStyle + "<h1>Standortverlauf</h1>")
+	if verbunden { // connected: the timeline first, the step only while no point came, Trennen last and quiet
+		b.WriteString("<p class=lead>" + html.EscapeString(texte.T(texte.StandortKurz)) + "</p>" + gesagt(said, problem))
+		if reittiURL != "" {
+			b.WriteString(vorne(reittiURL, texte.T(texte.StandortOeffnen)))
 		}
-		b.WriteString(`<form method=post action=` + StandortPath + ` data-frage="Homes soll nichts mehr an Reitti schicken?"><input type=hidden name=tun value=trennen><button data-laeuft="Trennt …">Trennen</button></form>`)
-	} else {
-		b.WriteString("<form class=passwort method=post action=" + StandortPath + "><h2>Mit Reitti verbinden</h2><input type=hidden name=tun value=verbinden>" +
-			"<p class=k>" + html.EscapeString(saysStandortHow) + "</p>")
-		if u := AppURL(OnDomain(cfg.Reitti.PublicURL, cfg.PublicURL)); u != "" {
-			b.WriteString(`<p class=wege><a class=knopf href="` + html.EscapeString(u) + `">Reitti öffnen</a></p>`)
+		now, loc := cfg.clock()
+		if k.Zuletzt.IsZero() {
+			b.WriteString(zustand("gelb", "Verbunden seit "+dayWords(k.Seit, loc)) + "<p class=schritt>" + html.EscapeString(texte.T(texte.StandortEinschalten)) + "</p>")
+		} else {
+			b.WriteString(zustand("", fmt.Sprintf(texte.T(texte.StandortZuletzt), dayWord(k.Zuletzt, now, loc)+" "+k.Zuletzt.In(loc).Format("15:04"))))
 		}
-		// type=password: the token is not shown while it is pasted, and never written back
-		b.WriteString(`<div class=feld><label for=reitti-token>Token aus Reitti</label><input id=reitti-token name=token type=password autocomplete=off spellcheck=false required></div>` +
-			`<button data-laeuft="Prüft bei Reitti …">Verbinden</button></form>`)
-		b.WriteString("<p class=k>" + html.EscapeString(saysStandortApp) + "</p>")
+		b.WriteString(leiseTrennen(StandortPath, "Homes soll nichts mehr an Reitti schicken?"))
+		writePage(w, code, b)
+		return
 	}
+	b.WriteString("<p class=lead>" + html.EscapeString(saysStandortWas) + "</p>" + gesagt(said, problem) +
+		"<form class=passwort method=post action=" + StandortPath + "><h2>Mit Reitti verbinden</h2><input type=hidden name=tun value=verbinden><p class=k>" + html.EscapeString(saysStandortHow) + "</p>")
+	if reittiURL != "" {
+		b.WriteString(`<p class=wege><a class=knopf href="` + html.EscapeString(reittiURL) + `">Reitti öffnen</a></p>`)
+	}
+	// type=password: the token is not shown while it is pasted, and never written back
+	b.WriteString(`<div class=feld><label for=reitti-token>Token aus Reitti</label><input id=reitti-token name=token type=password autocomplete=off spellcheck=false required></div>` +
+		`<button data-laeuft="Prüft bei Reitti …">Verbinden</button></form><p class=k>` + html.EscapeString(saysStandortApp) + "</p>")
 	writePage(w, code, b)
 }

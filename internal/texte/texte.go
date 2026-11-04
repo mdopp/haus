@@ -48,15 +48,19 @@ const (
 	NichtSchaltbar      ID = "schalten.nicht-schaltbar"
 	ModuleSeite         ID = "box.module" // the Box pill
 	// Start's „Deine Geräte“ as the app's tiles (homes-android#245, owner 2026-11-04)
-	Geraete         ID = "geraete.titel"
-	GeraeteAlle     ID = "geraete.alle"     // the head's link to Räume
-	GeraeteHinweis  ID = "geraete.hinweis"  // what a tap and a long press do
-	GeraeteSchaltet ID = "geraete.schaltet" // a tile right after a tap
-	BoxWeg          ID = "verbindung.weg"   // the page cannot reach the box
-	Stand           ID = "verbindung.stand" // „Stand %s“: since when the values are
-	TorOeffnen      ID = "tor.frage"        // „%s öffnen?“, asked before a garage opens
-	TorJa           ID = "tor.ja"
-	TorNein         ID = "tor.nein"
+	Geraete             ID = "geraete.titel"
+	GeraeteAlle         ID = "geraete.alle"     // the head's link to Räume
+	GeraeteHinweis      ID = "geraete.hinweis"  // what a tap and a long press do
+	GeraeteSchaltet     ID = "geraete.schaltet" // a tile right after a tap
+	BoxWeg              ID = "verbindung.weg"   // the page cannot reach the box
+	Stand               ID = "verbindung.stand" // „Stand %s“: since when the values are
+	TorOeffnen          ID = "tor.frage"        // „%s öffnen?“, asked before a garage opens
+	TorJa               ID = "tor.ja"
+	TorNein             ID = "tor.nein"
+	StandortKurz        ID = "standort.kurz"        // Standortverlauf once connected (owner 2026-11-04): the one-line intro
+	StandortOeffnen     ID = "standort.oeffnen"     // the main button, into Reitti
+	StandortZuletzt     ID = "standort.zuletzt"     // „… %s“: when the newest point came
+	StandortEinschalten ID = "standort.einschalten" // the step while no point has come
 )
 
 var de = map[ID]string{
@@ -123,6 +127,10 @@ var de = map[ID]string{
 	TorOeffnen:          "%s öffnen?",
 	TorJa:               "Öffnen",
 	TorNein:             "Abbrechen",
+	StandortKurz:        "Wo du warst – nur für dich, auf eurer Box.",
+	StandortOeffnen:     "Zeitleiste öffnen",
+	StandortZuletzt:     "Verbunden · zuletzt aufgezeichnet %s",
+	StandortEinschalten: "Noch ist kein Punkt angekommen. Schalte in der Homes-App unter „Standortverlauf“ die Aufzeichnung ein.",
 }
 
 // sprachen are the tables by language; a missing word falls back to German.

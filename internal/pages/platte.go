@@ -242,9 +242,7 @@ func writePlatte(w http.ResponseWriter, r *http.Request, cfg StartConfig, said s
 		writePage(w, http.StatusOK, b)
 		return
 	}
-	if said != "" {
-		b.WriteString("<div class=gut role=status><span class=punkt></span><p>" + html.EscapeString(said) + "</p></div>")
-	}
+	b.WriteString(gesagt(said, ""))
 	for _, n := range notes {
 		b.WriteString("<div class=\"achtung selbst\" role=status><p>" + html.EscapeString(n) + "</p></div>")
 	}

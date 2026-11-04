@@ -64,8 +64,9 @@ func (u *Unavailable) Unwrap() error { return u.Err }
 
 // Konto is what Homes keeps of a person's Reitti connection.
 type Konto struct {
-	Token string    `json:"token"`
-	Seit  time.Time `json:"seit"`
+	Token   string    `json:"token"`
+	Seit    time.Time `json:"seit"`
+	Zuletzt time.Time `json:"zuletzt,omitzero"` // the newest point Reitti took from the app; zero: none yet
 }
 
 // Reitti is the household's Reitti as Homes reaches it inside the box, and
@@ -159,6 +160,28 @@ func (r *Reitti) Verbinden(ctx context.Context, user, token string) error {
 		return err
 	}
 	all[user] = Konto{Token: token, Seit: r.now()}
+	return r.save(all)
+}
+
+// Angekommen keeps that Reitti took the app's points up to at, for the
+// page's „zuletzt aufgezeichnet“: only a later time, never one past now (a
+// phone's clock may run ahead), and only while user is connected.
+func (r *Reitti) Angekommen(user string, at time.Time) error {
+	if now := r.now(); at.After(now) {
+		at = now
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	all, err := r.load()
+	if err != nil {
+		return err
+	}
+	k, ok := all[user]
+	if !ok || !at.After(k.Zuletzt) {
+		return nil
+	}
+	k.Zuletzt = at
+	all[user] = k
 	return r.save(all)
 }
 

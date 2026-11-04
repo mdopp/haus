@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // A token is kept only once Reitti said yes to it; the file is the
@@ -63,5 +64,39 @@ func TestVerbindenKeepsOnlyATokenReittiTakes(t *testing.T) {
 	var none *Reitti
 	if _, ok := none.Konto("anna"); ok {
 		t.Fatal("no Reitti, no account")
+	}
+}
+
+// Angekommen keeps when the newest point came, for the page: a later time
+// only, never past now, and nothing for someone not connected.
+func TestAngekommenKeepsTheNewestPointOnly(t *testing.T) {
+	now := time.Date(2026, 11, 4, 17, 45, 0, 0, time.UTC)
+	r := &Reitti{Dir: t.TempDir(), Now: func() time.Time { return now }}
+	if err := r.save(map[string]Konto{"anna": {Token: "gut", Seit: now.Add(-time.Hour)}}); err != nil {
+		t.Fatal(err)
+	}
+	if k, _ := r.Konto("anna"); !k.Zuletzt.IsZero() {
+		t.Fatalf("a point before any came: %v", k.Zuletzt)
+	}
+	at := now.Add(-5 * time.Minute)
+	for _, p := range []time.Time{at, at.Add(-time.Hour)} { // an older batch sent late changes nothing
+		if err := r.Angekommen("anna", p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if k, _ := r.Konto("anna"); !k.Zuletzt.Equal(at) || k.Token != "gut" {
+		t.Fatalf("kept %+v", k)
+	}
+	if err := r.Angekommen("anna", now.Add(time.Hour)); err != nil { // a phone clock ahead
+		t.Fatal(err)
+	}
+	if k, _ := r.Konto("anna"); !k.Zuletzt.Equal(now) {
+		t.Fatalf("a time past now: %v", k.Zuletzt)
+	}
+	if err := r.Angekommen("ben", now); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := r.Konto("ben"); ok {
+		t.Fatal("a point made ben connected")
 	}
 }

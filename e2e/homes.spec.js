@@ -516,12 +516,39 @@ test('Aktivierungswort shows the wake word the speaker listens for', async ({ pa
   await expect(card).toContainText('„Hey Mycroft“ kann der Lautsprecher schon, Laib wählt es für ihn aus. Bis dahin hört er auf „Okay Nabu“.');
 });
 
+// Standortverlauf once connected (owner 2026-11-04: „Ab dem Moment der
+// Koppelung ist es aber das wichtigste“): the timeline first and big, the
+// state, the step only while no point has come, Trennen last and quiet.
+test('Standortverlauf, connected, leads with the timeline and ends with a quiet Trennen', async ({ page, request }, info) => {
+  const y = async (sel) => (await page.locator(sel).boundingBox()).y;
+  await request.get('/demo/standort?punkte=0');
+  await page.goto('/standort');
+  const open = page.getByRole('link', { name: 'Zeitleiste öffnen' });
+  await expect(open).toHaveAttribute('href', 'https://reitti.example');
+  expect((await open.boundingBox()).height).toBeGreaterThanOrEqual(48);
+  await expect(page.locator('.zustand')).toContainText('Verbunden seit');
+  await expect(page.locator('.schritt')).toContainText('die Aufzeichnung ein');
+  await expect(page.locator('form.leise-weg')).toHaveAttribute('data-frage', /Reitti/);
+  expect(await y('.vorne')).toBeLessThan(await y('.zustand'));
+  expect(await y('.zustand')).toBeLessThan(await y('.schritt'));
+  expect(await y('.schritt')).toBeLessThan(await y('form.leise-weg'));
+  await page.screenshot({ path: info.outputPath('standort-verbunden-ohne-punkte.png'), fullPage: true });
+
+  await request.get('/demo/standort?punkte=1');
+  await page.reload();
+  await expect(page.locator('.zustand')).toContainText(/Verbunden · zuletzt aufgezeichnet (heute|gestern) \d\d:\d\d/);
+  await expect(page.locator('.schritt')).toHaveCount(0);
+  expect(await y('.vorne')).toBeLessThan(await y('.zustand'));
+  expect(await y('.zustand')).toBeLessThan(await y('form.leise-weg'));
+  await page.screenshot({ path: info.outputPath('standort-verbunden.png'), fullPage: true });
+});
+
 // Every page, every field, on a phone (owner 2026-10-24: "werden alle
 // Felder geprüft?"): with every fold open, the page is no wider than the
 // screen, a field to type in has room, a button is big enough for a
 // finger, and no text runs out of its box.
 const PAGES = ['/start', '/raeume', '/raeume/light.kueche', '/medien', '/energie', '/energie?zeitraum=jahr', '/kalender', '/kalender/verwalten',
-  '/notizen', '/notizen?tag=kochen', '/notizen/einkaufsliste.md', '/notizen/markdown.md', '/notizen/einkaufsliste.md?bearbeiten=1', '/mehr', '/musik', '/platte', '/discogs', '/aktivierungswort', '/aufgaben', '/dokumente', '/willkommen', '/box/geraete', '/pair-device', '/podcasts', '/gesehen',
+  '/notizen', '/notizen?tag=kochen', '/notizen/einkaufsliste.md', '/notizen/markdown.md', '/notizen/einkaufsliste.md?bearbeiten=1', '/mehr', '/musik', '/platte', '/discogs', '/aktivierungswort', '/aufgaben', '/dokumente', '/willkommen', '/box/geraete', '/pair-device', '/podcasts', '/gesehen', '/standort',
   '/einkauf', '/einkauf?liste=liste-baumarkt', '/einkauf?liste=liste-musik', '/einkauf/rezepte', '/einkauf/rezepte?n=rezepte%2Flasagne.md', '/notizen/rezepte/lasagne.md'];
 for (const path of PAGES) {
   test(`layout of ${path}`, async ({ page }) => {

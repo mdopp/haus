@@ -216,9 +216,7 @@ func writeDokumente(w http.ResponseWriter, r *http.Request, cfg StartConfig, cod
 		}
 		b.WriteString("<div class=gut role=status><span class=punkt></span><p>" + html.EscapeString(done) + see + "</p></div>")
 	}
-	if problem != "" {
-		b.WriteString("<div class=achtung role=alert><p>" + html.EscapeString(problem) + "</p></div>")
-	}
+	b.WriteString(gesagt("", problem))
 	scanning := scanSection(r, cfg, scan)
 	if scan.active() { // a stack running or waiting comes first
 		b.WriteString(scanning)
