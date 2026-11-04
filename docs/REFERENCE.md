@@ -123,11 +123,14 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   steps (`internal/texte`, `schritt.*`) and the vendor's guide. A module
   that is on and has an app is one task per person
   (`internal/einrichten`), „<Titel> auf dem Handy einrichten“, and so is
-  the Homes app; a module that is off has none. Today: Podcasts (Audiobookshelf), Sprechen
-  (Signal, with `HOMES_BOTE_SIGNAL`), and three modules Homes only leads
+  the Homes app; a module that is off has none. Today: Sprechen
+  (Signal, with `HOMES_BOTE_SIGNAL`), and four modules Homes only leads
   to, on while Laib runs their service (asked once at start: `laib
   status`): `fotos` (immich, the Immich app), `passwoerter` (vaultwarden,
-  Bitwarden), `filme` (media, Jellyfin). Kalender has no setup task (owner
+  Bitwarden), `filme` (media, Jellyfin), `hoerbuecher` (audiobookshelf,
+  the Audiobookshelf app, „Hörbücher und Podcasts“; owner 2026-11-04 — on
+  without Homes' ABS token too, and the only task for that app: Podcasts
+  has none). Kalender has no setup task (owner
   2026-11-04: the iPhone's way is to be thought anew first). A task is done when Homes can
   tell — a phone paired for the person (the Homes app), the phone
   reporting the module's app installed (`POST /napi/einrichtung/apps`),
