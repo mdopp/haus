@@ -319,6 +319,36 @@ func TestMusikWunschliste(t *testing.T) {
 	}
 }
 
+// ADR 0001 H4: einkauf off, musik on — the music wish list is musik's
+// and stays, with its own steps; the shopping list, the other lists and
+// managing them are gone
+func TestMusikWunschlisteWithoutEinkauf(t *testing.T) {
+	l, _ := shoppingList(t)
+	l.Changed = nil
+	l.DAV.MakeList(context.Background(), "", "urlaub", "Urlaub")
+	w := &einkauf.Wuensche{Listen: l, Dir: t.TempDir()}
+	w.Wuenschen(context.Background(), merken.Lied{Kuenstler: "Wanda", Titel: "Salbei"}, "anna")
+	cfg := StartConfig{Wuensche: w}
+	code, body, _ := familyPage(t, Einkauf, cfg, "GET", "/einkauf?liste=liste-musik", "family")
+	if code != http.StatusOK {
+		t.Fatalf("the music wish list with einkauf off → %d", code)
+	}
+	mustContain(t, body, "<h1>Musik</h1>", "Wanda – Salbei")
+	mustNotContain(t, body, "Listen verwalten", "Urlaub", ">Einkauf<")
+	for _, target := range []string{"/einkauf", "/einkauf?liste=liste-urlaub", EinkaufRezeptePath} {
+		if code, _, _ := familyPage(t, Einkauf, cfg, "GET", target, "family"); code != http.StatusNotFound {
+			t.Errorf("GET %s with einkauf off → %d, want 404", target, code)
+		}
+	}
+	uid := uidOf(t, l.Andere(einkauf.MusikListe), "Wanda – Salbei")
+	if rec := post(t, Einkauf(cfg), "/einkauf?liste=liste-musik", url.Values{"tun": {"haken"}, "uid": {uid}, "erledigt": {"1"}}, "anna", nil); rec.Code >= 400 {
+		t.Errorf("ticking a wish off → %d %s", rec.Code, rec.Body)
+	}
+	if rec := post(t, Einkauf(cfg), "/einkauf?liste=liste-musik", url.Values{"tun": {"neu"}, "name": {"Baumarkt"}}, "anna", nil); rec.Code != http.StatusNotFound {
+		t.Errorf("making a list with einkauf off → %d, want 404", rec.Code)
+	}
+}
+
 // haus#174: a deleted list with its lines waits 30 days in the Papierkorb;
 // „Rückgängig“ where it was deleted, and under Listen verwalten, puts it back
 // whole; another person's own list is not theirs to take back

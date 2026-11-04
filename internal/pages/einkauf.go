@@ -12,6 +12,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -58,10 +59,28 @@ const (
 // einkaufWait is how long a change may take before the page says so.
 var einkaufWait = 20 * time.Second
 
+// nurWuensche: einkauf is off and musik on (ADR 0001 H4), so the page is
+// the music wish list's only: no other list, nothing to manage.
+func nurWuensche(cfg StartConfig) bool { return cfg.Einkauf == nil && cfg.Wuensche != nil }
+
+// einkaufHier: the page serves this request: every list while einkauf is
+// on; with it off and musik on, the music wish list and its own steps only.
+func einkaufHier(r *http.Request, cfg StartConfig) bool {
+	if !nurWuensche(cfg) {
+		return cfg.Einkauf != nil
+	}
+	tun := r.PostFormValue("tun")
+	return r.URL.Path == EinkaufPath && r.URL.Query().Get("liste") == einkauf.MusikListe.ID() &&
+		(r.Method != http.MethodPost || tun == "dazu" || tun == "haken" || tun == "aufraeumen" || tun == "stufe")
+}
+
 // listOf is the list the request names (liste=<id>), the household's
 // shopping list without one; another person's own list is no list here.
 func listOf(r *http.Request, cfg StartConfig) (*einkauf.Liste, bool) {
 	id := r.FormValue("liste")
+	if nurWuensche(cfg) {
+		return cfg.Wuensche.Listen.Andere(einkauf.MusikListe), true // einkaufHier let only it through
+	}
 	if id == "" {
 		return cfg.Einkauf.Andere(caldav.Einkauf), true
 	}
@@ -85,7 +104,7 @@ func listPath(ref caldav.ListRef) string {
 // each "text\torigin"), neu (name, fuer=haushalt|mich), loeschen.
 func Einkauf(cfg StartConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if cfg.Einkauf == nil || (r.URL.Path != EinkaufPath && r.URL.Path != EinkaufRezeptePath) {
+		if !einkaufHier(r, cfg) || (r.URL.Path != EinkaufPath && r.URL.Path != EinkaufRezeptePath) {
 			missing{http.StatusNotFound, "Diese Seite gibt es nicht.", "Haushalt", "/kalender", "Haushalt"}.write(w, r, cfg)
 			return
 		}
@@ -375,6 +394,7 @@ func writeEinkauf(w http.ResponseWriter, r *http.Request, cfg StartConfig, l *ei
 		missing{http.StatusNotFound, saysNoList, "Einkauf", EinkaufPath, "Zur Einkaufsliste"}.write(w, r, cfg)
 		return
 	}
+	lists = waehlbar(cfg, lists)
 	act := html.EscapeString(listPath(l.Ref))
 	b := familyHead(r, cfg, name, "Einkauf")
 	how := saysEinkaufHow
@@ -453,7 +473,27 @@ func writeEinkauf(w http.ResponseWriter, r *http.Request, cfg StartConfig, l *ei
 		}
 		b.WriteString(`<p class=wege><a class=knopf href="` + html.EscapeString(rez) + `">Zutaten aus Rezepten</a></p>`)
 	}
-	// make a list, delete this one (not the household's shopping list)
+	b.WriteString(listenVerwalten(cfg, l, act, name, person))
+	writePage(w, http.StatusOK, b)
+}
+
+// waehlbar are the lists the page offers to switch to: with einkauf off,
+// none but the music wish list.
+func waehlbar(cfg StartConfig, lists []caldav.List) []caldav.List {
+	if nurWuensche(cfg) {
+		return slices.DeleteFunc(lists, func(o caldav.List) bool { return o.Ref != einkauf.MusikListe })
+	}
+	return lists
+}
+
+// listenVerwalten is the list page's last part: make a list, delete this
+// one (not the household's shopping list), the deleted ones to take back;
+// nothing with einkauf off.
+func listenVerwalten(cfg StartConfig, l *einkauf.Liste, act, name, person string) string {
+	if nurWuensche(cfg) {
+		return ""
+	}
+	var b strings.Builder
 	b.WriteString(`<details class=neu><summary>Listen verwalten</summary><form class=notizform method=post action=` + EinkaufPath + `><input type=hidden name=tun value=neu>` +
 		`<label for=liste-name>Neue Liste</label><input type=text id=liste-name name=name maxlength=60 required placeholder="z. B. Baumarkt, Urlaub packen" autocomplete=off>` +
 		`<fieldset class=tagwahl><legend>Für wen?</legend><label class=tag><input type=radio name=fuer value=haushalt checked> Für den Haushalt</label>` +
@@ -466,7 +506,7 @@ func writeEinkauf(w http.ResponseWriter, r *http.Request, cfg StartConfig, l *ei
 		b.WriteString(`<h3>Gelöscht, noch 30 Tage zurückzuholen</h3><ul class="einkauf-korb">` + korb + `</ul>`)
 	}
 	b.WriteString("</details>")
-	writePage(w, http.StatusOK, b)
+	return b.String()
 }
 
 // writeRezepte is choosing recipes and portions (n: the notes chosen,

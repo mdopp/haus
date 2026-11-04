@@ -622,7 +622,7 @@ func merkenPost(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
 			writePage(w, http.StatusBadRequest, b)
 			return
 		}
-		writeEinkauf(w, r, cfg, cfg.Einkauf.Andere(einkauf.MusikListe), g.Satz) // the wish list, saying what happened
+		writeEinkauf(w, r, cfg, cfg.Wuensche.Listen.Andere(einkauf.MusikListe), g.Satz) // the wish list, saying what happened
 		return
 	}
 	got, err := merken.Merken(ctx, cfg.Fetcher, cfg.Judge, cfg.Notes, link, hint)

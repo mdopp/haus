@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mdopp/homes/internal/haushalt"
 	"github.com/mdopp/homes/internal/laib"
 	"github.com/mdopp/homes/internal/modul"
 	"github.com/mdopp/homes/internal/pages"
@@ -127,7 +128,7 @@ func katalog(s site, musicInbox string) []modul.Modul {
 // HOMES_MODULE_AUS names, and logs it (ADR 0001): what this box can do,
 // and why not. A broken catalog stops Homes.
 func logModule(s *site) *modul.Liste {
-	l, err := modul.Bauen(ausschalten(s, katalog(*s, musicInbox()), os.Getenv("HOMES_MODULE_AUS")))
+	l, err := modul.Bauen(ausschalten(s, katalog(*s, s.musik), os.Getenv("HOMES_MODULE_AUS")))
 	if err != nil {
 		log.Fatalf("homes: %v", err)
 	}
@@ -173,10 +174,11 @@ func schliesseWuensche(ctx context.Context, l *laib.Client, liste *modul.Liste, 
 }
 
 // schaltbar are the modules HOMES_MODULE_AUS can switch off today (ADR 0001
-// step H3: the leaf areas, each with its own paths and backend), each with
-// how its backend leaves the site: off, its field stays nil, so no page,
-// route, tool or background work learns of it (ADR 0001 §1). The others
-// follow in H4–H6.
+// steps H3, H4: the leaf areas, each with its own paths and backend; the
+// documents, the notes, the music and the lists), each with how its
+// backend leaves the site: off, its field stays nil, so no page, route,
+// tool or background work learns of it (ADR 0001 §1). The others follow
+// in H5–H6.
 var schaltbar = map[string]func(*site){
 	"gesundheit":   func(s *site) { s.gesundheit = "" },
 	"werkstatt":    func(s *site) { s.tickets = nil },
@@ -185,6 +187,24 @@ var schaltbar = map[string]func(*site){
 	"gesehen":      func(s *site) { s.gesehen = nil },
 	"standort":     func(s *site) { s.napi.Reitti = nil },
 	"sicherung":    func(s *site) { s.napi.Sicherung = nil },
+	// the Dokumente page's ways in, the app's upload, the doc widget and tools
+	"dokumente": func(s *site) {
+		s.haushalt(func(h *haushalt.Config) { h.Documents = nil })
+		s.napi.UploadDir, s.docsMail, s.paperlessPublic = "", "", ""
+	},
+	// the folder, its search by meaning, the note widget, Merken and the tools
+	"notizen": func(s *site) { s.haushalt(func(h *haushalt.Config) { h.Notes, h.Library = nil, nil }) },
+	// the inbox, the wish list (a shared song is a note again), Discogs and Platte
+	"musik": func(s *site) { s.musik = ""; s.haushalt(func(h *haushalt.Config) { h.Wuensche = nil }) },
+	// the lists and their tools; the music wish list keeps its own (hh.Wuensche.Listen)
+	"einkauf": func(s *site) { s.haushalt(func(h *haushalt.Config) { h.Einkauf = nil }) },
+}
+
+// haushalt changes the Haushalt source's backends, the Bote's and the
+// tool widgets' (napi's copy) alike.
+func (s *site) haushalt(f func(*haushalt.Config)) {
+	f(&s.hh)
+	f(&s.napi.Haushalt)
 }
 
 // ausschalten applies HOMES_MODULE_AUS, "podcasts,standort" (ADR 0001 §5):
@@ -200,7 +220,7 @@ func ausschalten(s *site, ms []modul.Modul, liste string) []modul.Modul {
 		case i < 0:
 			log.Printf("homes: HOMES_MODULE_AUS: no module %q, ignored", name)
 		case schaltbar[name] == nil:
-			log.Printf("homes: HOMES_MODULE_AUS: %s cannot be switched off yet (ADR 0001 H4–H6), it stays on", name)
+			log.Printf("homes: HOMES_MODULE_AUS: %s cannot be switched off yet (ADR 0001 H5–H6), it stays on", name)
 		case ms[i].An():
 			ms[i].Warum, ms[i].Grund = modul.Aus, texte.T(texte.GrundAus)
 			schaltbar[name](s)
@@ -209,9 +229,13 @@ func ausschalten(s *site, ms []modul.Modul, liste string) []modul.Modul {
 	return ms
 }
 
-// startLeaf starts the leaf modules' background work, only for those on:
-// the podcasts' new episodes (haus#123), the backups' old parts (haus#207).
+// startLeaf starts the modules' background work, only for those on: the
+// podcasts' new episodes (haus#123), the backups' old parts (haus#207),
+// the music wishes that arrived (laib#695).
 func startLeaf(ctx context.Context, s site) {
+	if s.hh.Wuensche != nil {
+		go tickWishes(ctx, s.hh.Wuensche, s.ops)
+	}
 	if s.podcasts != nil && s.ops != nil {
 		go tellNewEpisodes(ctx, s.podcasts, s.ops)
 	}
