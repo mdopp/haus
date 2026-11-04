@@ -49,9 +49,8 @@ test('the page follows a change made elsewhere at once (push)', async ({ page, r
 // owner 2026-11-03 (a screenshot of /raeume): scrolling the page moved
 // the sliders. The card has none: the level in its line ("an · 60 %") is
 // a button that opens a sheet with the thing's name, a large slider,
-// quick steps and Fertig. A swipe over the card changes nothing; a lamp
-// that is off has no level to tap.
-const level = (page, name) => page.getByRole('button', { name: new RegExp('^' + name + ' (Helligkeit|Position) \\d+ %, einstellen$') });
+// quick steps and Fertig. A swipe over the card changes nothing.
+const level = (page, name) => page.getByRole('button', { name: new RegExp('^' + name + ' (Helligkeit|Position) (\\d+ %|aus), einstellen$') });
 const sheet = (page, name) => page.getByRole('dialog', { name });
 const slider = (page, name) => page.getByRole('slider', { name });
 async function swipe(page, from, dx, dy) {
@@ -120,41 +119,94 @@ test('a swipe over a card sends nothing; the level opens its sheet', async ({ pa
   expect(sent, 'opening and closing send nothing').toEqual([]);
 });
 
-test('a quick step sends exactly one request, the slider one when let go', async ({ page }) => {
+// the lamp back at 60 %, for the next test
+const kuecheAt60 = (request, info) => request.post('/schalten', { form: { geraet: 'light.kueche', tun: 'light.turn_on', wert: '60' }, headers: { 'X-Homes-Skript': '1', Origin: info.project.use.baseURL } });
+
+test('a quick step sends exactly one request, the slider one when let go', async ({ page, request }, info) => {
   const sent = posts(page);
   await page.goto('/raeume');
-  await level(page, 'Küchenlicht').tap();
-  await sheet(page, 'Küchenlicht').getByRole('button', { name: 'Helligkeit 25 %' }).tap();
-  await expect.poll(() => sent.length).toBe(1);
-  await page.waitForTimeout(800);
-  expect(sent).toHaveLength(1);
-  expect(sent[0]).toContain('/schalten');
-  expect(sent[0]).toContain('geraet=light.kueche');
-  expect(sent[0]).toContain('wert=25');
-  await expect(sheet(page, 'Küchenlicht'), 'the sheet stays open after the answer').toBeVisible();
-  const s = slider(page, 'Küchenlicht Helligkeit');
-  await s.focus();
-  await s.press('ArrowRight');
-  await expect.poll(() => sent.length).toBe(2);
-  expect(sent[1]).toContain('wert=61');
+  try {
+    await level(page, 'Küchenlicht').tap();
+    await sheet(page, 'Küchenlicht').getByRole('button', { name: 'Helligkeit 25 %' }).tap();
+    await expect.poll(() => sent.length).toBe(1);
+    await page.waitForTimeout(800);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toContain('/schalten');
+    expect(sent[0]).toContain('geraet=light.kueche');
+    expect(sent[0]).toContain('wert=25');
+    await expect(sheet(page, 'Küchenlicht'), 'the sheet stays open after the answer').toBeVisible();
+    const s = slider(page, 'Küchenlicht Helligkeit');
+    await expect(s, 'the sheet shows the level the step set').toHaveValue('25');
+    await s.focus();
+    await s.press('ArrowRight');
+    await expect.poll(() => sent.length).toBe(2);
+    expect(sent[1]).toContain('wert=26');
+  } finally {
+    await kuecheAt60(request, info);
+  }
 });
 
-test('a lamp that is off has no level to tap; switched on, it is back', async ({ page }) => {
+// owner 2026-11-04 (a screenshot of /raeume): a lamp that is off said
+// "aus" and nothing opened its sheet. A lamp HA can dim has "aus" as its
+// level, accented like "60 %"; its sheet says "aus" large, and a step
+// turns it on at that level in one request, the sheet staying open. A
+// lamp that only switches says a plain "aus"; one HA does not reach has
+// nothing to tap.
+test('a dimmer that is off says aus as its level; a step turns it on', async ({ page, request }, info) => {
+  const sent = posts(page);
   await page.goto('/raeume');
   const sw = page.getByRole('switch', { name: 'Küchenlicht' });
   await expect(sw).toHaveAttribute('aria-checked', 'true');
-  await expect(level(page, 'Küchenlicht')).toBeVisible();
   try {
     await sw.click();
     await expect(page.getByRole('switch', { name: 'Küchenlicht' })).toHaveAttribute('aria-checked', 'false');
-    await expect(level(page, 'Küchenlicht')).toHaveCount(0);
-    await expect(slider(page, 'Küchenlicht Helligkeit')).toHaveCount(0);
-    await expect(page.locator('section[aria-labelledby=karte-kueche]')).toContainText('aus');
+    const kueche = level(page, 'Küchenlicht');
+    await expect(kueche).toHaveText('aus');
+    await expect(kueche).toHaveAccessibleName('Küchenlicht Helligkeit aus, einstellen');
+    await expect(kueche, 'accented like the %').toHaveCSS('text-decoration-style', 'dotted');
+    expect((await kueche.boundingBox()).height, 'a finger hits it').toBeGreaterThanOrEqual(44);
+    // a lamp that only switches says a plain "aus"
+    await expect(page.getByRole('switch', { name: 'Flurlicht' })).toHaveAttribute('aria-checked', 'false');
+    await expect(level(page, 'Flurlicht')).toHaveCount(0);
+    await kueche.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: info.outputPath('aus-karte.png') });
+
+    await kueche.tap();
+    await expect(sheet(page, 'Küchenlicht')).toBeVisible();
+    await expect(sheet(page, 'Küchenlicht').locator('output')).toHaveText('aus');
+    await expect(slider(page, 'Küchenlicht Helligkeit')).toHaveValue('0');
+    await page.waitForTimeout(200);
+    await page.screenshot({ path: info.outputPath('aus-licht.png') });
+
+    sent.length = 0;
+    await sheet(page, 'Küchenlicht').getByRole('button', { name: 'Helligkeit 25 %' }).tap();
+    await expect.poll(() => sent.length).toBe(1);
+    await page.waitForTimeout(800);
+    expect(sent, 'one request').toHaveLength(1);
+    expect(sent[0]).toContain('geraet=light.kueche');
+    expect(sent[0]).toContain('tun=light.turn_on');
+    expect(sent[0]).toContain('wert=25');
+    await expect(sheet(page, 'Küchenlicht'), 'the sheet stays open').toBeVisible();
+    await expect(page.getByRole('switch', { name: 'Küchenlicht' })).toHaveAttribute('aria-checked', 'true');
+    await expect(sheet(page, 'Küchenlicht').locator('output')).toHaveText('25 %');
+    await expect(level(page, 'Küchenlicht')).toHaveText('25 %');
+    await sheet(page, 'Küchenlicht').getByRole('button', { name: 'Fertig' }).tap();
   } finally {
-    await page.getByRole('switch', { name: 'Küchenlicht' }).click();
+    await kuecheAt60(request, info);
   }
-  await expect(page.getByRole('switch', { name: 'Küchenlicht' })).toHaveAttribute('aria-checked', 'true');
+  await page.goto('/raeume');
   await expect(level(page, 'Küchenlicht')).toHaveText('60 %');
+});
+
+test('a lamp HA does not reach has nothing to tap', async ({ page, request }) => {
+  await request.get('/demo/setze?id=light.flur&state=unavailable&name=Flurlicht&dimmbar=1');
+  await page.goto('/raeume');
+  await expect(page.locator('section[aria-labelledby=karte-flur]')).toContainText('nicht erreichbar');
+  await expect(level(page, 'Flurlicht')).toHaveCount(0);
+  await expect(page.getByRole('dialog', { name: 'Flurlicht' })).toHaveCount(0);
+  await request.get('/demo/setze?id=light.flur&state=off&name=Flurlicht&dimmbar=1');
+  await page.goto('/raeume');
+  await expect(level(page, 'Flurlicht'), 'the same lamp, off, says aus').toHaveText('aus');
 });
 
 test('a player pauses in place', async ({ page }) => {

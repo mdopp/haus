@@ -15,6 +15,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
+	"math"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -526,6 +528,10 @@ func (h *HA) serve(w http.ResponseWriter, r *http.Request) {
 				attrs, _ := s["attributes"].(map[string]any)
 				switch parts[1] {
 				case "turn_on", "media_play":
+					if pct, ok := data["brightness_pct"].(float64); ok { // a lamp turned on at a level, as HA keeps it
+						attrs = maps.Clone(attrs)
+						attrs["brightness"] = math.Round(pct * 255 / 100)
+					}
 					h.set(id, map[bool]string{true: "playing", false: "on"}[parts[1] == "media_play"], attrs)
 				case "turn_off":
 					h.set(id, "off", attrs)

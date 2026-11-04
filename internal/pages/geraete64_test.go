@@ -59,8 +59,8 @@ func TestRaeumeDimsAndMovesCovers(t *testing.T) {
 		`<noscript><button data-laeuft="Setzt …">Setzen</button></noscript>`, `onchange="this.form.requestSubmit`)
 	mustNotContain(t, ess, `value="light.schalter"><input type=hidden name=tun value="light.turn_on"><input type=hidden name=zurueck value="/raeume#karte-esszimmer"><span`,
 		`value="cover.ohne"`, `value="cover.garage"`, "<script>alert")
-	if n := strings.Count(ess, "class=regler"); n != 3 { // Bambi, Rollo, Esszimmerjalousie; the Dimmer is off
-		t.Fatalf("%d sliders, want 3:\n%s", n, ess)
+	if n := strings.Count(ess, "class=regler"); n != 4 { // Bambi, the Dimmer (off, "aus"), Rollo, Esszimmerjalousie
+		t.Fatalf("%d sliders, want 4:\n%s", n, ess)
 	}
 
 	// the slider and the buttons switch through the page's rule

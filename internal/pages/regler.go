@@ -42,14 +42,16 @@ func brightness(s ha.State) int {
 }
 
 // dimmer is a lamp's slider (haus#64): light.turn_on with its brightness,
-// 0 turns it off; nil for a lamp HA cannot dim or does not reach, and for
-// one that is off (owner, 2026-11-03): its switch turns it on, and the
-// level comes with the page's live update. Its steps are quarters.
+// 0 turns it off; nil for a lamp HA cannot dim, does not reach or does
+// not know. A lamp that is off says "aus" as its level (owner,
+// 2026-11-04: at 0 % nothing opened the sheet): a step turns it on at
+// that level, in the one call. Its steps are quarters.
 func dimmer(s ha.State, back string) *cards.Slider {
-	if s.State != "on" || !dimmable(s) {
+	if s.State != "on" && s.State != "off" || !dimmable(s) {
 		return nil
 	}
 	return &cards.Slider{Label: "Helligkeit", Name: friendly(s), Entity: s.EntityID, Do: "light.turn_on", Back: back, Value: brightness(s),
+		Off:   map[bool]string{true: "aus"}[s.State == "off"],
 		Steps: []cards.Step{{Label: "25 %", Value: 25}, {Label: "50 %", Value: 50}, {Label: "75 %", Value: 75}, {Label: "100 %", Value: 100}}}
 }
 
