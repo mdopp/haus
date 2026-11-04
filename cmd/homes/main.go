@@ -97,6 +97,13 @@ func routes(s site) http.Handler {
 	// (laib ADR 0012 §4; the template publishes 8650 lan:false, the firewall keeps
 	// the LAN out). Not through Caddy: the route has no /mcp/ bypass.
 	mux.Handle("/mcp/haushalt", haushalt.Handler(s.hh))
+	// counted behind the proxy secret: only what Caddy let through is a page view (haus#50)
+	mux.Handle("/", pages.RequireProxy(s.proxySecret, pages.Counted(s.usage, familyMux(s))))
+	return legacyHost(s.publicURL, mux) // haus.<domain>'s pages to homes.<domain> (laib#1021)
+}
+
+// familyMux is the family's pages, behind the proxy secret.
+func familyMux(s site) *http.ServeMux {
 	pagesMux := http.NewServeMux()
 	// the family's pages (haus#12): each card only from a backend that is set; a
 	// page whose backend is not set says what is missing (laib#418)
@@ -206,9 +213,7 @@ func routes(s site) http.Handler {
 	pagesMux.HandleFunc("/box/", box)
 	pagesMux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
 	pagesMux.HandleFunc("/", pages.Elsewhere(family)) // "/" is Start; every path not served is a 404 with the way there
-	// counted behind the proxy secret: only what Caddy let through is a page view (haus#50)
-	mux.Handle("/", pages.RequireProxy(s.proxySecret, pages.Counted(s.usage, pagesMux)))
-	return legacyHost(s.publicURL, mux) // haus.<domain>'s pages to homes.<domain> (laib#1021)
+	return pagesMux
 }
 
 // musicInboxMount is where laib's homes template mounts the music inbox
