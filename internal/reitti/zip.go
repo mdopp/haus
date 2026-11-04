@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"path"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -26,22 +27,46 @@ const (
 	zipMaxEntpackt = int64(40) << 30 // what is unpacked in all, against a ZIP that claims less than it holds
 )
 
-// rang is the order a ZIP's files are read in: the raw points first, the Semantic Location
-// History last, so where both cover an hour the raw points are the ones taken.
-var rang = map[Format]int{FormatRecords: 0, FormatTimeline: 1, FormatTimelineIOS: 1, FormatGPX: 2, FormatGeoJSON: 2, FormatSemantic: 3}
+// ErrTakeoutTeil is a part of a Google Takeout with no history in it (owner 2026-11-04: Takeout
+// splits at 2 GB, each file whole in one part): the history is in another part.
+var ErrTakeoutTeil = errors.New("reitti: no location history in this part of the takeout")
 
 // errGenug stops a look at a file once its format is known.
 var errGenug = errors.New("reitti: enough")
 
+// Roh are the hours a person's raw points came for (Records.json, Timeline.json, GPX,
+// GeoJSON), kept across imports — a Takeout in two parts is two imports: the Semantic
+// Location History's points are taken only for hours none did. Raw points always go; Reitti
+// keeps a point it has (same device, same second) once.
+type Roh map[int64]bool
+
+// filter lets fd through unless it is a Semantic point of an hour raw points came for; it
+// counts what it let through.
+func (roh Roh) filter(format Format, n *int, emit func(Fund) error) func(Fund) error {
+	return func(fd Fund) error {
+		h := fd.Zeit.Unix() / 3600
+		if format == FormatSemantic && roh[h] {
+			return nil
+		}
+		if format != FormatSemantic {
+			roh[h] = true
+		}
+		*n++
+		return emit(fd)
+	}
+}
+
 // LesenDatei reads the history in f (size bytes), a file or a ZIP of them, and hands each
-// point to emit; gelesen is told how far into f it has come. It says the format (FormatZIP
-// for a ZIP) and how many files gave points. Where a ZIP's files overlap, an hour one file
-// gave points for is taken from no later one. A ZIP without a history Homes reads is
-// ErrZIPLeer; a broken member is passed over.
-func LesenDatei(f io.ReaderAt, size int64, gelesen func(int64), emit func(Fund) error) (Format, int, error) {
-	head := make([]byte, 4)
-	if n, _ := f.ReadAt(head, 0); n < 4 || (string(head) != "PK\x03\x04" && string(head) != "PK\x05\x06") {
-		format, err := Lesen(&zaehler{r: io.NewSectionReader(f, 0, size), gelesen: gelesen}, emit)
+// point to emit, the Semantic Location History's only for hours roh has no raw point for (a
+// ZIP's raw files are read first); roh gains the raw points' hours. gelesen is told how far
+// into f it has come. It says the format (FormatZIP for a ZIP) and how many files gave points.
+// A ZIP without a history Homes reads is ErrZIPLeer, ErrTakeoutTeil when it is a Takeout's;
+// a broken member is passed over.
+func LesenDatei(f io.ReaderAt, size int64, roh Roh, gelesen func(int64), emit func(Fund) error) (Format, int, error) {
+	head, n := make([]byte, 4), 0
+	if m, _ := f.ReadAt(head, 0); m < 4 || (string(head) != "PK\x03\x04" && string(head) != "PK\x05\x06") {
+		format, _ := Lesen(io.NewSectionReader(f, 0, size), func(Fund) error { return errGenug })
+		format, err := Lesen(&zaehler{r: io.NewSectionReader(f, 0, size), gelesen: gelesen}, roh.filter(format, &n, emit))
 		return format, 1, err
 	}
 	zr, err := zip.NewReader(f, size)
@@ -50,42 +75,28 @@ func LesenDatei(f io.ReaderAt, size int64, gelesen func(int64), emit func(Fund) 
 	}
 	budget := zipMaxEntpackt
 	ds := kandidaten(zr, &budget)
-	sort.SliceStable(ds, func(i, j int) bool { return rang[ds[i].format] < rang[ds[j].format] })
-	gedeckt, dateien, done := map[int64]bool{}, 0, int64(0)
+	sort.SliceStable(ds, func(i, j int) bool { return ds[i].format != FormatSemantic && ds[j].format == FormatSemantic })
+	dateien, done := 0, int64(0)
 	for _, d := range ds {
-		eigene, punkte := map[int64]bool{}, 0
 		var stop error
-		_, err := lesenIn(d.zf, &budget, func(fd Fund) error {
-			h := fd.Zeit.Unix() / 3600
-			if gedeckt[h] {
-				return nil
-			}
-			eigene[h], punkte = true, punkte+1
-			if stop = emit(fd); stop != nil {
-				return stop
-			}
-			return nil
-		})
-		if stop != nil {
+		punkte := 0
+		_, err := lesenIn(d.zf, &budget, roh.filter(d.format, &punkte, func(fd Fund) error { stop = emit(fd); return stop }))
+		var fe *FormatError
+		switch {
+		case stop != nil:
 			return FormatZIP, dateien, stop
-		}
-		if err != nil && !errors.Is(err, ErrFormat) {
-			var fe *FormatError
-			if !errors.As(err, &fe) {
-				return FormatZIP, dateien, err
-			}
-		}
-		for h := range eigene {
-			gedeckt[h] = true
-		}
-		if punkte > 0 {
+		case err != nil && !errors.Is(err, ErrFormat) && !errors.As(err, &fe):
+			return FormatZIP, dateien, err
+		case punkte > 0:
 			dateien++
 		}
 		done += int64(d.zf.CompressedSize64)
 		gelesen(min(done, size))
 	}
 	gelesen(size)
-	if dateien == 0 {
+	if dateien == 0 && slices.ContainsFunc(zr.File, func(zf *zip.File) bool { return strings.HasPrefix(zf.Name, "Takeout/") }) {
+		return FormatZIP, 0, ErrTakeoutTeil
+	} else if dateien == 0 {
 		return FormatZIP, 0, ErrZIPLeer
 	}
 	return FormatZIP, dateien, nil

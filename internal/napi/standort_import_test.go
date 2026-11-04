@@ -171,6 +171,16 @@ func takeout(t *testing.T, files ...string) []byte {
 	return b.Bytes()
 }
 
+// fremdeZIP is a ZIP that is no Takeout and holds no history.
+func fremdeZIP(t *testing.T) []byte {
+	var b bytes.Buffer
+	zw := zip.NewWriter(&b)
+	w, _ := zw.Create("Urlaub/notizen.json")
+	w.Write(testdata(t, "fremd.json"))
+	zw.Close()
+	return b.Bytes()
+}
+
 func testdata(t *testing.T, name string) []byte {
 	t.Helper()
 	b, err := os.ReadFile(filepath.Join("..", "reitti", "testdata", name))
@@ -304,7 +314,7 @@ func TestImportEndsInWords(t *testing.T) {
 	}{
 		{"fremd.json", testdata(t, "fremd.json"), nil, "format", "kein Standortverlauf, den Homes kennt"},
 		{"leer.json", []byte(`{"locations":[]}`), nil, "keine_orte", "keine Orte"},
-		{"leer.zip", takeout(t, "Settings.json=fremd.json"), nil, "format", "In der ZIP ist kein Standortverlauf, den Homes kennt. Es gehen:"},
+		{"leer.zip", fremdeZIP(t), nil, "format", "In der ZIP ist kein Standortverlauf, den Homes kennt. Es gehen:"},
 		{"abgeschnitten.json", testdata(t, "abgeschnitten.json"), nil, "format", "Reitti hat bis dahin 1 Ort übernommen"},
 		{"records.json", testdata(t, "records.json"), func(int) (int, string) { return 401, "" }, grundAbgelehnt, "Reitti kennt deinen Schlüssel nicht mehr"},
 		{"records.json", testdata(t, "records.json"), func(int) (int, string) { return 503, "" }, grundReittiWeg, "Reitti nimmt gerade nichts an"},
@@ -343,11 +353,11 @@ func TestImportGoesOnAfterARestart(t *testing.T) {
 func TestImportRefusesWhatItCannotTake(t *testing.T) {
 	ih := newImportHouse(t, newFakeImport(t))
 	for body, want := range map[string]int{
-		`{"name":"a.json"}`:                      400,
-		`{"name":"a.json","groesse":0}`:          400,
-		`{"name":"","groesse":5}`:                400,
-		`{"name":"a/b.json","groesse":5}`:        400,
-		`{"name":"a.json","groesse":6000000000}`: 413,
+		`{"name":"a.json"}`:                       400,
+		`{"name":"a.json","groesse":0}`:           400,
+		`{"name":"","groesse":5}`:                 400,
+		`{"name":"a/b.json","groesse":5}`:         400,
+		`{"name":"a.json","groesse":60000000000}`: 413, // over 50 GB; a 2 GB Takeout part is fine
 	} {
 		rec, out := ih.do("POST", "anna1", "/napi/standort/import", []byte(body), nil)
 		if rec.Code != want || out["fehler"] == nil {
@@ -374,5 +384,31 @@ func TestUebernommenSays(t *testing.T) {
 		if zahl(n) != want {
 			t.Errorf("zahl(%d) = %s", n, zahl(n))
 		}
+	}
+}
+
+// owner 2026-11-04: a Takeout comes in parts (2 GB each by default), each file whole in one.
+// Each part is its own import: the Semantic part brings no hour the Records part did, a part
+// without a history says so gently and is no error, and nothing comes twice.
+func TestImportTakeoutInParts(t *testing.T) {
+	f := newFakeImport(t)
+	ih := newImportHouse(t, f)
+	for _, c := range []struct {
+		name   string
+		file   []byte
+		punkte float64
+		text   string
+	}{
+		{"takeout-001.zip", takeout(t, "Records.json=records.json", "Google Fotos/bild.json=fremd.json"), 3, "3 Orte von März 2014 bis Dezember 2024 übernommen."},
+		{"takeout-002.zip", takeout(t, "Semantic Location History/2014/2014_MARCH.json=semantic-2014-03.json"), 7, "7 Orte aus dem März 2014 übernommen, darunter 1 Aufenthalt."},
+		{"takeout-003.zip", takeout(t, "Settings.json=fremd.json"), 0, "In diesem Teil steckt kein Standortverlauf – vermutlich im anderen Teil der Google-Sicherung. Teile die andere ZIP auch."},
+	} {
+		_, out := ih.upload("anna1", c.name, c.file, 1<<20)
+		if out["stand"] != standFertig || out["punkte"] != c.punkte || !strings.HasPrefix(out["text"].(string), c.text) || out["fehler"] != nil {
+			t.Fatalf("%s → %v", c.name, out)
+		}
+	}
+	if f.points != 10 {
+		t.Errorf("reitti got %d points, want 3 + 7", f.points)
 	}
 }

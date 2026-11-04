@@ -828,12 +828,21 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   FeatureCollection of Points with a time) — or a ZIP of them, a whole
   Google Takeout (owner 2026-11-04). In a ZIP every `.json`, `.gpx` and
   `.geojson` is looked at, in any folder and known by its content, never by
-  the folder's name (Takeout names it in the person's language); the raw
-  formats are read first and the Semantic files last, and an hour one file
-  gave points for is taken from no later one, so where `Records.json` and
-  the Semantic files overlap, Records' points come over. The ZIP is read
-  from the staged file member by member, never whole (at most 20,000
-  members and 40 GB unpacked). Reitti reads the
+  the folder's name (Takeout names it in the person's language). A Takeout
+  comes in parts (2 GB each by default, up to 50 GB), each file whole in
+  one part, and each part is its own import: Homes keeps the hours raw
+  points (Records.json, Timeline.json, GPX, GeoJSON) came for, per person
+  across imports (`HOMES_DATA/standort-import/<person>/roh.json`, written
+  once Reitti took them), and takes the Semantic files' points only for
+  hours none did — so where Records and the Semantic Location History
+  overlap, in one ZIP or across parts, Records' points come over (a ZIP's
+  raw files are read before its Semantic ones; a Semantic part imported
+  before its Records part keeps its points beside Records'). Raw points
+  always go; Reitti keeps a point it has once. A Takeout part with no
+  history ends `fertig`, gently: „In diesem Teil steckt kein
+  Standortverlauf – vermutlich im anderen Teil der Google-Sicherung. Teile
+  die andere ZIP auch.“ The ZIP is read from the staged file member by
+  member, never whole (at most 20,000 members and 40 GB unpacked). Reitti reads the
   Google formats only on its logged-in settings page (`/settings/import/…`,
   session and CSRF; its token filter covers `/api/` only), so Homes reads
   each file itself, point by point as Reitti's own importers do (v5.9.0:
@@ -847,7 +856,7 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   twice. The file comes like a backup: `POST /napi/standort/import {name,
   groesse}` → 201 `{id, offset}` (the same name and size again resume; 409
   `{fehler, grund: "kein_schluessel"}` before the person connected Reitti;
-  413 over 5 GB; 507 without room), `HEAD /napi/standort/import/{id}` →
+  413 over 50 GB; 507 without room for it and 1 GB beside), `HEAD /napi/standort/import/{id}` →
   `Upload-Offset`, `PATCH /napi/standort/import/{id}` with `Upload-Offset`
   and `application/offset+octet-stream` (≤ 16 MB a piece) → `{offset,
   fertig}`; the piece that makes the file whole starts the import. `GET
@@ -857,7 +866,7 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   many of its files gave points; `text` is the end in one sentence
   („12.345 Orte von März 2014 bis Dezember 2024 übernommen …“, from a ZIP
   „Aus 3 Dateien 48.210 Orte …“), `fehler` why not (`grund`
-  `format` — also a ZIP with no history Homes knows, „In der ZIP ist kein
+  `format` — also a ZIP, no Takeout's, with no history Homes knows, „In der ZIP ist kein
   Standortverlauf, den Homes kennt. Es gehen: …“ —, `keine_orte`, `schluessel_abgelehnt`, `reitti_weg`,
   `kein_schluessel`). One import runs at a time; a Homes restarted
   mid-import goes on at the next GET. The file

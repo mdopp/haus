@@ -36,7 +36,7 @@ func zipOf(t *testing.T, files map[string]string) *bytes.Reader {
 func liesDatei(r *bytes.Reader) (Format, int, []Fund, error) {
 	var out []Fund
 	var gelesen int64
-	format, n, err := LesenDatei(r, r.Size(), func(g int64) { gelesen = g }, func(fd Fund) error { out = append(out, fd); return nil })
+	format, n, err := LesenDatei(r, r.Size(), Roh{}, func(g int64) { gelesen = g }, func(fd Fund) error { out = append(out, fd); return nil })
 	if err == nil && gelesen == 0 {
 		err = errors.New("no progress said")
 	}
@@ -111,11 +111,15 @@ func TestLesenDateiZIP(t *testing.T) {
 }
 
 func TestLesenDateiZIPOhneVerlauf(t *testing.T) {
-	for name, files := range map[string]map[string]string{
-		"leer":   {},
-		"fremde": {"Takeout/Fotos/bild.json": `{"title": "bild.jpg"}`, "Takeout/index.html": "<html></html>", "a.gpx": "<kml></kml>", "b.json": `[1, 2]`},
+	for name, c := range map[string]struct {
+		files map[string]string
+		err   error
+	}{
+		"leer":   {map[string]string{}, ErrZIPLeer},
+		"fremde": {map[string]string{"Fotos/bild.json": `{"title": "bild.jpg"}`, "index.html": "<html></html>", "a.gpx": "<kml></kml>", "b.json": `[1, 2]`}, ErrZIPLeer},
+		"teil":   {map[string]string{"Takeout/Google Fotos/bild.json": `{"title": "bild.jpg"}`, "Takeout/archive_browser.html": "<html></html>"}, ErrTakeoutTeil},
 	} {
-		if format, n, _, err := liesDatei(zipOf(t, files)); !errors.Is(err, ErrZIPLeer) || format != FormatZIP || n != 0 {
+		if format, n, _, err := liesDatei(zipOf(t, c.files)); !errors.Is(err, c.err) || format != FormatZIP || n != 0 {
 			t.Errorf("%s: %s %d %v", name, format, n, err)
 		}
 	}
@@ -127,7 +131,30 @@ func TestLesenDateiZIPOhneVerlauf(t *testing.T) {
 	// emit's own error stops it and comes back as it is
 	stop := errors.New("reitti ist weg")
 	r := zipOf(t, map[string]string{"a/Records.json": "testdata/records.json"})
-	if _, _, err := LesenDatei(r, r.Size(), func(int64) {}, func(Fund) error { return stop }); err != stop {
+	if _, _, err := LesenDatei(r, r.Size(), Roh{}, func(int64) {}, func(Fund) error { return stop }); err != stop {
 		t.Errorf("%v", err)
+	}
+}
+
+// A Takeout in two parts is two imports: what the first part's raw points cover, the second
+// part's Semantic files do not bring again; a second part's raw points always go.
+func TestLesenDateiTeile(t *testing.T) {
+	roh := Roh{}
+	lies := func(files map[string]string) int {
+		r := zipOf(t, files)
+		var n int
+		if _, _, err := LesenDatei(r, r.Size(), roh, func(int64) {}, func(Fund) error { n++; return nil }); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	if n := lies(map[string]string{"Takeout/Standortverlauf/Records.json": "testdata/records.json"}); n != 3 {
+		t.Fatalf("part 1: %d", n)
+	}
+	if n := lies(map[string]string{"Takeout/Standortverlauf/Semantic Location History/2014/2014_MARCH.json": "testdata/semantic-2014-03.json"}); n != 7 {
+		t.Errorf("part 2: %d points, the 08:00 Records has is not taken again", n)
+	}
+	if n := lies(map[string]string{"Takeout/Standortverlauf/Records.json": "testdata/records.json"}); n != 3 {
+		t.Errorf("raw points go again (Reitti keeps each once): %d", n)
 	}
 }

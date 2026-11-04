@@ -43,7 +43,7 @@ import (
 // nothing twice.
 
 var (
-	importMaxGroesse int64  = 5 << 30  // one file; Reitti's own upload limit
+	importMaxGroesse int64  = 50 << 30 // one file: the largest part a Google Takeout makes (2 GB by default); the disk's room is checked too
 	importMaxStueck  int64  = 16 << 20 // one PATCH body, as a backup's
 	importStapel            = 25000    // points in one request to Reitti
 	importRand       uint64 = 1 << 30  // what stays free after the rest of a file
@@ -64,7 +64,7 @@ const (
 const (
 	saysImportNoToken   = "Verbinde zuerst Reitti: öffne in Homes Mehr → Standortverlauf und füge dort einmal deinen Reitti-Schlüssel ein. Dann teile die Datei noch einmal."
 	saysImportEmpty     = "Die Datei ist leer."
-	saysImportTooBig    = "Die Datei ist zu groß: höchstens 5 GB."
+	saysImportTooBig    = "Die Datei ist zu groß: höchstens 50 GB."
 	saysImportName      = "Der Dateiname fehlt oder ist zu lang. Aktualisiere die Homes-App."
 	saysImportUnknown   = "Diesen Import gibt es auf der Box nicht (mehr). Teile die Datei noch einmal."
 	saysImportFormat    = "Das ist kein Standortverlauf, den Homes kennt." + saysImportGehen
@@ -508,7 +508,10 @@ func (im *importer) run(ctx context.Context, person, id string) {
 		return nil
 	}
 	var von, bis time.Time
-	format, dateien, err := reitti.LesenDatei(f, st.Groesse, func(n int64) { st.Gelesen = n }, func(fd reitti.Fund) error {
+	roh, rohDatei := reitti.Roh{}, filepath.Join(im.folder(person), "roh.json") // the hours raw points came for, across imports
+	b, _ := os.ReadFile(rohDatei)
+	json.Unmarshal(b, &roh)
+	format, dateien, err := reitti.LesenDatei(f, st.Groesse, roh, func(n int64) { st.Gelesen = n }, func(fd reitti.Fund) error {
 		batch = append(batch, fd.Punkt)
 		if fd.Besuch {
 			besuche++
@@ -546,9 +549,12 @@ func (im *importer) run(ctx context.Context, person, id string) {
 	case err == nil && gesendet == 0:
 		end(standFehler, "", saysImportNoPoints, "keine_orte")
 	case err == nil:
+		jsonfile.Save(rohDatei, roh) // only what Reitti took covers an hour
 		end(standFertig, uebernommen(st), "", "")
 	case errors.Is(err, reitti.ErrFormat):
 		end(standFehler, "", saysImportFormat, "format")
+	case errors.Is(err, reitti.ErrTakeoutTeil): // owner 2026-11-04: a Takeout comes in parts; not an error
+		end(standFertig, "In diesem Teil steckt kein Standortverlauf – vermutlich im anderen Teil der Google-Sicherung. Teile die andere ZIP auch.", "", "")
 	case errors.Is(err, reitti.ErrZIPLeer):
 		end(standFehler, "", "In der ZIP ist kein Standortverlauf, den Homes kennt."+saysImportGehen, "format")
 	case errors.As(err, &fe):
