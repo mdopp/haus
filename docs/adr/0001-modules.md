@@ -207,6 +207,15 @@ so every existing `cfg.X != nil` check keeps working. Its routes are not
 mounted, its nav entries are not in the list, its background work does
 not start, and its Bote tools are not in `haushalt.Tools`.
 
+**As built (homes#243):** the route groups are not fields of the
+`Modul`. `napi.Gruppen(c)` (and, for the pages, `pages.Gruppen(cfg)`)
+give each module's routes by its name, and Homes mounts them together
+with the core's. The reason is that a page needs the `Liste` itself, for
+its nav (H6), so the `Liste` cannot hold the pages' handlers. An off
+module's group is what its paths answer without its backend. That is
+`Aus` (§4) where a released app relies on it, and the surface's 404
+everywhere else, so `Modul` has no `Seiten`, `Napi` or `Aus`.
+
 ### 2. `GET /napi/kann`: what this box can do, for the app
 
 The endpoint needs a paired device (401 otherwise), like every `/napi`

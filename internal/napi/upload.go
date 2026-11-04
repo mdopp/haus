@@ -108,9 +108,7 @@ func newUploads(dir string) *uploads {
 	return &uploads{dir: dir, slots: make(chan struct{}, uploadConcurrent)}
 }
 
-func (u *uploads) routes(mux *http.ServeMux, auth func(http.HandlerFunc) http.HandlerFunc) {
-	mux.HandleFunc("POST /napi/upload", auth(u.upload))
-}
+func (u *uploads) routes(gs gruppen) { gs.add("dokumente", "POST /napi/upload", u.upload) }
 
 // the reasons a part is refused, each with its status
 type uploadErr struct {

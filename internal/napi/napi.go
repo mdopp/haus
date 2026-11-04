@@ -13,7 +13,9 @@ package napi
 import (
 	"context"
 	"encoding/json"
+	"maps"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -252,40 +254,67 @@ func Handler(c Config) http.Handler {
 		lv.shared, lv.sharedEvery = dav.FamilyVersions, c.SharedEvery
 	}
 	mux.HandleFunc("GET /napi/portal/events", auth(lv.events))
-	c.house(mux, auth, lv)
-	if t := newTools(c.Haushalt); t != nil { // the tool widgets from the Haushalt source
-		t.routes(mux, auth)
+	if c.HA != nil { // what the stream watches, from Home Assistant
+		mux.HandleFunc("POST /napi/portal/watch", auth(lv.watch))
 	}
-	if c.UploadDir != "" { // the camera capture into the consume folder
-		newUploads(c.UploadDir).routes(mux, auth)
+	if t := newTools(c.Haushalt); t != nil { // the tool widgets' catalog, of the modules with a tool
+		mux.HandleFunc("GET /napi/defs/tool", auth(t.defs))
+		// Homes answers the actions it knows; any other is 404 unknown_action.
+		mux.HandleFunc("POST /napi/action-callback", auth(t.action))
 	}
-	c.Sicherung.routes(mux, auth, c.Whoami) // the phone's message backups (haus#207)
+	mount(mux, Gruppen(c), auth)
 	// every other /napi path, passed on to nobody; a device first, so a
 	// stranger cannot tell which backends are set
-	mux.HandleFunc("POST /napi/merken", auth(c.merken)) // Share → Homes (haus#120)
-	// the phone's contacts, mirrored into the person's Handy-Kontakte (laib ADR 0029)
-	k := &kontakte{dav: c.Haushalt.Contacts, whoami: c.Whoami, busy: map[string]bool{}}
-	mux.HandleFunc("POST /napi/kontakte", auth(k.post))
-	// the household's shared contacts and calendars for the phone's Homes account (haus#218)
-	(&gemeinsam{dav: c.Konto, whoami: c.Whoami, loc: c.Haushalt.Loc, now: c.Now}).routes(mux, auth)
-	// the phone's positions, passed on to the person's Reitti (owner 2026-11-02)
-	(&standort{r: c.Reitti, whoami: c.Whoami}).routes(mux, auth)
 	mux.HandleFunc("/napi/", auth(noSuchPath))
 	return mux
 }
 
-// house mounts the house paths and what the stream watches, from Home
-// Assistant (geraete), and the energy picture (energie, unless it is off).
-func (c Config) house(mux *http.ServeMux, auth func(http.HandlerFunc) http.HandlerFunc, lv *live) {
-	if c.HA == nil {
-		return
+// mount puts each module's routes behind the device's bearer.
+func mount(mux *http.ServeMux, gs map[string][]modul.Route, auth func(http.HandlerFunc) http.HandlerFunc) {
+	for _, name := range slices.Sorted(maps.Keys(gs)) {
+		for _, r := range gs[name] {
+			mux.HandleFunc(r.Muster, auth(r.Handler.ServeHTTP))
+		}
 	}
-	h := &homeAPI{ha: c.HA, sources: c.Energy, witness: c.Witness, whoami: c.Whoami, favs: c.Favorites, loc: c.Haushalt.Loc, now: c.Now}
-	h.routes(mux, auth)
-	mux.HandleFunc("POST /napi/portal/watch", auth(lv.watch))
-	if !c.OhneEnergie {
-		mux.HandleFunc("GET /napi/portal/energy", auth(h.energy))
+}
+
+// gruppen are the modules' /napi routes as they are built, by module name.
+type gruppen map[string][]modul.Route
+
+func (gs gruppen) add(name, muster string, h http.HandlerFunc) {
+	gs[name] = append(gs[name], modul.Route{Muster: muster, Handler: h})
+}
+
+// Gruppen are each module's /napi routes (ADR 0001 §1, homes#243), by
+// module name; Handler puts them behind the paired device's bearer. Each
+// is what its module serves with its backend set and, where a released
+// app relies on it (§4), the answer without one: sicherung, standort,
+// konto and kontakte answer 503 in words. HOMES_MODULE_AUS unsets an off
+// module's backend, so its group is a box's without it.
+func Gruppen(c Config) map[string][]modul.Route {
+	gs := gruppen{}
+	if c.HA != nil { // the house paths (geraete) and the energy picture (energie, unless it is off)
+		h := &homeAPI{ha: c.HA, sources: c.Energy, witness: c.Witness, whoami: c.Whoami, favs: c.Favorites, loc: c.Haushalt.Loc, now: c.Now}
+		h.routes(gs)
+		if !c.OhneEnergie {
+			gs.add("energie", "GET /napi/portal/energy", h.energy)
+		}
 	}
+	if t := newTools(c.Haushalt); t != nil { // the tool widgets' rows
+		t.routes(gs)
+	}
+	if c.UploadDir != "" { // the camera capture into the consume folder
+		newUploads(c.UploadDir).routes(gs)
+	}
+	c.Sicherung.routes(gs, c.Whoami)                 // the phone's message backups (haus#207)
+	gs.add("notizen", "POST /napi/merken", c.merken) // Share → Homes (haus#120)
+	// the phone's contacts, mirrored into the person's Handy-Kontakte (laib ADR 0029)
+	gs.add("kontakte", "POST /napi/kontakte", (&kontakte{dav: c.Haushalt.Contacts, whoami: c.Whoami, busy: map[string]bool{}}).post)
+	// the household's shared contacts and calendars for the phone's Homes account (haus#218)
+	(&gemeinsam{dav: c.Konto, whoami: c.Whoami, loc: c.Haushalt.Loc, now: c.Now}).routes(gs)
+	// the phone's positions, passed on to the person's Reitti (owner 2026-11-02)
+	(&standort{r: c.Reitti, whoami: c.Whoami}).routes(gs)
+	return gs
 }
 
 // bearerOf is the token after the literal "Bearer "; anything else is none.

@@ -107,14 +107,14 @@ func newImporter(r *reitti.Reitti) *importer {
 		slots: make(chan struct{}, 2), lauf: make(chan struct{}, 1), busy: map[string]*idleReader{}, laufend: map[string]bool{}}
 }
 
-func (s *standort) importRoutes(mux *http.ServeMux, auth func(http.HandlerFunc) http.HandlerFunc) {
+func (s *standort) importRoutes(gs gruppen) {
 	im := func(next func(*importer, http.ResponseWriter, *http.Request, string)) http.HandlerFunc {
-		return auth(s.person(func(w http.ResponseWriter, r *http.Request, person string) { next(s.importer(), w, r, person) }))
+		return s.person(func(w http.ResponseWriter, r *http.Request, person string) { next(s.importer(), w, r, person) })
 	}
-	mux.HandleFunc("POST /napi/standort/import", im((*importer).create))
-	mux.HandleFunc("HEAD /napi/standort/import/{id}", im((*importer).head))
-	mux.HandleFunc("PATCH /napi/standort/import/{id}", im((*importer).patch))
-	mux.HandleFunc("GET /napi/standort/import/{id}", im((*importer).stand))
+	gs.add("standort", "POST /napi/standort/import", im((*importer).create))
+	gs.add("standort", "HEAD /napi/standort/import/{id}", im((*importer).head))
+	gs.add("standort", "PATCH /napi/standort/import/{id}", im((*importer).patch))
+	gs.add("standort", "GET /napi/standort/import/{id}", im((*importer).stand))
 }
 
 func (s *standort) importer() *importer {

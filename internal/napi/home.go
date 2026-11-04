@@ -51,14 +51,14 @@ type homeAPI struct {
 	now     func() time.Time                   // the clock; nil: time.Now
 }
 
-func (h *homeAPI) routes(mux *http.ServeMux, auth func(http.HandlerFunc) http.HandlerFunc) {
-	mux.HandleFunc("POST /napi/ha/call", auth(h.call))
-	mux.HandleFunc("GET /napi/portal/state", auth(h.state))
-	mux.HandleFunc("GET /napi/portal/entity-history", auth(h.history))
-	mux.HandleFunc("GET /napi/portal/active", auth(h.active))
-	mux.HandleFunc("GET /napi/portal/camera/{entity_id}/snapshot", auth(h.snapshot))
-	mux.HandleFunc("GET /napi/portal/start/addable", auth(h.addable))
-	mux.HandleFunc("GET /napi/portal/favorites", auth(h.favorites))
+func (h *homeAPI) routes(gs gruppen) {
+	gs.add("geraete", "POST /napi/ha/call", h.call)
+	gs.add("geraete", "GET /napi/portal/state", h.state)
+	gs.add("geraete", "GET /napi/portal/entity-history", h.history)
+	gs.add("geraete", "GET /napi/portal/active", h.active)
+	gs.add("geraete", "GET /napi/portal/camera/{entity_id}/snapshot", h.snapshot)
+	gs.add("geraete", "GET /napi/portal/start/addable", h.addable)
+	gs.add("geraete", "GET /napi/portal/favorites", h.favorites)
 }
 
 func answer(w http.ResponseWriter, code int, v any) {

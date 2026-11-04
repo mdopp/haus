@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -87,5 +88,61 @@ func golden(t *testing.T, file, got string) {
 	}
 	if got != string(want) {
 		t.Errorf("%s differs:\n%s", file, lineDiff(string(want), got))
+	}
+}
+
+// beispiel is a request for a pattern: its method (GET without one) and
+// its path with each wildcard a word.
+func beispiel(muster string) *http.Request {
+	method, path, ok := strings.Cut(muster, " ")
+	if !ok {
+		method, path = "GET", muster
+	}
+	path = regexp.MustCompile(`\{[^}]*\}`).ReplaceAllString(path, "x1")
+	return httptest.NewRequest(method, path, nil)
+}
+
+// ADR 0001 §8: every route a module declares is served, under its own
+// pattern, with everything on; each group is a module of the catalog;
+// the modules with /napi paths (§7) have them; and a module off keeps
+// only the answers released apps rely on (§4: sicherung, standort,
+// konto, kontakte answer 503), or nothing.
+func TestEveryDeclaredNapiRouteIsServed(t *testing.T) {
+	s, l := switched(t, leafSite(t), "")
+	mux := napi.Handler(s.napi).(*http.ServeMux)
+	gs := napi.Gruppen(s.napi)
+	for name, rs := range gs {
+		if !l.An(name) {
+			t.Errorf("group %q is no module that is on", name)
+		}
+		for _, r := range rs {
+			if _, p := mux.Handler(beispiel(r.Muster)); p != r.Muster {
+				t.Errorf("%s declares %q, served as %q", name, r.Muster, p)
+			}
+		}
+	}
+	for _, name := range []string{"geraete", "energie", "kalender", "kontakte", "konto", "notizen", "dokumente", "sicherung", "standort"} {
+		if len(gs[name]) == 0 {
+			t.Errorf("%s has no /napi route", name)
+		}
+	}
+	// a module off keeps the paths released apps read an answer from: 503
+	// in words (sicherung, standort, konto, kontakte) or Merken's 404 sentence
+	aus := map[string][]string{"sicherung": nil, "standort": nil, "konto": nil, "kontakte": {"POST /napi/kontakte"}, "notizen": {"POST /napi/merken"}}
+	for name := range gs {
+		off, _ := switched(t, leafSite(t), name)
+		var got []string
+		for _, r := range napi.Gruppen(off.napi)[name] {
+			got = append(got, r.Muster)
+		}
+		want, ok := aus[name]
+		if want == nil && ok {
+			for _, r := range gs[name] {
+				want = append(want, r.Muster)
+			}
+		}
+		if strings.Join(got, ",") != strings.Join(want, ",") {
+			t.Errorf("%s off declares %v, want %v", name, got, want)
+		}
 	}
 }

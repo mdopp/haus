@@ -120,16 +120,16 @@ func NewSicherung(dir, dataDir string) *Sicherung {
 
 // routes are registered whether or not the box has the inbox: without
 // it (s nil) each answers 503 with the sentence the app shows.
-func (s *Sicherung) routes(mux *http.ServeMux, auth func(http.HandlerFunc) http.HandlerFunc, whoami func(string) (string, bool)) {
-	as := func(next personHandler) http.HandlerFunc { return auth(s.person(whoami, next)) }
-	mux.HandleFunc("GET /napi/sicherung/stand", as(s.stand))
-	mux.HandleFunc("POST /napi/sicherung/fehlend", as(s.fehlend))
-	mux.HandleFunc("POST /napi/sicherung/uploads", as(s.create))
-	mux.HandleFunc("HEAD /napi/sicherung/uploads/{id}", as(s.head))
-	mux.HandleFunc("PATCH /napi/sicherung/uploads/{id}", as(s.patch))
-	mux.HandleFunc("GET /napi/sicherung/schluessel", as(s.schluessel))
-	mux.HandleFunc("GET /napi/sicherung/letzte", as(s.letzteListe))                    // a new phone gets the newest back (haus#209)
-	mux.HandleFunc("GET /napi/sicherung/letzte/{quelle}/{pfad...}", as(s.letzteDatei)) // GET also answers HEAD
+func (s *Sicherung) routes(gs gruppen, whoami func(string) (string, bool)) {
+	as := func(next personHandler) http.HandlerFunc { return s.person(whoami, next) }
+	gs.add("sicherung", "GET /napi/sicherung/stand", as(s.stand))
+	gs.add("sicherung", "POST /napi/sicherung/fehlend", as(s.fehlend))
+	gs.add("sicherung", "POST /napi/sicherung/uploads", as(s.create))
+	gs.add("sicherung", "HEAD /napi/sicherung/uploads/{id}", as(s.head))
+	gs.add("sicherung", "PATCH /napi/sicherung/uploads/{id}", as(s.patch))
+	gs.add("sicherung", "GET /napi/sicherung/schluessel", as(s.schluessel))
+	gs.add("sicherung", "GET /napi/sicherung/letzte", as(s.letzteListe))                    // a new phone gets the newest back (haus#209)
+	gs.add("sicherung", "GET /napi/sicherung/letzte/{quelle}/{pfad...}", as(s.letzteDatei)) // GET also answers HEAD
 }
 
 // fehler is a refusal of /napi/sicherung: {"fehler": a German sentence}.
