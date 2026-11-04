@@ -102,6 +102,7 @@ const (
 type Eintrag struct {
 	Titel, Pfad, Icon string
 	Ort               Ort
+	Rang              int                      // its place at Ort among the core's and the modules' entries (H6)
 	Fuer              func(*http.Request) bool // who sees it (signed in, admins); nil: everyone
 }
 

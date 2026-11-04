@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"sync"
 	"time"
@@ -310,12 +311,20 @@ type laibFake struct {
 	wishes *laibfake.Laib
 }
 
-// demoModule is a box without Reitti and with Podcasts switched off.
+// demoModule is the demo's box: the modules its pages have, with their
+// entries in the family's selection as the catalog gives them on a box
+// with a music inbox (Musik, not Platte erfassen or Discogs on their own);
+// no Reitti, and Podcasts switched off.
 func demoModule() *modul.Liste {
 	m := func(name, backend, warum, grund string) modul.Modul {
-		return modul.Modul{Name: name, Titel: texte.Titel(name), Backend: backend, Warum: warum, Grund: grund}
+		nav := slices.DeleteFunc(pages.Nav(name), func(e modul.Eintrag) bool {
+			return e.Pfad == pages.PlattePath || e.Pfad == pages.DiscogsPath
+		})
+		return modul.Modul{Name: name, Titel: texte.Titel(name), Backend: backend, Warum: warum, Grund: grund, Nav: nav}
 	}
-	l, err := modul.Bauen([]modul.Modul{m("geraete", "home-assistant", "", ""), m("kalender", "radicale", "", ""),
+	l, err := modul.Bauen([]modul.Modul{m("geraete", "home-assistant", "", ""), m("energie", "home-assistant", "", ""),
+		m("kalender", "radicale", "", ""), m("einkauf", "radicale", "", ""), m("notizen", "file-share", "", ""),
+		m("musik", "beets", "", ""), m("gesehen", "media", "", ""),
 		m("standort", "reitti", modul.Fehlt, "Auf dieser Box läuft kein Reitti."),
 		m("podcasts", "audiobookshelf", modul.Aus, "Auf dieser Box ausgeschaltet."),
 		m("gesundheit", "gesundheit", modul.Fehlt, "Auf dieser Box läuft Gesundheit nicht.")})

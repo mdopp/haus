@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/mdopp/homes/internal/cards"
+	"github.com/mdopp/homes/internal/modul"
 )
 
 // mehrPath is Mehr's page.
@@ -49,15 +50,12 @@ func Mehr(cfg StartConfig) http.HandlerFunc {
 		if !showOnly(w, r, "Mehr") {
 			return
 		}
-		show := shows(r, cfg)
 		b := familyHead(r, cfg, "Mehr", "Mehr")
 		b.WriteString("<h1>Mehr</h1>")
 		b.WriteString(einrichtungKarte(r, cfg)) // haus#188: the open setup first; gone once done
 		pages := cards.Card{Title: "Seiten"}
-		for _, t := range mehr {
-			if show[t.name] {
-				pages.AddLink(t.name, mehrSays[t.name], t.href)
-			}
+		for _, t := range eintraege(r, cfg, modul.Mehr) {
+			pages.AddLink(t.Titel, mehrSays[t.Titel], t.Pfad)
 		}
 		b.WriteString(pages.HTML())
 		b.WriteString(gesundheitKarte(cfg))

@@ -18,7 +18,7 @@ import (
 func TestEveryVariableHasAnOwner(t *testing.T) {
 	s, _, _ := fullSite(t)
 	owned := slices.Clone(kern)
-	for _, m := range katalog(s, "") {
+	for _, m := range katalog(s) {
 		owned = append(owned, m.Env...)
 	}
 	read := map[string]string{}
@@ -52,8 +52,8 @@ func TestEveryVariableHasAnOwner(t *testing.T) {
 
 func TestTheCatalogBuilds(t *testing.T) {
 	full, _, _ := fullSite(t)
-	full.podcasts, full.gesundheit = nil, ""
-	l, err := modul.Bauen(katalog(full, "/musik-eingang"))
+	full.podcasts, full.gesundheit, full.musik = nil, "", "/musik-eingang"
+	l, err := modul.Bauen(katalog(full))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +73,7 @@ func TestTheCatalogBuilds(t *testing.T) {
 			t.Errorf("the log line lacks %q: %s", want, log)
 		}
 	}
-	empty, err := modul.Bauen(katalog(site{}, ""))
+	empty, err := modul.Bauen(katalog(site{}))
 	if err != nil {
 		t.Fatalf("a box with nothing: %v", err)
 	}
@@ -81,7 +81,7 @@ func TestTheCatalogBuilds(t *testing.T) {
 		t.Errorf("a box with nothing: %s", empty)
 	}
 	names := map[string]bool{}
-	for _, m := range katalog(site{}, "") {
+	for _, m := range katalog(site{}) {
 		names[m.Name] = true
 	}
 	if len(names) != 18 {

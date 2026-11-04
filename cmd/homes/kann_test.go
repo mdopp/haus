@@ -15,7 +15,7 @@ import (
 func kannSite(t *testing.T) site {
 	t.Helper()
 	s, _, _ := fullSite(t)
-	l, err := modul.Bauen(katalog(s, ""))
+	l, err := modul.Bauen(katalog(s))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +86,7 @@ func TestKannWidgetsAreTheToolDefs(t *testing.T) {
 		s := kannSite(t)
 		s.hh.Documents, s.hh.Notes = nil, nil
 		s.napi.Haushalt = s.hh
-		s.napi.Module, _ = modul.Bauen(katalog(s, ""))
+		s.napi.Module, _ = modul.Bauen(katalog(s))
 		return s
 	}()} {
 		h := routes(s)

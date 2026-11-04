@@ -62,7 +62,7 @@ func leafSite(t *testing.T) site {
 // switched builds s as main does with HOMES_MODULE_AUS=aus.
 func switched(t *testing.T, s site, aus string) (site, *modul.Liste) {
 	t.Helper()
-	l, err := modul.Bauen(ausschalten(&s, katalog(s, ""), aus))
+	l, err := modul.Bauen(ausschalten(&s, katalog(s), aus))
 	if err != nil {
 		t.Fatal(err)
 	}
