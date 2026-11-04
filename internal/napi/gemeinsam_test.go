@@ -24,9 +24,9 @@ func gemeinsamHandler(t *testing.T, dav *caldav.Client) http.Handler {
 	people := map[string]string{"anna1": "anna", "waise1": ""}
 	berlin, _ := time.LoadLocation("Europe/Berlin")
 	return Handler(Config{Validate: StaticValidator([]string{"anna1", "waise1"}),
-		Haushalt: haushalt.Config{Calendar: dav, Contacts: dav, Loc: berlin},
-		Whoami:   func(b string) (string, bool) { p, ok := people[b]; return p, ok },
-		Now:      func() time.Time { return gemeinsamNow }})
+		Haushalt: haushalt.Config{Calendar: dav, Contacts: dav, Loc: berlin}, Konto: dav,
+		Whoami: func(b string) (string, bool) { p, ok := people[b]; return p, ok },
+		Now:    func() time.Time { return gemeinsamNow }})
 }
 
 func gemeinsamFake(t *testing.T) (*davfake.Server, http.Handler) {

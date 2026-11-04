@@ -91,7 +91,7 @@ func TestModuleSwitchProposes(t *testing.T) {
 	for _, c := range []struct {
 		path, tun string
 		code      int
-	}{{"/module/standort", "aus", 409}, {"/module/podcasts", "aus", 409}, {"/module/gesehen", "an", 409}, {"/module/kalender", "aus", 409}} {
+	}{{"/module/standort", "aus", 409}, {"/module/podcasts", "aus", 409}, {"/module/gesehen", "an", 409}, {"/module/geraete", "aus", 409}} {
 		if rec := admin("POST", c.path, url.Values{"tun": {c.tun}}); rec.Code != c.code || !strings.Contains(rec.Body.String(), "lässt sich noch nicht") {
 			t.Errorf("%s %s → %d %s", c.path, c.tun, rec.Code, rec.Body)
 		}

@@ -77,7 +77,7 @@ func katalog(s site, musicInbox string) []modul.Modul {
 			hh.Contacts != nil, "Auf dieser Box läuft kein Radicale."),
 		bau(modul.Modul{Name: "konto", Backend: "radicale", Env: radicale,
 			App: modul.Angebot{Konto: []string{"kontakte", "kalender"}}},
-			hh.Calendar != nil, "Auf dieser Box läuft kein Radicale."),
+			n.Konto != nil, "Auf dieser Box läuft kein Radicale."),
 		bau(modul.Modul{Name: "einkauf", Backend: "radicale", Env: radicale,
 			Nav: []modul.Eintrag{{Titel: "Einkauf", Pfad: pages.EinkaufPath, Ort: modul.Haushalt}}},
 			hh.Einkauf != nil, "Auf dieser Box läuft kein Radicale."),
@@ -174,11 +174,12 @@ func schliesseWuensche(ctx context.Context, l *laib.Client, liste *modul.Liste, 
 }
 
 // schaltbar are the modules HOMES_MODULE_AUS can switch off today (ADR 0001
-// steps H3, H4: the leaf areas, each with its own paths and backend; the
-// documents, the notes, the music and the lists), each with how its
-// backend leaves the site: off, its field stays nil, so no page, route,
-// tool or background work learns of it (ADR 0001 §1). The others follow
-// in H5–H6.
+// steps H3–H5: the leaf areas, each with its own paths and backend; the
+// documents, the notes, the music and the lists; the calendar, the
+// contacts and the account on the one Radicale connection), each with how
+// its backend leaves the site: off, its field stays nil, so no page,
+// route, tool or background work learns of it (ADR 0001 §1). The others
+// follow in H6.
 var schaltbar = map[string]func(*site){
 	"gesundheit":   func(s *site) { s.gesundheit = "" },
 	"werkstatt":    func(s *site) { s.tickets = nil },
@@ -198,6 +199,11 @@ var schaltbar = map[string]func(*site){
 	"musik": func(s *site) { s.musik = ""; s.haushalt(func(h *haushalt.Config) { h.Wuensche = nil }) },
 	// the lists and their tools; the music wish list keeps its own (hh.Wuensche.Listen)
 	"einkauf": func(s *site) { s.haushalt(func(h *haushalt.Config) { h.Einkauf = nil }) },
+	// H5, one Radicale account: each module leaves only its own field, the
+	// others keep theirs (Contacts and Konto are their own, not Calendar)
+	"kalender": func(s *site) { s.haushalt(func(h *haushalt.Config) { h.Calendar = nil }) },
+	"kontakte": func(s *site) { s.haushalt(func(h *haushalt.Config) { h.Contacts = nil }) },
+	"konto":    func(s *site) { s.napi.Konto = nil },
 }
 
 // haushalt changes the Haushalt source's backends, the Bote's and the
@@ -223,7 +229,7 @@ func ausschalten(s *site, ms []modul.Modul, liste string) []modul.Modul {
 		case i < 0:
 			log.Printf("homes: HOMES_MODULE_AUS: no module %q, ignored", name)
 		case schaltbar[name] == nil:
-			log.Printf("homes: HOMES_MODULE_AUS: %s cannot be switched off yet (ADR 0001 H5–H6), it stays on", name)
+			log.Printf("homes: HOMES_MODULE_AUS: %s cannot be switched off yet (ADR 0001 H6), it stays on", name)
 		case ms[i].An():
 			ms[i].Warum, ms[i].Grund = modul.Aus, texte.T(texte.GrundAus)
 			schaltbar[name](s)

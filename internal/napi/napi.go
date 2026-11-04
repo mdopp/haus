@@ -20,6 +20,7 @@ import (
 
 	"github.com/mdopp/homes/internal/app"
 	"github.com/mdopp/homes/internal/assistent"
+	"github.com/mdopp/homes/internal/caldav"
 	"github.com/mdopp/homes/internal/favoriten"
 	"github.com/mdopp/homes/internal/ha"
 	"github.com/mdopp/homes/internal/haushalt"
@@ -61,6 +62,12 @@ type Config struct {
 	// app's points on with the person's token (standort.go, HOMES_REITTI_URL);
 	// nil = /napi/standort answers 503 in words
 	Reitti *reitti.Reitti
+	// Konto: the household's shared contacts and calendars for the phone's
+	// Homes account (gemeinsam.go, haus#218) and the live stream's frames
+	// when they change; the Radicale account Haushalt's Calendar is on, its
+	// own field so the account stays with the calendar off (ADR 0001 H5);
+	// nil = /napi/gemeinsam answers 503 in words
+	Konto *caldav.Client
 	// SharedEvery: how often the live stream looks whether the household's
 	// shared contacts and calendars changed (haus#223); 0 = 30 s
 	SharedEvery time.Duration
@@ -238,7 +245,7 @@ func Handler(c Config) http.Handler {
 	if c.HA != nil { // the house paths and the event stream, from Home Assistant
 		(&homeAPI{ha: c.HA, sources: c.Energy, witness: c.Witness, whoami: c.Whoami, favs: c.Favorites, loc: c.Haushalt.Loc, now: c.Now}).routes(mux, auth)
 		lv := newLive(c.HA, c.Ping, c.SensorEvery)
-		if dav := c.Haushalt.Calendar; dav != nil {
+		if dav := c.Konto; dav != nil {
 			lv.shared, lv.sharedEvery = dav.FamilyVersions, c.SharedEvery
 		}
 		lv.routes(mux, auth)
@@ -257,7 +264,7 @@ func Handler(c Config) http.Handler {
 	k := &kontakte{dav: c.Haushalt.Contacts, whoami: c.Whoami, busy: map[string]bool{}}
 	mux.HandleFunc("POST /napi/kontakte", auth(k.post))
 	// the household's shared contacts and calendars for the phone's Homes account (haus#218)
-	(&gemeinsam{dav: c.Haushalt.Calendar, whoami: c.Whoami, loc: c.Haushalt.Loc, now: c.Now}).routes(mux, auth)
+	(&gemeinsam{dav: c.Konto, whoami: c.Whoami, loc: c.Haushalt.Loc, now: c.Now}).routes(mux, auth)
 	// the phone's positions, passed on to the person's Reitti (owner 2026-11-02)
 	(&standort{r: c.Reitti, whoami: c.Whoami}).routes(mux, auth)
 	mux.HandleFunc("/napi/", auth(noSuchPath))
