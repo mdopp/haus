@@ -32,6 +32,7 @@ const (
 	FormatTimelineIOS Format = "timeline-ios" // Google Maps on an iPhone: […] of segments
 	FormatGeoJSON     Format = "geojson"      // a FeatureCollection of Points with a time each
 	FormatGPX         Format = "gpx"          // <gpx> with <trkpt>s
+	FormatSemantic    Format = "semantic"     // older Takeouts, Semantic Location History/YYYY/YYYY_MONTH.json: {"timelineObjects": […]}
 )
 
 // ErrFormat is a file that is none of the formats Homes reads.
@@ -149,6 +150,8 @@ func readObject(dec *json.Decoder, emit func(Fund) error) (Format, error) {
 			f, read = FormatTimeline, readSegments
 		case "features":
 			f, read = FormatGeoJSON, readFeatures
+		case "timelineObjects":
+			f, read = FormatSemantic, readTimelineObjects
 		}
 		if read == nil || (found != "" && f != found) {
 			if err := skip(dec); err != nil {
@@ -335,6 +338,106 @@ func readSegments(dec *json.Decoder, emit func(Fund) error) error {
 		}
 		return nil
 	})
+}
+
+// e7Ort is a place as the Semantic Location History writes it.
+type e7Ort struct {
+	Lat  *float64 `json:"latitudeE7"`
+	Lng  *float64 `json:"longitudeE7"`
+	LatK *float64 `json:"latE7"`
+	LngK *float64 `json:"lngE7"`
+	Zeit string   `json:"timestamp"`
+	Ms   string   `json:"timestampMs"`
+}
+
+func (o e7Ort) ort() (float64, float64, bool) {
+	lat, lng := o.Lat, o.Lng
+	if lat == nil || lng == nil {
+		lat, lng = o.LatK, o.LngK
+	}
+	if lat == nil || lng == nil || !onEarth(e7(*lat), e7(*lng)) {
+		return 0, 0, false
+	}
+	return e7(*lat), e7(*lng), true
+}
+
+// dauer is a timeline object's start and end, ISO or in milliseconds.
+type dauer struct {
+	Start   string `json:"startTimestamp"`
+	StartMs string `json:"startTimestampMs"`
+	Ende    string `json:"endTimestamp"`
+	EndeMs  string `json:"endTimestampMs"`
+}
+
+// timelineObject is one entry of an older Takeout's Semantic Location History: a stay at a
+// place (placeVisit) or a way between two (activitySegment).
+type timelineObject struct {
+	Visit *struct {
+		Location e7Ort `json:"location"`
+		Duration dauer `json:"duration"`
+	} `json:"placeVisit"`
+	Activity *struct {
+		Start     e7Ort `json:"startLocation"`
+		End       e7Ort `json:"endLocation"`
+		Duration  dauer `json:"duration"`
+		Waypoints struct {
+			Points []e7Ort `json:"waypoints"`
+		} `json:"waypointPath"`
+		Raw struct {
+			Points []e7Ort `json:"points"`
+		} `json:"simplifiedRawPath"`
+	} `json:"activitySegment"`
+}
+
+// readTimelineObjects reads the Semantic Location History, object by object.
+func readTimelineObjects(dec *json.Decoder, emit func(Fund) error) error {
+	return eachIn(dec, func(o timelineObject) error {
+		for _, f := range o.funde() {
+			if err := send(emit, f); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// funde are a timeline object's points: a visit is its place at the start and at the end, as
+// a Timeline visit; a way its start, its raw path's points with their times (or, without
+// one, its waypoints spread evenly between start and end) and its end.
+func (o timelineObject) funde() []Fund {
+	at := func(e e7Ort, t time.Time, besuch bool) []Fund {
+		if lat, lng, ok := e.ort(); ok {
+			return []Fund{{Punkt: Punkt{Zeit: t.Truncate(time.Second), Breite: lat, Laenge: lng, Genauigkeit: genauGoogle}, Besuch: besuch}}
+		}
+		return nil
+	}
+	var d dauer
+	switch {
+	case o.Visit != nil:
+		d = o.Visit.Duration
+	case o.Activity != nil:
+		d = o.Activity.Duration
+	}
+	start, ok1 := googleTime(d.Start, d.StartMs)
+	end, ok2 := googleTime(d.Ende, d.EndeMs)
+	switch {
+	case !ok1 || !ok2:
+		return nil
+	case o.Visit != nil:
+		return append(at(o.Visit.Location, start, true), at(o.Visit.Location, end, true)...)
+	}
+	a, out := o.Activity, at(o.Activity.Start, start, false)
+	for _, p := range a.Raw.Points {
+		if t, ok := googleTime(p.Zeit, p.Ms); ok {
+			out = append(out, at(p, t, false)...)
+		}
+	}
+	for i, p := range a.Waypoints.Points {
+		if len(a.Raw.Points) == 0 {
+			out = append(out, at(p, start.Add(end.Sub(start)*time.Duration(i+1)/time.Duration(len(a.Waypoints.Points)+1)), false)...)
+		}
+	}
+	return append(out, at(a.End, end, false)...)
 }
 
 func placeOf(raw json.RawMessage) (float64, float64, bool) {
