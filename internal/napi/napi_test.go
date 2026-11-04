@@ -361,8 +361,8 @@ func TestEveryNapiRouteWantsADevice(t *testing.T) {
 	h := Handler(Config{Laib: &laib.Client{URL: lb.URL, Token: "ops"}, Validate: StaticValidator([]string{"dev1"}),
 		HA:        &ha.Client{URL: dead, Token: "ha"},
 		Haushalt:  haushalt.Config{Calendar: dav, Contacts: dav, Documents: &paperless.Client{URL: dead, Token: "pl"}, Notes: nd},
-		UploadDir: t.TempDir(), Sicherung: NewSicherung(t.TempDir(), t.TempDir()), Reitti: &reitti.Reitti{URL: dead, Dir: t.TempDir()}})
-	routes := map[string]bool{
+		UploadDir: t.TempDir(), MusicInbox: t.TempDir(), Sicherung: NewSicherung(t.TempDir(), t.TempDir()), Reitti: &reitti.Reitti{URL: dead, Dir: t.TempDir()}})
+	routes := map[string]bool{"POST /napi/musik": true,
 		"GET /napi/assistent": true, "GET /napi/persona": true, "GET /napi/whoami": true,
 		"GET /napi/box/home": true, "GET /napi/box/services": true, "GET /napi/box/approvals": true, "GET /napi/box/upgrades": true,
 		"POST /napi/box/services/{name}/operate": true, "POST /napi/box/approvals/{id}/approve": true, "POST /napi/box/approvals/{id}/deny": true,

@@ -76,6 +76,26 @@ const (
 	ZurStartseite ID = "willkommen.weiter"
 	GrundDienst   ID = "grund.dienst"        // a link module's service is not on the box: „%s“ is its name
 	GrundUnklar   ID = "grund.dienst-unklar" // … or Laib did not say at start
+	// Musik, managing the music (owner 2026-11-04: „Musik verwalten“, not what is playing)
+	MusikDazu             ID = "musik.dazu"              // the section how music gets in
+	MusikHandy            ID = "musik.handy"             // from the phone: Teilen → Homes
+	MusikComputer         ID = "musik.computer"          // from a computer at home; its word „Netzlaufwerk“ links to the page
+	MusikWirdEinsortiert  ID = "musik.wird-einsortiert"  // „… %s“: the uploads beets has not finished
+	MusikDauert           ID = "musik.dauert"            // an upload waits longer than ten minutes
+	MusikFertig           ID = "musik.fertig"            // „%s“ the upload, „%s“ what went in
+	MusikNicht            ID = "musik.nicht"             // „%s“ the upload, „%s“ why not
+	MusikNichtUnten       ID = "musik.nicht-unten"       // where to act on it
+	MusikZuletzt          ID = "musik.zuletzt"           // the albums last added
+	MusikInDerMusik       ID = "musik.in-der-musik"      // „%s“ how many albums
+	MusikJellyfinStumm    ID = "musik.jellyfin-stumm"    // Jellyfin did not answer
+	MusikAchtung          ID = "musik.achtung"           // what beets kept back
+	MusikAchtungWie       ID = "musik.achtung-wie"       // its quiet line
+	MusikPlatten          ID = "musik.platten"           // the records
+	MusikPlatteErfassen   ID = "musik.platte-erfassen"   // its button
+	MusikInSammlung       ID = "musik.in-sammlung"       // „%s“ how many records
+	MusikWunschliste      ID = "musik.wunschliste"       // the music wish list's link, its open wishes after
+	MusikDiscogsVerbunden ID = "musik.discogs-verbunden" // „%s“ the Discogs account
+	MusikDiscogsVerbinden ID = "musik.discogs-verbinden" // not connected yet
 )
 
 var de = map[ID]string{
@@ -177,4 +197,23 @@ var de = map[ID]string{
 	"schritt.signal":          "Tippe unten auf „Öffnen“ und schreib „Hallo“. {name} antwortet, sobald ein Admin dich einmal freigegeben hat.",
 	"schritt.homes":           "Öffne die App, trag {adresse} ein und melde dich an. Die App richtet sich dann selbst ein.",
 	"schritt.homes-iphone":    "iPhone: Öffne {adresse} in Safari, tippe auf „Teilen“ und dann auf „Zum Home-Bildschirm“.",
+	"musik.dazu":              "Hinzufügen",
+	"musik.handy":             "Auf dem Handy: Lieder oder ein ganzes Album als ZIP teilen und Homes wählen. Die Box sortiert sie selbst ein.",
+	"musik.computer":          "Am Computer, zu Hause: in den Ordner „musik-eingang“ auf dem Netzlaufwerk legen.",
+	"musik.wird-einsortiert":  "Wird einsortiert: %s.",
+	"musik.dauert":            "Das dauert länger als sonst; sobald es fertig ist, bekommst du eine Nachricht.",
+	"musik.fertig":            "Fertig: „%s“, %s in der Musik",
+	"musik.nicht":             "Nicht einsortiert: „%s“ – %s",
+	"musik.nicht-unten":       "Was jetzt: unten unter „Braucht Aufmerksamkeit“.",
+	"musik.zuletzt":           "Zuletzt hinzugefügt",
+	"musik.in-der-musik":      "%s in der Musik",
+	"musik.jellyfin-stumm":    "Was zuletzt dazukam, lässt sich gerade nicht nachsehen: Jellyfin antwortet nicht.",
+	"musik.achtung":           "Braucht Aufmerksamkeit",
+	"musik.achtung-wie":       "Das hat die Box nicht einsortiert. Was inzwischen gehen sollte, legt „Noch einmal einsortieren“ zurück; was du nicht brauchst, „Löschen“.",
+	"musik.platten":           "Platten",
+	"musik.platte-erfassen":   "Platte erfassen",
+	"musik.in-sammlung":       "%s in deiner Sammlung",
+	"musik.wunschliste":       "Wunschliste",
+	"musik.discogs-verbunden": "Discogs: verbunden mit „%s“",
+	"musik.discogs-verbinden": "Dein Discogs-Konto verbinden, um Platten zu erfassen",
 }

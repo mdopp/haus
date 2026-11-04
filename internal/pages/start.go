@@ -25,6 +25,7 @@ import (
 	"github.com/mdopp/homes/internal/favoriten"
 	"github.com/mdopp/homes/internal/gesehen"
 	"github.com/mdopp/homes/internal/ha"
+	"github.com/mdopp/homes/internal/jellyfin"
 	"github.com/mdopp/homes/internal/judge"
 	"github.com/mdopp/homes/internal/laib"
 	"github.com/mdopp/homes/internal/modul"
@@ -105,7 +106,8 @@ type StartConfig struct {
 	// the page says the box has no archive
 	Sicherung          *napi.Sicherung
 	Papierkorb         *papierkorb.Korb // what the family deleted, for 30 days (haus#174); nil: deletes go at once
-	MusicInbox         string           // laib's music inbox, which beets sorts in (haus#107); "": no Musik hinzufügen
+	MusicInbox         string           // laib's music inbox, which beets sorts in (haus#107); "": no Musik page
+	Musikbib           *jellyfin.Client // the music in Jellyfin, Homes' own music-only user (HOMES_JELLYFIN_TOKEN): Zuletzt hinzugefügt; nil, none
 	PaperlessPublicURL string
 	PaperlessLANOnly   bool
 }

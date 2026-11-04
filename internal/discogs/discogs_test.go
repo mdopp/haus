@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestEAN(t *testing.T) {
@@ -46,6 +47,8 @@ func fake(t *testing.T) (*Client, *[]string) {
 		case p == "/users/mdopp/collection/folders/1/releases/11" && r.Method == "POST":
 			w.WriteHeader(201)
 			ans(map[string]any{"instance_id": 1})
+		case p == "/users/mdopp/collection/folders/0":
+			ans(map[string]any{"id": 0, "count": 37})
 		case p == "/users/mdopp/collection/folders/0/releases":
 			if q.Get("page") == "1" {
 				ans(map[string]any{"pagination": map[string]int{"pages": 2}, "releases": []any{map[string]any{"id": 11, "basic_information": map[string]any{"title": "Amore", "year": 2014, "master_id": 800, "artists": []any{map[string]string{"name": "Wanda (2)"}}}}}})
@@ -105,5 +108,19 @@ func TestFindenAndShelf(t *testing.T) {
 	}
 	if _, err := (&Client{Base: c.Base, Token: "falsch"}).User(ctx); err == nil || !strings.Contains(err.Error(), "401") {
 		t.Errorf("bad token: %v", err)
+	}
+}
+
+// Platten on Musik: how many records, one call while the shelf is not fresh, the shelf once it is.
+func TestAnzahl(t *testing.T) {
+	c, _ := fake(t)
+	now := time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC)
+	rg := &Regal{C: c, Now: func() time.Time { return now }}
+	if n, err := rg.Anzahl(context.Background()); err != nil || n != 37 {
+		t.Fatalf("%d %v", n, err)
+	}
+	rg.Hat(context.Background(), "Wanda", "Amore")
+	if n, _ := rg.Anzahl(context.Background()); n != 2 {
+		t.Errorf("from the shelf read: %d", n)
 	}
 }

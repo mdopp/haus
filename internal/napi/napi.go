@@ -29,6 +29,7 @@ import (
 	"github.com/mdopp/homes/internal/haushalt"
 	"github.com/mdopp/homes/internal/laib"
 	"github.com/mdopp/homes/internal/modul"
+	"github.com/mdopp/homes/internal/musik"
 	"github.com/mdopp/homes/internal/reitti"
 	"github.com/mdopp/homes/internal/schalter"
 	"github.com/mdopp/homes/internal/usage"
@@ -60,7 +61,8 @@ type Config struct {
 	Haushalt haushalt.Config
 	// UploadDir: where /napi/upload stores (upload.go), the share's Paperless
 	// consume folder; "" = 404
-	UploadDir string
+	UploadDir  string
+	MusicInbox string // where POST /napi/musik stores (internal/musik), beets' inbox; "" = 404
 	// Sicherung: the message archives' inbox (sicherung.go, HOMES_ARCHIV_DIR,
 	// haus#207); nil = every /napi/sicherung path answers 503 in words
 	Sicherung *Sicherung
@@ -310,6 +312,9 @@ func Gruppen(c Config) map[string][]modul.Route {
 	}
 	if c.UploadDir != "" { // the camera capture into the consume folder
 		newUploads(c.UploadDir).routes(gs)
+	}
+	if c.MusicInbox != "" { // Teilen → Homes: songs and ZIPs into beets' inbox (haus#107), for the device's person
+		gs.add("musik", "POST /napi/musik", func(w http.ResponseWriter, r *http.Request) { musik.Hochladen(w, r, c.MusicInbox, c.Whoami) })
 	}
 	c.Sicherung.routes(gs, c.Whoami)                 // the phone's message backups (haus#207)
 	gs.add("notizen", "POST /napi/merken", c.merken) // Share → Homes (haus#120)

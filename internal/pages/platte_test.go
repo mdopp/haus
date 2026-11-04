@@ -125,9 +125,10 @@ func TestPlatteErfassen(t *testing.T) {
 	cfg.Module = modulListe(t, "musik")
 	_, body, _ = familyPage(t, Mehr, cfg, "GET", "/mehr", "family")
 	mustNotContain(t, body, "Platte erfassen", "Discogs-Konto verbinden")
-	mustContain(t, body, "Hochladen, Platten erfassen, Discogs")
+	mustContain(t, body, "Neue Alben, was beim Einsortieren hängt, Platten erfassen, Discogs")
 	_, body, _ = familyPage(t, Musik, cfg, "GET", MusikPath, "family")
-	mustContain(t, body, "<h2 id=m-p>Platten und Wünsche</h2>", `href=/platte>Platte erfassen</a>`, `href=/discogs>Dein Discogs-Konto</a>`, `?liste=liste-musik">Musik-Wunschliste</a>`)
+	mustContain(t, body, "<h2 id=m-p>Platten</h2>", `href=/platte>Platte erfassen</a>`, `?liste=liste-musik">Wunschliste · 0</a>`,
+		`<p class=ruhig><span class=punkt></span><a href=/discogs>Discogs: verbunden mit`)
 	mustNotContain(t, body, "noch nicht eingerichtet")
 
 	// the phone read the barcode: Discogs's pressing, to confirm

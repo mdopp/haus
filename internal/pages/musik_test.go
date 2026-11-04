@@ -1,199 +1,128 @@
 package pages
 
 import (
-	"bytes"
 	"encoding/json"
-	"github.com/mdopp/homes/internal/laib"
-	"github.com/mdopp/homes/internal/papierkorb"
+	"fmt"
+	"image/color"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
-	"reflect"
-	"strconv"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/mdopp/homes/internal/jellyfin"
+	"github.com/mdopp/homes/internal/jellyfin/jellyfinfake"
+	"github.com/mdopp/homes/internal/laib"
+	"github.com/mdopp/homes/internal/modul"
+	"github.com/mdopp/homes/internal/papierkorb"
+	"github.com/mdopp/homes/internal/samba"
 )
 
-// musikPiece sends one piece as the page's script does.
-func musikPost(t *testing.T, h http.HandlerFunc, name string, at, total int, body []byte, hdr map[string]string) *httptest.ResponseRecorder {
-	t.Helper()
-	q := "?pfad=" + strings.ReplaceAll(name, " ", "%20") + "&ab=" + strconv.Itoa(at) + "&gesamt=" + strconv.Itoa(total)
-	req := httptest.NewRequest("POST", MusikTeilPath+q, bytes.NewReader(body))
-	req.Header.Set("Remote-User", "anna")
-	req.Header.Set("Sec-Fetch-Site", "same-origin")
-	for k, v := range hdr {
-		if v == "" {
-			req.Header.Del(k)
-		} else {
-			req.Header.Set(k, v)
+// beetsLaib is a Laib whose status of beets says own; "" says nothing of it.
+func beetsLaib(t *testing.T, own string) *laib.Client {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		svc := []map[string]any{}
+		if own != "" {
+			svc = append(svc, map[string]any{"name": "beets", "detail": "Musik-Eingang: …", "eigenes": json.RawMessage(own)})
 		}
-	}
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-	return rec
+		b, _ := json.Marshal(map[string]any{"services": svc})
+		json.NewEncoder(w).Encode(map[string]any{"result": map[string]any{"content": []map[string]string{{"text": string(b)}}}})
+	}))
+	t.Cleanup(srv.Close)
+	return &laib.Client{URL: srv.URL, Token: "t"}
 }
 
-// haus#107: Musik hinzufügen puts music into laib's inbox in pieces: each
-// piece appended to "._<name>.part" at the offset the page says, the file
-// renamed to its name after the last byte, its folders kept, never over
-// another file; a piece twice answers the size there; what is not music,
-// leaves the inbox, is hidden or comes from elsewhere goes nowhere. The
-// page is under Mehr, and only with an inbox.
-func TestMusikHinzufuegen(t *testing.T) {
-	inbox := t.TempDir()
-	cfg := StartConfig{MusicInbox: inbox, Module: modulListe(t, "musik")}
-	h := Musik(cfg)
+// headings are a page's h1 and h2 in order, "h1 Musik".
+func headings(body string) []string {
+	var out []string
+	for _, m := range regexp.MustCompile(`<(h[12])[^>]*>([^<]*)</h[12]>`).FindAllStringSubmatch(body, -1) {
+		out = append(out, m[1]+" "+m[2])
+	}
+	return out
+}
 
+// Musik verwalten (owner 2026-11-04): one h1, then Hinzufügen with the import's state under
+// it, Zuletzt hinzugefügt, Braucht Aufmerksamkeit, Platten, and Discogs quiet last — each from
+// real data: beets' status from Laib, the inbox, Jellyfin's newest albums.
+func TestMusikVerwalten(t *testing.T) {
+	inbox := t.TempDir()
+	now := time.Date(2026, 11, 4, 18, 0, 0, 0, time.UTC)
+	run := filepath.Join(inbox, "_nicht-importiert", "2026-11-04_17-20-00")
+	os.MkdirAll(run, 0o755)
+	os.WriteFile(filepath.Join(run, "kassette.rar"), []byte("Rar!"), 0o644)
+	os.WriteFile(filepath.Join(run, "GRUND.txt"), []byte("kassette.rar: RAR kann die Box nicht auspacken\n"), 0o644)
+	os.WriteFile(filepath.Join(inbox, "Sommer.zip"), []byte("PK"), 0o644)
+	os.Chtimes(filepath.Join(inbox, "Sommer.zip"), now.Add(-time.Minute), now.Add(-time.Minute))
+	os.WriteFile(filepath.Join(inbox, "._Sommer.zip.von"), []byte("anna\n"), 0o644) // a sidecar is no upload
+	own := fmt.Sprintf(`{"wartet":1,"letzte":[{"at":%q,"eingang":"kassette.rar","nicht_importiert":[{"datei":"kassette.rar","grund":"RAR kann die Box nicht auspacken"}]},
+		{"at":%q,"eingang":"Album.zip","titel":24,"alben":2},{"at":"2026-10-01T10:00:00Z","eingang":"alt.mp3","titel":1}]}`,
+		now.Add(-40*time.Minute).Format(time.RFC3339), now.Add(-3*time.Hour).Format(time.RFC3339))
+	jf := jellyfinfake.New()
+	defer jf.Close()
+	jf.Setze(jellyfinfake.Album{ID: strings.Repeat("a", 32), Name: "Ciao!", Kuenstler: "Wanda", Farbe: color.RGBA{200, 100, 50, 255}},
+		jellyfinfake.Album{ID: strings.Repeat("b", 32), Name: "Ohne Bild", Kuenstler: "X"})
+	filme, _ := modul.Bauen([]modul.Modul{{Name: "musik", Nav: Nav("musik")}, {Name: "filme", Einrichtung: &modul.Einrichtung{Web: "https://media.example"}}})
+	cfg := StartConfig{MusicInbox: inbox, Laib: beetsLaib(t, own), Musikbib: &jellyfin.Client{URL: jf.URL, Token: "k"}, Module: filme,
+		Samba: &samba.Dir{Path: t.TempDir()}, Loc: time.UTC, Now: func() time.Time { return now }}
 	_, body, _ := familyPage(t, Musik, cfg, "GET", MusikPath, "family")
-	mustContain(t, body, "<h1>Musik</h1>", "<h2 class=musik-teil>Musik hinzufügen</h2>", saysMusikHow, `id=musik-dateien multiple`, `webkitdirectory`, "fetch('"+MusikTeilPath)
-	mustContain(t, mehrOf(t, body), `href=/musik aria-current=page>`)
-	_, body, _ = familyPage(t, Mehr, StartConfig{}, "GET", "/mehr", "family")
-	mustNotContain(t, body, `href=/musik`)
+	if got, want := strings.Join(headings(body), " | "), "h1 Musik | h2 Hinzufügen | h2 Zuletzt hinzugefügt | h2 Braucht Aufmerksamkeit"; got != want {
+		t.Errorf("headings %q, want %q", got, want)
+	}
+	mustContain(t, body, "Auf dem Handy: Lieder", `auf dem <a href=/netzlaufwerk>Netzlaufwerk</a> legen.`,
+		`<span class="punkt gelb"></span>Wird einsortiert: „Sommer.zip“.</p><span hidden data-auffrischen=10></span>`,
+		`<span class="punkt rot"></span>Nicht einsortiert: „kassette.rar“ – RAR kann die Box nicht auspacken · heute, 17:20. Was jetzt: unten unter „Braucht Aufmerksamkeit“.`,
+		`<span class="punkt "></span>Fertig: „Album.zip“, 2 Alben, 24 Titel in der Musik · heute, 15:00`,
+		"24 Alben in der Musik", `<a href="https://media.example/web/#/details?id=`+strings.Repeat("a", 32)+`"><img class=bild src="/musik/bild?id=`+strings.Repeat("a", 32)+`"`,
+		`<span class=name>Ciao!</span><span class=wer>Wanda</span>`, `<span class=bild aria-hidden=true><svg`, "<span class=name>kassette.rar</span>")
+	mustNotContain(t, body, "alt.mp3", "Sommer.zip.von", "musik-dateien", "webkitdirectory")
+	order := []string{"id=m-h", "punkt gelb", "punkt rot", "id=m-z", "id=m-n"}
+	for i := 1; i < len(order); i++ {
+		if strings.Index(body, order[i-1]) > strings.Index(body, order[i]) {
+			t.Errorf("%s after %s", order[i-1], order[i])
+		}
+	}
+	// the cover through Homes; an id that is none, 404
+	code, png, hdr := familyPage(t, Musik, cfg, "GET", MusikBildPath+"?id="+strings.Repeat("a", 32), "family")
+	if code != 200 || hdr.Get("Content-Type") != "image/png" || !strings.HasPrefix(png, "\x89PNG") {
+		t.Errorf("cover: %d %s", code, hdr.Get("Content-Type"))
+	}
+	for _, id := range []string{"../x", strings.Repeat("b", 32), ""} {
+		if code, _, _ := familyPage(t, Musik, cfg, "GET", MusikBildPath+"?id="+url.QueryEscape(id), "family"); code != http.StatusNotFound {
+			t.Errorf("cover %q → %d", id, code)
+		}
+	}
+
+	// waiting long: said so; Jellyfin silent: a line, no tiles
+	now = now.Add(20 * time.Minute)
+	jf.Close()
+	_, body, _ = familyPage(t, Musik, cfg, "GET", MusikPath, "family")
+	mustContain(t, body, "Das dauert länger als sonst", "Was zuletzt dazukam, lässt sich gerade nicht nachsehen")
+	mustNotContain(t, body, "<ul class=alben>")
+}
+
+// An empty library, nothing uploaded, no Laib, no Jellyfin, no network drive: Hinzufügen
+// alone, the phone's way only; nothing that has no data is shown, and nothing refreshes.
+func TestMusikLeer(t *testing.T) {
+	jf := jellyfinfake.New()
+	defer jf.Close()
+	for _, cfg := range []StartConfig{{MusicInbox: t.TempDir()}, {MusicInbox: t.TempDir(), Laib: beetsLaib(t, `{"letzte":[]}`), Musikbib: &jellyfin.Client{URL: jf.URL, Token: "k"}}} {
+		_, body, _ := familyPage(t, Musik, cfg, "GET", MusikPath, "family")
+		if got := strings.Join(headings(body), " | "); got != "h1 Musik | h2 Hinzufügen" {
+			t.Errorf("headings %q", got)
+		}
+		mustContain(t, body, "Auf dem Handy: Lieder")
+		mustNotContain(t, body, "Netzlaufwerk", "class=zustand", "<span hidden data-auffrischen", "Zuletzt hinzugefügt", "Braucht Aufmerksamkeit", "Gelöscht", "Platten")
+	}
+	mustContain(t, mehrOf(t, func() string {
+		_, b, _ := familyPage(t, Musik, StartConfig{MusicInbox: t.TempDir(), Module: modulListe(t, "musik")}, "GET", MusikPath, "family")
+		return b
+	}()), `href=/musik aria-current=page>`)
 	if code, _, _ := familyPage(t, Musik, StartConfig{}, "GET", MusikPath, "family"); code != http.StatusNotFound {
 		t.Errorf("no inbox → %d", code)
-	}
-
-	// an album folder, in two pieces
-	song := bytes.Repeat([]byte("x"), 10)
-	rec := musikPost(t, h, "Beatles/Abbey Road/01 Come Together.flac", 0, 10, song[:6], nil)
-	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `"ab":6`) || !strings.Contains(rec.Body.String(), `"fertig":false`) {
-		t.Fatalf("%d %s", rec.Code, rec.Body)
-	}
-	part := filepath.Join(inbox, "Beatles/Abbey Road/._01 Come Together.flac.part")
-	if _, err := os.Stat(part); err != nil {
-		t.Fatalf("no part: %v", err)
-	}
-	// the same piece again: the size there, nothing written twice
-	rec = musikPost(t, h, "Beatles/Abbey Road/01 Come Together.flac", 0, 10, song[:6], nil)
-	var a struct {
-		Ab     int64
-		Fertig bool
-	}
-	json.Unmarshal(rec.Body.Bytes(), &a)
-	if rec.Code != http.StatusConflict || a.Ab != 6 {
-		t.Fatalf("again: %d %s", rec.Code, rec.Body)
-	}
-	rec = musikPost(t, h, "Beatles/Abbey Road/01 Come Together.flac", 6, 10, song[6:], nil)
-	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `"fertig":true`) {
-		t.Fatalf("last: %d %s", rec.Code, rec.Body)
-	}
-	if got, _ := os.ReadFile(filepath.Join(inbox, "Beatles/Abbey Road/01 Come Together.flac")); string(got) != string(song) {
-		t.Fatalf("file %q", got)
-	}
-	if _, err := os.Stat(part); err == nil {
-		t.Error("the part stayed")
-	}
-	// the same name again: beside it, not over it
-	musikPost(t, h, "Beatles/Abbey Road/01 Come Together.flac", 0, 3, []byte("neu"), nil)
-	if got, _ := os.ReadFile(filepath.Join(inbox, "Beatles/Abbey Road/01 Come Together (2).flac")); string(got) != "neu" {
-		t.Fatalf("second %q", got)
-	}
-	// a ZIP from the phone, in one piece
-	if rec := musikPost(t, h, "album.zip", 0, 4, []byte("PK.."), nil); rec.Code != 200 {
-		t.Fatalf("zip: %d", rec.Code)
-	}
-
-	for _, bad := range []string{"../draussen.mp3", "/etc/x.mp3", "a/.versteckt/x.mp3", "notiz.txt", "a\\b.mp3", "", "a/../../x.mp3"} {
-		if rec := musikPost(t, h, bad, 0, 1, []byte("x"), nil); rec.Code != http.StatusBadRequest {
-			t.Errorf("%q → %d", bad, rec.Code)
-		}
-	}
-	if rec := musikPost(t, h, "x.mp3", 0, 1, []byte("x"), map[string]string{"Sec-Fetch-Site": "cross-site"}); rec.Code != http.StatusForbidden {
-		t.Errorf("cross-site → %d", rec.Code)
-	}
-	if rec := musikPost(t, h, "y.mp3", 0, 2, []byte("xyz"), nil); rec.Code != http.StatusBadRequest {
-		t.Errorf("more than announced → %d", rec.Code)
-	}
-	if rec := musikPost(t, h, "z.mp3", 0, int(musikMaxFile)+1, []byte("x"), nil); rec.Code != http.StatusRequestEntityTooLarge {
-		t.Errorf("too big → %d", rec.Code)
-	}
-	if _, err := os.Stat(filepath.Join(filepath.Dir(inbox), "draussen.mp3")); err == nil {
-		t.Fatal("wrote outside the inbox")
-	}
-	for _, f := range []string{"x.mp3", "y.mp3", "._y.mp3.part"} {
-		if _, err := os.Stat(filepath.Join(inbox, f)); err == nil {
-			t.Errorf("%s written", f)
-		}
-	}
-}
-
-// haus#113: who uploaded goes beside the upload at the inbox's top before
-// it is whole (laib's beets contract), so the importer's message goes to
-// them; after the upload the page shows laib's line of the import.
-func TestMusikSaysWhoAndHowFar(t *testing.T) {
-	inbox := t.TempDir()
-	h := Musik(StartConfig{MusicInbox: inbox})
-	musikPost(t, h, "Beatles/Abbey Road/01 Come Together.flac", 0, 3, []byte("abc"), nil)
-	musikPost(t, h, "lied.mp3", 0, 3, []byte("abc"), nil)
-	musikPost(t, h, "lied.mp3", 0, 3, []byte("abc"), nil) // beside it: lied (2).mp3
-	for name, want := range map[string]string{"._Beatles.von": "anna\n", "._lied.mp3.von": "anna\n", "._lied (2).mp3.von": "anna\n"} {
-		if got, err := os.ReadFile(filepath.Join(inbox, name)); err != nil || string(got) != want {
-			t.Errorf("%s = %q, %v", name, got, err)
-		}
-	}
-	if rec := musikPost(t, h, "x.mp3", 0, 1, []byte("x"), map[string]string{"Remote-User": "Anna Müller"}); rec.Code != 200 {
-		t.Fatalf("%d", rec.Code)
-	}
-	if _, err := os.Stat(filepath.Join(inbox, "._x.mp3.von")); err == nil {
-		t.Error("a name the importer does not take was written")
-	}
-	for in, want := range map[string]string{"anna": "anna", "Erika": "erika", "a b": "", "": "", strings.Repeat("a", 65): "", "ben.k@x-y_z": "ben.k@x-y_z", "ä": ""} {
-		if got := uploader(in); got != want {
-			t.Errorf("uploader(%q) = %q", in, got)
-		}
-	}
-
-	line, wartet := importLine("Musik-Eingang: zuletzt 12 Titel (2 Alben) importiert · 1 Eingang wird noch kopiert · geprüft vor 2 min")
-	if line != "zuletzt 12 Titel (2 Alben) importiert" || !wartet {
-		t.Errorf("%q %v", line, wartet)
-	}
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		b, _ := json.Marshal(map[string]any{"services": []map[string]any{{"name": "beets", "state": "grün", "detail": "Musik-Eingang: zuletzt 3 Titel importiert · geprüft gerade eben"}}})
-		json.NewEncoder(w).Encode(map[string]any{"result": map[string]any{"content": []map[string]string{{"text": string(b)}}}})
-	}))
-	defer srv.Close()
-	code, body, hdr := familyPage(t, Musik, StartConfig{MusicInbox: inbox, Laib: &laib.Client{URL: srv.URL, Token: "t"}}, "GET", MusikStandPath, "family")
-	if code != 200 || hdr.Get("Content-Type") != "application/json" || strings.TrimSpace(body) != `{"ergebnis":[],"stand":"zuletzt 3 Titel importiert","wartet":false}` {
-		t.Errorf("%d %q", code, body)
-	}
-	_, body, _ = familyPage(t, Musik, StartConfig{MusicInbox: inbox}, "GET", MusikStandPath, "family")
-	if strings.TrimSpace(body) != `{"ergebnis":[],"stand":"","wartet":false}` {
-		t.Errorf("without laib: %q", body)
-	}
-}
-
-// haus#107 (laib#688): after the upload the page says what became of each
-// upload — its titles and albums, or what was kept back and why — read
-// from beets' own status, only for these uploads since the page started.
-func TestMusikSaysWhatBecameOfIt(t *testing.T) {
-	own := json.RawMessage(`{"letzte":[
-		{"at":"2026-10-26T12:05:00Z","eingang":"KREIS.zip","titel":0,"alben":0,"nicht_importiert":[{"datei":"KREIS.zip","grund":"unsicherer Pfad in der ZIP-Datei"}]},
-		{"at":"2026-10-26T12:04:00Z","eingang":"Ein Lächeln im Gesicht","titel":13,"alben":1,"namen":["Farin Urlaub – Ein Lächeln im Gesicht"]},
-		{"at":"2026-10-26T12:04:30Z","eingang":"lied.mp3","titel":1,"alben":0},
-		{"at":"2026-10-20T10:00:00Z","eingang":"Ein Lächeln im Gesicht","titel":2}]}`)
-	got := uploadResults(own, []string{"Ein Lächeln im Gesicht", "KREIS.zip"}, "2026-10-26T12:00:00Z")
-	want := []Ergebnis{
-		{Eingang: "KREIS.zip", Satz: "KREIS.zip: nicht übernommen: KREIS.zip (unsicherer Pfad in der ZIP-Datei)."},
-		{Eingang: "Ein Lächeln im Gesicht", Satz: "Ein Lächeln im Gesicht: 13 Titel (1 Album): Farin Urlaub – Ein Lächeln im Gesicht in der Musik.", Gut: true},
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("%#v", got)
-	}
-	if got := uploadResults(nil, []string{"x"}, "2026-10-26T12:00:00Z"); len(got) != 0 {
-		t.Errorf("nothing said: %v", got)
-	}
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		b, _ := json.Marshal(map[string]any{"services": []map[string]any{{"name": "beets", "state": "grün", "detail": "Musik-Eingang: zuletzt 13 Titel importiert", "eigenes": own}}})
-		json.NewEncoder(w).Encode(map[string]any{"result": map[string]any{"content": []map[string]string{{"text": string(b)}}}})
-	}))
-	defer srv.Close()
-	_, body, _ := familyPage(t, Musik, StartConfig{MusicInbox: t.TempDir(), Laib: &laib.Client{URL: srv.URL, Token: "t"}}, "GET",
-		MusikStandPath+"?seit=2026-10-26T12:00:00Z&namen=lied.mp3", "family")
-	if !strings.Contains(body, `"ergebnis":[{"eingang":"lied.mp3","satz":"lied.mp3: 1 Titel in der Musik.","gut":true}]`) {
-		t.Errorf("%s", body)
 	}
 }
 
@@ -207,7 +136,7 @@ func TestMusikNochmal(t *testing.T) {
 	os.WriteFile(filepath.Join(run, "GRUND.txt"), []byte("Musik-Eingang, 2026-10-24\nDiese Dateien …\n\nKREIS.zip: unsicherer Pfad in der ZIP-Datei (absolut): /\n"), 0o644)
 	cfg := StartConfig{MusicInbox: inbox}
 	_, body, _ := familyPage(t, Musik, cfg, "GET", MusikPath, "family")
-	mustContain(t, body, "<h2 id=m-n>Nicht übernommen</h2>", "<span class=name>KREIS.zip</span><span class=k>unsicherer Pfad in der ZIP-Datei (absolut): /</span>",
+	mustContain(t, body, "<h2 id=m-n>Braucht Aufmerksamkeit</h2>", "<span class=name>KREIS.zip</span><span class=k>unsicherer Pfad in der ZIP-Datei (absolut): /</span>",
 		`<input type=hidden name=lauf value="2026-10-24_18-11-01"><input type=hidden name=name value="KREIS.zip"><button data-laeuft="Legt zurück …">Noch einmal einsortieren</button>`)
 
 	h := Musik(cfg)
@@ -221,8 +150,8 @@ func TestMusikNochmal(t *testing.T) {
 		t.Errorf("cross-site → %d", rec.Code)
 	}
 	rec := post(t, h, MusikPath, url.Values{"tun": {"nochmal"}, "lauf": {"2026-10-24_18-11-01"}, "name": {"KREIS.zip"}}, "anna", nil)
-	mustContain(t, rec.Body.String(), "„KREIS.zip“ liegt wieder im Musik-Eingang.", `id=musik-nochmal data-name="KREIS.zip"`)
-	mustNotContain(t, rec.Body.String(), "Nicht übernommen")
+	mustContain(t, rec.Body.String(), "„KREIS.zip“ liegt wieder im Musik-Eingang.", `Wird einsortiert: „KREIS.zip“.`, "data-auffrischen")
+	mustNotContain(t, rec.Body.String(), "Braucht Aufmerksamkeit")
 	if b, _ := os.ReadFile(filepath.Join(inbox, "KREIS.zip")); string(b) != "PK.." {
 		t.Errorf("not in the inbox: %q", b)
 	}
@@ -301,7 +230,7 @@ func TestMusikLoeschenRueckgaengig(t *testing.T) {
 		t.Fatal("not kept in the hidden Papierkorb")
 	}
 	rec = post(t, h, MusikPath, url.Values{"tun": {"zurueckholen"}, "id": {es[0].ID}}, "anna", nil)
-	mustContain(t, rec.Body.String(), "„Album“ ist wieder da, unter „Nicht übernommen“.", "<span class=name>Album</span>")
+	mustContain(t, rec.Body.String(), "„Album“ ist wieder da, unter „Braucht Aufmerksamkeit“.", "<span class=name>Album</span>")
 	if b, _ := os.ReadFile(filepath.Join(run, "Album", "01.mp3")); string(b) != "x" {
 		t.Fatal("not back")
 	}

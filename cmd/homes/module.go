@@ -91,7 +91,8 @@ func katalog(s site) []modul.Modul {
 			App: dokApp},
 			docs, "Auf dieser Box läuft kein Paperless."),
 		bau(modul.Modul{Name: "musik", Backend: "beets",
-			Env: []string{"HOMES_MUSIC_INBOX", "HOMES_JELLYFIN_URL", "HOMES_JELLYFIN_TOKEN", "HOMES_DISCOGS_KEY", "HOMES_DISCOGS_SECRET", "HOMES_LLM_VISION_MODEL"}},
+			Env: []string{"HOMES_MUSIC_INBOX", "HOMES_JELLYFIN_URL", "HOMES_JELLYFIN_TOKEN", "HOMES_DISCOGS_KEY", "HOMES_DISCOGS_SECRET", "HOMES_LLM_VISION_MODEL"},
+			App: modul.Angebot{Teilen: strings.Fields(map[bool]string{true: "musik"}[musicInbox != ""])}}, // Teilen → Homes: POST /napi/musik
 			musicInbox != "" || hh.Wuensche != nil, "Auf dieser Box gibt es keinen Musik-Eingang."),
 		bau(modul.Modul{Name: "podcasts", Backend: "audiobookshelf", Env: []string{"HOMES_ABS_URL", "HOMES_ABS_TOKEN"},
 			Einrichtung: einrichten.App("Audiobookshelf", "com.audiobookshelf.app", einrichten.Web("hoerbuecher", s.domain), "https://www.audiobookshelf.org/guides/", "schritt.anmelden")},

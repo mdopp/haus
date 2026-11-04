@@ -407,18 +407,28 @@ test("a list of one's own is made, switched to, and deleted", async ({ page }) =
   await expect(page.getByRole('link', { name: name })).toHaveCount(0);
 });
 
-test('music goes up in pieces and arrives whole', async ({ page, request }) => {
+// Musik verwalten (owner 2026-11-04): how music gets in first, the import's state right under
+// it, the newest albums as tiles, what needs someone, the records, Discogs quiet last; with an
+// empty library only Hinzufügen is left, and nothing refreshes.
+test('Musik leads with how music gets in and shows the library from real data', async ({ page, request }, info) => {
+  await request.get('/demo/musik?leer=0');
   await page.goto('/musik');
-  const big = Buffer.alloc(9 * 1024 * 1024, 7); // two pieces
-  await page.setInputFiles('#musik-dateien', [
-    { name: 'lied.mp3', mimeType: 'audio/mpeg', buffer: big },
-    { name: 'notiz.txt', mimeType: 'text/plain', buffer: Buffer.from('nein') },
-  ]);
-  await expect(page.locator('#musik-stand')).toContainText('1 von 2 Dateien hochgeladen', { timeout: 20_000 });
-  await expect(page.locator('#musik-liste')).toContainText('keine Musikdatei');
-  const got = await (await request.get('/demo/musik')).json();
-  expect(got['lied.mp3']).toBe(big.length);
-  expect(Object.keys(got).filter((k) => k.includes('.part'))).toEqual([]);
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Musik');
+  await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Hinzufügen', 'Zuletzt hinzugefügt', 'Braucht Aufmerksamkeit', 'Platten']);
+  await expect(page.locator('.musik-dazu .zustand')).toHaveText([/Wird einsortiert: „Sommerplatte.zip“/, /Nicht einsortiert: „kassette-1994.rar“/, /Fertig: „Erfundenes Album.zip“, 2 Alben, 24 Titel/]);
+  await expect(page.locator('.alben li')).toHaveCount(6);
+  await expect(page.locator('.alben img').first()).toHaveJSProperty('complete', true);
+  expect(await page.locator('.alben img').first().evaluate((i) => i.naturalWidth)).toBeGreaterThan(0);
+  const y = async (sel) => (await page.locator(sel).first().boundingBox()).y;
+  expect(await y('.musik-dazu .zustand')).toBeLessThan(await y('.musik-neu'));
+  expect(await y('.musik-platten')).toBeLessThan(await y('p.ruhig'));
+  await page.screenshot({ path: info.outputPath('musik-demo.png'), fullPage: true });
+  await request.get('/demo/musik?leer=1');
+  await page.reload();
+  await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Hinzufügen', 'Platten']);
+  await expect(page.locator('.zustand, [data-auffrischen], .alben')).toHaveCount(0);
+  await page.screenshot({ path: info.outputPath('musik-leer.png'), fullPage: true });
+  await request.get('/demo/musik?leer=0');
 });
 
 // owner 2026-10-26: after the photo the page stood still at „1 Foto(s)

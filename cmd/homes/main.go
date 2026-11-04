@@ -95,7 +95,7 @@ type site struct {
 // Bote, and the pages behind the proxy secret.
 func routes(s site) http.Handler {
 	mux := http.NewServeMux()
-	s.napi.Usage = s.usage
+	s.napi.Usage, s.napi.MusicInbox = s.usage, s.musik // the app's songs and ZIPs go where the Musik page looks (haus#107)
 	mux.Handle("/napi/", napi.Handler(s.napi))
 	// the Bote's bearer, not the proxy secret: the Bote calls the host port from its pod
 	// (laib ADR 0012 §4; the template publishes 8650 lan:false, the firewall keeps
@@ -124,9 +124,9 @@ func familyOf(s site) pages.StartConfig {
 		family.Discogs = s.hh.Wuensche.Regale
 	}
 	family.OhneEnergie = s.napi.OhneEnergie
-	family.Papierkorb = &papierkorb.Korb{Dir: s.dataDir} // haus#174: family deletes, for 30 days
-	family.MusicInbox = s.musik
-	if family.MusicInbox != "" { // haus#107: the music inbox beets sorts in
+	family.Papierkorb = &papierkorb.Korb{Dir: s.dataDir}             // haus#174: family deletes, for 30 days
+	family.MusicInbox, family.Musikbib = s.musik, jellyfin.FromEnv() // the Musik page: the inbox, and the albums last added
+	if family.MusicInbox != "" {                                     // haus#107: the music inbox beets sorts in
 		if fi, err := os.Stat(family.MusicInbox); err != nil || !fi.IsDir() {
 			log.Printf("homes: HOMES_MUSIC_INBOX %s is not a folder (yet): uploads answer 503 until it is", family.MusicInbox)
 		}

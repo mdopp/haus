@@ -23,7 +23,7 @@ var napiProben = []string{
 	"GET /napi/portal/entity-history", "GET /napi/portal/active", "GET /napi/portal/camera/camera.tuer/snapshot",
 	"GET /napi/portal/start/addable", "GET /napi/portal/favorites", "GET /napi/portal/energy", "GET /napi/defs/tool",
 	"POST /napi/action-callback", "GET /napi/portal/tasks", "GET /napi/portal/contacts", "GET /napi/portal/documents",
-	"GET /napi/portal/notes", "POST /napi/upload", "GET /napi/sicherung/stand", "POST /napi/sicherung/fehlend",
+	"GET /napi/portal/notes", "POST /napi/upload", "POST /napi/musik", "GET /napi/sicherung/stand", "POST /napi/sicherung/fehlend",
 	"POST /napi/sicherung/uploads", "HEAD /napi/sicherung/uploads/x1", "PATCH /napi/sicherung/uploads/x1",
 	"GET /napi/sicherung/schluessel", "GET /napi/sicherung/letzte", "GET /napi/sicherung/letzte/whatsapp/a/b.jpg",
 	"HEAD /napi/sicherung/letzte/whatsapp/a/b.jpg", "POST /napi/merken", "POST /napi/kontakte", "GET /napi/gemeinsam/kontakte",
@@ -163,7 +163,7 @@ var seitenProben = []string{
 	"/raeume", "/raeume/light.flur", "/medien", "/medien/radio", "/schalten", "/aktivierungswort", "/energie", "/energie/heute",
 	"/kalender", "/kalender/verwalten", "/kalender/hinzufuegen", "/kalender/aendern", "/kalender/erinnerung/x1",
 	"/kontakte/x1", "/notizen", "/notizen/x1.md", "/dokumente", "/dokumente/x1", "/scannen", "/scannen/trennblatt",
-	"/einkauf", "/einkauf/rezepte", "/musik", "/musik/teil", "/musik/stand", "/discogs", "/discogs/zurueck", "/platte",
+	"/einkauf", "/einkauf/rezepte", "/musik", "/musik/bild", "/discogs", "/discogs/zurueck", "/platte",
 	"/platte/bild", "/podcasts", "/gesehen", "/daten-sichern", "/nachrichten-sichern", "/standort", "/netzlaufwerk",
 	"/sprechen", "/sprechen/hoeren", "/gibtsnicht", "/kalender/gibtsnicht",
 }

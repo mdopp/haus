@@ -254,7 +254,7 @@ The keys the app knows today are:
 | list | keys |
 |---|---|
 | `widgets` | `geraet`, `energie`, and `tool:<id>` for each tool def (`note`, `doc`, `contacts`, `task`) |
-| `teilen` | `merken` (text), `dokument` (images), `standort-import` (GPX/GeoJSON) |
+| `teilen` | `merken` (text), `dokument` (images), `standort-import` (GPX/GeoJSON), `musik` (songs and ZIPs) |
 | `konto` | `kontakte`, `kalender` |
 | `sicherung` | `whatsapp`, `signal`, `sms`, `kontakte` |
 | `mehr` | `daten-sichern`, `standortverlauf` |
@@ -379,7 +379,7 @@ module: `LAIB_URL`, `LAIB_TOKEN`, `LAIB_PUBLIC_URL`, `LAIB_DOMAIN`,
 | `einkauf` | Einkauf | radicale (VTODO lists) | Radicale | `/einkauf`, `/einkauf/rezepte` · Haushalt | – | – | Bote list tools |
 | `notizen` | Notizen | file-share (folder); opt. qmd, the house model | `HOMES_NOTES_DIR`; opt. `HOMES_QMD_URL`, `_COLLECTION`, `HOMES_LLM_URL`, `_KEY`, `_MODEL` | `/notizen`, `/notizen/…` · Haushalt | – | `portal/notes`, def `note`, `POST merken` | widgets `tool:note`; teilen `merken` |
 | `dokumente` | Dokumente | paperless | `HOMES_PAPERLESS_URL`, `_TOKEN`; opt. `_PUBLIC_URL`, `_LAN_ONLY`, `HOMES_UPLOAD_DIR`, `HOMES_DOCUMENTS_MAIL`, `HOMES_DOCUMENTS_DIR`, `HOMES_QMD_DOCUMENTS` | `/dokumente`, `/dokumente/…`, `/scannen`, `/scannen/trennblatt` · Mehr | – | `portal/documents`, def `doc`, `POST upload` | widgets `tool:doc`; teilen `dokument` |
-| `musik` | Musik | music inbox (beets), radicale (wishes), MusicBrainz; opt. media (Jellyfin), Discogs, the house model | `HOMES_MUSIC_INBOX` (or the `/musik-eingang` mount); opt. `HOMES_JELLYFIN_URL`, `_TOKEN`, `HOMES_DISCOGS_KEY`, `_SECRET`, `HOMES_LLM_VISION_MODEL` | `/musik`, `/musik/{teil,stand}`, `/discogs`, `/discogs/zurueck`, `/platte`, `/platte/bild` · Mehr | – | – | Bote wish tools |
+| `musik` | Musik | music inbox (beets), radicale (wishes), MusicBrainz; opt. media (Jellyfin), Discogs, the house model | `HOMES_MUSIC_INBOX` (or the `/musik-eingang` mount); opt. `HOMES_JELLYFIN_URL`, `_TOKEN`, `HOMES_DISCOGS_KEY`, `_SECRET`, `HOMES_LLM_VISION_MODEL` | `/musik`, `/musik/bild`, `/discogs`, `/discogs/zurueck`, `/platte`, `/platte/bild` · Mehr | – | `POST musik` | teilen `musik` (with the inbox); Bote wish tools |
 | `podcasts` | Podcasts | audiobookshelf | `HOMES_ABS_URL`, `HOMES_ABS_TOKEN` | `/podcasts` · Mehr | – | – | Bote podcast tool; new episodes told |
 | `gesehen` | Gesehen & Gehört | media (Jellyfin) and/or audiobookshelf; radicale (wishes) | `HOMES_JELLYFIN_URL`, `HOMES_JELLYFIN_KEY`; `HOMES_ABS_*` | `/gesehen` · Mehr | – | – | – |
 | `sicherung` | Daten sichern | archiv (each person's inbox) | `HOMES_ARCHIV_DIR`; opt. `HOMES_ARCHIV_INTERN`, `HOMES_ARCHIV_SECRET_<PERSON>` | `/daten-sichern`, `/nachrichten-sichern` · Mehr | – | `sicherung/*` (503 while off) | sicherung `whatsapp`, `signal`, `sms`; mehr `daten-sichern` |

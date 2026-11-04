@@ -44,6 +44,7 @@ import (
 	"github.com/mdopp/homes/internal/ha"
 	"github.com/mdopp/homes/internal/ha/hafake"
 	"github.com/mdopp/homes/internal/jellyfin"
+	"github.com/mdopp/homes/internal/jellyfin/jellyfinfake"
 	"github.com/mdopp/homes/internal/laib"
 	"github.com/mdopp/homes/internal/laib/laibfake"
 	"github.com/mdopp/homes/internal/merken"
@@ -52,6 +53,7 @@ import (
 	"github.com/mdopp/homes/internal/pages"
 	"github.com/mdopp/homes/internal/podcasts"
 	"github.com/mdopp/homes/internal/reitti"
+	"github.com/mdopp/homes/internal/samba"
 	"github.com/mdopp/homes/internal/texte"
 )
 
@@ -121,7 +123,6 @@ func main() {
 	}
 
 	inbox := filepath.Join(dir, "musik-eingang")
-	os.MkdirAll(inbox, 0o755)
 	dav := davfake.New("homes", "demo")
 	defer dav.Close()
 	dav.AddCalendar("/homes/haushalt/", "Haushalt")
@@ -169,7 +170,6 @@ func main() {
 	mux.HandleFunc("/energie", pages.Energie(cfg))
 	mux.HandleFunc("/kalender", pages.Kalender(cfg))
 	mux.HandleFunc("/kalender/verwalten", pages.KalenderVerwalten(cfg))
-	mux.HandleFunc(pages.MusikPath, pages.Musik(cfg))
 	mux.HandleFunc(pages.PlattePath, pages.Platte(cfg))
 	mux.HandleFunc(pages.AktivierungswortPath, pages.Aktivierungswort(cfg))
 	mux.HandleFunc("/aufgaben", pages.DeineAufgaben(cfg))
@@ -201,21 +201,6 @@ func main() {
 	standort.Reitti = &reitti.Reitti{URL: "http://127.0.0.1:1", PublicURL: "https://reitti.example", Dir: dir}
 	mux.HandleFunc(pages.StandortPath, pages.Standort(standort))
 	mux.HandleFunc("/demo/standort", func(w http.ResponseWriter, r *http.Request) { reittiKonto(r.URL.Query().Get("punkte") != "0") })
-	mux.HandleFunc(pages.MusikTeilPath, pages.Musik(cfg))
-	mux.HandleFunc(pages.MusikStandPath, pages.Musik(cfg))                       // haus#113: the import's line
-	mux.HandleFunc("/demo/musik", func(w http.ResponseWriter, r *http.Request) { // what arrived in the inbox, name → size
-		got := map[string]int64{}
-		filepath.WalkDir(inbox, func(p string, d os.DirEntry, err error) error {
-			if err == nil && !d.IsDir() {
-				if fi, err := d.Info(); err == nil {
-					rel, _ := filepath.Rel(inbox, p)
-					got[rel] = fi.Size()
-				}
-			}
-			return nil
-		})
-		json.NewEncoder(w).Encode(got)
-	})
 	mux.HandleFunc("/notizen", pages.Notizen(cfg))
 	mux.HandleFunc(cards.NotePages, pages.Notizen(cfg))
 	// Mehr with a Laib whose task list takes a while: the Einrichtung card
@@ -229,6 +214,20 @@ func main() {
 	mux.HandleFunc(pages.SpurenPath, pages.Mehr(mehr))
 	mux.HandleFunc(pages.AnfordernPath, pages.Anfordern(mehr))
 	mux.HandleFunc(pages.ModulPages, pages.ModulSeite(mehr))
+	// Musik (owner 2026-11-04: „Musik verwalten“): albums in Jellyfin, an upload being sorted in, one
+	// done and one beets kept back; /demo/musik?leer=1 empties the music, the inbox and beets' status
+	jf := jellyfinfake.New()
+	defer jf.Close()
+	musikCfg := mehr
+	musikCfg.Musikbib, musikCfg.Samba = &jellyfin.Client{URL: jf.URL, Token: "demo"}, &samba.Dir{Path: dir}
+	musikDemo := func(leer bool) {
+		jf.Setze(map[bool][]jellyfinfake.Album{false: jellyfinfake.Demo}[leer]...)
+		demoLaib.wishes.Status("beets", laibfake.DemoBeets(inbox, time.Now(), leer))
+	}
+	musikDemo(false)
+	mux.HandleFunc(pages.MusikPath, pages.Musik(musikCfg))
+	mux.HandleFunc(pages.MusikBildPath, pages.Musik(musikCfg))
+	mux.HandleFunc("/demo/musik", func(w http.ResponseWriter, r *http.Request) { musikDemo(r.URL.Query().Get("leer") == "1") })
 	mux.HandleFunc("/demo/wunsch", func(w http.ResponseWriter, r *http.Request) { // a wish moved on in Laib: wartet, abgelehnt, …
 		demoLaib.wishes.Setze(r.URL.Query().Get("modul"), r.URL.Query().Get("stand"), "")
 		mehr.Laib.ForgetWuensche()

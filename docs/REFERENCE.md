@@ -527,6 +527,26 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   the app then behaves as before. `GET /napi/kann` (ADR 0001 §2) is
   unchanged; it lists the three new modules like any other.
 
+- Teilen → Homes → Musik (owner 2026-11-04: songs and ZIPs come from the
+  phone by sharing, not by a picker on the page): `POST /napi/musik`,
+  multipart, one or more `file` parts (other parts are skipped), each a
+  music file (`.mp3`, `.flac`, `.m4a`, `.ogg`, `.opus`, `.wav`) or a
+  `.zip`, by its file name's extension, up to 4 GB a file; the request may
+  take an hour. Each file becomes one upload at the top of beets' inbox
+  (`HOMES_MUSIC_INBOX`), under the phone's name for it without any
+  folder, beside one of the same name (`Lied (2).mp3`), never over it:
+  written as `._<name>.<n>.part` (the importer skips dot files), the
+  device's person's sidecar `._<name>.von` beside it (laib
+  templates/beets, "Uploading from Homes": the importer's message goes to
+  them), then renamed into place. An album goes as a ZIP: single files are
+  sorted in as single songs. `{"ok": true, "dateien": [the names they
+  got]}`; a refusal is `{"ok": false, "error": a German sentence,
+  "dateien": what arrived before it}` — 400 for what is not music, an
+  empty file or no file, 413 over 4 GB, 507 the disk full, 500 a disk
+  error. What the importer made of it is the Musik page's (below). It
+  wants a paired device (401) and is 404 `not_found` without an inbox;
+  `GET /napi/kann` names `musik` under the module's `teilen` then.
+
 - The assistant's name: `GET /napi/assistent` with a device token →
   `{"name":"Homes"}` — `HOMES_ASSISTANT` as Laib sets it from box.yml
   `assistant:`, *Homes* when unset or empty. That is all the app takes
@@ -1157,21 +1177,45 @@ Homes looks for new episodes and tells each only to who subscribed,
 through Laib's `tell` (laib#676) — not before Laib has it, so nothing is
 taken as told unsaid.
 
-## Musik hinzufügen (haus#107)
+## Musik (haus#107; owner 2026-11-04: „Musik verwalten“)
 
 `GET /musik`, under Mehr, only with laib's music inbox: `HOMES_MUSIC_INBOX`,
 else `/musik-eingang` when it is mounted (laib#639's homes template mounts
-it there; beets sorts it into the music and Jellyfin). Anyone in the family: files
-(MP3, FLAC, M4A, OGG, Opus, WAV), a whole folder (`webkitdirectory`, on
-a computer) or ZIPs. The page's script sends each file in 8 MB pieces to
-`POST /musik/teil?pfad=<place>&ab=<offset>&gesamt=<size>`: appended to
-`._<name>.part` beside where it goes (a piece at another offset answers
-409 with the size there, so the page goes on from it), renamed to its
-name after the last byte — never over another file (`name (2).mp3`) —
-the folders kept, nothing hidden, absolute or outside the inbox, up to
-4 GB a file. Each file's progress, then how many arrived and that the
-box sorts them in. What beets made of them (laib's status) follows when
-laib reports it.
+it there; beets sorts it into the music and Jellyfin). Managing the
+household's music, not what is playing; one h1, then:
+
+- **Hinzufügen**: how music gets in — on the phone, share songs or an
+  album as a ZIP to Homes (`POST /napi/musik`); with the network drive
+  (`HOMES_SAMBA_DIR`), at home on a computer into `musik-eingang` on the
+  share `data`, linked to `/netzlaufwerk`. Under it the state, one line
+  each: „Wird einsortiert: …“ for what is at the inbox's top or in its
+  `.in-arbeit/` (the page refreshes itself every 10 s meanwhile, and says
+  after ten minutes that it takes longer and a message follows), and the
+  last week's uploads from beets' own status in laib (`letzte`, at most
+  three): „Fertig: „…“, 2 Alben, 24 Titel in der Musik“ or „Nicht
+  einsortiert: „…“ – <beets' reason>“, pointing at Braucht Aufmerksamkeit
+  while something is kept back.
+- **Zuletzt hinzugefügt**: the six albums Jellyfin added last
+  (`HOMES_JELLYFIN_TOKEN`, Homes' own music-only user), with how many
+  albums the music holds; each its cover through `GET /musik/bild?id=`
+  (Jellyfin's 32-hex id, a day in the browser's cache) or the music's
+  picture, a link into Jellyfin (`/web/#/details?id=`) when the `filme`
+  module knows Jellyfin's address. Gone while the music is empty or
+  without Jellyfin; a line when Jellyfin does not answer.
+- **Braucht Aufmerksamkeit**, only while beets kept something back
+  (`_nicht-importiert/<run>/`, `GRUND.txt`): each with its reason,
+  „Noch einmal einsortieren“ (back into the inbox, the person's sidecar
+  beside it) and „Löschen“ (asked; 30 days in the inbox's hidden
+  `.papierkorb`, **Gelöscht** with Rückgängig meanwhile).
+- **Platten**: „Platte erfassen“ while one's Discogs is connected, how many
+  records one's collection holds (Discogs's count, or the shelf read in the
+  last ten minutes), and „Wunschliste · N“, the music wish list's open
+  wishes; without the household's Discogs app, what is missing and an
+  admin's way to its keys. Last and quiet, one's Discogs: „verbunden mit
+  …“ or the way to connect it.
+
+Laib, Jellyfin, Discogs and Radicale are asked at once, each within the
+page's backend wait.
 
 ## The Homes script
 

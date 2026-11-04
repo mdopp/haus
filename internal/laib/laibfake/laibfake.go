@@ -10,6 +10,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -22,11 +24,12 @@ type Laib struct {
 	je       map[string]map[string]any // modul → its wish, as laib_wish stand answers it
 	next     int
 	Ohne     bool
-	Kaputt   bool          // laib_wish answers an error
-	Warte    time.Duration // laib_wish waits this long first
-	Gefragt  []string      // the stand questions, in order
-	Erledigt []int         // the Box-Aufgaben ticked off
-	Modul    []string      // laib_module's proposals: "<liste>|<grund>" (laib#1036)
+	Kaputt   bool              // laib_wish answers an error
+	Warte    time.Duration     // laib_wish waits this long first
+	Gefragt  []string          // the stand questions, in order
+	Erledigt []int             // the Box-Aufgaben ticked off
+	Modul    []string          // laib_module's proposals: "<liste>|<grund>" (laib#1036)
+	status   map[string]string // laib_status: a service's own status (its JSON)
 }
 
 // New is a fake with no wish yet.
@@ -50,6 +53,37 @@ func (f *Laib) Setze(modul, stand, grund string) {
 	if grund != "" {
 		w["grund"] = grund
 	}
+}
+
+// Status sets what laib_status says of service: its own status, JSON; "" says nothing of it.
+func (f *Laib) Status(service, own string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.status == nil {
+		f.status = map[string]string{}
+	}
+	f.status[service] = own
+	if own == "" {
+		delete(f.status, service)
+	}
+}
+
+// DemoBeets fills a beets inbox for cmd/homesdemo as laib's importer leaves it (laib
+// templates/beets) and is beets' own status for laib_status: an upload settling, two albums
+// sorted in three hours before now, a RAR kept back 40 minutes before. leer: both empty.
+func DemoBeets(inbox string, now time.Time, leer bool) string {
+	os.RemoveAll(inbox)
+	run := filepath.Join(inbox, "_nicht-importiert", "2026-11-04_09-12-00")
+	os.MkdirAll(run, 0o755)
+	if leer {
+		return ""
+	}
+	os.WriteFile(filepath.Join(inbox, "Sommerplatte.zip"), []byte("PK"), 0o644)
+	os.WriteFile(filepath.Join(run, "kassette-1994.rar"), []byte("Rar!"), 0o644)
+	os.WriteFile(filepath.Join(run, "GRUND.txt"), []byte("kassette-1994.rar: RAR kann die Box nicht auspacken; bitte als ZIP\n"), 0o644)
+	return fmt.Sprintf(`{"wartet":1,"letzte":[{"at":%q,"eingang":"kassette-1994.rar","nicht_importiert":[{"datei":"kassette-1994.rar",`+
+		`"grund":"RAR kann die Box nicht auspacken; bitte als ZIP"}]},{"at":%q,"eingang":"Erfundenes Album.zip","titel":24,"alben":2}]}`,
+		now.Add(-40*time.Minute).UTC().Format(time.RFC3339), now.Add(-3*time.Hour).UTC().Format(time.RFC3339))
 }
 
 // Stand is a module's wish's stand, "" without one.
@@ -99,6 +133,15 @@ func (f *Laib) Tools() []map[string]any {
 func (f *Laib) Antwort(name string, args map[string]any) (text string, isErr, ok bool) {
 	str := func(k string) string { s, _ := args[k].(string); return s }
 	switch {
+	case name == "laib_status":
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		svc := []map[string]any{}
+		if own, ok := f.status[str("service")]; ok {
+			svc = append(svc, map[string]any{"name": str("service"), "detail": "", "eigenes": json.RawMessage(own)})
+		}
+		b, _ := json.Marshal(map[string]any{"services": svc})
+		return string(b), false, true
 	case name == "laib_aufgabe" && str("action") == "erledigt":
 		id, _ := strconv.Atoi(str("id"))
 		f.mu.Lock()
