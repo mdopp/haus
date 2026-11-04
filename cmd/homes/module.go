@@ -3,6 +3,9 @@ package main
 import (
 	"context"
 	"log"
+	"os"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/mdopp/homes/internal/laib"
@@ -14,7 +17,7 @@ import (
 // kern are the variables of what is always on and no module (ADR 0001 §1,
 // §7): Laib, the proxy secret, the data folder, the address, the name.
 var kern = []string{"LAIB_URL", "LAIB_TOKEN", "LAIB_PUBLIC_URL", "LAIB_DOMAIN", "HOMES_PROXY_SECRET", "HOMES_DATA",
-	"HOMES_LISTEN", "HOMES_PUBLIC_URL", "HOMES_ASSISTANT", "HOMES_HAUSHALT_TOKEN", "HOMES_PHONE_COUNTRY"}
+	"HOMES_LISTEN", "HOMES_PUBLIC_URL", "HOMES_ASSISTANT", "HOMES_HAUSHALT_TOKEN", "HOMES_PHONE_COUNTRY", "HOMES_MODULE_AUS"}
 
 // radicale is what the Radicale modules read (one account, ADR 0001 §7).
 var radicale = []string{"HOMES_RADICALE_URL", "HOMES_RADICALE_USER", "HOMES_RADICALE_PASSWORD"}
@@ -120,10 +123,11 @@ func katalog(s site, musicInbox string) []modul.Modul {
 	}
 }
 
-// logModule builds the box's module list and logs it (ADR 0001): what
-// this box can do, and why not. A broken catalog stops Homes.
-func logModule(s site) *modul.Liste {
-	l, err := modul.Bauen(katalog(s, musicInbox()))
+// logModule builds the box's module list, switches off what
+// HOMES_MODULE_AUS names, and logs it (ADR 0001): what this box can do,
+// and why not. A broken catalog stops Homes.
+func logModule(s *site) *modul.Liste {
+	l, err := modul.Bauen(ausschalten(s, katalog(*s, musicInbox()), os.Getenv("HOMES_MODULE_AUS")))
 	if err != nil {
 		log.Fatalf("homes: %v", err)
 	}
@@ -165,5 +169,53 @@ func schliesseWuensche(ctx context.Context, l *laib.Client, liste *modul.Liste, 
 			}
 		}
 		return
+	}
+}
+
+// schaltbar are the modules HOMES_MODULE_AUS can switch off today (ADR 0001
+// step H3: the leaf areas, each with its own paths and backend), each with
+// how its backend leaves the site: off, its field stays nil, so no page,
+// route, tool or background work learns of it (ADR 0001 §1). The others
+// follow in H4–H6.
+var schaltbar = map[string]func(*site){
+	"gesundheit":   func(s *site) { s.gesundheit = "" },
+	"werkstatt":    func(s *site) { s.tickets = nil },
+	"netzlaufwerk": func(s *site) { s.samba = nil },
+	"podcasts":     func(s *site) { s.podcasts, s.hh.Podcasts, s.napi.Haushalt.Podcasts = nil, nil, nil },
+	"gesehen":      func(s *site) { s.gesehen = nil },
+	"standort":     func(s *site) { s.napi.Reitti = nil },
+	"sicherung":    func(s *site) { s.napi.Sicherung = nil },
+}
+
+// ausschalten applies HOMES_MODULE_AUS, "podcasts,standort" (ADR 0001 §5):
+// each module named that is on is marked aus and its backend taken out of
+// s. A name Homes does not know, or cannot switch off yet, is logged and
+// ignored, never fatal: Laib and Homes release apart.
+func ausschalten(s *site, ms []modul.Modul, liste string) []modul.Modul {
+	for _, name := range strings.Split(liste, ",") {
+		name = strings.TrimSpace(name)
+		i := slices.IndexFunc(ms, func(m modul.Modul) bool { return m.Name == name })
+		switch {
+		case name == "":
+		case i < 0:
+			log.Printf("homes: HOMES_MODULE_AUS: no module %q, ignored", name)
+		case schaltbar[name] == nil:
+			log.Printf("homes: HOMES_MODULE_AUS: %s cannot be switched off yet (ADR 0001 H4–H6), it stays on", name)
+		case ms[i].An():
+			ms[i].Warum, ms[i].Grund = modul.Aus, texte.T(texte.GrundAus)
+			schaltbar[name](s)
+		}
+	}
+	return ms
+}
+
+// startLeaf starts the leaf modules' background work, only for those on:
+// the podcasts' new episodes (haus#123), the backups' old parts (haus#207).
+func startLeaf(ctx context.Context, s site) {
+	if s.podcasts != nil && s.ops != nil {
+		go tellNewEpisodes(ctx, s.podcasts, s.ops)
+	}
+	if s.napi.Sicherung != nil {
+		go s.napi.Sicherung.Pflegen(nil) // parts untouched for a week go, now and daily
 	}
 }

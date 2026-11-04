@@ -392,7 +392,6 @@ func main() {
 		if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
 			log.Printf("homes: HOMES_ARCHIV_DIR %s is not a folder (yet): backups answer 503 until it is", dir)
 		}
-		go cfg.Sicherung.Pflegen(nil) // parts untouched for a week go, now and daily
 	}
 	// the app's Standortverlauf (owner 2026-11-02): Reitti inside the box,
 	// HOMES_REITTI_URL (http://host.containers.internal:<port>); unset, /napi/standort is 503
@@ -425,9 +424,6 @@ func main() {
 		go ensureHaushalt(ctx, hh.Calendar)
 		go tickWishes(ctx, hh.Wuensche, ops)
 	}
-	if pods != nil && ops != nil {
-		go tellNewEpisodes(ctx, pods, ops) // haus#123: a new episode to who subscribed
-	}
 	counter := usage.FromEnv(os.Getenv)
 	var voice *usage.Voice
 	if counter != nil && cfg.HA != nil {
@@ -448,7 +444,8 @@ func main() {
 		gesundheit: gesundheit, haPublic: haPublic, inverted: pages.InvertedFromList(os.Getenv("HOMES_COVER_INVERTED")),
 		radicale: radicalePublic, views: ansicht.Open(dataDir, os.Getenv("HOMES_RADICALE_USER")), dataDir: dataDir,
 		docsMail: docsMail, paperlessPublic: paperlessPublic, paperlessLAN: paperlessLAN}
-	st.napi.Module = logModule(st)
+	st.napi.Module = logModule(&st) // HOMES_MODULE_AUS takes what it switches off out of st
+	startLeaf(ctx, st)
 	go schliesseWuensche(ctx, ops, st.napi.Module, time.Minute) // a wish for what is on now is done (ADR 0001 §10)
 	mux := routes(st)
 	addr := env("HOMES_LISTEN", "127.0.0.1:8650")

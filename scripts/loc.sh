@@ -43,7 +43,8 @@ budget napi 5033 internal/napi        # the app's widgets' and share sheet's API
 # cmd/homes/module.go, 1,150 with it; plus 5 %. H3–H6 move the routes out of main.go into it
 # 2026-11-04, step H8 (§10, owner: „Keine Funktion soll versteckt werden“): the routes of the traces
 # and closing a wish once its module is on, 1,209; plus 5 %
-budget cmd 1270 cmd                   # homes' wiring and the demo on fakes: 1,018
+# 2026-11-04, step H3: HOMES_MODULE_AUS switches the leaf modules off, 1,298; plus 5 %
+budget cmd 1363 cmd                   # homes' wiring and the demo on fakes: 1,018
 # 2026-11-04, the caps moved with the packages, none raised (sum 24,134 as before): abs and
 # musicbrainz (1,227 lines, 1,289 of cap) from household to connectors once merken's fetcher
 # was internal/abruf (235 lines of merken, 247 of cap, to shared) and jellyfin.Plain
