@@ -9,9 +9,11 @@ import (
 	"errors"
 	"github.com/mdopp/homes/internal/papierkorb"
 	"log"
+	"maps"
 	"net/http"
 	"os"
 	"os/signal"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -23,7 +25,6 @@ import (
 	"github.com/mdopp/homes/internal/assistent"
 	"github.com/mdopp/homes/internal/bote"
 	"github.com/mdopp/homes/internal/caldav"
-	"github.com/mdopp/homes/internal/cards"
 	"github.com/mdopp/homes/internal/devices"
 	"github.com/mdopp/homes/internal/discogs"
 	"github.com/mdopp/homes/internal/einkauf"
@@ -97,7 +98,15 @@ func routes(s site) http.Handler {
 	// (laib ADR 0012 §4; the template publishes 8650 lan:false, the firewall keeps
 	// the LAN out). Not through Caddy: the route has no /mcp/ bypass.
 	mux.Handle("/mcp/haushalt", haushalt.Handler(s.hh))
-	pagesMux := http.NewServeMux()
+	// counted behind the proxy secret: only what Caddy let through is a page view (haus#50)
+	mux.Handle("/", pages.RequireProxy(s.proxySecret, pages.Counted(s.usage, familyMux(s))))
+	return legacyHost(s.publicURL, mux) // haus.<domain>'s pages to homes.<domain> (laib#1021)
+}
+
+// familyMux is the family's pages, behind the proxy secret.
+// familyOf is what the family's pages are built from: the backends the
+// site has, and what Homes keeps itself.
+func familyOf(s site) pages.StartConfig {
 	// the family's pages (haus#12): each card only from a backend that is set; a
 	// page whose backend is not set says what is missing (laib#418)
 	family := pages.StartConfig{Podcasts: s.podcasts, Gesehen: s.gesehen, Laib: s.ops, Witness: s.napi.Witness, LaibURL: s.laibURL, HA: s.napi.HA, Energy: s.napi.Energy, Calendar: s.hh.Calendar, Contacts: s.hh.Contacts,
@@ -118,41 +127,33 @@ func routes(s site) http.Handler {
 		if fi, err := os.Stat(family.MusicInbox); err != nil || !fi.IsDir() {
 			log.Printf("homes: HOMES_MUSIC_INBOX %s is not a folder (yet): uploads answer 503 until it is", family.MusicInbox)
 		}
-		pagesMux.HandleFunc(pages.MusikPath, pages.Musik(family))
-		pagesMux.HandleFunc(pages.MusikTeilPath, pages.Musik(family))
-		pagesMux.HandleFunc(pages.MusikStandPath, pages.Musik(family)) // haus#113: the import's line
 	}
 	if s.napi.UploadDir != "" { // haus#68: the page's way into Paperless's inbox, the app's folder
 		family.Ablage = napi.NewUploads(s.napi.UploadDir)
 	}
+	return family
+}
+
+func familyMux(s site) *http.ServeMux {
+	pagesMux := http.NewServeMux()
+	family := familyOf(s)
 	start := pages.Start(family) // one: the page and its box line share laib's status (haus#67)
 	pagesMux.HandleFunc("/start", start)
-	if family.HA != nil { // the word each speaker listens for, as it reports it (owner 2026-10-30)
-		pagesMux.HandleFunc(pages.AktivierungswortPath, pages.Aktivierungswort(family))
-	}
-	if s.podcasts != nil {
-		pagesMux.HandleFunc(pages.PodcastsPath, pages.Podcasts(family)) // haus#123
-	}
 	live := &pages.Live{HA: family.HA} // the pages' push: Home Assistant's changes and Homes' own
 	pagesMux.Handle(pages.LivePath, live)
 	if s.gesehen != nil { // haus#152: the film and book wish list, told like the other lists
 		s.gesehen.Changed = func(r caldav.ListRef) { live.Tell(pages.ListeLive(r)) }
-		pagesMux.HandleFunc(pages.GesehenPath, pages.Gesehen(family))
 	}
 	if l := s.hh.Einkauf; l != nil || s.hh.Wuensche != nil { // haus#118: the list, ticked on one phone, fetched again on the others
 		if l == nil { // einkauf off: the music wish list's lists are musik's own (ADR 0001 H4)
 			l = s.hh.Wuensche.Listen
 		}
 		l.Changed = func(r caldav.ListRef) { live.Tell(pages.ListeLive(r)) }
-		pagesMux.HandleFunc(pages.EinkaufPath, pages.Einkauf(family)) // with einkauf off, the music wish list only
-		pagesMux.HandleFunc(pages.EinkaufRezeptePath, pages.Einkauf(family))
 	}
-	if s.hh.Wuensche != nil { // musik's records: Discogs and Platte erfassen (owner 2026-10-26)
-		pagesMux.HandleFunc(pages.DiscogsPath, pages.Discogs(family)) // connect one's own Discogs; without the app's keys, how to set them
-		if family.Discogs != nil {
-			pagesMux.HandleFunc(pages.DiscogsZurueckPath, pages.Discogs(family)) // the way back from Discogs
-			pagesMux.HandleFunc(pages.PlattePath, pages.Platte(family))
-			pagesMux.HandleFunc(pages.PlatteBildPath, pages.Platte(family))
+	gs := pages.Gruppen(family) // each module's pages (ADR 0001 §1, homes#243)
+	for _, name := range slices.Sorted(maps.Keys(gs)) {
+		for _, r := range gs[name] {
+			pagesMux.Handle(r.Muster, r.Handler)
 		}
 	}
 	pagesMux.HandleFunc(pages.StartBoxPath, start)
@@ -160,36 +161,8 @@ func routes(s site) http.Handler {
 	pagesMux.HandleFunc(pages.MehrAufgabenPath, pages.Mehr(family)) // its Einrichtung card, after the page
 	pagesMux.HandleFunc(pages.SpurenPath, pages.Mehr(family))       // its traces of what the box lacks (ADR 0001 §10)
 	pagesMux.HandleFunc(pages.AnfordernPath, pages.Anfordern(family))
-	pagesMux.HandleFunc(pages.ModulPages, pages.ModulSeite(family)) // a module, admins: where a wish leads
-	pagesMux.HandleFunc("/aufgaben", pages.DeineAufgaben(family))   // haus#188: Deine Aufgaben // the bar's fourth entry, with Abmelden (haus#67)
-	pagesMux.HandleFunc("/raeume", pages.Raeume(family))
-	if !s.napi.OhneEnergie { // energie switched off: its paths are the surface's 404
-		pagesMux.HandleFunc("/energie", pages.Energie(family))
-		pagesMux.HandleFunc("/energie/", pages.Energie(family)) // a path it does not serve: 404 and the way back
-	}
-	pagesMux.HandleFunc("/medien", pages.Medien(family))
-	pagesMux.HandleFunc("/medien/", pages.Medien(family)) // a path it does not serve: 404 and the way back
-	pagesMux.HandleFunc("/kalender", pages.Kalender(family))
-	pagesMux.HandleFunc("/kalender/verwalten", pages.KalenderVerwalten(family))     // Deine Kalender: hinzufügen, Farbe, Trennen (haus#66)
-	pagesMux.HandleFunc("/kalender/hinzufuegen", pages.KalenderHinzufuegen(family)) // Google, ein Abo, ein neuer Kalender
-	pagesMux.HandleFunc("/kalender/aendern", pages.KalenderAendern(family))         // one calendar's buttons
-	pagesMux.HandleFunc("/notizen", pages.Notizen(family))
-	// each thing's and each tool item's own page, which the widgets name (haus#28)
-	pagesMux.HandleFunc(cards.ThingPages, pages.Ding(family))
-	pagesMux.HandleFunc(cards.ReminderPages, pages.Erinnerung(family))
-	pagesMux.HandleFunc(cards.ContactPages, pages.Kontakt(family))
-	pagesMux.HandleFunc(pages.DokumentePath, pages.Dokumente(family))   // the ways into the archive (haus#68)
-	pagesMux.HandleFunc(pages.ScannenPath, pages.Scannen(family))       // the Dokumente page's scan orders to Laib (haus#76, laib#568)
-	pagesMux.HandleFunc(pages.TrennblattPath, pages.Trennblatt(family)) // separator sheets to print, PATCH T (haus#161)
-	pagesMux.HandleFunc(cards.DocumentPages, pages.Dokument(family))
-	pagesMux.HandleFunc(cards.NotePages, pages.Notizen(family))                   // a note's own page
-	pagesMux.HandleFunc(cards.SwitchPath, pages.Schalten(family))                 // a page's switch, the widgets' rule (haus#35)
-	pagesMux.HandleFunc("/sprechen", pages.Sprechen(family))                      // the Sprechen field to the Bote, and its reply (haus#12)
-	pagesMux.HandleFunc(pages.HoerenPath, pages.Hoeren(family))                   // the field's microphone, HA's speech-to-text (haus#63)
-	pagesMux.HandleFunc(pages.DatenPath, pages.Nachrichten(family))               // what goes into the person's archive and how to switch it on (haus#207)
-	pagesMux.HandleFunc(pages.NachrichtenPath, pages.Nachrichten(family))         // the page's old address, a redirect
-	pagesMux.HandleFunc(pages.StandortPath, pages.Standort(family))               // the person's Reitti token for the app's Standortverlauf (owner 2026-11-02)
-	pagesMux.HandleFunc("/netzlaufwerk", pages.Netzlaufwerk(family))              // each person's network-drive password (haus#52)
+	pagesMux.HandleFunc(pages.ModulPages, pages.ModulSeite(family))               // a module, admins: where a wish leads
+	pagesMux.HandleFunc("/aufgaben", pages.DeineAufgaben(family))                 // haus#188: Deine Aufgaben // the bar's fourth entry, with Abmelden (haus#67)
 	pagesMux.HandleFunc("/willkommen", pages.Willkommen(family))                  // a new person's apps and how to set them up (haus#56)
 	pagesMux.HandleFunc("/adresse", pages.Adresse(family))                        // the household's address, admins only (laib#561)
 	pagesMux.HandleFunc("/adresse/vorschlagen", pages.AdresseVorschlagen(family)) // its form, a proposal to Laib
@@ -206,9 +179,7 @@ func routes(s site) http.Handler {
 	pagesMux.HandleFunc("/box/", box)
 	pagesMux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
 	pagesMux.HandleFunc("/", pages.Elsewhere(family)) // "/" is Start; every path not served is a 404 with the way there
-	// counted behind the proxy secret: only what Caddy let through is a page view (haus#50)
-	mux.Handle("/", pages.RequireProxy(s.proxySecret, pages.Counted(s.usage, pagesMux)))
-	return legacyHost(s.publicURL, mux) // haus.<domain>'s pages to homes.<domain> (laib#1021)
+	return pagesMux
 }
 
 // musicInboxMount is where laib's homes template mounts the music inbox
