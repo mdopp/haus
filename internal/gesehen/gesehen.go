@@ -15,6 +15,7 @@ import (
 	"github.com/mdopp/homes/internal/abs"
 	"github.com/mdopp/homes/internal/caldav"
 	"github.com/mdopp/homes/internal/jellyfin"
+	"github.com/mdopp/homes/internal/namen"
 )
 
 // Liste is the household's film and book wish list, beside the music's.
@@ -90,13 +91,13 @@ func (s *Service) Wuenschen(ctx context.Context, person, titel string, art Art) 
 	if r := []rune(titel); len(r) > 200 {
 		titel = string(r[:200])
 	}
-	plain := jellyfin.Plain(titel)
+	plain := namen.Plain(titel)
 	q := "„" + titel + "“"
 	switch {
 	case art != Buch && s.Filme != nil:
 		if seen, err := s.Filme.Geschaut(ctx, person, 200); err == nil {
 			for _, g := range seen {
-				if jellyfin.Plain(g.Name) == plain {
+				if namen.Plain(g.Name) == plain {
 					return Gewuenscht{Schon: true, Satz: "Hast du schon gesehen: " + q + "."}, nil
 				}
 			}
@@ -107,7 +108,7 @@ func (s *Service) Wuenschen(ctx context.Context, person, titel string, art Art) 
 			return Gewuenscht{Schon: true, Satz: "„" + name + "“ ist schon in Jellyfin – du kannst gleich anfangen."}, nil
 		}
 	case art == Buch && s.Buecher != nil:
-		if name, ok, err := s.Buecher.HatBuch(ctx, titel, jellyfin.Plain); err != nil {
+		if name, ok, err := s.Buecher.HatBuch(ctx, titel, namen.Plain); err != nil {
 			log.Printf("homes: gesehen: audiobookshelf: %v", err)
 		} else if ok {
 			return Gewuenscht{Schon: true, Satz: "„" + name + "“ gibt es schon als Hörbuch in Audiobookshelf."}, nil
@@ -125,7 +126,7 @@ func (s *Service) Wuenschen(ctx context.Context, person, titel string, art Art) 
 	}
 	line := Zeile(titel, art)
 	for _, it := range items {
-		if jellyfin.Plain(it.Summary) != jellyfin.Plain(line) {
+		if namen.Plain(it.Summary) != namen.Plain(line) {
 			continue
 		}
 		if !it.Done {

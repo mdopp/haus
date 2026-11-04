@@ -17,8 +17,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/mdopp/homes/internal/abruf"
 	"github.com/mdopp/homes/internal/abs"
-	"github.com/mdopp/homes/internal/merken"
 )
 
 // File is the store's name in HOMES_DATA.
@@ -49,7 +49,7 @@ type state struct {
 // Service is the podcasts: ABS, how links are fetched, and the store.
 type Service struct {
 	ABS   *abs.Client
-	Fetch merken.Fetcher
+	Fetch abruf.Fetcher
 	path  string
 	mu    sync.Mutex
 }
@@ -323,7 +323,7 @@ func (s *Service) AusLink(ctx context.Context, person, link string) (Ergebnis, b
 // is); any other error is the box's trouble, said in a sentence by the
 // caller.
 func Bekannt(err error) bool {
-	for _, e := range []error{abs.ErrNoFeed, abs.ErrNoFeedFound, abs.ErrSpotifyOnly, abs.ErrNoLibrary, merken.ErrNoAddress, merken.ErrPrivate, merken.ErrNoAnswer} {
+	for _, e := range []error{abs.ErrNoFeed, abs.ErrNoFeedFound, abs.ErrSpotifyOnly, abs.ErrNoLibrary, abruf.ErrNoAddress, abruf.ErrPrivate, abruf.ErrNoAnswer} {
 		if errors.Is(err, e) {
 			return true
 		}

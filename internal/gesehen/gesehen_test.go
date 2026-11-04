@@ -9,6 +9,7 @@ import (
 	"github.com/mdopp/homes/internal/caldav"
 	"github.com/mdopp/homes/internal/caldav/davfake"
 	"github.com/mdopp/homes/internal/jellyfin"
+	"github.com/mdopp/homes/internal/namen"
 )
 
 // fakeFilme is Jellyfin for the tests: what each person played, the
@@ -25,7 +26,7 @@ func (f *fakeFilme) Geschaut(_ context.Context, person string, n int) ([]jellyfi
 
 func (f *fakeFilme) HatFilm(_ context.Context, name string) (string, bool, error) {
 	for _, l := range f.lib {
-		if jellyfin.Plain(l) == jellyfin.Plain(name) {
+		if namen.Plain(l) == namen.Plain(name) {
 			return l, true, f.err
 		}
 	}

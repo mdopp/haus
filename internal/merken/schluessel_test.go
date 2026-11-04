@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/mdopp/homes/internal/abruf"
 	"github.com/mdopp/homes/internal/notes"
 )
 
@@ -49,7 +50,7 @@ func TestMerkenTwice(t *testing.T) {
 	defer site.Close()
 	dir := t.TempDir()
 	d, _ := notes.Open(dir)
-	f := Fetcher{AllowPrivate: true}
+	f := abruf.Fetcher{AllowPrivate: true}
 	ctx := context.Background()
 	first, err := Merken(ctx, f, nil, d, site.URL+"/suppe?utm_source=app", "")
 	if err != nil || first.Schon {

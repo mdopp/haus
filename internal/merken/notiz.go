@@ -1,3 +1,13 @@
+// Package merken makes a note from a link (haus#117; owner 2026-10-25:
+// "faul und einfach"): Homes fetches the page itself, from the box, reads
+// what the page says of itself in machine words (schema.org's JSON-LD: a
+// recipe, an album's review, a hotel or an offer) and its meta tags and
+// text, asks the house model for the core where the page carries no such
+// data, and writes one note with its kind, tags and the link. The page's
+// words stay with the note, so it outlives the page.
+//
+// It fetches through internal/abruf: only public addresses, never the
+// house's own network or the box.
 package merken
 
 import (
@@ -9,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mdopp/homes/internal/abruf"
 	"github.com/mdopp/homes/internal/judge"
 	"github.com/mdopp/homes/internal/notes"
 )
@@ -28,15 +39,15 @@ type Gemerkt struct {
 // ?si=… or utm_… — is not kept twice (owner 2026-10-26): Homes says so, and
 // brings the note up to the page's new state when the page changed and
 // nobody edited the note since; a note someone edited is left as it is.
-func Merken(ctx context.Context, f Fetcher, model *judge.Client, d *notes.Dir, link, hint string) (Gemerkt, error) {
-	u, err := Address(link)
+func Merken(ctx context.Context, f abruf.Fetcher, model *judge.Client, d *notes.Dir, link, hint string) (Gemerkt, error) {
+	u, err := abruf.Address(link)
 	if err != nil {
 		return Gemerkt{}, err
 	}
 	old, had, lerr := d.ByQuelleWie(ctx, u.String(), Schluessel)
 	had = had && lerr == nil
 	final, page, err := f.Fetch(ctx, u)
-	if err != nil && !errors.Is(err, ErrNoPage) { // no address, at home, or no answer at all: nothing to keep
+	if err != nil && !errors.Is(err, abruf.ErrNoPage) { // no address, at home, or no answer at all: nothing to keep
 		if had {
 			return schon(old, " Die Seite antwortet gerade nicht, darum weiß ich nicht, ob sie sich geändert hat."), nil
 		}

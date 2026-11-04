@@ -13,11 +13,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/mdopp/homes/internal/abruf"
 	"github.com/mdopp/homes/internal/caldav"
 	"github.com/mdopp/homes/internal/discogs"
 	"github.com/mdopp/homes/internal/jellyfin"
 	"github.com/mdopp/homes/internal/merken"
 	"github.com/mdopp/homes/internal/musicbrainz"
+	"github.com/mdopp/homes/internal/namen"
 )
 
 // The household's music wish list (owner 2026-10-25: "nur noch eigene
@@ -101,7 +103,7 @@ func (w *Wuensche) Wuenschen(ctx context.Context, lied merken.Lied, person strin
 	var out Gewuenscht
 	err := l.retry(ctx, func(items []caldav.Item) error {
 		for _, it := range items {
-			if jellyfin.Plain(it.Summary) != jellyfin.Plain(lied.Name()) {
+			if namen.Plain(it.Summary) != namen.Plain(lied.Name()) {
 				continue
 			}
 			if !it.Done {
@@ -248,15 +250,15 @@ func Kaufen(wish string) [][2]string {
 // AusLink is a shared link as a wish, when it is a song or an album: it
 // answers false for any other link (a page to keep as a note), and for
 // none on a box without the list (w nil).
-func (w *Wuensche) AusLink(ctx context.Context, f merken.Fetcher, link, person string) (Gewuenscht, bool, error) {
+func (w *Wuensche) AusLink(ctx context.Context, f abruf.Fetcher, link, person string) (Gewuenscht, bool, error) {
 	if w == nil {
 		return Gewuenscht{}, false, nil
 	}
-	u, err := merken.Address(link)
+	u, err := abruf.Address(link)
 	if err != nil || !merken.MusikLink(u) {
 		return Gewuenscht{}, false, nil
 	}
-	lied, err := f.Lied(ctx, u.String())
+	lied, err := merken.LiedVon(ctx, f, u.String())
 	if errors.Is(err, merken.ErrKeinLied) {
 		return Gewuenscht{}, false, nil
 	}

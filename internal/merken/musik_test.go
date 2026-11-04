@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/mdopp/homes/internal/abruf"
 )
 
 // owner 2026-10-25: a shared song is read as a song — YouTube by its
@@ -33,22 +35,22 @@ func TestLied(t *testing.T) {
 	was := YouTubeBase
 	YouTubeBase = yt.URL
 	defer func() { YouTubeBase = was }()
-	f := Fetcher{AllowPrivate: true}
+	f := abruf.Fetcher{AllowPrivate: true}
 	for link, want := range map[string]string{
 		"https://youtube.com/watch?v=wanda":      "Wanda – Salbei",
 		"https://www.youtube.com/watch?v=topic":  "Wanda – Salbei",
 		"https://youtu.be/lyrics":                "Bilderbuch – Bungalow",
 		"https://music.youtube.com/watch?v=vevo": "Wanda – Bologna",
 	} {
-		l, err := f.Lied(context.Background(), link)
+		l, err := LiedVon(context.Background(), f, link)
 		if err != nil || l.Name() != want || l.Quelle != "YouTube" || l.Link != link {
 			t.Errorf("%s → %+v %v, want %s", link, l, err, want)
 		}
 	}
-	if _, err := f.Lied(context.Background(), "https://youtube.com/watch?v=kochen"); !errors.Is(err, ErrKeinLied) {
+	if _, err := LiedVon(context.Background(), f, "https://youtube.com/watch?v=kochen"); !errors.Is(err, ErrKeinLied) {
 		t.Errorf("a cooking video is no song: %v", err)
 	}
-	if _, err := f.Lied(context.Background(), "https://www.chefkoch.de/rezepte/1"); !errors.Is(err, ErrKeinLied) {
+	if _, err := LiedVon(context.Background(), f, "https://www.chefkoch.de/rezepte/1"); !errors.Is(err, ErrKeinLied) {
 		t.Errorf("a page is no song: %v", err)
 	}
 

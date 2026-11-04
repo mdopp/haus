@@ -53,8 +53,8 @@ möglichst sauber sein“).** Both run in CI; run them before a PR.
   napi, cmd, connectors, household, shared; set at the size of
   2026-11-03 plus 5 %, the reason next to each number), every
   `internal/` package in exactly one area, and who may import whom: a
-  connector (a client of one other service) and a shared package import
-  no Homes package; only `cmd/` imports pages; only `cmd/` and pages
+  connector (a client of one other service) imports only shared packages,
+  a shared package imports no Homes package; only `cmd/` imports pages; only `cmd/` and pages
   import napi; a fake only the tests and `cmd/homesdemo`. Crossing a cap
   means raising it in the same PR with its reason and the owner's yes.
   CI also fails on a file gofmt would change (lines count as gofmt

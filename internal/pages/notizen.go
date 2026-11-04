@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/mdopp/homes/internal/markdown"
-	"github.com/mdopp/homes/internal/papierkorb"
 	"html"
 	"log"
 	"net/http"
@@ -13,6 +11,10 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/mdopp/homes/internal/abruf"
+	"github.com/mdopp/homes/internal/markdown"
+	"github.com/mdopp/homes/internal/papierkorb"
 
 	"github.com/mdopp/homes/internal/assistent"
 	"github.com/mdopp/homes/internal/cards"
@@ -612,7 +614,7 @@ func merkenPost(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
 		if err != nil {
 			log.Printf("homes: musikwunsch by %s: %v", r.Header.Get("Remote-User"), err)
 			say := saysNoteNotSaved
-			if errors.Is(err, merken.ErrNoAnswer) {
+			if errors.Is(err, abruf.ErrNoAnswer) {
 				say = err.Error()
 			}
 			b := familyHead(r, cfg, "Notizen", "Notizen")
@@ -626,7 +628,7 @@ func merkenPost(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
 	got, err := merken.Merken(ctx, cfg.Fetcher, cfg.Judge, cfg.Notes, link, hint)
 	if err != nil {
 		say := err.Error()
-		if !errors.Is(err, merken.ErrNoAddress) && !errors.Is(err, merken.ErrPrivate) && !errors.Is(err, merken.ErrNoAnswer) {
+		if !errors.Is(err, abruf.ErrNoAddress) && !errors.Is(err, abruf.ErrPrivate) && !errors.Is(err, abruf.ErrNoAnswer) {
 			log.Printf("homes: merken by %s: %v", r.Header.Get("Remote-User"), err)
 			say = saysNoteNotSaved
 		}

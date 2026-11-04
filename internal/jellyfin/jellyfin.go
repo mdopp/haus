@@ -14,7 +14,8 @@ import (
 	"os"
 	"strings"
 	"time"
-	"unicode"
+
+	"github.com/mdopp/homes/internal/namen"
 )
 
 // Client is Jellyfin behind its API key.
@@ -59,15 +60,15 @@ func (c *Client) Find(ctx context.Context, artist, title string) (Treffer, bool,
 	if err := c.get(ctx, "/Items", q, &out); err != nil {
 		return Treffer{}, false, err
 	}
-	want, by := Plain(title), Plain(artist)
+	want, by := namen.Plain(title), namen.Plain(artist)
 	for _, it := range out.Items {
-		if Plain(it.Name) != want {
+		if namen.Plain(it.Name) != want {
 			continue
 		}
 		artists := append([]string{it.AlbumArtist}, it.Artists...)
 		ok := by == ""
 		for _, a := range artists {
-			ok = ok || (Plain(a) != "" && (Plain(a) == by || strings.Contains(Plain(a), by) || strings.Contains(by, Plain(a))))
+			ok = ok || (namen.Plain(a) != "" && (namen.Plain(a) == by || strings.Contains(namen.Plain(a), by) || strings.Contains(by, namen.Plain(a))))
 		}
 		if !ok {
 			continue
@@ -106,18 +107,4 @@ func (c *Client) get(ctx context.Context, path string, q url.Values, out any) er
 		return fmt.Errorf("jellyfin: %w", err)
 	}
 	return nil
-}
-
-// Plain is a name compared: lower case, letters and digits only, umlauts
-// as their base letter.
-func Plain(s string) string {
-	r := strings.NewReplacer("ä", "a", "ö", "o", "ü", "u", "ß", "ss", "é", "e", "è", "e", "á", "a", "à", "a", "ó", "o", "í", "i", "&", "und")
-	s = r.Replace(strings.ToLower(s))
-	var b strings.Builder
-	for _, c := range s {
-		if unicode.IsLetter(c) || unicode.IsDigit(c) {
-			b.WriteRune(c)
-		}
-	}
-	return b.String()
 }

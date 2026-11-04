@@ -24,6 +24,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/mdopp/homes/internal/abruf"
 	"github.com/mdopp/homes/internal/caldav"
 	"github.com/mdopp/homes/internal/cards"
 	"github.com/mdopp/homes/internal/einkauf"
@@ -41,7 +42,7 @@ import (
 type Config struct {
 	Token     string            // HOMES_HAUSHALT_TOKEN, the Bote's bearer
 	Calendar  *caldav.Client    // nil: no calendar or reminder tools
-	Fetcher   merken.Fetcher    // how notiz_aus_link fetches a page (haus#117); the tests' allows 127.0.0.1
+	Fetcher   abruf.Fetcher     // how notiz_aus_link fetches a page (haus#117); the tests' allows 127.0.0.1
 	Podcasts  *podcasts.Service // the family's podcasts (haus#123); nil: no podcast tool
 	Einkauf   *einkauf.Liste    // the household's shopping list (haus#118); nil: no list tools
 	Wuensche  *einkauf.Wuensche // the music wish list (owner 2026-10-25); nil: a song link is a note

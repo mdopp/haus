@@ -1,15 +1,11 @@
-// Package merken makes a note from a link (haus#117; owner 2026-10-25:
-// "faul und einfach"): Homes fetches the page itself, from the box, reads
-// what the page says of itself in machine words (schema.org's JSON-LD: a
-// recipe, an album's review, a hotel or an offer) and its meta tags and
-// text, asks the house model for the core where the page carries no such
-// data, and writes one note with its kind, tags and the link. The page's
-// words stay with the note, so it outlives the page.
-//
-// It fetches only public addresses (never the house's own network, never
-// the box), at most maxPage bytes, within fetchWait, at most five
-// redirects, each checked again.
-package merken
+// Package abruf fetches what Homes reads from the internet for the family:
+// a page to keep as a note (merken), a song's page (merken), a podcast's
+// feed (abs), MusicBrainz's answers (musicbrainz). One set of rules: only
+// public addresses (never the house's own network, never the box, also
+// not behind a name that points home), at most maxPage bytes, within
+// fetchWait, at most five redirects, each checked again; and when a page
+// does not answer, why, in the family's words.
+package abruf
 
 import (
 	"context"
@@ -175,7 +171,7 @@ func (f Fetcher) Get(ctx context.Context, u *url.URL) (string, string, []byte, s
 		if errors.As(err, &ue) && errors.Is(ue.Err, ErrNoAddress) {
 			return "", "", nil, "", ErrNoAddress
 		}
-		log.Printf("homes: merken: %s: %v", u.Host, err) // why it did not answer: the name, the way, the time
+		log.Printf("homes: abruf: %s: %v", u.Host, err) // why it did not answer: the name, the way, the time
 		return "", "", nil, "", why(u.Hostname(), err)
 	}
 	defer res.Body.Close()
@@ -185,7 +181,7 @@ func (f Fetcher) Get(ctx context.Context, u *url.URL) (string, string, []byte, s
 	ct, params, _ := mime.ParseMediaType(res.Header.Get("Content-Type"))
 	raw, err := io.ReadAll(io.LimitReader(res.Body, maxPage))
 	if err != nil {
-		log.Printf("homes: merken: %s: reading: %v", u.Host, err)
+		log.Printf("homes: abruf: %s: reading: %v", u.Host, err)
 		return "", "", nil, "", &NoAnswer{Reason: u.Hostname() + " hat die Seite nicht ganz geschickt; die Verbindung brach ab.", Next: "Gleich noch einmal teilen."}
 	}
 	return res.Request.URL.String(), ct, raw, params["charset"], nil

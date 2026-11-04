@@ -7,11 +7,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mdopp/homes/internal/abruf"
 	"github.com/mdopp/homes/internal/caldav"
 	"github.com/mdopp/homes/internal/caldav/davfake"
 	"github.com/mdopp/homes/internal/jellyfin"
 	"github.com/mdopp/homes/internal/merken"
 	"github.com/mdopp/homes/internal/musicbrainz"
+	"github.com/mdopp/homes/internal/namen"
 	"github.com/mdopp/homes/internal/notes"
 )
 
@@ -318,7 +320,7 @@ func TestWaehle(t *testing.T) {
 type fakeBib map[string]jellyfin.Treffer // "artist|title"
 
 func (b fakeBib) Find(ctx context.Context, artist, title string) (jellyfin.Treffer, bool, error) {
-	t, ok := b[jellyfin.Plain(artist)+"|"+jellyfin.Plain(title)]
+	t, ok := b[namen.Plain(artist)+"|"+namen.Plain(title)]
 	return t, ok, nil
 }
 
@@ -374,7 +376,7 @@ func TestMusikWuensche(t *testing.T) {
 		t.Errorf("%v", k)
 	}
 	var none *Wuensche
-	if _, ok, _ := none.AusLink(ctx, merken.Fetcher{}, "https://youtube.com/watch?v=x", "anna"); ok {
+	if _, ok, _ := none.AusLink(ctx, abruf.Fetcher{}, "https://youtube.com/watch?v=x", "anna"); ok {
 		t.Error("no list, no wish")
 	}
 }

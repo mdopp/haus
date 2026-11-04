@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mdopp/homes/internal/abruf"
 	"github.com/mdopp/homes/internal/abs"
 	"github.com/mdopp/homes/internal/abs/absfake"
-	"github.com/mdopp/homes/internal/merken"
 )
 
 func service(t *testing.T) (*Service, *absfake.Server, string) {
@@ -26,7 +26,7 @@ func service(t *testing.T) (*Service, *absfake.Server, string) {
 	fake.AddFeed(feeds.URL+"/lage", "Lage der Nation")
 	fake.AddFeed(feeds.URL+"/zeit", "Was jetzt?")
 	s := Open(&abs.Client{URL: fake.URL, Token: "k"}, t.TempDir())
-	s.Fetch = merken.Fetcher{AllowPrivate: true}
+	s.Fetch = abruf.Fetcher{AllowPrivate: true}
 	return s, fake, feeds.URL
 }
 

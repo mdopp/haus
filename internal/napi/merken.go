@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mdopp/homes/internal/abruf"
 	"github.com/mdopp/homes/internal/cards"
 	"github.com/mdopp/homes/internal/einkauf"
 	"github.com/mdopp/homes/internal/merken"
@@ -83,7 +84,7 @@ func (c Config) merken(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			code := http.StatusBadRequest
 			switch {
-			case errors.Is(err, merken.ErrNoAnswer):
+			case errors.Is(err, abruf.ErrNoAnswer):
 				code = http.StatusBadGateway
 			case !podcasts.Bekannt(err):
 				log.Printf("homes: napi podcast: %v", err)
@@ -103,7 +104,7 @@ func (c Config) merken(w http.ResponseWriter, r *http.Request) {
 	if g, ok, err := h.Wuensche.AusLink(ctx, h.Fetcher, link, person); ok {
 		if err != nil {
 			code := http.StatusBadGateway
-			if !errors.Is(err, merken.ErrNoAnswer) {
+			if !errors.Is(err, abruf.ErrNoAnswer) {
 				log.Printf("homes: napi musikwunsch: %v", err)
 				err = errors.New("Das ließ sich gerade nicht auf die Musik-Wunschliste schreiben. Später noch einmal teilen.")
 				code = http.StatusInternalServerError
@@ -123,11 +124,11 @@ func (c Config) merken(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		code := http.StatusBadRequest
 		switch {
-		case errors.Is(err, merken.ErrNoAnswer): // with its reason (merken.NoAnswer)
+		case errors.Is(err, abruf.ErrNoAnswer): // with its reason (abruf.NoAnswer)
 			code = http.StatusBadGateway
 		case errors.Is(err, context.DeadlineExceeded):
 			code, err = http.StatusGatewayTimeout, errors.New("Homes hat länger als "+waitWords(merkenWait)+" gebraucht und aufgegeben. Später noch einmal teilen.")
-		case errors.Is(err, merken.ErrNoAddress), errors.Is(err, merken.ErrPrivate):
+		case errors.Is(err, abruf.ErrNoAddress), errors.Is(err, abruf.ErrPrivate):
 		default:
 			log.Printf("homes: napi merken: %v", err)
 			code, err = http.StatusInternalServerError, errors.New("Das ließ sich gerade nicht merken. Später noch einmal teilen.")

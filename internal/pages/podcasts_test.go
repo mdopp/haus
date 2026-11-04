@@ -6,9 +6,9 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/mdopp/homes/internal/abruf"
 	"github.com/mdopp/homes/internal/abs"
 	"github.com/mdopp/homes/internal/abs/absfake"
-	"github.com/mdopp/homes/internal/merken"
 	"github.com/mdopp/homes/internal/podcasts"
 )
 
@@ -26,7 +26,7 @@ func TestPodcastsPage(t *testing.T) {
 	defer feeds.Close()
 	fake.AddFeed(feeds.URL+"/lage", "Lage der Nation")
 	svc := podcasts.Open(&abs.Client{URL: fake.URL, Token: "k"}, t.TempDir())
-	svc.Fetch = merken.Fetcher{AllowPrivate: true}
+	svc.Fetch = abruf.Fetcher{AllowPrivate: true}
 	cfg := StartConfig{Podcasts: svc}
 	h := Podcasts(cfg)
 
@@ -51,7 +51,7 @@ func TestPodcastsPage(t *testing.T) {
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("no link: %d", rec.Code)
 	}
-	mustContain(t, rec.Body.String(), merken.ErrNoAddress.Error(), `value="kein link"`)
+	mustContain(t, rec.Body.String(), abruf.ErrNoAddress.Error(), `value="kein link"`)
 	if rec := post(t, h, PodcastsPath, url.Values{"tun": {"abonnieren"}, "link": {feeds.URL + "/lage"}}, "anna", map[string]string{"Sec-Fetch-Site": "cross-site"}); rec.Code != http.StatusForbidden {
 		t.Errorf("cross-site → %d", rec.Code)
 	}
