@@ -223,7 +223,8 @@ func Handler(c Config) http.Handler {
 	})
 	mux.HandleFunc("POST "+prefix+"/approvals/{id}/approve", verdict)
 	mux.HandleFunc("POST "+prefix+"/approvals/{id}/deny", verdict)
-	mux.HandleFunc("GET /napi/kann", auth(c.kann)) // what this box can do, for the app (ADR 0001 §2)
+	mux.HandleFunc("GET /napi/kann", auth(c.kann))                 // what this box can do, for the app (ADR 0001 §2)
+	mux.HandleFunc("POST /napi/kann/anfordern", auth(c.anfordern)) // a wish for what it cannot yet (§10)
 	mux.HandleFunc("GET /napi/whoami", func(w http.ResponseWriter, r *http.Request) {
 		if bearer, ok := bearerOf(r); ok && c.Whoami != nil {
 			if uid, ok := c.Whoami(bearer); ok {

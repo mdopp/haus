@@ -39,6 +39,9 @@ func Mehr(cfg StartConfig) http.HandlerFunc {
 		case MehrAufgabenPath: // the Einrichtung card, after the page
 			mehrAufgaben(w, r, cfg)
 			return
+		case SpurenPath: // the traces with Laib's wishes, after the page (ADR 0001 §10)
+			spuren(w, r, cfg)
+			return
 		default:
 			Elsewhere(cfg)(w, r)
 			return
@@ -64,6 +67,7 @@ func Mehr(cfg StartConfig) http.HandlerFunc {
 		}
 		konto.AddLink("Abmelden", "Danach meldet sich jemand anderes an", "/abmelden")
 		b.WriteString(konto.HTML())
+		b.WriteString(spurenKarte(r, cfg)) // what this box lacks, last and quiet (ADR 0001 §10)
 		writePage(w, http.StatusOK, b)
 	}
 }

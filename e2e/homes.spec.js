@@ -529,3 +529,66 @@ test.describe('light', () => {
     await page.screenshot({ path: info.outputPath('energie-hell.png'), fullPage: true });
   });
 });
+
+// ADR 0001 §10 (owner 2026-11-04: „Keine Funktion soll versteckt werden.“):
+// Mehr ends with what this box lacks, quiet; „Hier anfordern“ answers at
+// once and ends with the wish's state, which follows Laib.
+test('what the box lacks is a quiet trace; a wish follows Laib', async ({ page, request }, info) => {
+  await request.get('/demo/laib?ms=0&fehler=0');
+  await page.goto('/mehr');
+  const card = page.getByRole('region', { name: 'Gibt es hier noch nicht' });
+  const standort = card.locator('#spur-standort');
+  await expect(standort).toContainText('Standortverlauf');
+  await expect(standort).toContainText('auf dieser Box nicht eingerichtet');
+  await expect(card.locator('#spur-podcasts')).toContainText('ausgeschaltet');
+  await expect(card.locator('#spur-geraete')).toHaveCount(0);
+  // quiet: the trace's text is the muted colour, never the danger colour
+  const color = await standort.evaluate((el) => getComputedStyle(el).color);
+  const muted = await page.evaluate(() => { const d = document.createElement('span'); d.style.color = 'var(--muted)'; document.body.appendChild(d); const c = getComputedStyle(d).color; d.remove(); return c; });
+  expect(color).toBe(muted);
+  await card.scrollIntoViewIfNeeded();
+  await card.screenshot({ path: info.outputPath('spuren-1-nicht-eingerichtet.png') });
+
+  await mark(page);
+  const ask = standort.getByRole('button', { name: 'Standortverlauf: Hier anfordern' });
+  await request.get('/demo/laib?ms=600&fehler=0'); // Laib takes a moment: the button says what runs
+  await ask.click();
+  await expect(standort.getByRole('button')).toHaveText('Wird angefordert …');
+  await standort.screenshot({ path: info.outputPath('spuren-2-wird-angefordert.png') });
+  await expect(page.locator('#spur-standort')).toContainText('angefordert', { timeout: 10_000 });
+  await expect(page.locator('#spur-standort').getByRole('button')).toHaveCount(0);
+  expect(await stays(page), 'no reload').toBe(true);
+  await page.locator('#spur-standort').screenshot({ path: info.outputPath('spuren-3-angefordert.png') });
+
+  await request.get('/demo/laib?ms=0&fehler=0');
+  await request.get('/demo/wunsch?modul=standort&stand=wartet');
+  await page.goto('/mehr');
+  await expect(page.locator('#spur-standort')).toContainText('wartet auf Freigabe');
+  await page.locator('#spur-standort').screenshot({ path: info.outputPath('spuren-4-wartet.png') });
+
+  await request.get('/demo/wunsch?modul=standort&stand=eingerichtet');
+  await page.goto('/mehr');
+  await expect(page.locator('#spur-standort')).toContainText('wird eingerichtet');
+  await page.locator('#spur-standort').screenshot({ path: info.outputPath('spuren-5-wird-eingerichtet.png') });
+
+  await request.get('/demo/wunsch?modul=standort&stand=abgelehnt');
+  await page.goto('/mehr');
+  await expect(page.locator('#spur-standort')).toContainText('abgelehnt');
+  await expect(page.locator('#spur-standort').getByRole('button', { name: 'Standortverlauf: Hier anfordern' })).toBeVisible();
+  await page.getByRole('region', { name: 'Gibt es hier noch nicht' }).screenshot({ path: info.outputPath('spuren-6-abgelehnt.png') });
+});
+
+test('a wish Laib cannot take is said on the page, the trace stays', async ({ page, request }, info) => {
+  await request.get('/demo/laib?ms=0&fehler=0');
+  await page.goto('/mehr');
+  await mark(page);
+  const podcasts = page.locator('#spur-podcasts');
+  await expect(podcasts.getByRole('button')).toBeVisible();
+  await request.get('/demo/laib?ms=0&fehler=1');
+  await podcasts.getByRole('button').click();
+  await expect(page.locator('#homes-hinweis')).toContainText('nicht aufschreiben');
+  await expect(podcasts.getByRole('button')).toHaveText('Hier anfordern');
+  expect(await stays(page)).toBe(true);
+  await page.screenshot({ path: info.outputPath('spuren-7-fehler.png') });
+  await request.get('/demo/laib?ms=0&fehler=0');
+});

@@ -537,8 +537,13 @@ Each entry of `module` gains:
   app knows which widget type, share target, account or backup part an
   off module would bring and puts its trace there. The app still never
   maps a module to a feature itself.
-- `spur`: the trace's words for an off module („auf dieser Box nicht
-  eingerichtet“, „ausgeschaltet“, or the wish's state), absent while on.
+- `spur_id`: the trace's stable key for an off module (`fehlt`, `aus`,
+  or the wish's state), absent while on; `spur`: its German words beside
+  it („auf dieser Box nicht eingerichtet“, „ausgeschaltet“, …). The app
+  says the key in its own language (owner 2026-11-04: Homes becomes
+  multilingual); Homes' new words are one table, `internal/texte`.
+- `admins`: `true` for a module only admins use (`werkstatt`,
+  `nutzung`), whose trace is on the Box page only.
 - `wunsch`, only while there is one: `{"stand": "angefordert" | "wartet" |
   "abgelehnt" | "eingerichtet" | "umgesetzt", "seit": "2026-11-04"}`.
 - `anfordern`: `true` when the trace offers „Hier anfordern“.

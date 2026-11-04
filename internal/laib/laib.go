@@ -29,6 +29,8 @@ type Client struct {
 
 	aufgabenMu sync.Mutex // KeptAufgaben's lists, per person
 	aufgaben   map[string]*aufgabenKept
+
+	wuensche wuenscheKept // the modules' wishes, a minute (wunsch.go)
 }
 
 // Readiness is `laib status --json`.ready.

@@ -75,6 +75,7 @@ type Modul struct {
 	Standard string   // the open protocol, where there is one: "caldav", "carddav"
 	Env      []string // the variables it reads (a test holds every HOMES_* to a module or the core)
 	Braucht  []string // modules it needs on: energie needs geraete
+	Admins   bool     // only admins use it: its trace is on the Box page, not on Mehr (§10)
 
 	Seiten []Route   // pages, behind the proxy secret
 	Napi   []Route   // /napi paths, behind the device's bearer
@@ -150,6 +151,72 @@ func (l *Liste) String() string {
 	return "Module an: " + strings.Join(an, ", ") + "; aus: " + strings.Join(aus, ", ")
 }
 
+// Module are the box's modules in catalog order, on and off.
+func (l *Liste) Module() []Modul { return slices.Clone(l.alle) }
+
+// Eins is the module of that name.
+func (l *Liste) Eins(name string) (Modul, bool) {
+	i := slices.IndexFunc(l.alle, func(m Modul) bool { return m.Name == name })
+	if i < 0 {
+		return Modul{}, false
+	}
+	return l.alle[i], true
+}
+
+// Frage is what Laib's wish stand is asked (laib#1038): every module with
+// its backend, "geraete=home-assistant … werkstatt=".
+func (l *Liste) Frage() string {
+	var b strings.Builder
+	for i, m := range l.alle {
+		if i > 0 {
+			b.WriteByte(' ')
+		}
+		b.WriteString(m.Name + "=" + m.Backend)
+	}
+	return b.String()
+}
+
+// Wunsch is the state of a module's latest wish, as Laib answers it
+// (laib#1038): angefordert, wartet, abgelehnt, eingerichtet, umgesetzt.
+type Wunsch struct {
+	Stand string `json:"stand"`
+	Seit  string `json:"seit,omitempty"` // 2026-11-04
+}
+
+// Offen: a wish still under way, so its trace shows its state, no button.
+func (w *Wunsch) Offen() bool {
+	return w != nil && (w.Stand == "angefordert" || w.Stand == "wartet" || w.Stand == "eingerichtet")
+}
+
+// Wuensche are the box's wishes by module; Geht: Laib takes a wish.
+type Wuensche struct {
+	Je   map[string]Wunsch
+	Geht bool
+}
+
+func (w Wuensche) von(name string) *Wunsch {
+	if x, ok := w.Je[name]; ok {
+		return &x
+	}
+	return nil
+}
+
+// Spur is the key of an off module's trace (ADR 0001 §10): its wish's
+// state while there is one, else fehlt or aus; "" while it is on. A wish
+// umgesetzt while the module is off again is history, not its state.
+func (m Modul) Spur(w *Wunsch) string {
+	switch {
+	case m.An():
+		return ""
+	case w != nil && w.Stand != "umgesetzt" && w.Stand != "":
+		return w.Stand
+	}
+	return m.Warum
+}
+
+// Anfordern: does an off module's trace offer „Hier anfordern“?
+func (m Modul) Anfordern(w Wuensche) bool { return !m.An() && w.Geht && !w.von(m.Name).Offen() }
+
 // Kann is GET /napi/kann (ADR 0001 §2, §10): the box's modules for words,
 // and what the app may offer, the union of the offers of those on.
 type Kann struct {
@@ -160,23 +227,36 @@ type Kann struct {
 
 // KannEins is one module as the app reads it. Bietet is its offer, on or
 // off, so the app knows where an off module leaves its trace (§10).
+//
+// SpurID is the trace's stable key (fehlt, aus, or the wish's state), so
+// an app in another language says it in its own words; Spur is the
+// German the caller fills in.
 type KannEins struct {
-	Name     string  `json:"name"`
-	Titel    string  `json:"titel"`
-	An       bool    `json:"an"`
-	Backend  string  `json:"backend,omitempty"`
-	Standard string  `json:"standard,omitempty"`
-	Warum    string  `json:"warum,omitempty"`
-	Grund    string  `json:"grund,omitempty"`
-	Bietet   Angebot `json:"bietet"`
+	Name      string  `json:"name"`
+	Titel     string  `json:"titel"`
+	An        bool    `json:"an"`
+	Backend   string  `json:"backend,omitempty"`
+	Standard  string  `json:"standard,omitempty"`
+	Warum     string  `json:"warum,omitempty"`
+	Grund     string  `json:"grund,omitempty"`
+	Bietet    Angebot `json:"bietet"`
+	Admins    bool    `json:"admins,omitempty"`
+	SpurID    string  `json:"spur_id,omitempty"`
+	Spur      string  `json:"spur,omitempty"`
+	Wunsch    *Wunsch `json:"wunsch,omitempty"`
+	Anfordern bool    `json:"anfordern,omitempty"`
 }
 
-// Kann is the list as the app reads it.
-func (l *Liste) Kann() Kann {
+// Kann is the list as the app reads it, with the wishes Laib knows.
+func (l *Liste) Kann(w Wuensche) Kann {
 	k := Kann{Version: 1, Module: []KannEins{}, App: Angebot{}.plus(Angebot{})}
 	for _, m := range l.alle {
-		k.Module = append(k.Module, KannEins{Name: m.Name, Titel: m.Titel, An: m.An(), Backend: m.Backend, Standard: m.Standard,
-			Warum: m.Warum, Grund: m.Grund, Bietet: Angebot{}.plus(m.App)})
+		e := KannEins{Name: m.Name, Titel: m.Titel, An: m.An(), Backend: m.Backend, Standard: m.Standard,
+			Warum: m.Warum, Grund: m.Grund, Bietet: Angebot{}.plus(m.App), Admins: m.Admins, SpurID: m.Spur(w.von(m.Name)), Anfordern: m.Anfordern(w)}
+		if !m.An() {
+			e.Wunsch = w.von(m.Name)
+		}
+		k.Module = append(k.Module, e)
 		if m.An() {
 			k.App = k.App.plus(m.App)
 		}
