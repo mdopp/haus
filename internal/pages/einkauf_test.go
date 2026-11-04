@@ -54,7 +54,7 @@ func uidOf(t *testing.T, l *einkauf.Liste, summary string) string {
 // is told to the other phones; only from Homes' own page.
 func TestEinkaufPage(t *testing.T) {
 	l, told := shoppingList(t)
-	cfg := StartConfig{Einkauf: l}
+	cfg := StartConfig{Einkauf: l, Module: modulListe(t, "einkauf")}
 	h := Einkauf(cfg)
 
 	_, body, _ := familyPage(t, Einkauf, cfg, "GET", EinkaufPath, "family")

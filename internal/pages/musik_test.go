@@ -44,7 +44,7 @@ func musikPost(t *testing.T, h http.HandlerFunc, name string, at, total int, bod
 // page is under Mehr, and only with an inbox.
 func TestMusikHinzufuegen(t *testing.T) {
 	inbox := t.TempDir()
-	cfg := StartConfig{MusicInbox: inbox}
+	cfg := StartConfig{MusicInbox: inbox, Module: modulListe(t, "musik")}
 	h := Musik(cfg)
 
 	_, body, _ := familyPage(t, Musik, cfg, "GET", MusikPath, "family")

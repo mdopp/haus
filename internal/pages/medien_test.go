@@ -106,7 +106,7 @@ func TestMedienWhatPlaysWhere(t *testing.T) {
 func TestMedienSwitchesThroughSchalten(t *testing.T) {
 	fake, hc := house(t)
 	players(t, fake)
-	h := Schalten(StartConfig{HA: hc})
+	h := Schalten(StartConfig{HA: hc, Module: modulListe(t, "geraete")})
 	for _, tun := range []string{"media_player.media_pause", "media_player.media_play", "media_player.volume_down", "media_player.volume_up"} {
 		rec := post(t, h, "/schalten", url.Values{"geraet": {"media_player.wz"}, "tun": {tun}, "zurueck": {"/medien"}}, "anna", nil)
 		if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/medien" {
@@ -199,7 +199,7 @@ func TestMedienUnknownPathIsA404(t *testing.T) {
 	fake, hc := house(t)
 	players(t, fake)
 	for _, p := range []string{"/medien/", "/medien/radio", "/medien/x/y"} {
-		code, body, _ := familyPage(t, Medien, StartConfig{HA: hc}, "GET", p, "family")
+		code, body, _ := familyPage(t, Medien, StartConfig{HA: hc, Module: modulListe(t, "geraete")}, "GET", p, "family")
 		if code != 404 {
 			t.Fatalf("%s → %d, want 404", p, code)
 		}

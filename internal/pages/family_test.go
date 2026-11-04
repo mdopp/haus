@@ -6,14 +6,37 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/mdopp/homes/internal/assistent"
 	"github.com/mdopp/homes/internal/caldav"
+	"github.com/mdopp/homes/internal/modul"
 	"github.com/mdopp/homes/internal/notes"
 )
+
+// modulListe is a box's module list with these modules on and their
+// entries in the family's selection (ADR 0001 H6), as the catalog gives
+// them: "musik" with Musik, a box with a music inbox; "musik:ohne-eingang"
+// with Platte erfassen and Discogs on their own.
+func modulListe(t *testing.T, names ...string) *modul.Liste {
+	t.Helper()
+	var ms []modul.Modul
+	for _, n := range names {
+		name, wie, _ := strings.Cut(n, ":")
+		nav := slices.DeleteFunc(Nav(name), func(e modul.Eintrag) bool {
+			return name == "musik" && (e.Pfad == MusikPath) == (wie == "ohne-eingang")
+		})
+		ms = append(ms, modul.Modul{Name: name, Nav: nav})
+	}
+	l, err := modul.Bauen(ms)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return l
+}
 
 // familyPage asks one of the family's pages, with Start's test clock.
 func familyPage(t *testing.T, page func(StartConfig) http.HandlerFunc, cfg StartConfig, method, target, groups string) (int, string, http.Header) {
@@ -74,7 +97,7 @@ func TestFamilyTabBar(t *testing.T) {
 	fake.Set("light.flur", "on", map[string]any{"friendly_name": "Flurlicht"})
 	_, cal := calendar(t)
 	nd := notesDir(t, map[string]time.Duration{"Einkaufsliste": time.Hour})
-	all := StartConfig{HA: hc, Calendar: cal, Notes: nd}
+	all := StartConfig{HA: hc, Calendar: cal, Notes: nd, Module: modulListe(t, "geraete", "energie", "kalender", "notizen")}
 	for _, p := range []struct {
 		page func(StartConfig) http.HandlerFunc
 		path string
@@ -121,7 +144,7 @@ func TestFamilyTabBar(t *testing.T) {
 	mustContain(t, barOf(t, body), "href=/mehr aria-current=page>")
 	mustContain(t, mehrOf(t, body), "href=/box aria-current=page>")
 	// Haushalt with notes only: the tab leads there, no pills for one page
-	_, body, _ = familyPage(t, Notizen, StartConfig{Notes: nd}, "GET", "/notizen", "family")
+	_, body, _ = familyPage(t, Notizen, StartConfig{Notes: nd, Module: modulListe(t, "notizen")}, "GET", "/notizen", "family")
 	mustContain(t, barOf(t, body), "href=/notizen aria-current=page>", "</svg>Haushalt</a>")
 	mustNotContain(t, body, "class=unterseiten")
 	// nothing set: Start and Mehr, and no word about the rest
@@ -140,8 +163,9 @@ func TestDokumenteUnderMehr(t *testing.T) {
 	_, cal := calendar(t)
 	nd := notesDir(t, nil)
 	_, docs := dokumente(t)
+	docs.Module = modulListe(t, "dokumente")
 	all := docs
-	all.Calendar, all.Notes = cal, nd
+	all.Calendar, all.Notes, all.Module = cal, nd, modulListe(t, "kalender", "notizen", "dokumente")
 	// Dokumente marks Mehr and its own entry there, no pills
 	_, body, _ := familyPage(t, Dokumente, all, "GET", "/dokumente", "family")
 	mustContain(t, barOf(t, body), "href=/mehr aria-current=page>")

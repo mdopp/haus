@@ -33,7 +33,7 @@ func standortCfg(t *testing.T) (StartConfig, *httptest.Server) {
 	t.Cleanup(srv.Close)
 	r := &reitti.Reitti{URL: srv.URL, PublicURL: "https://reitti.", Dir: t.TempDir(),
 		Now: func() time.Time { return time.Date(2026, 11, 2, 9, 0, 0, 0, time.UTC) }}
-	return StartConfig{Reitti: r, PublicURL: "https://homes.box.test", Loc: time.UTC}, srv
+	return StartConfig{Reitti: r, PublicURL: "https://homes.box.test", Loc: time.UTC, Module: modulListe(t, "standort")}, srv
 }
 
 func getStandort(cfg StartConfig, user, query string) *httptest.ResponseRecorder {

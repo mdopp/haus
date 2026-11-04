@@ -143,6 +143,7 @@ func TestDokumenteFilesIntoPaperlessInbox(t *testing.T) {
 
 func TestDokumenteIsInMehrAndTheBareDocumentPathLeadsThere(t *testing.T) {
 	_, cfg := dokumente(t)
+	cfg.Module = modulListe(t, "dokumente")
 	req := httptest.NewRequest("GET", "/mehr", nil)
 	req.Header.Set("Remote-User", "anna")
 	rec := httptest.NewRecorder()

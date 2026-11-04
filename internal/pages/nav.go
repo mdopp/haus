@@ -82,19 +82,10 @@ func kern(cfg StartConfig) []modul.Eintrag {
 	}
 }
 
-// eintraege are the entries at o this person sees on this box. Without a
-// module list (until H6's second step) shows() says which modules' are.
+// eintraege are the entries at o this person sees on this box: the
+// core's, and those of the modules on; without a module list, the core's.
 func eintraege(r *http.Request, cfg StartConfig, o modul.Ort) []modul.Eintrag {
-	if cfg.Module != nil {
-		return cfg.Module.Eintraege(r, o, kern(cfg)...)
-	}
-	show := shows(r, cfg)
-	var all []modul.Eintrag
-	for _, es := range navVon {
-		all = append(all, es...)
-	}
-	es := (*modul.Liste)(nil).Eintraege(r, o, append(kern(cfg), all...)...)
-	return slices.DeleteFunc(es, func(e modul.Eintrag) bool { return e.Titel != "Haushalt" && !show[e.Titel] })
+	return cfg.Module.Eintraege(r, o, kern(cfg)...)
 }
 
 // tabOf is the bar entry a page belongs to: Räume and Medien are Geräte,

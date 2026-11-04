@@ -87,35 +87,3 @@ func lineDiff(want, got string) string {
 	}
 	return strings.Join(out, "\n")
 }
-
-// During the migration only (ADR 0001 §8, H6): for every pair of modules
-// off, on a box with every module and on one without a music inbox, the
-// nav the module list builds equals the one shows() builds. It goes away
-// with shows().
-func TestTheListBuildsTheNavShowsDid(t *testing.T) {
-	names := []string{}
-	for _, m := range katalog(leafSite(t)) {
-		names = append(names, m.Name)
-	}
-	base := []site{leafSite(t), leafSite(t)}
-	base[1].musik = ""
-	for b, box := range base {
-		for i := range names {
-			for j := i; j < len(names); j++ {
-				s, _ := switched(t, box, names[i]+","+names[j])
-				ohne := s
-				ohne.napi.Module = nil
-				for _, who := range []struct{ user, groups string }{{"anna", "family,admins"}, {"", ""}} {
-					for _, path := range []string{"/mehr", "/einkauf?liste=liste-musik"} {
-						list := navOf.FindAllString(as(routes(s), "GET", path, who.user, who.groups, nil).Body.String(), -1)
-						old := navOf.FindAllString(as(routes(ohne), "GET", path, who.user, who.groups, nil).Body.String(), -1)
-						if strings.Join(list, "\n") != strings.Join(old, "\n") {
-							t.Errorf("box %d, %s and %s off, %q %s: the list's nav differs:\n%s", b, names[i], names[j], who.user, path,
-								lineDiff(strings.Join(old, "\n"), strings.Join(list, "\n")))
-						}
-					}
-				}
-			}
-		}
-	}
-}

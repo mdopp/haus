@@ -113,7 +113,7 @@ func TestPlatteErfassen(t *testing.T) {
 	l, _ := shoppingList(t)
 	l.Changed = nil
 	w := &einkauf.Wuensche{Listen: l, Dir: t.TempDir(), Regale: dc, MB: fundFake{musicbrainz.Fund{Gefunden: true, Album: "Amore"}}}
-	cfg := StartConfig{Discogs: dc, Wuensche: w, Judge: modelFake(t, false)}
+	cfg := StartConfig{Discogs: dc, Wuensche: w, Judge: modelFake(t, false), Module: modulListe(t, "musik:ohne-eingang")}
 	h := Platte(cfg)
 
 	_, body, _ := familyPage(t, Platte, cfg, "GET", PlattePath, "family")
@@ -121,6 +121,7 @@ func TestPlatteErfassen(t *testing.T) {
 	_, body, _ = familyPage(t, Mehr, cfg, "GET", "/mehr", "family")
 	mustContain(t, body, "Platte erfassen") // a box without Musik: on Mehr itself
 	cfg.MusicInbox = t.TempDir()            // owner 2026-10-26: else under Musik, not on Mehr
+	cfg.Module = modulListe(t, "musik")
 	_, body, _ = familyPage(t, Mehr, cfg, "GET", "/mehr", "family")
 	mustNotContain(t, body, "Platte erfassen", "Discogs-Konto verbinden")
 	mustContain(t, body, "Hochladen, Platten erfassen, Discogs")
