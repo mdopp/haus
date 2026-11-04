@@ -1182,40 +1182,29 @@ taken as told unsaid.
 `GET /musik`, under Mehr, only with laib's music inbox: `HOMES_MUSIC_INBOX`,
 else `/musik-eingang` when it is mounted (laib#639's homes template mounts
 it there; beets sorts it into the music and Jellyfin). Managing the
-household's music, not what is playing; one h1, then:
+household's music, not what is playing, and only its files (owner: „nur
+Dateien darstellen, aber nichts Komplexes“; what came in last is the music
+app's or Jellyfin's). One h1, then:
 
 - **Hinzufügen**: how music gets in — on the phone, share songs or an
   album as a ZIP to Homes (`POST /napi/musik`); with the network drive
   (`HOMES_SAMBA_DIR`), at home on a computer into `musik-eingang` on the
-  share `data`, linked to `/netzlaufwerk`. Under it the state, one line
-  each: „Wird einsortiert: …“ for what is at the inbox's top or in its
+  share `data`, linked to `/netzlaufwerk`. Under it one list of the files,
+  a row each: „wird einsortiert …“ for what is at the inbox's top or in its
   `.in-arbeit/` (the page refreshes itself every 10 s meanwhile, and says
-  after ten minutes that it takes longer and a message follows), and the
-  last week's uploads from beets' own status in laib (`letzte`, at most
-  three): „Fertig: „…“, 2 Alben, 24 Titel in der Musik“ or „Nicht
-  einsortiert: „…“ – <beets' reason>“, pointing at Braucht Aufmerksamkeit
-  while something is kept back.
-- **Zuletzt hinzugefügt**: the six albums Jellyfin added last
-  (`HOMES_JELLYFIN_TOKEN`, Homes' own music-only user), with how many
-  albums the music holds; each its cover through `GET /musik/bild?id=`
-  (Jellyfin's 32-hex id, a day in the browser's cache) or the music's
-  picture, a link into Jellyfin (`/web/#/details?id=`) when the `filme`
-  module knows Jellyfin's address. Gone while the music is empty or
-  without Jellyfin; a line when Jellyfin does not answer.
-- **Braucht Aufmerksamkeit**, only while beets kept something back
-  (`_nicht-importiert/<run>/`, `GRUND.txt`): each with its reason,
-  „Noch einmal einsortieren“ (back into the inbox, the person's sidecar
-  beside it) and „Löschen“ (asked; 30 days in the inbox's hidden
-  `.papierkorb`, **Gelöscht** with Rückgängig meanwhile).
-- **Platten**: „Platte erfassen“ while one's Discogs is connected, how many
-  records one's collection holds (Discogs's count, or the shelf read in the
-  last ten minutes), and „Wunschliste · N“, the music wish list's open
-  wishes; without the household's Discogs app, what is missing and an
-  admin's way to its keys. Last and quiet, one's Discogs: „verbunden mit
-  …“ or the way to connect it.
-
-Laib, Jellyfin, Discogs and Radicale are asked at once, each within the
-page's backend wait.
+  after ten minutes that it takes longer and a message follows); „nicht
+  einsortiert: <reason>“ for what beets kept back (`_nicht-importiert/<run>/`,
+  `GRUND.txt`), with „Noch einmal einsortieren“ (back into the inbox, the
+  person's sidecar beside it) and „Löschen“ (asked; 30 days in the inbox's
+  hidden `.papierkorb`, Rückgängig right after) on its row; „fertig: 2 Alben,
+  24 Titel in der Musik“ for the last week's uploads from beets' own status
+  in laib (`letzte`, at most five).
+- **Platten**, by whether one's Discogs is connected: connected, „Platte
+  erfassen“ and „Wunschliste · N“ (the music wish list's open wishes), and
+  last and quiet „Discogs: verbunden mit …“; not connected, the wish list
+  and the quiet „Mit Discogs verbinden“ with what it brings. The wish list
+  is Homes' own (Radicale); Discogs only adds the wantlist. Without the
+  household's Discogs app, an admin sees the way to its keys.
 
 ## The Homes script
 

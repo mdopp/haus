@@ -2,8 +2,6 @@ package discogs
 
 import (
 	"context"
-	"net/http"
-	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -36,26 +34,6 @@ func (r *Regal) now() time.Time {
 		return r.Now()
 	}
 	return time.Now()
-}
-
-// Anzahl is how many records the shelf holds: the shelf read last when it
-// is fresh, else Discogs's count of the collection, one call.
-func (r *Regal) Anzahl(ctx context.Context) (int, error) {
-	r.mu.Lock()
-	n, fresh := len(r.plates), r.now().Sub(r.at) <= regalEvery
-	r.mu.Unlock()
-	if fresh {
-		return n, nil
-	}
-	u, err := r.C.User(ctx)
-	if err != nil {
-		return 0, err
-	}
-	var out struct {
-		Count int `json:"count"`
-	}
-	err = r.C.do(ctx, http.MethodGet, "/users/"+url.PathEscape(u)+"/collection/folders/0", nil, nil, &out)
-	return out.Count, err
 }
 
 // Hat is the record by artist named title on the shelf, if it is.

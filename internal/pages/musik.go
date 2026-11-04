@@ -14,35 +14,27 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
+	"github.com/mdopp/homes/internal/discogs"
 	"github.com/mdopp/homes/internal/einkauf"
-	"github.com/mdopp/homes/internal/jellyfin"
 	"github.com/mdopp/homes/internal/musik"
 	"github.com/mdopp/homes/internal/papierkorb"
 	"github.com/mdopp/homes/internal/texte"
 )
 
 // Musik is managing the household's music (owner 2026-11-04: „Musik verwalten“, not what is
-// playing): how music gets in — shared from the phone to Homes (POST /napi/musik), or laid into
-// the inbox on the network drive — and what laib's importer (beets) made of it, the albums
-// last added (Jellyfin), what needs someone, and the records (Discogs, the wish list).
-const (
-	MusikPath     = "/musik"
-	MusikBildPath = "/musik/bild" // an album's cover from Jellyfin, ?id=
-)
+// playing; „nur Dateien darstellen, aber nichts Komplexes“): how music gets in — shared from
+// the phone to Homes (POST /napi/musik), or laid into the inbox on the network drive — and
+// one list of the files and what laib's importer (beets) made of them; then the records.
+const MusikPath = "/musik"
 
-// Musik is the page, its POSTs (tun=nochmal, loeschen, zurueckholen) and the covers.
+// Musik is the page and its POSTs (tun=nochmal, loeschen, zurueckholen).
 func Musik(cfg StartConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case cfg.MusicInbox == "" || r.URL.Path != MusikPath && r.URL.Path != MusikBildPath:
+		case cfg.MusicInbox == "" || r.URL.Path != MusikPath:
 			missing{http.StatusNotFound, "Diese Seite gibt es nicht.", "Mehr", mehrPath, "Mehr"}.write(w, r, cfg)
-		case r.URL.Path == MusikBildPath:
-			zeigeBild(w, r, cfg.Musikbib != nil, func(ctx context.Context) ([]byte, string, error) {
-				return cfg.Musikbib.Bild(ctx, r.URL.Query().Get("id"))
-			})
 		case r.Method == http.MethodPost:
 			musikNochmal(w, r, cfg)
 		case showOnly(w, r, "Musik"):
@@ -52,28 +44,13 @@ func Musik(cfg StartConfig) http.HandlerFunc {
 }
 
 // writeMusik is the page, with what was just done and its Rückgängig (haus#174): Hinzufügen
-// and the import's state under it, Zuletzt hinzugefügt, Braucht Aufmerksamkeit and Gelöscht
-// while there is any, Platten, and Discogs quiet at the end. The backends are asked at once.
+// with the files under it, Platten, and one's Discogs quiet at the end.
 func writeMusik(w http.ResponseWriter, r *http.Request, cfg StartConfig, said, undo string) {
 	ctx, cancel := context.WithTimeout(r.Context(), backendWait)
 	defer cancel()
-	var (
-		st      beetsStand
-		alben   []jellyfin.Album
-		anzahl  int
-		bibErr  error
-		platten string
-		wg      sync.WaitGroup
-	)
-	wg.Go(func() { st = beetsLesen(ctx, cfg) })
-	if cfg.Musikbib != nil {
-		wg.Go(func() { alben, anzahl, bibErr = cfg.Musikbib.Neueste(ctx, 6) })
-	}
-	wg.Go(func() { platten = musikPlatten(ctx, r, cfg) })
-	wg.Wait()
-	kept := zurueck(cfg.MusicInbox)
+	musikKorbLeeren(cfg)
 	b := familyHead(r, cfg, texte.Titel("musik"), "Musik")
-	b.WriteString(musikStyle + gekoppeltStyle + keyHintStyle + "<h1>" + html.EscapeString(texte.Titel("musik")) + "</h1>")
+	b.WriteString(musikStyle + keyHintStyle + "<h1>" + html.EscapeString(texte.Titel("musik")) + "</h1>")
 	if said != "" {
 		b.WriteString("<div class=gut role=status><span class=punkt></span><p>" + html.EscapeString(said) + "</p>")
 		if undo != "" {
@@ -81,28 +58,26 @@ func writeMusik(w http.ResponseWriter, r *http.Request, cfg StartConfig, said, u
 		}
 		b.WriteString("</div>")
 	}
-	b.WriteString(musikDazu(cfg, st, len(kept) > 0) + musikNeu(cfg, alben, anzahl, bibErr) + nichtUebernommen(kept) + musikGeloescht(cfg) + platten)
+	b.WriteString(musikDazu(cfg, beetsLesen(ctx, cfg)) + musikPlatten(ctx, r, cfg))
 	writePage(w, http.StatusOK, b)
 }
 
-// beetsStand is what laib's status of beets says of the uploads (laib templates/beets
-// README: letzte, the last 20, newest first) and, read here, what is still in the inbox.
+// beetsStand is what laib's status of beets says of the uploads sorted in (laib
+// templates/beets README: letzte, the last 20, newest first) and, read here, what is still
+// in the inbox and what beets kept back.
 type beetsStand struct {
 	Letzte []struct {
 		At      time.Time `json:"at"`
 		Eingang string    `json:"eingang"`
 		Titel   int       `json:"titel"`
 		Alben   int       `json:"alben"`
-		Nicht   []struct {
-			Grund string `json:"grund"`
-		} `json:"nicht_importiert"`
 	} `json:"letzte"`
-	wartet []string  // the uploads at the inbox's top or in .in-arbeit/, not taken yet
-	seit   time.Time // when the oldest of them came
+	wartet []os.FileInfo // the uploads at the inbox's top or in .in-arbeit/, not taken yet
+	kept   []liegen      // what beets kept back
 }
 
-// beetsLesen is the uploads' state: beets' own status from laib (nothing when laib does not
-// say) and the inbox's entries the importer has not finished.
+// beetsLesen is the files' state: beets' own status from laib (nothing when laib does not
+// say), the inbox's entries the importer has not finished, and what it kept back.
 func beetsLesen(ctx context.Context, cfg StartConfig) beetsStand {
 	var st beetsStand
 	if cfg.Laib != nil {
@@ -115,130 +90,62 @@ func beetsLesen(ctx context.Context, cfg StartConfig) beetsStand {
 	for _, dir := range []string{"", ".in-arbeit/"} {
 		es, _ := os.ReadDir(cfg.MusicInbox + "/" + dir)
 		for _, e := range es {
-			fi, err := e.Info()
-			if err != nil || strings.HasPrefix(e.Name(), ".") || e.Name() == keptBack {
-				continue
-			}
-			st.wartet = append(st.wartet, e.Name())
-			if st.seit.IsZero() || fi.ModTime().Before(st.seit) {
-				st.seit = fi.ModTime()
+			if fi, err := e.Info(); err == nil && !strings.HasPrefix(e.Name(), ".") && e.Name() != keptBack {
+				st.wartet = append(st.wartet, fi)
 			}
 		}
 	}
+	st.kept = zurueck(cfg.MusicInbox)
 	return st
 }
 
-// musikDazu is Hinzufügen: how music gets in, from the phone and, with the network drive, from
-// a computer at home; under it the state, a line each: what is being sorted in (the page looks
-// again every ten seconds meanwhile, and says so when it takes long), and the last week's
-// uploads, at most three — done, or not sorted in with why and where to act.
-func musikDazu(cfg StartConfig, st beetsStand, kept bool) string {
+// musikDazu is Hinzufügen: how music gets in, from the phone and, with the network drive,
+// from a computer at home; under it one list of the files: being sorted in (the page looks
+// again every ten seconds meanwhile, and says when it takes long), not sorted in with beets'
+// reason and „Noch einmal einsortieren“ and „Löschen“ on its row, and the last week's done.
+func musikDazu(cfg StartConfig, st beetsStand) string {
 	var b strings.Builder
 	b.WriteString(`<section class="karte musik-dazu" aria-labelledby=m-h><h2 id=m-h>` + html.EscapeString(texte.T(texte.MusikDazu)) +
 		`</h2><div class=wie><p>` + html.EscapeString(texte.T(texte.MusikHandy)) + `</p>`)
 	if cfg.Samba != nil {
 		b.WriteString(`<p>` + strings.Replace(html.EscapeString(texte.T(texte.MusikComputer)), "Netzlaufwerk", `<a href=`+netzlaufwerkPath+`>Netzlaufwerk</a>`, 1) + `</p>`)
 	}
-	b.WriteString(`</div>`)
+	b.WriteString(`</div><ul class=musik-liste>`)
+	row := func(punkt, name, state, tun string) {
+		b.WriteString(`<li><span class="punkt ` + punkt + `"></span><div><span class=name>` + html.EscapeString(name) + `</span><span class=k>` + html.EscapeString(state) + `</span>` + tun + `</div></li>`)
+	}
 	now, loc := cfg.clock()
-	if len(st.wartet) > 0 {
-		line := fmt.Sprintf(texte.T(texte.MusikWirdEinsortiert), namenListe(st.wartet))
-		if now.Sub(st.seit) > 10*time.Minute {
-			line += " " + texte.T(texte.MusikDauert)
+	for _, fi := range st.wartet {
+		state := texte.T(texte.MusikWirdEinsortiert)
+		if now.Sub(fi.ModTime()) > 10*time.Minute {
+			state += " " + texte.T(texte.MusikDauert)
 		}
-		b.WriteString(zustand("gelb", line) + `<span hidden data-auffrischen=10></span>`)
+		row("gelb", fi.Name(), state, "")
+	}
+	for _, k := range st.kept {
+		hidden := `<input type=hidden name=lauf value="` + html.EscapeString(k.run) + `"><input type=hidden name=name value="` + html.EscapeString(k.name) + `">`
+		row("rot", k.name, strings.TrimSuffix(texte.T(texte.MusikNicht)+": "+k.grund, ": "), `<div class=musik-tun><form method=post action=`+MusikPath+
+			`><input type=hidden name=tun value=nochmal>`+hidden+`<button data-laeuft="Legt zurück …">Noch einmal einsortieren</button></form><form method=post action=`+MusikPath+
+			` data-frage="„`+html.EscapeString(k.name)+`“ endgültig löschen?"><input type=hidden name=tun value=loeschen>`+hidden+`<button class=weg data-laeuft="Löscht …">Löschen</button></form></div>`)
 	}
 	for i, u := range st.Letzte {
-		if i == 3 || now.Sub(u.At) > 7*24*time.Hour {
+		if i == 5 || now.Sub(u.At) > 7*24*time.Hour {
 			break
 		}
-		when := " · " + whenWords(u.At, now, loc)
 		if u.Titel > 0 {
 			what := count(u.Titel, "Titel", "Titel")
 			if u.Alben > 0 {
 				what = count(u.Alben, "Album", "Alben") + ", " + what
 			}
-			b.WriteString(zustand("", fmt.Sprintf(texte.T(texte.MusikFertig), u.Eingang, what)+when))
+			row("", u.Eingang, fmt.Sprintf(texte.T(texte.MusikFertig), what)+" · "+whenWords(u.At, now, loc), "")
 		}
-		if len(u.Nicht) > 0 {
-			why := u.Nicht[0].Grund
-			if len(u.Nicht) > 1 {
-				why = count(len(u.Nicht), "Datei", "Dateien")
-			}
-			line := fmt.Sprintf(texte.T(texte.MusikNicht), u.Eingang, why) + when
-			if kept {
-				line += ". " + texte.T(texte.MusikNichtUnten)
-			}
-			b.WriteString(zustand("rot", line))
-		}
+	}
+	b.WriteString(`</ul>`)
+	if len(st.wartet) > 0 {
+		b.WriteString(`<span hidden data-auffrischen=10></span>`)
 	}
 	b.WriteString(`</section>`)
 	return b.String()
-}
-
-// namenListe is up to three names in quotes, „und N weitere“ after.
-func namenListe(names []string) string {
-	sort.Strings(names)
-	out := "„" + strings.Join(names[:min(3, len(names))], "“, „") + "“"
-	if len(names) > 3 {
-		out += " und " + strconv.Itoa(len(names)-3) + " weitere"
-	}
-	return out
-}
-
-// musikNeu is Zuletzt hinzugefügt: the newest albums as tiles, each its cover (or the music's
-// picture), name and artist, a link into Jellyfin where its address is known, and how many
-// albums the music holds. None without Jellyfin or while the music is empty; Jellyfin silent, a line.
-func musikNeu(cfg StartConfig, alben []jellyfin.Album, anzahl int, err error) string {
-	if err != nil {
-		log.Printf("homes: musik: jellyfin: %v", err)
-	} else if len(alben) == 0 {
-		return ""
-	}
-	var b strings.Builder
-	b.WriteString(`<section class="karte musik-neu" aria-labelledby=m-z><h2 id=m-z>` + html.EscapeString(texte.T(texte.MusikZuletzt)) + `</h2><p class=hinweis>`)
-	if err != nil {
-		return b.String() + html.EscapeString(texte.T(texte.MusikJellyfinStumm)) + `</p></section>`
-	}
-	b.WriteString(html.EscapeString(fmt.Sprintf(texte.T(texte.MusikInDerMusik), count(anzahl, "Album", "Alben"))) + `</p><ul class=alben>`)
-	web := ""
-	if m, ok := cfg.Module.Eins("filme"); ok && m.An() && m.Einrichtung != nil {
-		web = m.Einrichtung.Web
-	}
-	for _, a := range alben {
-		inner := `<span class=bild aria-hidden=true><svg viewBox="0 0 24 24">` + iconMusik + `</svg></span>`
-		if a.Bild {
-			inner = `<img class=bild src="` + MusikBildPath + `?id=` + html.EscapeString(a.ID) + `" alt="" loading=lazy>`
-		}
-		inner += `<span class=name>` + html.EscapeString(a.Name) + `</span><span class=wer>` + html.EscapeString(a.Kuenstler) + `</span>`
-		if web != "" {
-			inner = `<a href="` + html.EscapeString(web+"/web/#/details?id="+a.ID) + `">` + inner + `</a>`
-		}
-		b.WriteString(`<li>` + inner + `</li>`)
-	}
-	return b.String() + `</ul></section>`
-}
-
-// zeigeBild answers a cover a page shows (a Discogs record's, a Jellyfin album's): get's bytes,
-// kept a day by the browser; none, or not there, 404.
-func zeigeBild(w http.ResponseWriter, r *http.Request, ok bool, get func(context.Context) ([]byte, string, error)) {
-	if !ok {
-		http.NotFound(w, r)
-		return
-	}
-	if !showOnly(w, r, "Das Bild") {
-		return
-	}
-	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
-	defer cancel()
-	b, ct, err := get(ctx)
-	if err != nil {
-		http.NotFound(w, r)
-		return
-	}
-	w.Header().Set("Content-Type", ct)
-	w.Header().Set("Cache-Control", "private, max-age=86400")
-	w.Write(b)
 }
 
 // musikNochmal puts an upload beets kept back into the inbox again, under
@@ -390,30 +297,6 @@ func zurueck(inbox string) []liegen {
 	return out
 }
 
-// nichtUebernommen is Braucht Aufmerksamkeit: what beets kept back, each with „Noch einmal
-// einsortieren“ and „Löschen“; none when there is nothing.
-func nichtUebernommen(kept []liegen) string {
-	if len(kept) == 0 {
-		return ""
-	}
-	var b strings.Builder
-	b.WriteString(`<section class="karte musik-achtung" aria-labelledby=m-n><h2 id=m-n>` + html.EscapeString(texte.T(texte.MusikAchtung)) + `</h2><p class=hinweis>` +
-		html.EscapeString(texte.T(texte.MusikAchtungWie)) + `</p><ul class=musik-liste>`)
-	for _, k := range kept {
-		b.WriteString("<li><span class=name>" + html.EscapeString(k.name) + "</span>")
-		if k.grund != "" {
-			b.WriteString("<span class=k>" + html.EscapeString(k.grund) + "</span>")
-		}
-		hidden := `<input type=hidden name=lauf value="` + html.EscapeString(k.run) + `"><input type=hidden name=name value="` + html.EscapeString(k.name) + `">`
-		b.WriteString(`<div class=musik-tun><form method=post action=` + MusikPath + `><input type=hidden name=tun value=nochmal>` + hidden +
-			`<button data-laeuft="Legt zurück …">Noch einmal einsortieren</button></form>` +
-			`<form method=post action=` + MusikPath + ` data-frage="„` + html.EscapeString(k.name) + `“ endgültig löschen?"><input type=hidden name=tun value=loeschen>` + hidden +
-			`<button class=weg data-laeuft="Löscht …">Löschen</button></form></div></li>`)
-	}
-	b.WriteString("</ul></section>")
-	return b.String()
-}
-
 // tidyRun removes a run of kept-back uploads left with only its GRUND.txt.
 func tidyRun(root *os.Root, run string) {
 	if rest, err := fs.ReadDir(root.FS(), keptBack+"/"+run); err == nil && (len(rest) == 0 || (len(rest) == 1 && rest[0].Name() == "GRUND.txt")) {
@@ -422,21 +305,19 @@ func tidyRun(root *os.Root, run string) {
 	}
 }
 
-// musikPlatten is Platten (owner 2026-10-26: Platte erfassen and Discogs belong under Musik):
-// Platte erfassen while one's Discogs is connected, how many records one has, the music wish
-// list with its open wishes; one's Discogs quiet at the page's end. Without the household's
-// Discogs app, what is missing and, for an admin, the way to its keys.
+// musikPlatten is Platten (owner 2026-10-26: Platte erfassen and Discogs belong under Musik;
+// 2026-11-04: by whether one's Discogs is connected). Connected: Platte erfassen, and one's
+// Discogs quiet at the page's end; not: only the quiet way to connect it and what it brings.
+// The music wish list with its open wishes either way: it is Homes' own, Discogs only adds the
+// wantlist. Without the household's Discogs app, for an admin the way to its keys.
 func musikPlatten(ctx context.Context, r *http.Request, cfg StartConfig) string {
-	if cfg.Wuensche == nil && cfg.Discogs == nil {
-		return ""
+	var b strings.Builder
+	k, connected := discogs.Konto{}, false
+	if cfg.Discogs != nil {
+		k, connected = cfg.Discogs.Konto(r.Header.Get("Remote-User"))
 	}
-	var state []string
-	b := `<section class="karte musik-platten" aria-labelledby=m-p><h2 id=m-p>` + html.EscapeString(texte.T(texte.MusikPlatten)) + `</h2>`
-	if rg, ok := cfg.Discogs.For(r.Header.Get("Remote-User")); ok {
-		b += `<p class=wege><a class=knopf href=` + PlattePath + `>` + html.EscapeString(texte.T(texte.MusikPlatteErfassen)) + `</a></p>`
-		if n, err := rg.Anzahl(ctx); err == nil {
-			state = append(state, html.EscapeString(fmt.Sprintf(texte.T(texte.MusikInSammlung), count(n, "Platte", "Platten"))))
-		}
+	if connected {
+		b.WriteString(`<p class=wege><a class=knopf href=` + PlattePath + `>` + html.EscapeString(texte.T(texte.MusikPlatteErfassen)) + `</a></p>`)
 	}
 	if cfg.Wuensche != nil {
 		wish := texte.T(texte.MusikWunschliste)
@@ -447,27 +328,32 @@ func musikPlatten(ctx context.Context, r *http.Request, cfg StartConfig) string 
 			}
 			wish += " · " + strconv.Itoa(open)
 		}
-		state = append(state, `<a href="`+EinkaufPath+`?liste=`+einkauf.MusikListe.ID()+`">`+html.EscapeString(wish)+`</a>`)
+		b.WriteString(`<p class=stand><a href="` + EinkaufPath + `?liste=` + einkauf.MusikListe.ID() + `">` + html.EscapeString(wish) + `</a></p>`)
 	}
-	b += `<p class=stand>` + strings.Join(state, ` · `) + `</p>`
-	if cfg.Discogs == nil {
-		return b + keyHint(r, cfg, "Discogs", saysDiscogsEnables, publicBase(r, cfg)+MusikPath, discogsKeys) + `</section>`
+	switch {
+	case cfg.Discogs == nil && isAdmin(r):
+		b.WriteString(keyHint(r, cfg, "Discogs", saysDiscogsEnables, publicBase(r, cfg)+MusikPath, discogsKeys))
+	case cfg.Discogs != nil && !connected:
+		b.WriteString(`<p class=ruhig><span class="punkt grau"></span><span><a href=` + DiscogsPath + `>` + html.EscapeString(texte.T(texte.MusikDiscogsVerbinden)) +
+			`</a> – ` + html.EscapeString(texte.T(texte.MusikDiscogsBringt)) + `</span></p>`)
 	}
-	if k, ok := cfg.Discogs.Konto(r.Header.Get("Remote-User")); ok {
-		return b + `</section><p class=ruhig><span class=punkt></span><a href=` + DiscogsPath + `>` + html.EscapeString(fmt.Sprintf(texte.T(texte.MusikDiscogsVerbunden), k.Name)) + `</a></p>`
+	if b.Len() == 0 {
+		return ""
 	}
-	return b + `</section><p class=ruhig><span class="punkt grau"></span><a href=` + DiscogsPath + `>` + html.EscapeString(texte.T(texte.MusikDiscogsVerbinden)) + `</a></p>`
+	out := `<section class="karte musik-platten" aria-labelledby=m-p><h2 id=m-p>` + html.EscapeString(texte.T(texte.MusikPlatten)) + `</h2>` + b.String() + `</section>`
+	if connected {
+		out += `<p class=ruhig><span class=punkt></span><a href=` + DiscogsPath + `>` + html.EscapeString(fmt.Sprintf(texte.T(texte.MusikDiscogsVerbunden), k.Name)) + `</a></p>`
+	}
+	return out
 }
 
-// musikStyle: Start's tiles' look (homes-android#245): no outlines, the card's colour, round
-// corners — for the how, the albums and what needs someone; the state's lines as #268's.
+// musikStyle: Start's tiles' look (homes-android#245) — no outlines, the card's colour, round
+// corners — for the how and the files; a file's state in a dot and a quiet line.
 const musikStyle = `<style>.musik-dazu .wie{padding:14px 16px;border-radius:20px;background:var(--card)}.musik-dazu .wie p{margin:0}.musik-dazu .wie p+p{margin-top:8px}.musik-dazu .wie a{color:var(--accent)}
-.musik-dazu .zustand{margin:10px 2px 0;align-items:flex-start;overflow-wrap:anywhere}.punkt.rot{background:var(--danger)}.karte .hinweis{margin:-2px 2px 10px}
-.karte ul.alben,.karte ul.musik-liste{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:8px;background:none;border:0;border-radius:0}.karte ul.musik-liste{grid-template-columns:1fr}
-.karte .alben li,.karte .musik-liste li{padding:8px;border:0;border-radius:20px;background:var(--card)}.alben .bild{display:grid;place-items:center;width:100%;aspect-ratio:1;border-radius:12px;object-fit:cover;background:var(--accent-soft);color:var(--accent)}
-.alben .bild svg{width:40%;fill:none;stroke:currentColor;stroke-width:1.6}.alben .name,.alben .wer{display:block;margin-top:8px;font-size:.9rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.alben .wer{margin-top:0;font-weight:400;font-size:.78rem;color:var(--muted)}
-.karte .musik-liste li{padding:12px 14px}.musik-liste .name{display:block;font-weight:600}.musik-tun{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 0}.musik-tun form{margin:0}.musik-tun .weg{background:var(--danger-soft);color:var(--danger)}
-.musik-platten .stand{margin:12px 2px 0;color:var(--muted)}.musik-platten .stand a{color:var(--accent)}</style>`
+.karte ul.musik-liste{display:grid;gap:8px;margin:10px 0 0;background:none;border:0;border-radius:0}.karte .musik-liste li{display:flex;gap:10px;padding:12px 14px;border:0;border-radius:20px;background:var(--card)}
+.musik-liste li>div{min-width:0}.musik-liste .name{display:block;font-weight:600;overflow-wrap:anywhere}.punkt.rot{background:var(--danger)}.musik-liste .punkt:not(.gelb):not(.rot){background:var(--ok)}
+.musik-tun{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 0}.musik-tun form{margin:0}.musik-tun .weg{background:var(--danger-soft);color:var(--danger)}
+.musik-platten .stand{margin:12px 2px 0}.musik-platten .stand a{color:var(--accent)}.musik-platten .ruhig{margin:12px 2px 0}.musik-platten .ruhig a{color:var(--accent)}</style>`
 
 // musikKorb is the inbox's hidden Papierkorb (haus#174): a dot folder, which
 // the importer never touches; each deleted upload in <id>/ for 30 days.
@@ -484,7 +370,7 @@ func musikUndoForm(id string) string {
 		`><button data-laeuft="Holt zurück …">Rückgängig</button></form>`
 }
 
-// musikZurueck puts a deleted upload back under Braucht Aufmerksamkeit, where it was.
+// musikZurueck puts a deleted upload back among the files not sorted in, where it was.
 func musikZurueck(w http.ResponseWriter, r *http.Request, cfg StartConfig, id string) {
 	var e papierkorb.Eintrag
 	var d musikImKorb
@@ -513,39 +399,25 @@ func musikZurueck(w http.ResponseWriter, r *http.Request, cfg StartConfig, id st
 	root.Remove(musikKorb + "/" + e.ID)
 	cfg.Papierkorb.Raus(e.ID)
 	log.Printf("homes: musik: %s put %s back", r.Header.Get("Remote-User"), d.Name)
-	writeMusik(w, r, cfg, "„"+d.Name+"“ ist wieder da, unter „"+texte.T(texte.MusikAchtung)+"“.", "")
+	writeMusik(w, r, cfg, "„"+d.Name+"“ ist wieder da.", "")
 }
 
-// musikGeloescht is the uploads deleted in the last 30 days, each with
-// Rückgängig; what is older leaves the inbox's Papierkorb.
-func musikGeloescht(cfg StartConfig) string {
-	if cfg.Papierkorb == nil {
-		return ""
+// musikKorbLeeren lets go of what was deleted more than 30 days ago: the inbox's Papierkorb
+// keeps a file only while its entry does (haus#174).
+func musikKorbLeeren(cfg StartConfig) {
+	root, err := os.OpenRoot(cfg.MusicInbox)
+	if cfg.Papierkorb == nil || err != nil {
+		return
 	}
-	es := cfg.Papierkorb.Liste("musik")
-	if root, err := os.OpenRoot(cfg.MusicInbox); err == nil { // what has no entry any more goes
-		keep := map[string]bool{}
-		for _, e := range es {
-			keep[e.ID] = true
+	defer root.Close()
+	keep := map[string]bool{}
+	for _, e := range cfg.Papierkorb.Liste("musik") {
+		keep[e.ID] = true
+	}
+	ds, _ := fs.ReadDir(root.FS(), musikKorb)
+	for _, d := range ds {
+		if !keep[d.Name()] {
+			root.RemoveAll(musikKorb + "/" + d.Name())
 		}
-		if ds, err := fs.ReadDir(root.FS(), musikKorb); err == nil {
-			for _, d := range ds {
-				if !keep[d.Name()] {
-					root.RemoveAll(musikKorb + "/" + d.Name())
-				}
-			}
-		}
-		root.Close()
 	}
-	if len(es) == 0 {
-		return ""
-	}
-	_, loc := cfg.clock()
-	var b strings.Builder
-	b.WriteString(`<section class=karte aria-labelledby=m-g><h2 id=m-g>Gelöscht</h2><p class=k>Noch 30 Tage zurückzuholen.</p><ul class=musik-liste>`)
-	for _, e := range es {
-		b.WriteString(`<li><span class=name>` + html.EscapeString(e.Name) + `</span><span class=k>bis ` + e.Bis().In(loc).Format("02.01.") + `</span><div class=musik-tun>` + musikUndoForm(e.ID) + `</div></li>`)
-	}
-	b.WriteString(`</ul></section>`)
-	return b.String()
 }

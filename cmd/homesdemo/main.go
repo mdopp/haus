@@ -44,7 +44,6 @@ import (
 	"github.com/mdopp/homes/internal/ha"
 	"github.com/mdopp/homes/internal/ha/hafake"
 	"github.com/mdopp/homes/internal/jellyfin"
-	"github.com/mdopp/homes/internal/jellyfin/jellyfinfake"
 	"github.com/mdopp/homes/internal/laib"
 	"github.com/mdopp/homes/internal/laib/laibfake"
 	"github.com/mdopp/homes/internal/merken"
@@ -144,7 +143,10 @@ func main() {
 		log.Fatal(err)
 	}
 	// Anna's Discogs is connected (owner 2026-10-26: Platte erfassen on a phone is checked too); the app reaches no Discogs
-	os.WriteFile(filepath.Join(dir, "discogs-konten.json"), []byte(`{"anna":{"name":"anna","token":"t","secret":"s","seit":"2026-10-26T10:00:00Z"}}`), 0o600)
+	discogsKonto := func(an bool) {
+		os.WriteFile(filepath.Join(dir, "discogs-konten.json"), []byte(map[bool]string{true: `{"anna":{"name":"anna","token":"t","secret":"s","seit":"2026-10-26T10:00:00Z"}}`, false: `{}`}[an]), 0o600)
+	}
+	discogsKonto(true)
 	shelves := &discogs.Regale{App: &discogs.App{Key: "demo", Secret: "demo", Base: "http://127.0.0.1:1", Web: "https://www.discogs.test"}, Dir: dir}
 	// haus#152: what Anna watched and heard, and the film and book wish list
 	absFake.Hoert("anna", "Krabat", 0.4, false, time.Now().Add(-time.Hour))
@@ -214,20 +216,16 @@ func main() {
 	mux.HandleFunc(pages.SpurenPath, pages.Mehr(mehr))
 	mux.HandleFunc(pages.AnfordernPath, pages.Anfordern(mehr))
 	mux.HandleFunc(pages.ModulPages, pages.ModulSeite(mehr))
-	// Musik (owner 2026-11-04: „Musik verwalten“): albums in Jellyfin, an upload being sorted in, one
-	// done and one beets kept back; /demo/musik?leer=1 empties the music, the inbox and beets' status
-	jf := jellyfinfake.New()
-	defer jf.Close()
+	// Musik (owner 2026-11-04: „nur Dateien darstellen“): a file being sorted in, one done, one beets
+	// kept back; /demo/musik?leer=1 empties the inbox and beets' status, ?discogs=0 is Anna without Discogs
 	musikCfg := mehr
-	musikCfg.Musikbib, musikCfg.Samba = &jellyfin.Client{URL: jf.URL, Token: "demo"}, &samba.Dir{Path: dir}
-	musikDemo := func(leer bool) {
-		jf.Setze(map[bool][]jellyfinfake.Album{false: jellyfinfake.Demo}[leer]...)
-		demoLaib.wishes.Status("beets", laibfake.DemoBeets(inbox, time.Now(), leer))
-	}
-	musikDemo(false)
+	musikCfg.Samba = &samba.Dir{Path: dir}
 	mux.HandleFunc(pages.MusikPath, pages.Musik(musikCfg))
-	mux.HandleFunc(pages.MusikBildPath, pages.Musik(musikCfg))
-	mux.HandleFunc("/demo/musik", func(w http.ResponseWriter, r *http.Request) { musikDemo(r.URL.Query().Get("leer") == "1") })
+	mux.HandleFunc("/demo/musik", func(w http.ResponseWriter, r *http.Request) {
+		demoLaib.wishes.Status("beets", laibfake.DemoBeets(inbox, time.Now(), r.URL.Query().Get("leer") == "1"))
+		discogsKonto(r.URL.Query().Get("discogs") != "0")
+	})
+	demoLaib.wishes.Status("beets", laibfake.DemoBeets(inbox, time.Now(), false))
 	mux.HandleFunc("/demo/wunsch", func(w http.ResponseWriter, r *http.Request) { // a wish moved on in Laib: wartet, abgelehnt, …
 		demoLaib.wishes.Setze(r.URL.Query().Get("modul"), r.URL.Query().Get("stand"), "")
 		mehr.Laib.ForgetWuensche()

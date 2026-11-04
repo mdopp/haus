@@ -46,8 +46,7 @@ func Platte(cfg StartConfig) http.HandlerFunc {
 				http.NotFound(w, r)
 				return
 			}
-			id, err := strconv.Atoi(r.URL.Query().Get("r")) // the cover through Homes: the phone never asks Discogs itself
-			zeigeBild(w, r, err == nil && id > 0, func(ctx context.Context) ([]byte, string, error) { return rg.C.Bild(ctx, id) })
+			platteBild(w, r, rg)
 			return
 		}
 		if r.URL.Path != PlattePath {
@@ -202,6 +201,26 @@ func platteHinzu(ctx context.Context, w http.ResponseWriter, r *http.Request, cf
 		}
 	}
 	writePlatte(w, r, cfg, said, nil, nil, discogs.Hinweise{})
+}
+
+// platteBild is a release's cover through Homes: the phone never asks
+// Discogs itself.
+func platteBild(w http.ResponseWriter, r *http.Request, rg *discogs.Regal) {
+	id, err := strconv.Atoi(r.URL.Query().Get("r"))
+	if err != nil || id <= 0 || !showOnly(w, r, "Das Bild") {
+		http.NotFound(w, r)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	b, ct, err := rg.C.Bild(ctx, id)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", ct)
+	w.Header().Set("Cache-Control", "private, max-age=86400")
+	w.Write(b)
 }
 
 const platteStyle = `<style>.karte form.platte-form{display:block}.platte-form .knopf{margin:4px 0 0}.platte-form label{display:block;font-size:.85rem;color:var(--muted);margin:12px 0 6px}

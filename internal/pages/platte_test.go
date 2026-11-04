@@ -125,11 +125,15 @@ func TestPlatteErfassen(t *testing.T) {
 	cfg.Module = modulListe(t, "musik")
 	_, body, _ = familyPage(t, Mehr, cfg, "GET", "/mehr", "family")
 	mustNotContain(t, body, "Platte erfassen", "Discogs-Konto verbinden")
-	mustContain(t, body, "Neue Alben, was beim Einsortieren hängt, Platten erfassen, Discogs")
+	mustContain(t, body, "Hinzufügen und was beim Einsortieren hängt, Platten erfassen")
 	_, body, _ = familyPage(t, Musik, cfg, "GET", MusikPath, "family")
 	mustContain(t, body, "<h2 id=m-p>Platten</h2>", `href=/platte>Platte erfassen</a>`, `?liste=liste-musik">Wunschliste · 0</a>`,
-		`<p class=ruhig><span class=punkt></span><a href=/discogs>Discogs: verbunden mit`)
-	mustNotContain(t, body, "noch nicht eingerichtet")
+		`</section><p class=ruhig><span class=punkt></span><a href=/discogs>Discogs: verbunden mit „mdopp“</a></p>`)
+	mustNotContain(t, body, "noch nicht eingerichtet", "Mit Discogs verbinden")
+	// owner 2026-11-04: without one's Discogs, Platten is the wish list and the quiet way to connect it, nothing else
+	_, body, _ = familyPageAs(t, Musik, cfg, "GET", MusikPath, "ben", "family")
+	mustContain(t, body, `?liste=liste-musik">Wunschliste · 0</a>`, `<span class="punkt grau"></span><span><a href=/discogs>Mit Discogs verbinden</a> – dann erfasst du`)
+	mustNotContain(t, body, `href=/platte>`, "verbunden mit")
 
 	// the phone read the barcode: Discogs's pressing, to confirm
 	rec := plattePost(t, h, map[string]string{"tun": "suchen", "barcode": "4006381333931"}, false)

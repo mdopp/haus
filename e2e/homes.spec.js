@@ -407,26 +407,25 @@ test("a list of one's own is made, switched to, and deleted", async ({ page }) =
   await expect(page.getByRole('link', { name: name })).toHaveCount(0);
 });
 
-// Musik verwalten (owner 2026-11-04): how music gets in first, the import's state right under
-// it, the newest albums as tiles, what needs someone, the records, Discogs quiet last; with an
-// empty library only Hinzufügen is left, and nothing refreshes.
-test('Musik leads with how music gets in and shows the library from real data', async ({ page, request }, info) => {
+// Musik verwalten (owner 2026-11-04: „nur Dateien darstellen, aber nichts Komplexes“): how music
+// gets in, one list of the files under it, a failed one with its actions on its row; Platten
+// by whether one's Discogs is connected; with nothing uploaded only Hinzufügen and nothing refreshes.
+test('Musik is how music gets in, its files, and the records by Discogs', async ({ page, request }, info) => {
   await request.get('/demo/musik?leer=0');
   await page.goto('/musik');
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Musik');
-  await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Hinzufügen', 'Zuletzt hinzugefügt', 'Braucht Aufmerksamkeit', 'Platten']);
-  await expect(page.locator('.musik-dazu .zustand')).toHaveText([/Wird einsortiert: „Sommerplatte.zip“/, /Nicht einsortiert: „kassette-1994.rar“/, /Fertig: „Erfundenes Album.zip“, 2 Alben, 24 Titel/]);
-  await expect(page.locator('.alben li')).toHaveCount(6);
-  await expect(page.locator('.alben img').first()).toHaveJSProperty('complete', true);
-  expect(await page.locator('.alben img').first().evaluate((i) => i.naturalWidth)).toBeGreaterThan(0);
-  const y = async (sel) => (await page.locator(sel).first().boundingBox()).y;
-  expect(await y('.musik-dazu .zustand')).toBeLessThan(await y('.musik-neu'));
-  expect(await y('.musik-platten')).toBeLessThan(await y('p.ruhig'));
-  await page.screenshot({ path: info.outputPath('musik-demo.png'), fullPage: true });
-  await request.get('/demo/musik?leer=1');
-  await page.reload();
   await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Hinzufügen', 'Platten']);
-  await expect(page.locator('.zustand, [data-auffrischen], .alben')).toHaveCount(0);
+  const rows = page.locator('.musik-liste li');
+  await expect(rows).toHaveText([/Sommerplatte.zip\s*wird einsortiert/, /kassette-1994.rar\s*nicht einsortiert: RAR/, /Erfundenes Album.zip\s*fertig: 2 Alben, 24 Titel/]);
+  await expect(rows.nth(1).getByRole('button')).toHaveText(['Noch einmal einsortieren', 'Löschen']);
+  await expect(page.locator('.musik-platten')).toContainText('Platte erfassen');
+  await expect(page.locator('p.ruhig').last()).toContainText('Discogs: verbunden mit');
+  await page.screenshot({ path: info.outputPath('musik-demo.png'), fullPage: true });
+  await request.get('/demo/musik?leer=1&discogs=0');
+  await page.reload();
+  await expect(rows).toHaveCount(0);
+  await expect(page.locator('[data-auffrischen]')).toHaveCount(0);
+  await expect(page.locator('.musik-platten a')).toHaveText([/Wunschliste · \d+/, 'Mit Discogs verbinden']);
   await page.screenshot({ path: info.outputPath('musik-leer.png'), fullPage: true });
   await request.get('/demo/musik?leer=0');
 });
