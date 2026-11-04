@@ -52,3 +52,21 @@ func TestKeptAufgabenForgetsOnATick(t *testing.T) {
 		t.Errorf("after a tick Laib asked %d times in all; want 2", n)
 	}
 }
+
+// Gemerkt answers the kept list, asks nobody and starts no refresh.
+func TestGemerktAsksNobody(t *testing.T) {
+	c := &Client{URL: "http://127.0.0.1:1", Token: "t"}
+	if _, ok := c.Gemerkt("anna"); ok {
+		t.Fatal("a list nobody read")
+	}
+	c.keepAufgaben("anna", Aufgaben{Offen: 2})
+	if l, ok := c.Gemerkt("anna"); !ok || l.Offen != 2 {
+		t.Fatalf("kept: %v %v", l, ok)
+	}
+	c.aufgabenMu.Lock()
+	running := c.aufgaben["anna"].done != nil
+	c.aufgabenMu.Unlock()
+	if running {
+		t.Error("Gemerkt started a refresh")
+	}
+}

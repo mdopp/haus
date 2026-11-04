@@ -131,14 +131,15 @@ func Sprechen(cfg StartConfig) http.HandlerFunc {
 				return
 			}
 			e, ok := t.get(person)
-			b := familyHead(r, cfg, "Sprechen", "Start") // no tab of its own: the field is Start's (haus#12)
-			b.WriteString("<h1>Sprechen</h1>" + sprechenField(cfg, true))
+			b := familyHead(r, cfg, "Sprechen", "Start")      // no tab of its own: the field is Start's (haus#12)
+			oben, unten := einrichtenHier(r, cfg, "sprechen") // Signal, while it is not set up (owner 2026-11-04)
+			b.WriteString("<h1>Sprechen</h1>" + oben + sprechenField(cfg, true))
 			if ok {
 				b.WriteString(e.html())
 			} else {
 				b.WriteString("<p class=\"k vorher\">Was du hier schreibst, liest " + html.EscapeString(assistent.Name()) + ". Die Antwort erscheint hier; das kann einen Moment dauern.</p>")
 			}
-			b.WriteString(wakeLine(lookWake(r, cfg))) // and at the speaker: its wake word (owner 2026-10-30)
+			b.WriteString(wakeLine(lookWake(r, cfg)) + unten) // and at the speaker: its wake word (owner 2026-10-30)
 			writePage(w, http.StatusOK, b)
 		case http.MethodPost:
 			if !fromHomes(r) {

@@ -9,7 +9,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mdopp/homes/internal/app"
+	"github.com/mdopp/homes/internal/einrichten"
 	"github.com/mdopp/homes/internal/haushalt"
+	"github.com/mdopp/homes/internal/jellyfin"
 	"github.com/mdopp/homes/internal/laib"
 	"github.com/mdopp/homes/internal/modul"
 	"github.com/mdopp/homes/internal/pages"
@@ -50,6 +53,9 @@ func katalog(s site) []modul.Modul {
 	if n.UploadDir != "" {
 		dokApp.Teilen = []string{"dokument"}
 	}
+	link := func(name, backend, dienst string, e *modul.Einrichtung) modul.Modul { // a service Homes only leads to
+		return bau(modul.Modul{Name: name, Backend: backend, Einrichtung: e}, s.dienste[backend] && e != nil, einrichten.Grund(s.dienste, dienst))
+	}
 	ms := []modul.Modul{
 		bau(modul.Modul{Name: "geraete", Backend: "home-assistant",
 			Env:   []string{"HOMES_HA_URL", "HOMES_HA_TOKEN", "HOMES_HA_PUBLIC_URL", "HOMES_COVER_INVERTED"},
@@ -59,7 +65,7 @@ func katalog(s site) []modul.Modul {
 			Env: []string{"HOMES_ENERGY_FLOW", "HOMES_ENERGY_TOTALS", "HOMES_ENERGY_STATS"},
 			App: modul.Angebot{Widgets: []string{"energie"}}},
 			n.HA != nil, "Auf dieser Box läuft kein Home Assistant."),
-		bau(modul.Modul{Name: "sprechen", Backend: "bote",
+		bau(modul.Modul{Name: "sprechen", Backend: "bote", Einrichtung: einrichten.App("Signal", "org.thoughtcrime.securesms", einrichten.Signal(s.boteSignal), "https://support.signal.org/hc/de/articles/360007318691", "schritt.signal"),
 			Env: []string{"HOMES_BOTE_URL", "HOMES_BOTE_KEY", "HOMES_STT_PROVIDER", "HOMES_STT_LANGUAGE", "HOMES_BOTE_SIGNAL"}},
 			s.bote != nil, "Auf dieser Box läuft kein Bote."),
 		bau(modul.Modul{Name: "kalender", Backend: "radicale", Standard: "caldav",
@@ -87,8 +93,8 @@ func katalog(s site) []modul.Modul {
 		bau(modul.Modul{Name: "musik", Backend: "beets",
 			Env: []string{"HOMES_MUSIC_INBOX", "HOMES_JELLYFIN_URL", "HOMES_JELLYFIN_TOKEN", "HOMES_DISCOGS_KEY", "HOMES_DISCOGS_SECRET", "HOMES_LLM_VISION_MODEL"}},
 			musicInbox != "" || hh.Wuensche != nil, "Auf dieser Box gibt es keinen Musik-Eingang."),
-		bau(modul.Modul{Name: "podcasts", Backend: "audiobookshelf",
-			Env: []string{"HOMES_ABS_URL", "HOMES_ABS_TOKEN"}},
+		bau(modul.Modul{Name: "podcasts", Backend: "audiobookshelf", Env: []string{"HOMES_ABS_URL", "HOMES_ABS_TOKEN"},
+			Einrichtung: einrichten.App("Audiobookshelf", "com.audiobookshelf.app", einrichten.Web("hoerbuecher", s.domain), "https://www.audiobookshelf.org/guides/", "schritt.anmelden")},
 			s.podcasts != nil, "Auf dieser Box läuft kein Audiobookshelf."),
 		bau(modul.Modul{Name: "gesehen", Backend: "media",
 			Env: []string{"HOMES_JELLYFIN_URL", "HOMES_JELLYFIN_KEY", "HOMES_ABS_URL", "HOMES_ABS_TOKEN"}},
@@ -111,6 +117,11 @@ func katalog(s site) []modul.Modul {
 		bau(modul.Modul{Name: "nutzung", Backend: "usage-metrics",
 			Env: []string{"HOMES_USAGE_URL", "HOMES_USAGE_TOKEN"}},
 			s.usage != nil, "Auf dieser Box läuft kein usage-metrics."),
+		// the box's apps Homes only leads to, on with their service (owner 2026-11-04: their setup is theirs)
+		link("fotos", "immich", "Immich", einrichten.App("Immich", "app.alextran.immich", einrichten.Web("photos", s.domain), "https://immich.app/docs/features/mobile-app", "schritt.fotos", "schritt.fotos-sichern")),
+		link("passwoerter", "vaultwarden", "Vaultwarden", einrichten.App("Bitwarden", "com.x8bit.bitwarden", einrichten.Web("vault", s.domain),
+			"https://bitwarden.com/help/getting-started-mobile/", "schritt.tresor", "schritt.tresor-passwort")),
+		link("filme", "media", "Jellyfin", einrichten.App("Jellyfin", "org.jellyfin.mobile", einrichten.Web("media", s.domain), "https://jellyfin.org/docs/general/clients/", "schritt.anmelden")),
 	}
 	// what the box decides of the entries: Dokumente only with a way into the
 	// archive (haus#68); Musik with the inbox; Platte erfassen (with Discogs)
@@ -221,6 +232,8 @@ var schaltbar = map[string]func(*site){
 	"energie":  func(s *site) { s.napi.OhneEnergie = true },
 	"sprechen": func(s *site) { s.bote, s.boteSignal = nil, "" },
 	"nutzung":  func(s *site) { s.usage, s.voice = nil, nil },
+	// the services Homes only leads to: off, their setup and task are gone, nothing else knew of them
+	"fotos": func(*site) {}, "passwoerter": func(*site) {}, "filme": func(*site) {},
 }
 
 // haushalt changes the Haushalt source's backends, the Bote's and the
@@ -276,4 +289,28 @@ func startLeaf(ctx context.Context, s site) {
 	if s.napi.Sicherung != nil {
 		go s.napi.Sicherung.Pflegen(nil) // parts untouched for a week go, now and daily
 	}
+}
+
+// einrichtung is each person's setup tasks (owner 2026-11-04): the modules
+// on, the Homes app (done once paired), Jellyfin's devices where Homes has
+// its key, the ticks in HOMES_DATA, and the app's shortcuts this box has.
+func einrichtung(s site, gekoppelt func(string) bool, jf *jellyfin.Client) *einrichten.Quellen {
+	q := &einrichten.Quellen{Module: s.napi.Module, Haken: einrichten.Open(s.dataDir), Gekoppelt: gekoppelt, Adresse: s.publicURL, Ziele: map[string]string{}}
+	if s.publicURL != "" {
+		q.HomesApp = &modul.Einrichtung{Web: s.publicURL, App: "Homes", Paket: app.Paket, Store: app.Quelle + "/releases/latest/download/app-release.apk",
+			Anleitung: app.Quelle + "#readme", Schritte: []string{"schritt.homes", "schritt.homes-iphone"}}
+	}
+	if jf != nil && s.napi.Module.An("filme") {
+		q.Erkennen = map[string]func(context.Context, string) (bool, error){"filme": jf.HatGeraet}
+	}
+	if s.hh.Einkauf != nil { // the app's launcher shortcuts: the shopping list, the timeline, the camera into Paperless
+		q.Ziele["einkauf"] = s.publicURL + pages.EinkaufPath
+	}
+	if r := s.napi.Reitti; r != nil && pages.AppURL(r.PublicURL) != "" {
+		q.Ziele["zeitleiste"] = pages.AppURL(r.PublicURL)
+	}
+	if s.napi.UploadDir != "" {
+		q.Ziele["scannen"] = s.publicURL + "/napi/upload"
+	}
+	return q
 }

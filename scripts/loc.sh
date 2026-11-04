@@ -26,7 +26,7 @@ bad=0
 p() { for x in "$@"; do printf 'internal/%s ' "$x"; done; }
 connectors=$(p abs bote caldav discogs ha jellyfin judge laib musicbrainz paperless qmd reitti samba werkstatt)
 shared=$(p abruf app assistent cards code128 jsonfile markdown mcpserver modul namen texte)
-household=$(p ansicht devices dokumente einkauf energie favoriten gesehen haushalt library merken notes papierkorb podcasts schalter takeout usage)
+household=$(p ansicht devices dokumente einkauf einrichten energie favoriten gesehen haushalt library merken notes papierkorb podcasts schalter takeout usage)
 
 budget() { # budget <name> <cap> <dir…>
   name=$1 cap=$2; shift 2
@@ -59,7 +59,11 @@ budget household 9584 $household      # the household's own logic: 10,638, 9,176
 # says about itself and the list Homes builds from them, 1,472 with it; plus 5 %
 # 2026-11-04, step H8 (§10): the traces and wishes in internal/modul, and internal/texte, the one
 # table of the new family words (owner: Homes becomes multilingual), 1,709; plus 5 %
-budget shared 1795 $shared            # the card, Markdown, the app's names: 1,019; abruf, namen: 1,287; jsonfile: 1,334
+# 2026-11-04, the owner: „Texte aus Übersetzungen sind kein Code. Also raus aus der Grenze.“ The
+# text catalog (internal/texte/katalog.go: the family's words by id, and later each language's
+# table, de/en/es/fr) is words, not code, and multiplies with every language: not counted. The
+# package stays shared for the import rules; its logic (texte.go: T, In, Titel) is counted here
+budget shared 1795 $(echo "$shared" | sed 's#internal/texte ##') internal/texte/texte.go # the card, Markdown, the app's names: 1,019; abruf, namen: 1,287; jsonfile: 1,334
 
 # every package in one area
 for d in internal/*/; do

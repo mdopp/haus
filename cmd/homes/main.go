@@ -28,6 +28,7 @@ import (
 	"github.com/mdopp/homes/internal/devices"
 	"github.com/mdopp/homes/internal/discogs"
 	"github.com/mdopp/homes/internal/einkauf"
+	"github.com/mdopp/homes/internal/einrichten"
 	"github.com/mdopp/homes/internal/favoriten"
 	"github.com/mdopp/homes/internal/gesehen"
 	"github.com/mdopp/homes/internal/ha"
@@ -85,7 +86,9 @@ type site struct {
 	podcasts                  *podcasts.Service // haus#123: the family's podcasts in Audiobookshelf; nil, no page
 	gesehen                   *gesehen.Service  // haus#152: what each person watched and heard; nil, no page
 	musik                     string            // haus#107: the music inbox's folder (musicInbox); "", no Musik page
-	boteSignal                string            // haus#175: the house's Signal number (HOMES_BOTE_SIGNAL), Willkommen's chat card; "", none
+	boteSignal                string            // haus#175: the house's Signal number (HOMES_BOTE_SIGNAL), sprechen's setup; "", none
+	domain                    string            // the box's domain, HOMES_PUBLIC_URL's after homes.: the services' addresses
+	dienste                   map[string]bool   // the services Laib runs, asked at start: the link modules; nil, Laib did not say
 }
 
 // routes is Homes' whole surface: /napi for the app, /mcp/haushalt for the
@@ -114,14 +117,14 @@ func familyOf(s site) pages.StartConfig {
 		Samba: s.samba, SambaHost: s.sambaHost, Usage: s.usage, PublicURL: s.publicURL, Welcome: s.welcome, STT: s.stt,
 		HAPublicURL: s.haPublic, Inverted: s.inverted, RadicalePublicURL: s.radicale, Views: s.views, GesundheitURL: s.gesundheit,
 		DocumentsMail: s.docsMail, PaperlessPublicURL: s.paperlessPublic, PaperlessLANOnly: s.paperlessLAN, Sicherung: s.napi.Sicherung,
-		Reitti: s.napi.Reitti, Module: s.napi.Module}
+		Reitti: s.napi.Reitti, Module: s.napi.Module, Einrichtung: s.napi.Einrichtung}
 	// the lists, the music wish list and the shelf, before any page takes its copy of family
 	family.Einkauf, family.Wuensche = s.hh.Einkauf, s.hh.Wuensche
 	if s.hh.Wuensche != nil {
 		family.Discogs = s.hh.Wuensche.Regale
 	}
-	family.BoteSignal, family.OhneEnergie = s.boteSignal, s.napi.OhneEnergie // haus#175: Willkommen's chat card
-	family.Papierkorb = &papierkorb.Korb{Dir: s.dataDir}                     // haus#174: family deletes, for 30 days
+	family.OhneEnergie = s.napi.OhneEnergie
+	family.Papierkorb = &papierkorb.Korb{Dir: s.dataDir} // haus#174: family deletes, for 30 days
 	family.MusicInbox = s.musik
 	if family.MusicInbox != "" { // haus#107: the music inbox beets sorts in
 		if fi, err := os.Stat(family.MusicInbox); err != nil || !fi.IsDir() {
@@ -163,7 +166,8 @@ func familyMux(s site) *http.ServeMux {
 	pagesMux.HandleFunc(pages.AnfordernPath, pages.Anfordern(family))
 	pagesMux.HandleFunc(pages.ModulPages, pages.ModulSeite(family))               // a module, admins: where a wish leads
 	pagesMux.HandleFunc("/aufgaben", pages.DeineAufgaben(family))                 // haus#188: Deine Aufgaben // the bar's fourth entry, with Abmelden (haus#67)
-	pagesMux.HandleFunc("/willkommen", pages.Willkommen(family))                  // a new person's apps and how to set them up (haus#56)
+	pagesMux.HandleFunc("/willkommen", pages.Willkommen(family))                  // hello and the next steps (haus#56)
+	pagesMux.HandleFunc(pages.EinrichtenPages, pages.Einrichten(family))          // a module's setup, ticked by hand (owner 2026-11-04)
 	pagesMux.HandleFunc("/adresse", pages.Adresse(family))                        // the household's address, admins only (laib#561)
 	pagesMux.HandleFunc("/adresse/vorschlagen", pages.AdresseVorschlagen(family)) // its form, a proposal to Laib
 	pagesMux.HandleFunc("/abmelden", pages.Abmelden(s.publicURL))                 // Authelia's logout, back to Homes (haus#61)
@@ -436,8 +440,10 @@ func main() {
 		stt:        pages.STT{Provider: os.Getenv("HOMES_STT_PROVIDER"), Language: env("HOMES_STT_LANGUAGE", "de")},
 		gesundheit: gesundheit, haPublic: haPublic, inverted: pages.InvertedFromList(os.Getenv("HOMES_COVER_INVERTED")),
 		radicale: radicalePublic, views: ansicht.Open(dataDir, os.Getenv("HOMES_RADICALE_USER")), dataDir: dataDir,
-		docsMail: docsMail, paperlessPublic: paperlessPublic, paperlessLAN: paperlessLAN, musik: musicInbox(), boteSignal: strings.TrimSpace(os.Getenv("HOMES_BOTE_SIGNAL"))}
+		docsMail: docsMail, paperlessPublic: paperlessPublic, paperlessLAN: paperlessLAN, musik: musicInbox(), boteSignal: strings.TrimSpace(os.Getenv("HOMES_BOTE_SIGNAL")),
+		domain: einrichten.Domain(os.Getenv("HOMES_PUBLIC_URL")), dienste: einrichten.Dienste(ctx, ops, 5*time.Second)}
 	st.napi.Module = logModule(&st) // HOMES_MODULE_AUS takes what it switches off out of st
+	st.napi.Einrichtung = einrichtung(st, devices.Gekoppelt(store), jellyfin.KeyFromEnv())
 	// the counter stops only once the server has: a page is counted after
 	// it is answered, so the last flush waits for the requests under way (#92)
 	counting, stopCounting := context.WithCancel(context.Background())

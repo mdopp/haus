@@ -72,6 +72,8 @@ func fullSite(t *testing.T) (site, *hafake.HA, *davfake.Server) {
 	s.napi.Haushalt = s.hh
 	s.napi.Konto = cal // the phone's Homes account, on the same Radicale
 	s.napi.Validate = func(_ context.Context, b string) bool { return b == "dev1" }
+	// the services Laib runs (the link modules): Immich and Jellyfin, no Vaultwarden
+	s.domain, s.dienste = "example", map[string]bool{"immich": true, "media": true}
 	return s, fake, dav
 }
 

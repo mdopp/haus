@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/mdopp/homes/internal/modul"
+	"github.com/mdopp/homes/internal/texte"
 )
 
 // TestEveryVariableHasAnOwner (ADR 0001 §8): every HOMES_* the production
@@ -84,7 +85,57 @@ func TestTheCatalogBuilds(t *testing.T) {
 	for _, m := range katalog(site{}) {
 		names[m.Name] = true
 	}
-	if len(names) != 18 {
-		t.Errorf("the catalog has %d modules, ADR 0001 §7 lists 18", len(names))
+	if len(names) != 21 {
+		t.Errorf("the catalog has %d modules, ADR 0001 §7 lists 21", len(names))
+	}
+}
+
+// owner 2026-11-04: each module's setup is whole (every step it names is
+// in German, an app has its package, guide and address), and a service
+// Homes only leads to is on with it: fotos and filme here, passwoerter
+// not; Laib silent at start, they say they could not tell.
+func TestTheSetupsAreWhole(t *testing.T) {
+	s, _, _ := fullSite(t)
+	s.radicale, s.boteSignal, s.publicURL = "https://caldav.example", "+491701234567", "https://homes.example"
+	steps := 0
+	check := func(name string, e *modul.Einrichtung) {
+		for _, id := range e.Schritte {
+			if steps++; texte.T(texte.ID(id)) == id {
+				t.Errorf("%s: step %s has no German", name, id)
+			}
+		}
+		if e.App != "" && (e.Paket == "" || e.Anleitung == "" || e.Web == "" || !strings.HasPrefix(e.Store, "https://")) {
+			t.Errorf("%s: %+v", name, e)
+		}
+	}
+	apps := 0
+	for _, m := range katalog(s) {
+		if m.Einrichtung != nil {
+			apps++
+			check(m.Name, m.Einrichtung)
+		}
+	}
+	l, err := modul.Bauen(katalog(s))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.napi.Module = l
+	check("homes", einrichtung(s, nil, nil).HomesApp)
+	if m, _ := l.Eins("kalender"); m.Einrichtung != nil { // owner 2026-11-04: no calendar task, iPhone to be thought anew
+		t.Errorf("kalender has a setup: %+v", m.Einrichtung)
+	}
+	if apps != 5 || steps < 9 {
+		t.Errorf("%d modules with a setup, %d steps", apps, steps)
+	}
+	if !l.An("fotos") || !l.An("filme") || l.An("passwoerter") {
+		t.Errorf("link modules: %s", l)
+	}
+	if m, _ := l.Eins("passwoerter"); m.Grund != "Auf dieser Box läuft Vaultwarden nicht." {
+		t.Errorf("passwoerter: %q", m.Grund)
+	}
+	s.dienste = nil
+	l, _ = modul.Bauen(katalog(s))
+	if m, _ := l.Eins("fotos"); m.An() || !strings.Contains(m.Grund, "ließ sich beim Start nicht lesen") {
+		t.Errorf("Laib silent: %+v", m)
 	}
 }

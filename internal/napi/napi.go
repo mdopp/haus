@@ -23,6 +23,7 @@ import (
 	"github.com/mdopp/homes/internal/app"
 	"github.com/mdopp/homes/internal/assistent"
 	"github.com/mdopp/homes/internal/caldav"
+	"github.com/mdopp/homes/internal/einrichten"
 	"github.com/mdopp/homes/internal/favoriten"
 	"github.com/mdopp/homes/internal/ha"
 	"github.com/mdopp/homes/internal/haushalt"
@@ -81,6 +82,8 @@ type Config struct {
 	Usage *usage.Counter
 	// Module: the box's areas (ADR 0001), GET /napi/kann; nil = 404
 	Module *modul.Liste
+	// Einrichtung: each person's setup tasks (einrichtung.go); nil = 404
+	Einrichtung *einrichten.Quellen
 }
 
 // refreshed is the event a /napi request counts as: its pattern's path,
@@ -235,8 +238,10 @@ func Handler(c Config) http.Handler {
 	})
 	mux.HandleFunc("POST "+prefix+"/approvals/{id}/approve", verdict)
 	mux.HandleFunc("POST "+prefix+"/approvals/{id}/deny", verdict)
-	mux.HandleFunc("GET /napi/kann", auth(c.kann))                 // what this box can do, for the app (ADR 0001 §2)
-	mux.HandleFunc("POST /napi/kann/anfordern", auth(c.anfordern)) // a wish for what it cannot yet (§10)
+	mux.HandleFunc("GET /napi/kann", auth(c.kann))                     // what this box can do, for the app (ADR 0001 §2)
+	mux.HandleFunc("POST /napi/kann/anfordern", auth(c.anfordern))     // a wish for what it cannot yet (§10)
+	mux.HandleFunc("GET /napi/einrichtung", auth(c.einrichtung))       // the person's modules and their setup tasks
+	mux.HandleFunc("POST /napi/einrichtung/apps", auth(c.einrichtung)) // the phone's installed apps tick theirs
 	mux.HandleFunc("GET /napi/whoami", func(w http.ResponseWriter, r *http.Request) {
 		if bearer, ok := bearerOf(r); ok && c.Whoami != nil {
 			if uid, ok := c.Whoami(bearer); ok {

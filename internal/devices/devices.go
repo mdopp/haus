@@ -13,6 +13,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -127,4 +128,12 @@ func (s *Store) List() []Device {
 	out := append([]Device(nil), s.list...)
 	sort.Slice(out, func(i, j int) bool { return out[i].Created.After(out[j].Created) })
 	return out
+}
+
+// Gekoppelt is whether a person paired a phone (owner 2026-11-04: the
+// Homes app's setup task is done then).
+func Gekoppelt(s *Store) func(person string) bool {
+	return func(person string) bool {
+		return slices.ContainsFunc(s.List(), func(d Device) bool { return d.UID == person })
+	}
 }

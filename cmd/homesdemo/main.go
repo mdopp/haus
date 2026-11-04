@@ -38,6 +38,7 @@ import (
 	"github.com/mdopp/homes/internal/caldav/davfake"
 	"github.com/mdopp/homes/internal/cards"
 	"github.com/mdopp/homes/internal/einkauf"
+	"github.com/mdopp/homes/internal/einrichten"
 	"github.com/mdopp/homes/internal/favoriten"
 	"github.com/mdopp/homes/internal/gesehen"
 	"github.com/mdopp/homes/internal/ha"
@@ -152,9 +153,13 @@ func main() {
 	cfg := pages.StartConfig{Gesehen: seen, Einkauf: list, Wuensche: wishes, Discogs: shelves, Podcasts: pods, HA: &ha.Client{URL: fake.URL, Token: "demo"}, Notes: nd, Favorites: favoriten.Open(dir), MusicInbox: inbox,
 		Calendar: cal, Views: ansicht.Open(dir, "homes"),
 		RadicalePublicURL: "https://caldav.example", Fetcher: abruf.Fetcher{AllowPrivate: true}}
-	// what the box lacks (ADR 0001 §10): Standortverlauf missing, Podcasts switched off, a wish to Laib
+	// what the box lacks (ADR 0001 §10): Standortverlauf missing, Netzlaufwerk switched off, a wish to Laib
 	cfg.Module = demoModule(false)
+	// each module's setup a task for Anna (owner 2026-11-04): the Homes app, Audiobookshelf, Immich, Jellyfin; none ticked yet
+	cfg.Einrichtung = &einrichten.Quellen{Module: cfg.Module, Haken: einrichten.Open(dir), HomesApp: einrichten.App("Homes", "cloud.dopp.homes", "https://homes.example",
+		"https://github.com/mdopp/homes-android#readme", "schritt.homes", "schritt.homes-iphone"), Adresse: "https://homes.example"}
 	mux := http.NewServeMux()
+	mux.HandleFunc(pages.EinrichtenPages, pages.Einrichten(cfg))
 	mux.HandleFunc("/start", pages.Start(cfg))
 	mux.HandleFunc("/schrift/", pages.Font()) // Geist, as on the box: the pictures and the layout gate in the family's font
 	mux.HandleFunc("/raeume", pages.Raeume(cfg))
@@ -341,21 +346,24 @@ type laibFake struct {
 // demoModule is the demo's box: the modules its pages have, with their
 // entries in the family's selection as the catalog gives them on a box
 // with a music inbox (Musik, not Platte erfassen or Discogs on their own);
-// no Reitti, and Podcasts switched off; Dokumente on its own page only,
+// no Reitti, and Netzlaufwerk switched off; Dokumente on its own page only,
 // which has a way into the archive.
 func demoModule(docs bool) *modul.Liste {
 	m := func(name, backend, warum, grund string) modul.Modul {
 		nav := slices.DeleteFunc(pages.Nav(name), func(e modul.Eintrag) bool {
 			return e.Pfad == pages.PlattePath || e.Pfad == pages.DiscogsPath || (e.Pfad == pages.DokumentePath && !docs)
 		})
-		return modul.Modul{Name: name, Titel: texte.Titel(name), Backend: backend, Warum: warum, Grund: grund, Nav: nav}
+		e := map[string]*modul.Einrichtung{"podcasts": einrichten.App("Audiobookshelf", "com.audiobookshelf.app", "https://hoerbuecher.example", "https://www.audiobookshelf.org/guides/", "schritt.anmelden"),
+			"fotos": einrichten.App("Immich", "app.alextran.immich", "https://photos.example", "https://immich.app/docs/features/mobile-app", "schritt.fotos", "schritt.fotos-sichern"),
+			"filme": einrichten.App("Jellyfin", "org.jellyfin.mobile", "https://media.example", "https://jellyfin.org/docs/general/clients/", "schritt.anmelden")}[name]
+		return modul.Modul{Name: name, Titel: texte.Titel(name), Backend: backend, Warum: warum, Grund: grund, Nav: nav, Einrichtung: e}
 	}
 	l, err := modul.Bauen([]modul.Modul{m("geraete", "home-assistant", "", ""), m("energie", "home-assistant", "", ""),
 		m("kalender", "radicale", "", ""), m("einkauf", "radicale", "", ""), m("notizen", "file-share", "", ""),
 		m("musik", "beets", "", ""), m("gesehen", "media", "", ""), m("dokumente", "paperless", "", ""),
 		m("standort", "reitti", modul.Fehlt, "Auf dieser Box läuft kein Reitti."),
-		m("podcasts", "audiobookshelf", modul.Aus, "Auf dieser Box ausgeschaltet."),
-		m("gesundheit", "gesundheit", modul.Fehlt, "Auf dieser Box läuft Gesundheit nicht.")})
+		m("podcasts", "audiobookshelf", "", ""), m("netzlaufwerk", "file-share", modul.Aus, "Auf dieser Box ausgeschaltet."),
+		m("gesundheit", "gesundheit", modul.Fehlt, "Auf dieser Box läuft Gesundheit nicht."), m("fotos", "immich", "", ""), m("filme", "media", "", "")})
 	if err != nil {
 		log.Fatal(err)
 	}

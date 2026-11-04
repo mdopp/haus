@@ -115,3 +115,14 @@ func (c *Client) PeekAufgaben(von string) (Aufgaben, bool) {
 
 // ForgetAufgaben drops every kept list, as a tick through Homes does.
 func (c *Client) ForgetAufgaben() { c.forgetAufgaben() }
+
+// Gemerkt is the list kept for von, however old, and asks nobody: for a
+// counter on every page (owner 2026-11-04), which must not make Laib work.
+func (c *Client) Gemerkt(von string) (Aufgaben, bool) {
+	c.aufgabenMu.Lock()
+	defer c.aufgabenMu.Unlock()
+	if k := c.aufgaben[von]; k != nil && k.have {
+		return k.list, true
+	}
+	return Aufgaben{}, false
+}

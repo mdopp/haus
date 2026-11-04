@@ -19,7 +19,7 @@ import (
 // page in the menu. Mehr shows the open ones at the top, each with its
 // guided page; Start says it quietly while an important one is open;
 // Deine Aufgaben lists them all, the done ones to do again. Done is what
-// Homes sees, never a tick.
+// Homes sees; a module's app, where nothing can tell, the person's tick.
 const aufgabenPath = "/aufgaben"
 
 // aufgabe is one thing for one person to set up.
@@ -111,6 +111,9 @@ func einrichtung(r *http.Request, cfg StartConfig) []aufgabe {
 					href: netzlaufwerkPath, wichtig: true, erledigt: !seit.IsZero()})
 			}
 		}
+	}
+	for _, a := range cfg.Einrichtung.Fuer(user) { // each module's own app, and the Homes app (owner 2026-11-04)
+		out = append(out, aufgabe{titel: a.Titel, warum: a.Warum, href: einrichtenHref(a.Modul), erledigt: a.Erledigt != nil})
 	}
 	if cfg.Discogs != nil { // the household's Discogs app is there; each person connects their own
 		_, verbunden := cfg.Discogs.Konto(user)
@@ -242,9 +245,10 @@ func DeineAufgaben(cfg StartConfig) http.HandlerFunc {
 		if !showOnly(w, r, "Deine Aufgaben") {
 			return
 		}
+		fetch(r, func(ctx context.Context) { cfg.Einrichtung.Pruefen(ctx, r.Header.Get("Remote-User")) }) // a module's own check (Jellyfin)
 		as := mitLaib(r, cfg)
 		b := familyHead(r, cfg, "Deine Aufgaben", "Aufgaben")
-		b.WriteString("<h1>Deine Aufgaben</h1><p class=k>Was du einmal einrichtest. Ist es erledigt, verschwindet es aus Mehr; hier kannst du es noch einmal machen.</p>")
+		b.WriteString("<h1>Deine Aufgaben" + zahl(len(offen(as))) + "</h1><p class=k>Was du einmal einrichtest. Ist es erledigt, verschwindet es aus Mehr; hier kannst du es noch einmal machen.</p>")
 		if len(as) == 0 {
 			b.WriteString("<p class=k>Auf dieser Box gibt es für dich gerade nichts einzurichten.</p>")
 		}

@@ -29,7 +29,6 @@ const (
 	iconPodcasts     = `<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>`
 	iconGesehen      = `<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>`
 	iconMusik        = `<path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/>`
-	iconApps         = `<rect x="6" y="3" width="12" height="18" rx="2"/><path d="M11 18h2"/>`
 	iconDaten        = `<path d="M4 5h16v11H9l-5 4z"/><path d="M12 7.5v5M9.5 10L12 12.5 14.5 10"/>`
 	iconStandort     = `<path d="M12 21s-6-5.5-6-11a6 6 0 0 1 12 0c0 5.5-6 11-6 11z"/><circle cx="12" cy="10" r="2.2"/>`
 	iconNetzlaufwerk = `<rect x="3" y="5" width="18" height="6" rx="1.5"/><rect x="3" y="13" width="18" height="6" rx="1.5"/><path d="M7 8h.01M7 16h.01"/>`
@@ -66,16 +65,14 @@ var navVon = map[string][]modul.Eintrag{
 func Nav(name string) []modul.Eintrag { return slices.Clone(navVon[name]) }
 
 // kern are the core's entries: Start and Mehr always (Mehr holds the
-// account), Haushalt while it has a pill, Apps einrichten with Laib or
-// the network drive, Aufgaben for who is signed in and has some (haus#188),
-// Box for admins.
+// account), Haushalt while it has a pill, Aufgaben for who is signed in
+// and has some (haus#188; each module's setup is one since 2026-11-04,
+// the guides of Apps einrichten went to the modules), Box for admins.
 func kern(cfg StartConfig) []modul.Eintrag {
 	return []modul.Eintrag{
 		{Titel: "Start", Pfad: "/start", Icon: iconStart, Ort: modul.Leiste, Rang: 10},
 		{Titel: "Haushalt", Pfad: "/kalender", Icon: iconHaushalt, Ort: modul.Leiste, Rang: 30},
 		{Titel: "Mehr", Pfad: mehrPath, Icon: iconMehr, Ort: modul.Leiste, Rang: 50},
-		{Titel: "Apps einrichten", Pfad: willkommenPath, Icon: iconApps, Ort: modul.Mehr, Rang: 70,
-			Fuer: func(*http.Request) bool { return cfg.Laib != nil || cfg.Samba != nil }},
 		{Titel: "Aufgaben", Pfad: aufgabenPath, Icon: iconAufgaben, Ort: modul.Mehr, Rang: 110,
 			Fuer: func(r *http.Request) bool { return angemeldet(r) && (cfg.Laib != nil || len(einrichtung(r, cfg)) > 0) }},
 		{Titel: "Box", Pfad: "/box", Icon: iconBox, Ort: modul.Mehr, Rang: 120, Fuer: isAdmin},
@@ -132,6 +129,14 @@ func navLink(b *strings.Builder, e modul.Eintrag, class string, current bool) {
 // and is there while it has one.
 func familyNav(r *http.Request, cfg StartConfig, current string) string {
 	in, pills := tabOf(current), eintraege(r, cfg, modul.Haushalt)
+	n := -1 // the open tasks beside Mehr and Aufgaben (owner 2026-11-04), counted once
+	mitZahl := func(e modul.Eintrag) modul.Eintrag {
+		if n < 0 {
+			n = offeneZahl(r, cfg)
+		}
+		e.Titel += zahl(n)
+		return e
+	}
 	var b strings.Builder
 	b.WriteString("<nav class=tabs aria-label=Seiten>")
 	for _, t := range eintraege(r, cfg, modul.Leiste) {
@@ -139,6 +144,8 @@ func familyNav(r *http.Request, cfg StartConfig, current string) string {
 		switch t.Titel {
 		case "Mehr":
 			class = "zu-mehr"
+			navLink(&b, mitZahl(t), class, t.Titel == in)
+			continue
 		case "Haushalt":
 			if len(pills) == 0 {
 				continue
@@ -149,7 +156,11 @@ func familyNav(r *http.Request, cfg StartConfig, current string) string {
 	}
 	b.WriteString("<div class=mehr><p class=mehr-titel>Mehr</p>")
 	for _, t := range eintraege(r, cfg, modul.Mehr) {
-		navLink(&b, t, "", t.Titel == current)
+		cur := t.Titel == current
+		if t.Pfad == aufgabenPath {
+			t = mitZahl(t)
+		}
+		navLink(&b, t, "", cur)
 	}
 	if u := r.Header.Get("Remote-User"); u != "" {
 		b.WriteString("<p class=mehr-wer>Angemeldet als <span class=wer>" + html.EscapeString(u) + "</span></p>")

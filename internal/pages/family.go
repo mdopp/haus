@@ -87,6 +87,7 @@ summary{padding:10px 0;cursor:pointer}.stern{margin:20px 0 0}.stern p{margin:6px
 .tabs{position:fixed;left:0;right:0;bottom:0;z-index:2;display:flex;justify-content:center;background:var(--panel);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
 .tabs a{flex:1;max-width:7.5rem;min-height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--muted);text-decoration:none;font-size:.72rem}
 .tabs a[aria-current]{color:var(--accent)}.tabs svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.tabs .mehr{display:none}
+.anzahl{display:inline-block;min-width:1.5em;padding:0 .4em;border-radius:999px;background:var(--accent);color:var(--bg);font-size:.72rem;font-weight:700;line-height:1.5em;text-align:center;vertical-align:.2em}.tabs a{position:relative}.tabs .anzahl{position:absolute;top:5px;left:calc(50% + 5px)}
 .konto{display:flex;justify-content:flex-end;margin:10px 0 -14px;font-size:.78rem;color:var(--muted)}.konto .wer{font-weight:600}
 button[disabled]{opacity:.55;cursor:default}.sprechen .hinweis{margin:8px 4px 0;font-size:.82rem;color:var(--muted)}.sprechen .hinweis:empty{display:none}
 .mikro{width:44px;min-height:44px;padding:0;display:inline-flex;align-items:center;justify-content:center;flex:none}.mikro[hidden]{display:none}.mikro svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round}.mikro.an{background:var(--danger-soft);color:var(--danger)}
@@ -97,7 +98,7 @@ button[disabled]{opacity:.55;cursor:default}.sprechen .hinweis{margin:8px 4px 0;
 body>*{grid-column:1/-1}body>.karte{grid-column:auto}body>.karte.geraete{grid-column:1/-1}.konto{display:none}
 .tabs{top:0;left:auto;right:0;bottom:0;width:15rem;flex-direction:column;justify-content:flex-start;gap:2px;padding:20px 12px;border-top:0;border-left:1px solid var(--line);overflow-y:auto}
 .tabs a{flex:none;max-width:none;min-height:44px;flex-direction:row;justify-content:flex-start;gap:12px;padding:0 12px;border-radius:10px;font-size:.92rem;color:var(--ink)}.tabs a:hover{background:var(--card)}
-.tabs a[aria-current]{background:var(--accent-soft);color:var(--accent);font-weight:600}.tabs .zu-mehr{display:none}
+.tabs a[aria-current]{background:var(--accent-soft);color:var(--accent);font-weight:600}.tabs .zu-mehr{display:none}.tabs .anzahl{position:static;margin-left:auto}
 .tabs .mehr{display:flex;flex-direction:column;gap:2px;margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
 .mehr-titel{margin:0 12px 6px;font-size:.95rem;font-weight:700;color:var(--muted)}.mehr-wer{margin:14px 12px 2px;font-size:.8rem;color:var(--muted)}.mehr-wer .wer{color:var(--ink);font-weight:600}}</style>`
 
