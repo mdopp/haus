@@ -1,12 +1,14 @@
 package pages
 
 import (
+	"fmt"
 	"math"
 	"strings"
 
 	"github.com/mdopp/homes/internal/cards"
 	"github.com/mdopp/homes/internal/ha"
 	"github.com/mdopp/homes/internal/schalter"
+	"github.com/mdopp/homes/internal/texte"
 )
 
 // What a cover can do, by HA's supported_features (CoverEntityFeature).
@@ -65,10 +67,11 @@ func coverFeatures(s ha.State) int {
 
 // coverButtons are a cover's Hoch, Stopp and Runter (haus#64), as the
 // family sees it (asSeen), each only when HA says the cover can; none for
-// a cover the rule does not let open freely (a garage, a door, a gate, one
-// HA does not say what it is).
+// a cover HA does not say what it is. A garage, a door or a gate asks
+// before Hoch, as the app does (owner, 2026-11-04: the tiles „genau so“);
+// its Stopp and Runter go at once, as the rule lets them.
 func coverButtons(s ha.State, back string) []*cards.Action {
-	if !schalter.CoverFree(s) || s.State == "unavailable" {
+	if dc, _ := s.Attributes["device_class"].(string); dc == "" || s.State == "unavailable" {
 		return nil
 	}
 	f := coverFeatures(s)
@@ -77,31 +80,37 @@ func coverButtons(s ha.State, back string) []*cards.Action {
 		feature   int
 		label, do string
 	}{{coverOpen, "Hoch", "cover.open_cover"}, {coverStop, "Stopp", "cover.stop_cover"}, {coverClose, "Runter", "cover.close_cover"}} {
-		if f&b.feature != 0 {
-			out = append(out, &cards.Action{Label: b.label, Entity: s.EntityID, Do: b.do, Back: back})
+		if f&b.feature == 0 {
+			continue
 		}
+		a := &cards.Action{Label: b.label, Entity: s.EntityID, Do: b.do, Back: back}
+		if b.do == "cover.open_cover" && !schalter.CoverFree(s) {
+			a.Frage = &cards.Frage{Text: fmt.Sprintf(texte.T(texte.TorOeffnen), kurzname(friendly(s))), Ja: texte.T(texte.TorJa), Nein: texte.T(texte.TorNein)}
+		}
+		out = append(out, a)
 	}
 	return out
 }
 
 // coverSlider is a cover's position, 0 down to 100 up (haus#64), for a
-// cover that reports one and may be set freely; its steps Auf, ½, Zu.
-// (owner, 2026-11-03)
-// cover that reports one and may be set freely.
+// cover that reports one and may be set freely; its steps Auf, ½, Zu
+// (owner, 2026-11-03), and Stopp when HA says it can (as the app's sheet,
+// owner 2026-11-04).
 func coverSlider(s ha.State, back string) *cards.Slider {
 	v, ok := number(s.Attributes["current_position"])
 	if !ok || !schalter.CoverFree(s) || coverFeatures(s)&coverPosition == 0 || s.State == "unavailable" {
 		return nil
 	}
-	return &cards.Slider{Label: "Position", Name: friendly(s), Entity: s.EntityID, Do: "cover.set_cover_position", Back: back,
+	sl := &cards.Slider{Label: "Position", Name: friendly(s), Entity: s.EntityID, Do: "cover.set_cover_position", Back: back,
 		Value: max(0, min(100, int(math.Round(v)))), Steps: []cards.Step{{Label: "Auf", Value: 100}, {Label: "½", Value: 50}, {Label: "Zu", Value: 0}}}
+	if coverFeatures(s)&coverStop != 0 {
+		sl.Stopp = &cards.Action{Label: "Stopp", Entity: s.EntityID, Do: "cover.stop_cover", Back: back}
+	}
+	return sl
 }
 
-// saysCoverInHA is a cover's page when Homes does not open it.
-const (
-	saysGateInHA  = "Tore und Türen öffnet Homes nicht; das geht in Home Assistant."
-	saysCoverWhat = "Home Assistant sagt nicht, ob das ein Rollladen oder ein Tor ist; darum öffnet Homes es nicht. In Home Assistant beim Gerät unter „Anzeigen als“ einstellen, dann geht es hier."
-)
+// saysCoverWhat is a cover's page when Homes does not move it.
+const saysCoverWhat = "Home Assistant sagt nicht, ob das ein Rollladen oder ein Tor ist; darum öffnet Homes es nicht. In Home Assistant beim Gerät unter „Anzeigen als“ einstellen, dann geht es hier."
 
 // asSeen is a state as the family sees it (haus#64): a cover wired the
 // wrong way round (cfg.Inverted) turned over — its position 100 − HA's,

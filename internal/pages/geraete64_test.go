@@ -39,8 +39,9 @@ func dimHouse(t *testing.T, fake *hafake.HA) {
 
 // haus#64: a dimmer has a slider 0–100 % beside its switch (a tap still
 // switches), a blind with a position its slider and Hoch, Stopp, Runter;
-// a lamp that only switches, a cover HA does not say what it is, and a
-// garage have none of it. The slider is a plain form (light.turn_on,
+// a lamp that only switches and a cover HA does not say what it is have
+// none of it. A garage has its buttons, Hoch asking first (owner,
+// 2026-11-04: as the app), and no slider. The slider is a plain form (light.turn_on,
 // cover.set_cover_position), sent when the finger lets go.
 func TestRaeumeDimsAndMovesCovers(t *testing.T) {
 	fake, hc := house(t)
@@ -58,7 +59,10 @@ func TestRaeumeDimsAndMovesCovers(t *testing.T) {
 		`name=geraet value="cover.rollo"><input type=hidden name=tun value="cover.close_cover">`, "<button data-laeuft=\"Schaltet …\">Runter</button>",
 		`<noscript><button data-laeuft="Setzt …">Setzen</button></noscript>`, `onchange="this.form.requestSubmit`)
 	mustNotContain(t, ess, `value="light.schalter"><input type=hidden name=tun value="light.turn_on"><input type=hidden name=zurueck value="/raeume#karte-esszimmer"><span`,
-		`value="cover.ohne"`, `value="cover.garage"`, "<script>alert")
+		`value="cover.ohne"`, `value="cover.garage"><input type=hidden name=tun value="cover.set_cover_position"`, "<script>alert")
+	mustContain(t, ess, `<button type=button popovertarget=frage-cover-garage-cover-open-cover>Hoch</button><div popover id=frage-cover-garage-cover-open-cover class=blatt role=dialog`,
+		"Garage öffnen?", `name=geraet value="cover.garage"><input type=hidden name=tun value="cover.open_cover"><input type=hidden name=zurueck value="/raeume#karte-esszimmer"><input type=hidden name=bestaetigt value=ja><button data-laeuft="…">Öffnen</button>`,
+		`name=geraet value="cover.garage"><input type=hidden name=tun value="cover.close_cover"><input type=hidden name=zurueck value="/raeume#karte-esszimmer"><button data-laeuft="Schaltet …">Runter</button>`)
 	if n := strings.Count(ess, "class=regler"); n != 4 { // Bambi, the Dimmer (off, "aus"), Rollo, Esszimmerjalousie
 		t.Fatalf("%d sliders, want 4:\n%s", n, ess)
 	}
@@ -159,7 +163,8 @@ func TestInvertedCoverIsTurnedOver(t *testing.T) {
 // haus#64: "Weiter in Home Assistant" — Geräte links to HA's own page for
 // what Homes does not do, and a thing's page to its device in HA (else
 // the entity's history), from HOMES_HA_PUBLIC_URL; without it, no link.
-// A cover Homes does not open says why and where it goes.
+// A cover HA does not say what it is says why Homes does not move it; a
+// garage asks before it opens.
 func TestGeraeteGoOnInHomeAssistant(t *testing.T) {
 	fake, hc := house(t)
 	dimHouse(t, fake)
@@ -176,8 +181,8 @@ func TestGeraeteGoOnInHomeAssistant(t *testing.T) {
 	mustContain(t, body, "Home Assistant sagt nicht, ob das ein Rollladen oder ein Tor ist")
 	mustNotContain(t, body, "<button data-laeuft=\"Schaltet …\">Hoch</button>", "class=regler")
 	_, body, _ = familyPage(t, Ding, cfg, "GET", "/raeume/cover.garage", "family")
-	mustContain(t, body, "Tore und Türen öffnet Homes nicht; das geht in Home Assistant.")
-	mustNotContain(t, body, "<button data-laeuft=\"Schaltet …\">Hoch</button>", "<button data-laeuft=\"Schaltet …\">Runter</button>")
+	mustContain(t, body, "Garage öffnen?", "<button data-laeuft=\"Schaltet …\">Runter</button>")
+	mustNotContain(t, body, "<button data-laeuft=\"Schaltet …\">Hoch</button>", "class=regler", "Home Assistant sagt nicht")
 
 	// no address, no link; HA not answering, no word of it
 	_, body, _ = familyPage(t, Raeume, StartConfig{HA: hc}, "GET", "/raeume", "family")
@@ -189,26 +194,5 @@ func TestGeraeteGoOnInHomeAssistant(t *testing.T) {
 		if got := AppURL(bad); got != "" {
 			t.Errorf("AppURL(%q) = %q, want none", bad, got)
 		}
-	}
-}
-
-// haus#64: Meine Geräte says at the top how more get there, and each
-// tile has its ★ to take it off again, landing back on Start.
-func TestMeineGeraeteHaveTheirStar(t *testing.T) {
-	fake, hc := house(t)
-	dimHouse(t, fake)
-	cfg := StartConfig{HA: hc, Favorites: favorites(t, `{"anna": ["light.bambi", "cover.rollo"]}`)}
-	_, body := startPage(t, cfg, "family")
-	g := section(t, body, "karte-meine-geraete")
-	mustContain(t, g, `<p class=hinweis><a href="/raeume">Mit ☆ legst du Geräte auf die Startseite.</a></p>`,
-		`<form method=post action="/raeume/light.bambi"><input type=hidden name=stern value=aus><input type=hidden name=zurueck value="/start">`,
-		`aria-label="Bambi von Start nehmen">★</button>`, `aria-label="Rollo von Start nehmen">★</button>`)
-	before(t, g, "hinweis", "Bambi")
-	rec := post(t, Ding(cfg), "/raeume/light.bambi", url.Values{"stern": {"aus"}, "zurueck": {"/start"}}, "anna", nil)
-	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/start" {
-		t.Fatalf("unpin from Start → %d %q", rec.Code, rec.Header().Get("Location"))
-	}
-	if got, _ := cfg.Favorites.For("anna"); !reflect.DeepEqual(got, []string{"cover.rollo"}) {
-		t.Fatalf("anna: %v", got)
 	}
 }

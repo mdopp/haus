@@ -235,7 +235,7 @@ func TestRaeumePinsFromTheList(t *testing.T) {
 	rooms(t, fake)
 	cfg := StartConfig{HA: hc, Favorites: favorites(t, `{"anna": ["climate.wohnzimmer"], "ben": ["light.keller"]}`)}
 	_, body, _ := familyPage(t, Raeume, cfg, "GET", "/raeume", "family")
-	mustContain(t, body, "Mit ☆ steht ein Gerät auf Start unter „Meine Geräte“.")
+	mustContain(t, body, "Mit ☆ steht ein Gerät auf Start unter „Deine Geräte“.")
 	kueche, wz := section(t, body, "karte-kueche"), section(t, body, "karte-wohnzimmer")
 	mustContain(t, kueche, `<form method=post action="/raeume/light.kueche_decke">`, `name=stern value=an`,
 		`name=zurueck value="/raeume#karte-kueche"`, `aria-label="Deckenlampe auf Start zeigen">☆</button>`,

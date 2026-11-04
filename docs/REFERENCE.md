@@ -35,15 +35,26 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   through the one that plays, else the paused one, else not Music
   Assistant's mirror; a Jellyfin session is someone's app, on Medien only
   while it plays. A player refusing a command (HA 500) is said as such.
-  *Meine Geräte*: the person's own things as tiles like the phone widget
-  (laib ADR 0017: favorites go to Homes): `HOMES_DATA/favoriten.json`,
-  `{"<Remote-User>": ["light.buero", "cover.wohnzimmer", …]}`, read on each
-  page load, in the person's order, at most twelve, the state in a word
-  and a bar, a lamp's or a switch's switch on the tile, and its ★ that
-  takes it off again (haus#64, back to Start); what a thing's page
-  would not show (not a card domain, unknown to HA, hidden by HA) is left
-  out. With things on it, the card says at the top how more get there
-  (*Mit ☆ legst du Geräte auf die Startseite.*, to Geräte); none says how
+  *Deine Geräte*: the person's own things as the app's tiles (homes-android
+  #245, variant A2; laib ADR 0017: favorites go to Homes):
+  `HOMES_DATA/favoriten.json`, `{"<Remote-User>": ["light.buero", …]}`,
+  read on each page load, in the person's order, at most twelve; what a
+  thing's page would not show (not a card domain, unknown to HA, hidden
+  by HA) is left out. The head says *Alle →* (to Geräte) and *Tippen
+  schaltet, lange drücken öffnet das Gerät.* Each tile is the widgets'
+  picture on a round of the state's colour (a lamp lit or dark, a blind
+  up, part-way or down, the garage door up or down, the padlock), words
+  only where the picture cannot say it (moving, not reachable, jammed, a
+  heating's reading, *schaltet …* right after a tap). A tap switches a
+  lamp or a switch, opens a blind's sheet, opens what is shut or shuts
+  what is open on a cover without a position; a lock and anything else
+  lead to their page; a long press opens the page (script). A dimmer's
+  *60 %* or *aus* and a blind's *32 %* open the sheet. On a phone two
+  columns: a lamp or a lock half the row, a cover across it with ▲ ■ ▼ (a
+  garage ▲ ▼ without stop), a tile left without a neighbour across it;
+  from two cells of 320 px on, every tile one cell as one line, in order.
+  While the page cannot reach Homes (offline, the live stream or a fetch
+  failing) the tiles grey under *Box nicht erreichbar … Stand 08:14*. None says how
   to get one (*Tippe unter Geräte bei einem Gerät auf ☆,
   dann erscheint es hier.*); no `Remote-User`, no store: no part.
   *Heute und demnächst*: appointments and open reminders of the next 14
@@ -68,7 +79,7 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   `HOMES_RADICALE_*`); one not set is not mentioned. One not
   answering within 4s is one plain line where its rows would be (*Licht
   und Geräte antworten gerade nicht. Schalten geht im Moment nicht.*, *Der
-  Kalender antwortet gerade nicht.* once, a line in *Meine Geräte* when its
+  Kalender antwortet gerade nicht.* once, a line in *Deine Geräte* when its
   file or HA does not), never its name or its error, which go to Homes'
   log; Laib not answering is *Wie es der Box geht, lässt sich gerade nicht
   sagen.* at the bottom. The page is always a 200. Cards are one renderer,
@@ -125,7 +136,7 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   of Homes' host; neither header is a 403 too), else 403; then 303 back. HA not answering is one plain
   line and the way back. No script: a plain form.
 - `POST /raeume/<id>` `stern=an|aus` — the ☆ on a thing's own page pins it
-  to the person's *Meine Geräte* or takes it off (`favoriten.json`, their
+  to the person's *Deine Geräte* or takes it off (`favoriten.json`, their
   own list only, at most 50, the file replaced whole, a file that does not
   read never written over); same guards as `/schalten`, then 303 back.
 - `GET /raeume`, `/kalender`, `/notizen` — the family's other pages
@@ -156,11 +167,14 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     switch still switches); a cover with a `current_position` its slider,
     and Hoch, Stopp and Runter as its `supported_features` allow. Both are
     plain forms to `/schalten`, the slider sent when the finger lets go
-    (one `onchange` attribute; without script, its *Setzen* button). Only a
-    cover whose `device_class` is named and is no garage, door or gate gets
-    Hoch and the slider (`schalter.CoverFree`, the rule's own line); a
-    thing's page says why for any other (*Tore und Türen öffnet Homes
-    nicht …*, or, with no class, to set *Anzeigen als* in HA).
+    (one `onchange` attribute; without script, its *Setzen* button); a
+    cover's sheet has Auf, ½, Zu and Stopp. Only a cover whose
+    `device_class` is named and is no garage, door or gate gets the slider
+    (`schalter.CoverFree`, the rule's own line); a garage, door or gate
+    asks before Hoch (*Garagentor öffnen?*, a popover: its *Öffnen* posts
+    `bestaetigt=ja`, the only way the page sends a confirmed call, and only
+    for `cover.open_cover`), as the app does. A cover with no class says to
+    set *Anzeigen als* in HA.
     A cover wired the wrong way round is listed in `HOMES_COVER_INVERTED`
     (cover entity ids, comma-separated): Homes shows it turned over (its
     position 100 − HA's, open where HA says closed) and sends Hoch as HA's

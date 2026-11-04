@@ -87,9 +87,9 @@ func Ding(cfg StartConfig) http.HandlerFunc {
 		b.WriteString("<h1>" + html.EscapeString(name) + "</h1>")
 		c := cards.Card{Title: "Jetzt"}
 		row := cards.Row{Text: roomDetail(domain, s, reg.TempUnit), Detail: changedWords(s, now, loc)}
-		if t := tile(domain, s, reg.TempUnit, cards.ThingPage(id)); t.Action != nil {
-			row.Action = t.Action
-			row.Action.Switch, row.Action.Label = false, map[bool]string{true: "Ausschalten", false: "Einschalten"}[t.On]
+		if a := umschalten(s, cards.ThingPage(id)); a != nil {
+			row.Action = a
+			row.Action.Switch, row.Action.Label = false, map[bool]string{true: "Ausschalten", false: "Einschalten"}[a.On]
 		}
 		switch domain {
 		case "media_player":
@@ -103,12 +103,8 @@ func Ding(cfg StartConfig) http.HandlerFunc {
 			row.Slider = coverSlider(s, cards.ThingPage(id))
 		}
 		c.Rows = append(c.Rows, row)
-		if domain == "cover" && row.Also == nil && s.State != "unavailable" {
-			if dc, _ := s.Attributes["device_class"].(string); dc == "" {
-				c.Add(saysCoverWhat, "")
-			} else {
-				c.Add(saysGateInHA, "")
-			}
+		if dc, _ := s.Attributes["device_class"].(string); domain == "cover" && dc == "" && s.State != "unavailable" {
+			c.Add(saysCoverWhat, "")
 		}
 		room := trimRunes(oneLine(reg.Rooms[s.EntityID]), 60)
 		if room == "" {
@@ -134,10 +130,10 @@ func star(id string, favs []string, err error) string {
 	if err != nil {
 		return "<p class=k>" + saysNoFavorites + "</p>"
 	}
-	value, label, says := "an", "☆ Auf Start zeigen", "Dann steht es auf Start unter „Meine Geräte“."
+	value, label, says := "an", "☆ Auf Start zeigen", "Dann steht es auf Start unter „Deine Geräte“."
 	for _, f := range favs {
 		if f == id {
-			value, label, says = "aus", "★ Von Start nehmen", "Steht auf Start unter „Meine Geräte“."
+			value, label, says = "aus", "★ Von Start nehmen", "Steht auf Start unter „Deine Geräte“."
 		}
 	}
 	return `<section class=stern><form method=post action="` + html.EscapeString(cards.ThingPage(id)) + `"><input type=hidden name=stern value=` + value +
@@ -168,8 +164,6 @@ func pin(w http.ResponseWriter, r *http.Request, cfg StartConfig, id string) {
 	switch z := r.PostForm.Get("zurueck"); {
 	case inRaeume.MatchString(z):
 		back, backText = z, "Zurück zu den Räumen"
-	case z == "/start": // the ☆ on a tile of Meine Geräte (haus#64)
-		back, backText = z, "Zur Startseite"
 	}
 	err := cfg.Favorites.Set(r.Header.Get("Remote-User"), id, on)
 	if err == nil {

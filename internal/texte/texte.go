@@ -47,6 +47,16 @@ const (
 	GrundVorschlagAn    ID = "schalten.grund.an"
 	NichtSchaltbar      ID = "schalten.nicht-schaltbar"
 	ModuleSeite         ID = "box.module" // the Box pill
+	// Start's „Deine Geräte“ as the app's tiles (homes-android#245, owner 2026-11-04)
+	Geraete         ID = "geraete.titel"
+	GeraeteAlle     ID = "geraete.alle"     // the head's link to Räume
+	GeraeteHinweis  ID = "geraete.hinweis"  // what a tap and a long press do
+	GeraeteSchaltet ID = "geraete.schaltet" // a tile right after a tap
+	BoxWeg          ID = "verbindung.weg"   // the page cannot reach the box
+	Stand           ID = "verbindung.stand" // „Stand %s“: since when the values are
+	TorOeffnen      ID = "tor.frage"        // „%s öffnen?“, asked before a garage opens
+	TorJa           ID = "tor.ja"
+	TorNein         ID = "tor.nein"
 )
 
 var de = map[ID]string{
@@ -104,6 +114,15 @@ var de = map[ID]string{
 	GrundVorschlagAn:    "%s kommt in Homes und die App zurück.",
 	NichtSchaltbar:      "Dieses Modul lässt sich noch nicht ausschalten.",
 	ModuleSeite:         "Module",
+	Geraete:             "Deine Geräte",
+	GeraeteAlle:         "Alle →",
+	GeraeteHinweis:      "Tippen schaltet, lange drücken öffnet das Gerät.",
+	GeraeteSchaltet:     "schaltet …",
+	BoxWeg:              "Box nicht erreichbar – versucht es wieder …",
+	Stand:               "Stand %s",
+	TorOeffnen:          "%s öffnen?",
+	TorJa:               "Öffnen",
+	TorNein:             "Abbrechen",
 }
 
 // sprachen are the tables by language; a missing word falls back to German.

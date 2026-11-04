@@ -197,7 +197,7 @@ func TestStartIsHomes(t *testing.T) {
 		t.Fatalf("status %d", code)
 	}
 	mustContain(t, body, "<title>Homes</title>", "<h1>Homes</h1>", "Dein Zuhause, klar im Blick.", "<header class=marke><svg", "url(#marke-clip)", "Mittwoch, 14. Oktober", `lang=de`,
-		"<h2 id=karte-im-haus>Im Haus</h2>", "<h2 id=karte-meine-geraete>Meine Geräte</h2>",
+		"<h2 id=karte-im-haus>Im Haus</h2>", "<h2 id=karte-deine-geraete>Deine Geräte</h2>",
 		"<h2 id=karte-heute-und-demnaechst>Heute und demnächst</h2>",
 		"Alles in Ordnung · eure Daten sind von gestern Abend gesichert")
 	mustNotContain(t, body, "Ada",
@@ -205,8 +205,8 @@ func TestStartIsHomes(t *testing.T) {
 		"Haushalt</h2>", "Jetzt</h2>", "Favoriten</h2>", "Einkaufsliste", "<script>alert", "fonts.googleapis", "fonts.gstatic")
 	// the day first, then what you switch, then the house (owner 2026-10-24)
 	before(t, body, "<h1>Homes</h1>", "karte-heute-und-demnaechst")
-	before(t, body, "karte-heute-und-demnaechst", "karte-meine-geraete")
-	before(t, body, "karte-meine-geraete", "karte-im-haus")
+	before(t, body, "karte-heute-und-demnaechst", "karte-deine-geraete")
+	before(t, body, "karte-deine-geraete", "karte-im-haus")
 	before(t, body, "karte-im-haus", "Alles in Ordnung")
 }
 
@@ -301,29 +301,25 @@ func TestStartLeavesOutWhatHAHides(t *testing.T) {
 	mustNotContain(t, body, "Alte Lampe", "Status-LED", "Diagnoseplayer", "Lichter an")
 }
 
-// haus#35: Meine Geräte — the person's things as tiles like the phone
-// widget, in their order: the state in a word (colour is never the only
-// sign), a lamp's or a switch's switch right there, each leading to its
-// own page. A cover or a heating has no switch on Start: its page has more.
-func TestStartMeineGeraete(t *testing.T) {
+// haus#35: Deine Geräte — the person's things, in their order, each
+// leading to its own page; a lamp's switch is the tile itself. Ben's are
+// Ben's. (The tiles' shape: kacheln_test.go.)
+func TestStartDeineGeraete(t *testing.T) {
 	_, body := startPage(t, familyEvening(t), "family")
-	g := section(t, body, "karte-meine-geraete")
+	g := section(t, body, "karte-deine-geraete")
 	mustContain(t, g,
-		`<a href="/raeume/light.buero">Bürolicht</a>`, `<b class=zustand>An</b>`, "50 %",
+		`href="/raeume/light.buero" style="--n:9">Bürolicht</a>`,
 		`name=geraet value="light.buero"><input type=hidden name=tun value="light.turn_off"><input type=hidden name=zurueck value="/start"><button class=schalter role=switch aria-checked=true aria-label="Bürolicht">`,
-		`<a href="/raeume/cover.wohnzimmer">Rollladen Wohnzimmer</a>`, `<b class=zustand>Offen</b>`, "40 %",
-		`<a href="/raeume/climate.bad">Heizung Bad</a>`, `<b class=zustand>21,5 °C</b>`, "→ 23 °C",
-		`<a href="/raeume/light.flur">Flurlicht</a>`, `<b class=zustand>Aus</b>`,
+		`>Rollladen Wohnzimmer</a>`, `>Heizung Bad</a>`, `<span class=worte>21,5 °C · Soll 23 °C</span>`,
 		`name=geraet value="light.flur"><input type=hidden name=tun value="light.turn_on"><input type=hidden name=zurueck value="/start"><button class=schalter role=switch aria-checked=false aria-label="Flurlicht">`)
-	mustNotContain(t, g, `value="cover.wohnzimmer"`, `value="climate.bad"`, "Küche")
+	mustNotContain(t, g, `value="climate.bad"`, "Küche", "★")
 	before(t, g, "Bürolicht", "Rollladen Wohnzimmer")
 	before(t, g, "Rollladen Wohnzimmer", "Heizung Bad")
 	before(t, g, "Heizung Bad", "Flurlicht")
 
-	// Ben's are Ben's
 	_, body = startPageAs(t, familyEvening(t), "ben", "family")
-	g = section(t, body, "karte-meine-geraete")
-	mustContain(t, g, `<a href="/raeume/light.kueche">Küche</a>`)
+	g = section(t, body, "karte-deine-geraete")
+	mustContain(t, g, `href="/raeume/light.kueche" style="--n:5">Küche</a>`)
 	mustNotContain(t, g, "Bürolicht", "Rollladen")
 }
 
@@ -336,7 +332,7 @@ func TestStartMeineGeraeteOnlyWhatItsPageShows(t *testing.T) {
 	fake.Set("light.alt", "on", map[string]any{"friendly_name": "Alte Lampe"})
 	fake.Set("person.ben", "home", map[string]any{"friendly_name": "Ben"})
 	_, body := startPage(t, StartConfig{HA: hc, Favorites: favorites(t, `{"anna": ["light.weg", "person.ben", "light.alt", "light.buero"]}`)}, "")
-	g := section(t, body, "karte-meine-geraete")
+	g := section(t, body, "karte-deine-geraete")
 	mustContain(t, g, "Bürolicht")
 	mustNotContain(t, g, "light.weg", "/raeume/person.ben", "Alte Lampe")
 }
@@ -354,7 +350,7 @@ func TestStartMeineGeraeteEmptySaysHow(t *testing.T) {
 		"only unknowns":  favorites(t, `{"anna": ["light.weg"]}`),
 	} {
 		_, body := startPage(t, StartConfig{HA: hc, Favorites: fav}, "")
-		g := section(t, body, "karte-meine-geraete")
+		g := section(t, body, "karte-deine-geraete")
 		if !strings.Contains(g, "Tippe unter Geräte bei einem Gerät auf ☆, dann erscheint es hier.") || !strings.Contains(g, `href="/raeume"`) {
 			t.Errorf("%s: Meine Geräte does not say how it fills:\n%s", name, g)
 		}
@@ -372,7 +368,7 @@ func TestStartMeineGeraeteEmptySaysHow(t *testing.T) {
 	fake.Down(true)
 	_, body := startPage(t, StartConfig{HA: hc, Favorites: favorites(t, `{"ben": ["light.buero"]}`)}, "")
 	mustContain(t, body, "Licht und Geräte antworten gerade nicht.")
-	mustNotContain(t, body, "karte-meine-geraete", "Tippe unter Geräte", "Favoriten")
+	mustNotContain(t, body, "karte-deine-geraete", "Tippe unter Geräte", "Favoriten")
 	// favorites without the house configured: nothing to draw them from, nothing said
 	for _, content := range []string{`{"anna": ["light.buero"]}`, `{"anna": [`} {
 		_, body := startPage(t, StartConfig{Favorites: favorites(t, content)}, "")
@@ -389,7 +385,7 @@ func TestStartSaysABrokenFavoritesFilePlainly(t *testing.T) {
 	if code != 200 {
 		t.Fatalf("status %d", code)
 	}
-	mustContain(t, section(t, body, "karte-meine-geraete"), "Deine Favoriten lassen sich gerade nicht lesen.")
+	mustContain(t, section(t, body, "karte-deine-geraete"), "Deine Favoriten lassen sich gerade nicht lesen.")
 	mustNotContain(t, body, "unexpected", "JSON", "favoriten.json", "Tippe unter Geräte")
 }
 
@@ -403,7 +399,7 @@ func TestStartCutsLongFavoriteLists(t *testing.T) {
 		ids = append(ids, `"`+id+`"`)
 	}
 	_, body := startPage(t, StartConfig{HA: hc, Favorites: favorites(t, `{"anna": [`+strings.Join(ids, ",")+`]}`)}, "")
-	g := section(t, body, "karte-meine-geraete")
+	g := section(t, body, "karte-deine-geraete")
 	mustContain(t, g, "Lampe 01", "Lampe 12", "und 3 weitere")
 	mustNotContain(t, g, "Lampe 13", "Lampe 15")
 }
@@ -579,7 +575,7 @@ func TestStartSaysPlainlyWhatDoesNotAnswer(t *testing.T) {
 	mustContain(t, body,
 		"Wie es der Box geht, lässt sich gerade nicht sagen.",
 		"<h2 id=karte-im-haus>Im Haus</h2>", "Licht und Geräte antworten gerade nicht. Schalten geht im Moment nicht.",
-		"<h2 id=karte-meine-geraete>Meine Geräte</h2>", "Deine Favoriten sind gerade nicht zu sehen.",
+		"<h2 id=karte-deine-geraete>Deine Geräte</h2>", "Deine Favoriten sind gerade nicht zu sehen.",
 		"<h2 id=karte-heute-und-demnaechst>Heute und demnächst</h2>", "Der Kalender antwortet gerade nicht.")
 	mustNotLeak(t, body, "Flur", "Laib", "favoriten.json", "Alles in Ordnung", "<form", host(hc.URL), host(cal.URL))
 	for _, once := range []string{"Der Kalender antwortet gerade nicht.", "Licht und Geräte antworten gerade nicht."} {
@@ -621,7 +617,7 @@ func TestStartSaysNothingAboutWhatIsNotConfigured(t *testing.T) {
 		t.Fatalf("status %d", code)
 	}
 	mustContain(t, body, "Alles in Ordnung · eure Daten sind von gestern Abend gesichert")
-	mustNotContain(t, body, "karte-im-haus", "karte-meine-geraete", "karte-heute", "Licht", "Termin", "Erinnerung", "Notiz", "nicht konfiguriert", "HOMES_")
+	mustNotContain(t, body, "karte-im-haus", "karte-deine-geraete", "karte-heute", "Licht", "Termin", "Erinnerung", "Notiz", "nicht konfiguriert", "HOMES_")
 }
 
 // haus#35: the family's pages switch Home Assistant things through

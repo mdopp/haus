@@ -16,17 +16,12 @@ import (
 
 // Row is one line: what it is, a quieter detail, and where it leads, if
 // anywhere (a note's page, the calendar). A row in a time card has its
-// When; a tile has its State in a word, whether that is on or off, and a
-// level for its bar; any row may carry one Action.
+// When; any row may carry one Action.
 type Row struct {
 	Text   string  `json:"text"`
 	Detail string  `json:"detail"`
 	Href   string  `json:"href,omitempty"`
 	When   string  `json:"when,omitempty"`
-	State  string  `json:"state,omitempty"`
-	On     bool    `json:"on,omitempty"`
-	Off    bool    `json:"off,omitempty"`
-	Level  int     `json:"level,omitempty"` // 1–100: a lamp's brightness, a cover's position; 0, no bar
 	Action *Action `json:"action,omitempty"`
 	Pin    *Pin    `json:"pin,omitempty"`
 	// Also are more buttons after Action (a player's Leiser, Lauter,
@@ -57,6 +52,9 @@ type Slider struct {
 	// Off is what the line says at level 0 ("aus": a lamp that is off,
 	// owner 2026-11-04); the button and the sheet say it for "0 %"
 	Off string `json:"off,omitempty"`
+	// Stopp is a cover's stop, after the steps (owner, 2026-11-04: the
+	// app's sheet has Auf, ½, Zu, Stopp); nil, none
+	Stopp *Action `json:"stopp,omitempty"`
 }
 
 // Step is one quick level in a slider's sheet: "50 %", "Zu".
@@ -69,7 +67,9 @@ type Step struct {
 // SwitchPath — no script needed. Do is the HA service ("light.turn_off")
 // or a page's own word ("alle-lichter-aus"); Back is where the page
 // lands after. A Switch is drawn as a switch, On its state, Label its
-// name for a screen reader; else Label is the button's words.
+// name for a screen reader; else Label is the button's words, or, with
+// Bild, its name beside a picture the class draws (▲ ■ ▼). With a Frage
+// the button asks first, and only the question's Ja posts, bestaetigt.
 type Action struct {
 	Label  string `json:"label"`
 	Entity string `json:"entity,omitempty"`
@@ -77,6 +77,16 @@ type Action struct {
 	Back   string `json:"back"`
 	Switch bool   `json:"switch,omitempty"`
 	On     bool   `json:"on,omitempty"`
+	Bild   string `json:"bild,omitempty"`
+	Frage  *Frage `json:"frage,omitempty"`
+}
+
+// Frage is what an Action asks before it is sent (a garage opening, as the
+// app asks): the question, its yes and its no.
+type Frage struct {
+	Text string `json:"text"`
+	Ja   string `json:"ja"`
+	Nein string `json:"nein"`
 }
 
 // Pin is a row's ☆ (haus#12): a form that POSTs to the thing's own page
@@ -96,11 +106,10 @@ type Link struct {
 }
 
 // How a card draws its rows: a list in one box (the default), each row a
-// box of its own, the phone widget's tiles, or a time column first.
+// box of its own, or a time column first.
 const (
 	List  = ""
 	Boxes = "einzeln"
-	Tiles = "kacheln"
 	Times = "zeiten"
 )
 
@@ -180,8 +189,6 @@ func (c Card) HTML() string {
 	b.WriteString("<ul>")
 	for _, r := range c.Rows {
 		switch {
-		case c.Look == Tiles && r.State != "":
-			tile(&b, r)
 		case c.Look == Times && r.When != "":
 			b.WriteString("<li><time>" + html.EscapeString(r.When) + "</time><div>")
 			what(&b, r)
@@ -191,10 +198,10 @@ func (c Card) HTML() string {
 			what(&b, r)
 			b.WriteString("</div><div class=knoepfe>")
 			if r.Action != nil {
-				b.WriteString(r.Action.form())
+				b.WriteString(r.Action.Form())
 			}
 			for _, a := range r.Also {
-				b.WriteString(a.form())
+				b.WriteString(a.Form())
 			}
 			if r.Pin != nil {
 				b.WriteString(r.Pin.form()) // the ☆ last, as on any row
@@ -203,16 +210,16 @@ func (c Card) HTML() string {
 		case r.Action != nil && r.Pin == nil:
 			b.WriteString("<li class=tu><div>")
 			what(&b, r)
-			b.WriteString("</div>" + r.Action.form() + "</li>")
+			b.WriteString("</div>" + r.Action.Form() + "</li>")
 		case r.Pin != nil:
 			b.WriteString("<li class=tu><div>")
 			what(&b, r)
 			b.WriteString("</div><div class=knoepfe>")
 			if r.Action != nil {
-				b.WriteString(r.Action.form())
+				b.WriteString(r.Action.Form())
 			}
 			b.WriteString(r.Pin.form() + "</div></li>") // the ☆ last: one column down the card
-		case c.Look == Tiles || c.Look == Times: // a line across, not a tile or a time
+		case c.Look == Times: // a line across, not a time
 			b.WriteString("<li class=voll>")
 			what(&b, r)
 			b.WriteString("</li>")
@@ -244,7 +251,7 @@ func what(b *strings.Builder, r Row) {
 		if detail, ok = s.inline(r.Detail); !ok {
 			if text, ok = s.inline(r.Text); !ok || r.Href != "" {
 				text = html.EscapeString(r.Text)
-				detail = strings.TrimSpace(html.EscapeString(r.Detail) + map[bool]string{true: " · "}[r.Detail != ""] + s.button())
+				detail = strings.TrimSpace(html.EscapeString(r.Detail) + map[bool]string{true: " · "}[r.Detail != ""] + s.Button())
 			}
 		}
 	}
@@ -257,49 +264,35 @@ func what(b *strings.Builder, r Row) {
 		b.WriteString(" <span class=k>" + detail + "</span>")
 	}
 	if r.Slider != nil {
-		b.WriteString(r.Slider.sheet())
+		b.WriteString(r.Slider.Sheet())
 	}
 }
 
-// tile is one thing as the phone widget draws it: its name (and switch),
-// its state in a word (colour is never the only sign), and a bar.
-func tile(b *strings.Builder, r Row) {
-	class := "kachel"
+// Form is the action's button: a POST to SwitchPath with what to do. With
+// a Frage, a button that opens the question (a popover, so without script
+// too), whose Ja posts with bestaetigt.
+func (a *Action) Form() string {
+	laeuft := `data-laeuft="Schaltet …"`
+	if a.Bild != "" {
+		laeuft = `data-laeuft=""` // a picture stays; the tile says „schaltet …“
+	}
 	switch {
-	case r.On:
-		class = `"kachel an"`
-	case r.Off:
-		class = `"kachel aus"`
+	case a.Frage != nil:
+		id := a.FrageID()
+		return a.button(`type=button popovertarget=`+id) + `<div popover id=` + id + ` class=blatt role=dialog aria-labelledby=` + id + `-titel><p class=blatt-titel id=` + id + `-titel>` +
+			html.EscapeString(a.Frage.Text) + `</p><div class=schritte>` + a.post(`<input type=hidden name=bestaetigt value=ja><button data-laeuft="…">`+html.EscapeString(a.Frage.Ja)+`</button>`) +
+			`<button type=button popovertarget=` + id + ` popovertargetaction=hide>` + html.EscapeString(a.Frage.Nein) + `</button></div></div>`
+	case a.Switch:
+		return a.post(`<button class=schalter role=switch aria-checked=` + strconv.FormatBool(a.On) + ` aria-label="` + html.EscapeString(a.Label) + `"></button>`)
 	}
-	b.WriteString("<li class=" + class + "><div class=kopf>")
-	if r.Href != "" {
-		b.WriteString(`<a href="` + html.EscapeString(r.Href) + `">` + html.EscapeString(r.Text) + "</a>")
-	} else {
-		b.WriteString("<span>" + html.EscapeString(r.Text) + "</span>")
-	}
-	if r.Action != nil || r.Pin != nil {
-		b.WriteString("<span class=knoepfe>")
-		if r.Action != nil {
-			b.WriteString(r.Action.form())
-		}
-		if r.Pin != nil {
-			b.WriteString(r.Pin.form()) // the ☆ on the tile too (haus#64)
-		}
-		b.WriteString("</span>")
-	}
-	b.WriteString("</div><p><b class=zustand>" + html.EscapeString(r.State) + "</b>")
-	if r.Detail != "" {
-		b.WriteString(" <span class=k>" + html.EscapeString(r.Detail) + "</span>")
-	}
-	b.WriteString("</p>")
-	if r.Level > 0 {
-		b.WriteString("<span class=balken><i style=\"width:" + strconv.Itoa(min(r.Level, 100)) + "%\"></i></span>")
-	}
-	b.WriteString("</li>")
+	return a.post(a.button(laeuft))
 }
 
-// form is the action's button: a POST to SwitchPath with what to do.
-func (a *Action) form() string {
+// FrageID is the element id of the action's question.
+func (a *Action) FrageID() string { return "frage-" + slug(a.Entity) + "-" + slug(a.Do) }
+
+// post is the action's form around button.
+func (a *Action) post(button string) string {
 	var b strings.Builder
 	b.WriteString("<form method=post action=" + SwitchPath + ">")
 	if a.Entity != "" {
@@ -307,13 +300,20 @@ func (a *Action) form() string {
 	}
 	b.WriteString(`<input type=hidden name=tun value="` + html.EscapeString(a.Do) + `">`)
 	b.WriteString(`<input type=hidden name=zurueck value="` + html.EscapeString(a.Back) + `">`)
-	if a.Switch {
-		b.WriteString(`<button class=schalter role=switch aria-checked=` + strconv.FormatBool(a.On) + ` aria-label="` + html.EscapeString(a.Label) + `"></button>`)
-	} else {
-		b.WriteString(`<button data-laeuft="Schaltet …">` + html.EscapeString(a.Label) + "</button>")
+	return b.String() + button + "</form>"
+}
+
+// button is the action's visible button, with attrs: its words, or its picture named.
+func (a *Action) button(attrs string) string {
+	if a.Bild != "" {
+		return `<button ` + attrs + ` class=` + html.EscapeString(a.Bild) + ` aria-label="` + html.EscapeString(a.Label) + `"></button>`
 	}
-	b.WriteString("</form>")
-	return b.String()
+	return `<button ` + attrs + `>` + html.EscapeString(a.Label) + "</button>"
+}
+
+// slug is an entity id or a service as part of an element id.
+func slug(s string) string {
+	return strings.NewReplacer(".", "-", "_", "-").Replace(strings.ToLower(s))
 }
 
 // percent is a level as the page says it.
@@ -327,15 +327,13 @@ func (s *Slider) says() string {
 	return percent(s.Value)
 }
 
-// id is the slider's sheet's element id, from its thing.
-func (s *Slider) id() string {
-	return "regler-" + strings.NewReplacer(".", "-", "_", "-").Replace(strings.ToLower(s.Entity))
-}
+// ID is the slider's sheet's element id, from its thing.
+func (s *Slider) ID() string { return "regler-" + slug(s.Entity) }
 
-// button is the level that opens the sheet: a popover's button, so it
+// Button is the level that opens the sheet: a popover's button, so it
 // opens without script too, and says aria-expanded on its own.
-func (s *Slider) button() string {
-	return `<button type=button class=stufe popovertarget=` + s.id() + ` aria-haspopup=dialog aria-label="` +
+func (s *Slider) Button() string {
+	return `<button type=button class=stufe popovertarget=` + s.ID() + ` aria-haspopup=dialog aria-label="` +
 		html.EscapeString(s.Name+" "+s.Label+" "+s.says()+", einstellen") + `">` + html.EscapeString(s.says()) + `</button>`
 }
 
@@ -351,7 +349,7 @@ func (s *Slider) inline(line string) (string, bool) {
 	if after, _ := utf8.DecodeRuneInString(line[i+len(w):]); unicode.IsLetter(before) || unicode.IsDigit(before) || unicode.IsLetter(after) {
 		return html.EscapeString(line), false
 	}
-	return html.EscapeString(line[:i]) + s.button() + html.EscapeString(line[i+len(w):]), true
+	return html.EscapeString(line[:i]) + s.Button() + html.EscapeString(line[i+len(w):]), true
 }
 
 // hidden are a slider form's fields but wert.
@@ -360,12 +358,12 @@ func (s *Slider) hidden() string {
 		`"><input type=hidden name=zurueck value="` + html.EscapeString(s.Back) + `">`
 }
 
-// sheet is the slider's sheet: the thing's name, its level large, the
+// Sheet is the slider's sheet: the thing's name, its level large, the
 // slider (a POST to SwitchPath with wert, sent when the finger lets go),
-// the Steps (each its own POST) and Fertig. A popover: a tap outside,
+// the Steps (each its own POST), Stopp and Fertig. A popover: a tap outside,
 // Escape and the phone's back close it, with or without script.
-func (s *Slider) sheet() string {
-	id, v := s.id(), strconv.Itoa(max(0, min(s.Value, 100)))
+func (s *Slider) Sheet() string {
+	id, v := s.ID(), strconv.Itoa(max(0, min(s.Value, 100)))
 	var b strings.Builder
 	b.WriteString(`<div popover id=` + id + ` class=blatt role=dialog aria-labelledby=` + id + `-titel>`)
 	b.WriteString(`<p class=blatt-titel id=` + id + `-titel>` + html.EscapeString(s.Name) + `</p>`)
@@ -374,11 +372,14 @@ func (s *Slider) sheet() string {
 	b.WriteString(`<input type=range name=wert min=0 max=100 step=1 value=` + v + ` aria-label="` + html.EscapeString(s.Name+" "+s.Label) +
 		`" oninput="this.form.querySelector('output').value=this.value+' %'" onchange="this.form.requestSubmit?this.form.requestSubmit():this.form.submit()">`)
 	b.WriteString(`<noscript><button data-laeuft="Setzt …">Setzen</button></noscript></form>`)
-	if len(s.Steps) > 0 {
+	if len(s.Steps) > 0 || s.Stopp != nil {
 		b.WriteString(`<div class=schritte>`)
 		for _, st := range s.Steps {
 			b.WriteString(`<form method=post action=` + SwitchPath + `>` + s.hidden() + `<input type=hidden name=wert value=` + strconv.Itoa(max(0, min(st.Value, 100))) +
 				`><button data-laeuft="…" aria-label="` + html.EscapeString(s.Label+" "+st.Label) + `">` + html.EscapeString(st.Label) + `</button></form>`)
+		}
+		if s.Stopp != nil {
+			b.WriteString(s.Stopp.Form())
 		}
 		b.WriteString(`</div>`)
 	}
@@ -412,12 +413,6 @@ const Style = `<style>.farbe{display:inline-block;width:.65em;height:.65em;borde
 .karte li.viele{flex-wrap:wrap;gap:8px}.karte li.viele>div:first-child{flex:1 1 100%}.viele .knoepfe{gap:8px;flex-wrap:wrap}
 .anheften{width:44px;min-height:44px;padding:0;background:none;border-radius:50%;color:var(--muted);font-size:1.35rem;font-weight:400;line-height:1}.anheften.an{color:var(--state)}
 .einzeln ul{background:none;border:0;border-radius:0;display:grid;gap:6px}.einzeln li,.einzeln li:first-child{background:var(--card);border:1px solid var(--edge);border-radius:14px}
-.kacheln ul{background:none;border:0;border-radius:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
-.kacheln li,.kacheln li:first-child{background:var(--tile);border:1px solid var(--edge);border-radius:20px;padding:10px 12px 12px;display:grid;gap:4px;align-content:start;min-width:0}
-.kacheln .kopf{display:flex;justify-content:space-between;align-items:center;gap:6px;min-height:40px;color:var(--muted);font-size:.85rem}
-.kacheln p{margin:0}.kacheln .zustand{font-size:1.15rem;font-weight:700;color:var(--ink)}.kacheln .an .zustand{color:var(--state)}.kacheln .aus .zustand{color:var(--faint)}
-.kacheln p .k{display:inline;margin-left:4px}
-.balken{display:block;height:6px;border-radius:3px;background:var(--track);overflow:hidden;margin-top:4px}.balken i{display:block;height:100%;border-radius:3px;background:var(--state)}
 .schalter{position:relative;width:52px;min-height:40px;padding:0;margin-right:-6px;background:none;border-radius:20px}
 .schalter::before{content:"";position:absolute;left:8px;top:10px;width:36px;height:20px;border-radius:10px;background:var(--track)}
 .schalter::after{content:"";position:absolute;left:11px;top:13px;width:14px;height:14px;border-radius:50%;background:#fff}
@@ -427,10 +422,8 @@ const Style = `<style>.farbe{display:inline-block;width:.65em;height:.65em;borde
 .blatt::backdrop{background:rgba(0,0,0,.55)}.blatt-titel{margin:0 0 4px;font-weight:700;font-size:1.05rem}
 .blatt-wert{margin:0 0 6px;display:flex;align-items:baseline;gap:10px}.blatt-wert output{font-size:2.4rem;font-weight:700;font-variant-numeric:tabular-nums;color:var(--ink)}
 .blatt form.regler{display:block}.blatt input[type=range]{display:block;width:100%;min-height:48px;margin:0;accent-color:var(--accent)}
-.blatt .schritte{display:flex;gap:8px;margin:10px 0 0}.blatt .schritte form{flex:1}.blatt .schritte button{width:100%}
+.blatt .schritte{display:flex;gap:8px;margin:10px 0 0}.blatt .schritte form,.blatt .schritte>button{flex:1}.blatt .schritte button{width:100%}
 .blatt .fertig{display:block;width:100%;margin-top:14px;background:var(--accent);color:#fff}
 .karte .hinweis{margin:-2px 2px 8px;font-size:.85rem;color:var(--muted)}.karte .hinweis a{color:var(--accent)}
-.kacheln .kopf .knoepfe{gap:0}.kacheln .kopf .anheften{width:40px;min-height:40px;font-size:1.2rem}
 .zeiten li{display:grid;grid-template-columns:6.4rem 1fr;gap:10px;align-items:baseline}
-.zeiten time{font-size:.8rem;color:var(--muted);font-variant-numeric:tabular-nums}.zeiten li.voll{display:block}
-.kacheln li.voll,.kacheln li.voll:first-child{grid-column:1/-1;display:block;background:none;border:1px dashed var(--edge);border-radius:14px;padding:12px 14px;color:var(--muted);font-size:.9rem}</style>`
+.zeiten time{font-size:.8rem;color:var(--muted);font-variant-numeric:tabular-nums}.zeiten li.voll{display:block}</style>`
