@@ -20,6 +20,7 @@ import (
 	"github.com/mdopp/homes/internal/cards"
 	"github.com/mdopp/homes/internal/discogs"
 	"github.com/mdopp/homes/internal/einkauf"
+	"github.com/mdopp/homes/internal/einrichten"
 	"github.com/mdopp/homes/internal/energie"
 	"github.com/mdopp/homes/internal/favoriten"
 	"github.com/mdopp/homes/internal/gesehen"
@@ -43,19 +44,21 @@ import (
 // Notizen). A nil backend is not configured, and no page says anything
 // about it.
 type StartConfig struct {
-	Laib     *laib.Client
-	Module   *modul.Liste      // the box's areas (ADR 0001): Mehr's traces of what it lacks (§10); nil: none
-	Witness  *schalter.Witness // who switched what, into the log and Laib's journal (haus#89); nil: the log only
-	Fetcher  abruf.Fetcher     // how Notizen fetches a page to keep (haus#117); the tests' allows their 127.0.0.1
-	Podcasts *podcasts.Service // the family's podcasts in Audiobookshelf (haus#123); nil: no page
-	Gesehen  *gesehen.Service  // what each person watched and heard, and the film and book wish list (haus#152); nil: no page
-	Einkauf  *einkauf.Liste    // the household's shopping list in Radicale (haus#118); nil: no page
-	Wuensche *einkauf.Wuensche // the music wish list (owner 2026-10-25); nil: a song link is a note
-	Discogs  *discogs.Regale   // each person's records on Discogs, connected through the app (laib#696); nil: no Discogs
-	Reitti   *reitti.Reitti    // the household's timeline, each person's token (Standortverlauf, owner 2026-11-02); nil: no page
-	LaibURL  string            // where Rückgängig lives (the guarantees, admins only)
-	HA       *ha.Client
-	Energy   energie.Map // which sensors Energie reads (haus#12); empty: by friendly name
+	Laib   *laib.Client
+	Module *modul.Liste // the box's areas (ADR 0001): Mehr's traces of what it lacks (§10); nil: none
+	// Einrichtung: each person's setup tasks, one per module with its own app (owner 2026-11-04); nil: none
+	Einrichtung *einrichten.Quellen
+	Witness     *schalter.Witness // who switched what, into the log and Laib's journal (haus#89); nil: the log only
+	Fetcher     abruf.Fetcher     // how Notizen fetches a page to keep (haus#117); the tests' allows their 127.0.0.1
+	Podcasts    *podcasts.Service // the family's podcasts in Audiobookshelf (haus#123); nil: no page
+	Gesehen     *gesehen.Service  // what each person watched and heard, and the film and book wish list (haus#152); nil: no page
+	Einkauf     *einkauf.Liste    // the household's shopping list in Radicale (haus#118); nil: no page
+	Wuensche    *einkauf.Wuensche // the music wish list (owner 2026-10-25); nil: a song link is a note
+	Discogs     *discogs.Regale   // each person's records on Discogs, connected through the app (laib#696); nil: no Discogs
+	Reitti      *reitti.Reitti    // the household's timeline, each person's token (Standortverlauf, owner 2026-11-02); nil: no page
+	LaibURL     string            // where Rückgängig lives (the guarantees, admins only)
+	HA          *ha.Client
+	Energy      energie.Map // which sensors Energie reads (haus#12); empty: by friendly name
 	// OhneEnergie: energie is switched off (ADR 0001 H6) while HA stays for
 	// Geräte: no Energie tab, no energy line on Start
 	OhneEnergie bool
@@ -72,7 +75,7 @@ type StartConfig struct {
 	Loc         *time.Location    // the house's time zone; default time.Local
 	Now         func() time.Time  // for the tests; default time.Now
 	Usage       *usage.Counter    // what the family uses, anonymously (haus#50); nil: nothing counted
-	PublicURL   string            // Homes' own address, https://homes.<domain>: the apps' addresses on Willkommen (haus#56)
+	PublicURL   string            // Homes' own address, https://homes.<domain>
 	Welcome     bool              // Start sends a person to Willkommen the first time a device opens it (haus#56)
 	STT         STT               // the Sprechen field's microphone, HA's speech-to-text (haus#63); no provider: no microphone
 	// HAPublicURL is Home Assistant's public address (HOMES_HA_PUBLIC_URL,
@@ -102,7 +105,6 @@ type StartConfig struct {
 	// the page says the box has no archive
 	Sicherung          *napi.Sicherung
 	Papierkorb         *papierkorb.Korb // what the family deleted, for 30 days (haus#174); nil: deletes go at once
-	BoteSignal         string           // the house's Signal number (HOMES_BOTE_SIGNAL, +49…): Willkommen's „… auf Signal“ (haus#175); "": no card
 	MusicInbox         string           // laib's music inbox, which beets sorts in (haus#107); "": no Musik hinzufügen
 	PaperlessPublicURL string
 	PaperlessLANOnly   bool
@@ -242,7 +244,6 @@ func Start(cfg StartConfig) http.HandlerFunc {
 		b.WriteString(bottom)
 		b.WriteString(einrichtungZeile(r, cfg)) // haus#188: an important setup still open, quietly
 		b.WriteString(toNetzlaufwerk(cfg.Samba, person))
-		b.WriteString(toWillkommen(cfg))
 		writePage(w, http.StatusOK, b)
 	}
 }

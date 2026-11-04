@@ -141,18 +141,18 @@ func TestStartBoxLineWhenLaibDoesNotAnswer(t *testing.T) {
 	}
 }
 
-// haus#67, owner 2026-10-24: Mehr holds the settings — Apps einrichten,
-// the Netzlaufwerk password, for admins Box and Adresse — each only when
+// haus#67, owner 2026-10-24: Mehr holds the settings — Aufgaben (the
+// guides of Apps einrichten went to the modules, 2026-11-04), the Netzlaufwerk password, for admins Box and Adresse — each only when
 // this box has it, and the account with Abmelden; nothing used day to day.
 func TestMehrListsWhatItHolds(t *testing.T) {
 	_, hc := house(t)
 	nd := notesDir(t, map[string]time.Duration{"Einkaufsliste": time.Hour})
 	_, body, _ := familyPage(t, Mehr, StartConfig{HA: hc, Notes: nd, Laib: fakeLaib(t, allGreen(t), nil)}, "GET", "/mehr", "family")
 	page := body[strings.Index(body, "<h1>Mehr</h1>"):]
-	mustContain(t, page, `<a href="/willkommen">Apps einrichten</a>`, mehrSays["Apps einrichten"],
+	mustContain(t, page, `<a href="/aufgaben">Aufgaben</a>`, mehrSays["Aufgaben"],
 		"<h2 id=karte-konto>Konto</h2>", "Angemeldet als anna", `<a href="/abmelden">Abmelden</a>`)
-	mustNotContain(t, page, "/box", "/netzlaufwerk", "/energie", "/medien", "/notizen", "/dokumente", "/adresse")
-	before(t, page, "/willkommen", "karte-konto")
+	mustNotContain(t, page, "/box", "/netzlaufwerk", "/energie", "/medien", "/notizen", "/dokumente", "/adresse", "/willkommen")
+	before(t, page, "/aufgaben", "karte-konto")
 	_, body, _ = familyPage(t, Mehr, StartConfig{}, "GET", "/mehr", "family,admins")
 	page = body[strings.Index(body, "<h1>Mehr</h1>"):]
 	mustContain(t, page, `<a href="/box">Box</a>`, "/abmelden")

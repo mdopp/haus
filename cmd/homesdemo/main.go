@@ -38,6 +38,7 @@ import (
 	"github.com/mdopp/homes/internal/caldav/davfake"
 	"github.com/mdopp/homes/internal/cards"
 	"github.com/mdopp/homes/internal/einkauf"
+	"github.com/mdopp/homes/internal/einrichten"
 	"github.com/mdopp/homes/internal/favoriten"
 	"github.com/mdopp/homes/internal/gesehen"
 	"github.com/mdopp/homes/internal/ha"
@@ -154,7 +155,11 @@ func main() {
 		RadicalePublicURL: "https://caldav.example", Fetcher: abruf.Fetcher{AllowPrivate: true}}
 	// what the box lacks (ADR 0001 §10): Standortverlauf missing, Podcasts switched off, a wish to Laib
 	cfg.Module = demoModule(false)
+	// each module's setup a task for Anna (owner 2026-11-04): the Homes app, DAVx⁵, Immich, Jellyfin; none ticked yet
+	cfg.Einrichtung = &einrichten.Quellen{Module: cfg.Module, Haken: einrichten.Open(dir), HomesApp: einrichten.App("Homes", "cloud.dopp.homes", "https://homes.example",
+		"https://github.com/mdopp/homes-android#readme", "schritt.homes", "schritt.homes-iphone"), Adresse: "https://homes.example"}
 	mux := http.NewServeMux()
+	mux.HandleFunc(pages.EinrichtenPages, pages.Einrichten(cfg))
 	mux.HandleFunc("/start", pages.Start(cfg))
 	mux.HandleFunc("/schrift/", pages.Font()) // Geist, as on the box: the pictures and the layout gate in the family's font
 	mux.HandleFunc("/raeume", pages.Raeume(cfg))
@@ -348,14 +353,17 @@ func demoModule(docs bool) *modul.Liste {
 		nav := slices.DeleteFunc(pages.Nav(name), func(e modul.Eintrag) bool {
 			return e.Pfad == pages.PlattePath || e.Pfad == pages.DiscogsPath || (e.Pfad == pages.DokumentePath && !docs)
 		})
-		return modul.Modul{Name: name, Titel: texte.Titel(name), Backend: backend, Warum: warum, Grund: grund, Nav: nav}
+		e := map[string]*modul.Einrichtung{"kalender": einrichten.App("DAVx⁵", "at.bitfire.davdroid", "https://caldav.example", "https://manual.davx5.com/", "schritt.davx"),
+			"fotos": einrichten.App("Immich", "app.alextran.immich", "https://photos.example", "https://immich.app/docs/features/mobile-app", "schritt.fotos", "schritt.fotos-sichern"),
+			"filme": einrichten.App("Jellyfin", "org.jellyfin.mobile", "https://media.example", "https://jellyfin.org/docs/general/clients/", "schritt.anmelden")}[name]
+		return modul.Modul{Name: name, Titel: texte.Titel(name), Backend: backend, Warum: warum, Grund: grund, Nav: nav, Einrichtung: e}
 	}
 	l, err := modul.Bauen([]modul.Modul{m("geraete", "home-assistant", "", ""), m("energie", "home-assistant", "", ""),
 		m("kalender", "radicale", "", ""), m("einkauf", "radicale", "", ""), m("notizen", "file-share", "", ""),
 		m("musik", "beets", "", ""), m("gesehen", "media", "", ""), m("dokumente", "paperless", "", ""),
 		m("standort", "reitti", modul.Fehlt, "Auf dieser Box läuft kein Reitti."),
 		m("podcasts", "audiobookshelf", modul.Aus, "Auf dieser Box ausgeschaltet."),
-		m("gesundheit", "gesundheit", modul.Fehlt, "Auf dieser Box läuft Gesundheit nicht.")})
+		m("gesundheit", "gesundheit", modul.Fehlt, "Auf dieser Box läuft Gesundheit nicht."), m("fotos", "immich", "", ""), m("filme", "media", "", "")})
 	if err != nil {
 		log.Fatal(err)
 	}

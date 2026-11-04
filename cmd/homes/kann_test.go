@@ -20,6 +20,7 @@ func kannSite(t *testing.T) site {
 		t.Fatal(err)
 	}
 	s.napi.Module = l
+	s.napi.Einrichtung = einrichtung(s, nil, nil)
 	return s
 }
 

@@ -67,6 +67,7 @@ func switched(t *testing.T, s site, aus string) (site, *modul.Liste) {
 		t.Fatal(err)
 	}
 	s.napi.Module = l
+	s.napi.Einrichtung = einrichtung(s, nil, nil)
 	return s, l
 }
 
@@ -113,7 +114,7 @@ func TestEachLeafModuleOff(t *testing.T) {
 			{"napi:/napi/portal/state?entity_id=light.decke", "#200", "#404"}, {"napi:POST /napi/ha/call", "#400", "#404"},
 			{"napi:POST /napi/portal/watch", "#200", "#404"}, {"napi:/napi/portal/favorites", "#200", "#404"}},
 		"energie":  {{"/start", `href=/energie`, `!href=/energie`}, {"/energie", "#200", "#404"}, {"napi:/napi/portal/energy", "#200", "#404"}},
-		"sprechen": {{"/start", "action=/sprechen", "!action=/sprechen"}, {"/willkommen", "auf Signal", "!auf Signal"}},
+		"sprechen": {{"/start", "action=/sprechen", "!action=/sprechen"}, {"/willkommen", "App „Signal“", "!App „Signal“"}},
 		"nutzung":  {{"/box/nutzung", "box-genutzt", "!box-genutzt"}},
 	}
 	check := func(t *testing.T, s site, p probe, want string) {

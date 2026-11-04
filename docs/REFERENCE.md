@@ -105,7 +105,7 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   Geräte) · Haushalt (Kalender, Einkauf, Notizen as pills on top of each;
   the tab leads to the first this box has) · Energie · Mehr — each only
   when its backend is set. `GET /mehr` holds Dokumente (owner 2026-10-27:
-  Dokumente unter Mehr, haus#159), the music, Apps einrichten, the
+  Dokumente unter Mehr, haus#159), the music, Aufgaben, the
   Netzlaufwerk password, Box for admins, each only when this box has it,
   and *Konto* with who is signed in and *Abmelden*. Start: the day (*Heute und demnächst*) first, then *Meine
   Geräte*, *Im Haus*, and Energie in one line (the roof, the house, the
@@ -116,6 +116,38 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   (haus#61's Abmelden moved under Mehr). The assistant's name stays off the
   top of the family's pages; it appears where a sentence says how to
   address it („Sag Homes: Merk dir …“).
+- Setup per module (owner 2026-11-04: „die Einrichtung gehört zur
+  Funktion, als Aufgabe pro App“). Each module declares its setup in the
+  catalog (`modul.Einrichtung`, `cmd/homes/module.go`): the address to
+  open, its own Android app (name, package, Play link) or none, short
+  steps (`internal/texte`, `schritt.*`) and the vendor's guide. A module
+  that is on and has an app is one task per person
+  (`internal/einrichten`), „<Titel> auf dem Handy einrichten“, and so is
+  the Homes app; a module that is off has none. Today: Kalender (DAVx⁵,
+  with `HOMES_RADICALE_PUBLIC_URL`), Podcasts (Audiobookshelf), Sprechen
+  (Signal, with `HOMES_BOTE_SIGNAL`), and three modules Homes only leads
+  to, on while Laib runs their service (asked once at start: `laib
+  status`): `fotos` (immich, the Immich app), `passwoerter` (vaultwarden,
+  Bitwarden), `filme` (media, Jellyfin). A task is done when Homes can
+  tell — a phone paired for the person (the Homes app), the phone
+  reporting the module's app installed (`POST /napi/einrichtung/apps`),
+  Jellyfin knowing a device of theirs other than its web page (`GET
+  /Devices` with `HOMES_JELLYFIN_KEY`) — or when the person ticks it on
+  the module's block („Ist eingerichtet“, `POST /einrichten/<name>`, from
+  Homes' own page, back to `zurueck`). Done tasks are kept per person in
+  `HOMES_DATA/einrichtung.json` (`{"anna":{"fotos":{"am":"2026-11-04",
+  "wie":"hand|app|erkannt"}}}`). The block sits on the module's own page
+  (`/kalender`, `/podcasts`, `/sprechen`) on top while the task is open,
+  and shrinks to a quiet „Auf einem weiteren Gerät einrichten“ at the
+  bottom once done; a module without a page has `/einrichten/<name>`.
+  *Deine Aufgaben* (`/aufgaben`) lists them with Homes' other tasks
+  (Netzlaufwerk-Passwort, Discogs) and Laib's for the person; the number
+  open stands beside its heading, beside *Mehr* in the bar, beside
+  *Aufgaben* in Mehr's list and in its row on `/mehr` — Homes' own, plus
+  Laib's once a page has read Laib's list (never asked for the counter).
+  `/willkommen`, where the first login lands: „Hallo <Vorname>“, the
+  username, and *Deine nächsten Schritte*, the open tasks of Homes' own as
+  links (or „Alles eingerichtet.“).
 - `POST /schalten` — a family page's button (haus#35): `geraet`, `tun`
   (`light|switch.turn_on|turn_off`, `media_player.media_pause`, Geräte's
   `cover.open_cover|stop_cover|close_cover|set_cover_position` (haus#64), or
@@ -435,6 +467,65 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   `HOMES_PUBLIC_URL`; `/napi/…` is served there as it is (OkHttp drops
   `Authorization` on a redirect to another host). Requests from inside the
   box (`host.containers.internal`, `127.0.0.1`) are never redirected.
+
+- The person's modules and setup tasks, for the app (owner 2026-11-04;
+  the app's launcher and its setup list): `GET /napi/einrichtung` with a
+  device token → the device's person's modules that are on (not the
+  admins' ones), each with an address to open or its own app:
+
+  ```json
+  {
+    "version": 1,
+    "offen": 1,
+    "module": [
+      {"name": "fotos", "titel": "Fotos", "icon": "fotos", "web": "https://photos.example.org",
+       "app": {"name": "Immich", "paket": "app.alextran.immich",
+               "store": "https://play.google.com/store/apps/details?id=app.alextran.immich"},
+       "nur_web": false,
+       "aufgabe": {"titel": "Fotos auf dem Handy einrichten", "erledigt": false,
+                   "einrichten": "https://homes.example.org/einrichten/fotos"}},
+      {"name": "filme", "titel": "Filme und Musik", "icon": "filme", "web": "https://media.example.org",
+       "app": {"name": "Jellyfin", "paket": "org.jellyfin.mobile",
+               "store": "https://play.google.com/store/apps/details?id=org.jellyfin.mobile"},
+       "nur_web": false,
+       "aufgabe": {"titel": "Filme und Musik auf dem Handy einrichten", "erledigt": true,
+                   "am": "2026-11-04", "wie": "app", "einrichten": "https://homes.example.org/einrichten/filme"}},
+      {"name": "einkauf", "titel": "Einkauf", "icon": "einkauf", "web": "https://homes.example.org/einkauf", "nur_web": true}
+    ],
+    "ziele": {
+      "einkauf": "https://homes.example.org/einkauf",
+      "zeitleiste": "https://reitti.example.org",
+      "scannen": "https://homes.example.org/napi/upload"
+    }
+  }
+  ```
+
+  `name` is the module's key (as in `/napi/kann`), `icon` the app's key
+  for its picture (the module's name; an unknown one gets the app's
+  default). `web` is the module's page in Homes where it has one, else its
+  service's own address; absent when there is none. `app` is absent and
+  `nur_web` true for a module without its own app. `aufgabe` is the
+  person's task, only for a module with an app: `erledigt`, since `am`,
+  and `wie` (`app`: the phone said it is installed, `hand`: ticked on the
+  page, `erkannt`: the service knows a device of theirs); `einrichten` is
+  the page with the module's steps, for the app to open. `offen` is how
+  many of these tasks are open (the web's counter adds Homes' other tasks
+  — the network drive's password, Discogs — and Laib's for the person).
+  `ziele` are the launcher's shortcuts this box has, each only when its
+  module is on: `einkauf` the shopping list's page, `zeitleiste` Reitti
+  (`HOMES_REITTI_PUBLIC_URL`), `scannen` the camera capture into Paperless
+  (`POST /napi/upload`, the same path the share target uses). Fields are
+  only ever added; a change that cannot be added is `version: 2`.
+  `POST /napi/einrichtung/apps` `{"pakete": ["app.alextran.immich", …]}`
+  (at most 64 KB; the Android package ids the phone has, from
+  `PackageManager`, for the packages the answer names) ticks each open task
+  whose app is among them, `wie: app`, and answers the same as the GET; a
+  task is never un-ticked by a package that is missing later. A body that
+  is no such JSON is 400 `{"ok":false,"reason":"bad_request"}`; a tick that
+  cannot be kept 500 with a German `error`. Both want a paired device
+  (401), and are 404 `not_found` on a Homes without them (an older one):
+  the app then behaves as before. `GET /napi/kann` (ADR 0001 §2) is
+  unchanged; it lists the three new modules like any other.
 
 - The assistant's name: `GET /napi/assistent` with a device token →
   `{"name":"Homes"}` — `HOMES_ASSISTANT` as Laib sets it from box.yml

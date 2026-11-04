@@ -80,7 +80,8 @@ func knownPodcastError(err error) bool { return podcasts.Bekannt(err) }
 func writePodcasts(w http.ResponseWriter, r *http.Request, cfg StartConfig, code int, done, problem, link string) {
 	person := r.Header.Get("Remote-User")
 	b := familyHead(r, cfg, "Podcasts", "Podcasts")
-	b.WriteString(noteStyle + "<h1>Podcasts</h1><p class=k>" + html.EscapeString(saysPodcastsHow) + "</p>")
+	oben, unten := einrichtenHier(r, cfg, "podcasts") // the Audiobookshelf app, while it is not set up (owner 2026-11-04)
+	b.WriteString(noteStyle + "<h1>Podcasts</h1>" + oben + "<p class=k>" + html.EscapeString(saysPodcastsHow) + "</p>")
 	b.WriteString(gesagt(done, problem))
 	b.WriteString(`<section class=karte aria-labelledby=k-abo><h2 id=k-abo>Podcast abonnieren</h2><form class=notizform method=post action=` + PodcastsPath + `>` +
 		`<input type=hidden name=tun value=abonnieren><label for=link>Link zum Podcast</label><input id=link type=url name=link required inputmode=url autocomplete=off placeholder="https://podcasts.apple.com/…" value="` + html.EscapeString(link) + `">` +
@@ -135,5 +136,6 @@ func writePodcasts(w http.ResponseWriter, r *http.Request, cfg StartConfig, code
 		}
 		b.WriteString(f.HTML())
 	}
+	b.WriteString(unten)
 	writePage(w, code, b)
 }

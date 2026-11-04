@@ -5,15 +5,40 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/mdopp/homes/internal/einrichten"
+	"github.com/mdopp/homes/internal/modul"
 	"github.com/mdopp/homes/internal/samba"
 	"github.com/mdopp/homes/internal/samba/sambafake"
 )
 
+// setupBox is a box with Fotos (Immich) and Kalender (DAVx⁵), both with an
+// app, and Notizen without one; the Homes app is paired by nobody.
+func setupBox(t *testing.T, mods ...string) StartConfig {
+	t.Helper()
+	all := map[string]modul.Modul{
+		"fotos":    {Name: "fotos", Titel: "Fotos", Einrichtung: einrichten.App("Immich", "app.alextran.immich", "https://photos.box.test", "https://immich.app/docs", "schritt.fotos", "schritt.fotos-sichern")},
+		"kalender": {Name: "kalender", Titel: "Kalender", Einrichtung: einrichten.App("DAVx⁵", "at.bitfire.davdroid", "https://caldav.box.test", "https://manual.davx5.com/", "schritt.davx")},
+		"notizen":  {Name: "notizen", Titel: "Notizen"},
+	}
+	if len(mods) == 0 {
+		mods = []string{"fotos", "kalender", "notizen"}
+	}
+	var ms []modul.Modul
+	for _, m := range mods {
+		ms = append(ms, all[m])
+	}
+	l, err := modul.Bauen(ms)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return StartConfig{Module: l, Einrichtung: &einrichten.Quellen{Module: l, Haken: einrichten.Open(t.TempDir())}}
+}
+
 func welcomePage(t *testing.T, cfg StartConfig) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest("GET", "/willkommen", nil)
-	req.Host = "homes.box.test"
 	req.Header.Set("Remote-User", "anna")
 	req.Header.Set("Remote-Name", "Anna Müller")
 	rec := httptest.NewRecorder()
@@ -21,88 +46,37 @@ func welcomePage(t *testing.T, cfg StartConfig) *httptest.ResponseRecorder {
 	return rec
 }
 
-// haus#56: the welcome page shows only the apps this box has, each with
-// its steps and its server address, in the family's words.
-func TestWillkommenShowsOnlyTheInstalledApps(t *testing.T) {
-	rows := []map[string]any{{"name": "immich", "state": "grün"}, {"name": "vaultwarden", "state": "grün"}, {"name": "auth", "state": "grün"}}
-	rec := welcomePage(t, StartConfig{Laib: fakeLaib(t, allGreen(t), rows), PublicURL: "https://homes.dopp.example"})
+// owner 2026-11-04: Willkommen is „Hallo <Vorname>“, the username and the
+// next steps, the person's open setup tasks as links, only the open ones;
+// the long guides are gone (they are each module's now).
+func TestWillkommenListsOnlyTheOpenTasks(t *testing.T) {
+	cfg := setupBox(t)
+	fs := sambafake.New(t, map[string]int64{"anna": 0}, true)
+	cfg.Samba = &samba.Dir{Path: fs.Dir}
+	cfg.Einrichtung.Haken.Setzen("anna", "kalender", einrichten.Hand, time.Now())
+	rec := welcomePage(t, cfg)
 	page := rec.Body.String()
-	for _, w := range []string{"<h1>Willkommen, Anna</h1>", saysWelcomeLead, ">anna<", "<h2>Fotos</h2>", "„Immich“", "https://photos.dopp.example", "Mit Familienkonto anmelden",
-		"<h2>Passwörter</h2>", "„Bitwarden“", "https://vault.dopp.example", "Master-Passwort", "auch kein Admin", "Apps einrichten", "href=/start"} {
-		if !strings.Contains(page, w) {
-			t.Errorf("the page lacks %q", w)
-		}
-	}
-	for _, w := range []string{"Jellyfin", "DAVx", "caldav.", "Netzlaufwerk", "die Anmeldung", "auth"} {
-		if strings.Contains(page, w) {
-			t.Errorf("the page shows %q, which this box does not have", w)
-		}
-	}
+	mustContain(t, page, "<h1>Hallo Anna</h1>", "Dein Benutzername:", ">anna</span>", "Deine nächsten Schritte",
+		`<a href="/einrichten/fotos">Fotos auf dem Handy einrichten</a>`, "Mit der App „Immich“.",
+		`<a href="/netzlaufwerk">Netzlaufwerk-Passwort festlegen</a>`, "href=/start>Weiter zur Startseite")
+	mustNotContain(t, page, "Kalender auf dem Handy", "Notizen auf dem Handy", "Bitwarden", "drucken", "Apps einrichten")
+	before(t, page, "Netzlaufwerk-Passwort", "Fotos auf dem Handy") // the important first
 	if c := rec.Header().Get("Set-Cookie"); !strings.Contains(c, welcomeCookie+"=gesehen") {
 		t.Errorf("the device is not marked: %q", c)
 	}
-	if rec := httptest.NewRecorder(); true {
-		Willkommen(StartConfig{}).ServeHTTP(rec, httptest.NewRequest("POST", "/willkommen", nil))
-		if rec.Code != http.StatusMethodNotAllowed {
-			t.Errorf("POST: %d", rec.Code)
-		}
-	}
-}
-
-func TestWillkommenAllAppsAndTheDrive(t *testing.T) {
-	fs := sambafake.New(t, map[string]int64{"anna": 0}, true)
-	rows := []map[string]any{{"name": "immich"}, {"name": "media"}, {"name": "radicale"}, {"name": "vaultwarden"}}
-	// no public address: the domain is the host's, after homes.
-	page := welcomePage(t, StartConfig{Laib: fakeLaib(t, allGreen(t), rows), Samba: &samba.Dir{Path: fs.Dir}}).Body.String()
-	for _, w := range []string{"Fotos", "Filme und Musik", "„Jellyfin“", "https://media.box.test", "Kalender und Kontakte", "„DAVx⁵“", "CalDAV-Account", "https://caldav.box.test",
-		"Passwörter", "https://vault.box.test", "Dateien am Computer", "href=/netzlaufwerk"} {
-		if !strings.Contains(page, w) {
-			t.Errorf("the page lacks %q", w)
-		}
-	}
-	if strings.Index(page, "Fotos") > strings.Index(page, "Passwörter") {
-		t.Errorf("Fotos come first")
-	}
-}
-
-func TestWillkommenSaysWhenItCannotLook(t *testing.T) {
-	page := welcomePage(t, StartConfig{Laib: brokenLaib(t)}).Body.String()
-	if !strings.Contains(page, saysAppsUnknown) || strings.Contains(page, "500") || strings.Contains(page, saysNoAppsYet) {
-		t.Fatalf("%s", page)
-	}
-	// nothing else installed: the Homes app is there all the same (haus#175)
-	page = welcomePage(t, StartConfig{Laib: fakeLaib(t, allGreen(t), nil), PublicURL: "https://homes.dopp.example"}).Body.String()
-	if !strings.Contains(page, "<h2>Die Homes-App</h2>") || strings.Contains(page, saysNoAppsYet) {
-		t.Fatalf("nothing else installed:\n%s", page)
-	}
-}
-
-// haus#175: the Homes app (Android installs it, an iPhone puts the page on its
-// home screen), the house on Signal when the box has a number, one printable page
-func TestWillkommenHomesAppSignalAndPaper(t *testing.T) {
-	cfg := StartConfig{Laib: fakeLaib(t, allGreen(t), nil), PublicURL: "https://homes.dopp.example"}
-	page := welcomePage(t, cfg).Body.String()
-	for _, w := range []string{"<h2>Die Homes-App</h2>", `href="` + homesAppAPK + `">Homes-App laden</a>`, "https://homes.dopp.example", "Zum Home-Bildschirm",
-		`<button type=button onclick="print()">Diese Seite drucken</button>`, "@media print{"} {
-		if !strings.Contains(page, w) {
-			t.Errorf("the page lacks %q", w)
-		}
-	}
-	if strings.Contains(page, "auf Signal</h2>") {
-		t.Error("a Signal card without a number")
-	}
-	named(t, "Ada")
-	cfg.BoteSignal = "+4915112345678"
+	cfg.Samba = nil
+	cfg.Einrichtung.Haken.Setzen("anna", "fotos", einrichten.Handy, time.Now())
 	page = welcomePage(t, cfg).Body.String()
-	for _, w := range []string{"<h2>Ada auf Signal</h2>", "+4915112345678", `href="https://signal.me/#p/+4915112345678">Ada in Signal öffnen</a>`, "als „Ada“"} {
-		if !strings.Contains(page, w) {
-			t.Errorf("the page lacks %q", w)
-		}
+	mustContain(t, page, "Alles eingerichtet.")
+	mustNotContain(t, page, "Deine nächsten Schritte", "auf dem Handy einrichten")
+	rec = httptest.NewRecorder()
+	Willkommen(StartConfig{}).ServeHTTP(rec, httptest.NewRequest("POST", "/willkommen", nil))
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Errorf("POST: %d", rec.Code)
 	}
 }
 
-// Start sends a device's first visit to the welcome page, once; Start
-// itself leads there quietly.
+// Start sends a device's first visit to the welcome page, once.
 func TestStartSendsTheFirstVisitToWillkommen(t *testing.T) {
 	cfg := StartConfig{Laib: fakeLaib(t, allGreen(t), nil), Welcome: true}
 	req := httptest.NewRequest("GET", "/start", nil)
@@ -115,7 +89,7 @@ func TestStartSendsTheFirstVisitToWillkommen(t *testing.T) {
 	req.AddCookie(&http.Cookie{Name: welcomeCookie, Value: "gesehen"})
 	rec = httptest.NewRecorder()
 	Start(cfg).ServeHTTP(rec, req)
-	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "href=/willkommen>Apps einrichten") {
+	if rec.Code != 200 {
 		t.Fatalf("seen: %d\n%s", rec.Code, rec.Body.String())
 	}
 }

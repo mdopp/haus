@@ -2,8 +2,9 @@
 // table per language (owner 2026-11-04: Homes becomes multilingual — de,
 // en, es, fr — after the module work). Only German is filled today, and
 // only the words added since then live here: the module titles, the
-// traces of what a box lacks and „Hier anfordern“ (ADR 0001 §10). Older
-// strings move here in that later project. Standard library only
+// traces of what a box lacks and „Hier anfordern“ (ADR 0001 §10), each
+// module's setup steps and the person's tasks. Older strings move here in
+// that later project. Standard library only
 // (scripts/loc.sh: shared).
 package texte
 
@@ -61,6 +62,27 @@ const (
 	StandortOeffnen     ID = "standort.oeffnen"     // the main button, into Reitti
 	StandortZuletzt     ID = "standort.zuletzt"     // „… %s“: when the newest point came
 	StandortEinschalten ID = "standort.einschalten" // the step while no point has come
+	// each module's setup, a task per person (owner 2026-11-04); the steps
+	// are the catalog's, "schritt.<…>" with {adresse} and {name}
+	Aufgabe       ID = "einrichten.aufgabe" // „%s auf dem Handy einrichten“
+	MitApp        ID = "einrichten.mit-app" // the task's line: „Mit der App „%s“.“
+	HomesApp      ID = "einrichten.homes"   // the Homes app, in a task's title
+	AppLaden      ID = "einrichten.app"     // the first step: „Lade die App „%s“ aufs Handy.“
+	Laden         ID = "einrichten.laden"   // its link to the store
+	Oeffnen       ID = "einrichten.oeffnen" // the module's address
+	Anleitung     ID = "einrichten.anleitung"
+	Eingerichtet  ID = "einrichten.fertig"   // the person's tick, where nothing can tell
+	Hakt          ID = "einrichten.hakt"     // the pressed tick
+	Weiteres      ID = "einrichten.weiteres" // what is left of the block once it is set up
+	HakenNicht    ID = "einrichten.nicht"    // the tick could not be kept
+	Offen         ID = "aufgaben.offen"      // the counter's words: „%d offen“
+	Hallo         ID = "willkommen.hallo"    // „Hallo %s“
+	Benutzername  ID = "willkommen.benutzername"
+	Schritte      ID = "willkommen.schritte"
+	AllesFertig   ID = "willkommen.alles"
+	ZurStartseite ID = "willkommen.weiter"
+	GrundDienst   ID = "grund.dienst"        // a link module's service is not on the box: „%s“ is its name
+	GrundUnklar   ID = "grund.dienst-unklar" // … or Laib did not say at start
 )
 
 var de = map[ID]string{
@@ -82,6 +104,9 @@ var de = map[ID]string{
 	"modul.gesundheit":   "Gesundheit",
 	"modul.werkstatt":    "Werkstatt",
 	"modul.nutzung":      "Was wird genutzt",
+	"modul.fotos":        "Fotos",
+	"modul.passwoerter":  "Passwörter",
+	"modul.filme":        "Filme und Musik",
 
 	SpurFehlt:           "auf dieser Box nicht eingerichtet",
 	SpurAus:             "ausgeschaltet",
@@ -131,6 +156,35 @@ var de = map[ID]string{
 	StandortOeffnen:     "Zeitleiste öffnen",
 	StandortZuletzt:     "Verbunden · zuletzt aufgezeichnet %s",
 	StandortEinschalten: "Noch ist kein Punkt angekommen. Schalte in der Homes-App unter „Standortverlauf“ die Aufzeichnung ein.",
+	Aufgabe:             "%s auf dem Handy einrichten",
+	MitApp:              "Mit der App „%s“.",
+	HomesApp:            "Homes-App",
+	AppLaden:            "Lade die App „%s“ aufs Handy.",
+	Laden:               "App laden",
+	Oeffnen:             "Öffnen",
+	Anleitung:           "Ausführliche Anleitung",
+	Eingerichtet:        "Ist eingerichtet",
+	Hakt:                "Hakt ab …",
+	Weiteres:            "Auf einem weiteren Gerät einrichten",
+	HakenNicht:          "Das ließ sich gerade nicht abhaken. Versuch es gleich noch einmal.",
+	Offen:               "%d offen",
+	Hallo:               "Hallo %s",
+	Benutzername:        "Dein Benutzername:",
+	Schritte:            "Deine nächsten Schritte",
+	AllesFertig:         "Alles eingerichtet.",
+	ZurStartseite:       "Weiter zur Startseite",
+	GrundDienst:         "Auf dieser Box läuft %s nicht.",
+	GrundUnklar:         "Ob auf dieser Box %s läuft, ließ sich beim Start nicht lesen.",
+
+	"schritt.anmelden":        "Trag als Server-Adresse {adresse} ein und melde dich mit deinem Benutzernamen und Passwort an.",
+	"schritt.fotos":           "Trag als Server-Adresse {adresse} ein, tippe auf „Mit Familienkonto anmelden“ und melde dich an.",
+	"schritt.fotos-sichern":   "Schalte unter „Sicherung“ ein, dass neue Fotos von selbst auf die Box kommen.",
+	"schritt.tresor":          "Wähle „Selbst gehostet“, trag {adresse} ein und melde dich mit „Single Sign-On“ und deinem Familienkonto an.",
+	"schritt.tresor-passwort": "Beim ersten Mal legst du ein Master-Passwort fest. Das kennst nur du, niemand kann es zurücksetzen: Schreib es auf.",
+	"schritt.davx":            "Tippe auf „Konto hinzufügen“, wähle „Mit URL und Benutzername anmelden“ und trag {adresse} ein, dazu deinen Benutzernamen und dein Passwort.",
+	"schritt.signal":          "Tippe unten auf „Öffnen“ und schreib „Hallo“. {name} antwortet, sobald ein Admin dich einmal freigegeben hat.",
+	"schritt.homes":           "Öffne die App, trag {adresse} ein und melde dich an. Die App richtet sich dann selbst ein.",
+	"schritt.homes-iphone":    "iPhone: Öffne {adresse} in Safari, tippe auf „Teilen“ und dann auf „Zum Home-Bildschirm“.",
 }
 
 // sprachen are the tables by language; a missing word falls back to German.

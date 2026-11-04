@@ -388,6 +388,9 @@ module: `LAIB_URL`, `LAIB_TOKEN`, `LAIB_PUBLIC_URL`, `LAIB_DOMAIN`,
 | `gesundheit` | Gesundheit | gesundheit (a link only) | `HOMES_GESUNDHEIT_URL` | the card on Mehr | – | – | – |
 | `werkstatt` | Werkstatt | GitHub (admins) | `HOMES_WERKSTATT_REPOS`; opt. `HOMES_GITHUB_API` | the card on Box | – | – | – |
 | `nutzung` | Was wird genutzt | usage-metrics (admins) | `HOMES_USAGE_URL`, `HOMES_USAGE_TOKEN` | Box's „Was wird genutzt“ | – | counts `/napi` | – |
+| `fotos` | Fotos | immich (a link only, on while Laib runs it) | – | `/einrichten/fotos` | – | – | the Immich app's setup |
+| `passwoerter` | Passwörter | vaultwarden (a link only) | – | `/einrichten/passwoerter` | – | – | the Bitwarden app's setup |
+| `filme` | Filme und Musik | media (a link only) | – | `/einrichten/filme` | – | – | the Jellyfin app's setup |
 
 Known couplings that the migration has to take care of:
 
@@ -622,3 +625,28 @@ that silently is not there. Maintenance gets no worse: the trace comes
 from the same module list, and the wish is Laib's existing Box-Aufgabe
 with one more read. What it costs: one more card on Mehr and one more call
 to Laib per Mehr view (cached), and about 150 lines in laib-haushalt.
+
+## 11. Amendment 2026-11-04 — each module carries its own setup
+
+The owner, on the Willkommen page's guides: they went stale in one
+place; the setup belongs with each function, and as a task per app.
+
+- **`modul.Einrichtung`** on a module: the address to open, its own
+  Android app (name, package, Play link) or none (web only), short steps
+  as `internal/texte` ids, and the vendor's guide. The catalog declares
+  it with the module; a module that is off has none, so its steps go with
+  it.
+- **Modules Homes only leads to.** The box's apps Homes has no page for
+  are modules too, so their setup has a home and an off one leaves its
+  trace (§10): `fotos` (immich), `passwoerter` (vaultwarden), `filme`
+  (media). They are on while Laib runs their service, read once at start
+  from `laib status` (Homes has no wiring of them; ADR §5's "derived from
+  what the box runs"). Laib silent at start: off, saying it could not
+  tell. `HOMES_MODULE_AUS` switches them off like any other.
+- **One task per person** for each module that is on and has an app, and
+  for the Homes app (`internal/einrichten`); done when Homes can tell (a
+  paired phone; the phone's installed apps, `POST
+  /napi/einrichtung/apps`; Jellyfin's devices with the key Homes has) or
+  ticked by hand; kept in `HOMES_DATA/einrichtung.json`.
+- **`GET /napi/einrichtung`** is the app's view of it (docs/REFERENCE.md);
+  `/napi/kann` is unchanged but lists the three modules.

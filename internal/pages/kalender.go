@@ -51,7 +51,8 @@ func Kalender(cfg StartConfig) http.HandlerFunc {
 		logErrs("kalender", map[string]error{"calendar": evErr, "reminders": todoErr, "view": viewErr})
 
 		b := familyHead(r, cfg, "Kalender", "Kalender")
-		b.WriteString("<h1>Kalender</h1>")
+		oben, unten := einrichtenHier(r, cfg, "kalender") // DAVx⁵, while it is not set up (owner 2026-11-04)
+		b.WriteString("<h1>Kalender</h1>" + oben)
 		if evErr != nil {
 			b.WriteString("<p class=k>" + saysNoCalendar + "</p>")
 		} else {
@@ -112,6 +113,7 @@ func Kalender(cfg StartConfig) http.HandlerFunc {
 			b.WriteString(rem.HTML())
 		}
 		b.WriteString(`<p class=weiter-in><a href="` + kalenderVerwalten + `">Kalender hinzufügen und verwalten</a> <span class=k>Google verbinden, Feiertage abonnieren, Farben, Adresse fürs Telefon</span></p>`)
+		b.WriteString(unten)
 		writePage(w, http.StatusOK, b)
 	}
 }

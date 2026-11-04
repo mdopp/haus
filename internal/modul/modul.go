@@ -5,7 +5,6 @@
 package modul
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"slices"
@@ -85,15 +84,29 @@ type Modul struct {
 	// Box page offers its switch only then
 	Schaltbar bool
 
-	Nav    []Eintrag // its entries in the family's selection
-	Start  []string  // Start's parts it fills: "im-haus", "meine-geraete", "heute"
-	App    Angebot
-	Laeuft []func(context.Context) // its background work, started only while it is on
+	Nav   []Eintrag // its entries in the family's selection
+	Start []string  // Start's parts it fills: "im-haus", "meine-geraete", "heute"
+	App   Angebot
+	// Einrichtung is how a person sets it up; nil: nothing to set up
+	Einrichtung *Einrichtung
 
 	// Grund is why it is off, one German sentence; "" while it is on.
 	Grund string
 	// Warum is the machine's word for Grund: Fehlt or Aus.
 	Warum string
+}
+
+// Einrichtung is a module's setup (owner 2026-11-04: „die Einrichtung
+// gehört zur Funktion“): the address to open, its own phone app if it has
+// one, short steps and the vendor's guide for the rest. A module that is
+// on and has an App is a task for each person (internal/einrichten).
+type Einrichtung struct {
+	Web       string   // the address to open, https://photos.<domain>; "" for none
+	App       string   // its phone app's name, „Immich“; "" when it is web only
+	Paket     string   // the app's Android package: the phone says it is installed
+	Store     string   // where the app comes from
+	Anleitung string   // the vendor's own guide
+	Schritte  []string // after „Lade die App“, as texte ids: {adresse} is Web, {name} the assistant's
 }
 
 // An: is the module on?

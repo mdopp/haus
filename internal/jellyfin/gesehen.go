@@ -135,3 +135,29 @@ func (c *Client) HatFilm(ctx context.Context, name string) (string, bool, error)
 	}
 	return "", false, nil
 }
+
+// HatGeraet: has the person signed in to Jellyfin from an app other than
+// its web page (a phone, a TV)? GET /Devices?userId= with the key; the
+// web page is "Jellyfin Web". A person Jellyfin does not know has none.
+func (c *Client) HatGeraet(ctx context.Context, person string) (bool, error) {
+	id, err := c.userID(ctx, person)
+	if errors.Is(err, ErrNoUser) {
+		return false, nil
+	} else if err != nil {
+		return false, err
+	}
+	var out struct {
+		Items []struct {
+			AppName string `json:"AppName"`
+		} `json:"Items"`
+	}
+	if err := c.get(ctx, "/Devices", url.Values{"userId": {id}}, &out); err != nil {
+		return false, err
+	}
+	for _, d := range out.Items {
+		if d.AppName != "" && !strings.Contains(d.AppName, "Web") {
+			return true, nil
+		}
+	}
+	return false, nil
+}

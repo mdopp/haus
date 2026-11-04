@@ -69,3 +69,34 @@ func TestGeschaut(t *testing.T) {
 		t.Error("Arrival is not there")
 	}
 }
+
+// owner 2026-11-04: the Filme task is done once Jellyfin knows an app of
+// the person's other than the web page.
+func TestHatGeraet(t *testing.T) {
+	apps := map[string][]string{"ua": {"Jellyfin Web"}, "ub": {"Jellyfin Web", "Jellyfin Android"}}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/Users":
+			json.NewEncoder(w).Encode([]any{map[string]any{"Name": "Anna", "Id": "ua"}, map[string]any{"Name": "ben", "Id": "ub"}})
+		case "/Devices":
+			var items []any
+			for _, a := range apps[r.URL.Query().Get("userId")] {
+				items = append(items, map[string]any{"AppName": a})
+			}
+			json.NewEncoder(w).Encode(map[string]any{"Items": items})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	c := &Client{URL: srv.URL, Token: "key"}
+	for person, want := range map[string]bool{"anna": false, "ben": true, "carla": false} {
+		if got, err := c.HatGeraet(context.Background(), person); err != nil || got != want {
+			t.Errorf("%s: %v %v, want %v", person, got, err, want)
+		}
+	}
+	srv.Close()
+	if _, err := c.HatGeraet(context.Background(), "ben"); err == nil {
+		t.Error("a Jellyfin that does not answer is no answer")
+	}
+}

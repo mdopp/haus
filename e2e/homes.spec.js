@@ -484,6 +484,28 @@ test('a form in a card stacks its fields on a phone', async ({ page }) => {
   expect(box.width, 'the name field has room').toBeGreaterThan(250);
 });
 
+// owner 2026-11-04: a module's setup is a task; „Ist eingerichtet“ says it
+// runs, the block then keeps its steps without the tick, in place, and the
+// counter beside Aufgaben goes down by one
+test('ticking a setup by hand shrinks the counter in place', async ({ page }) => {
+  await page.goto('/aufgaben');
+  const n = Number(await page.locator('h1 .anzahl').textContent());
+  await page.goto('/einrichten/filme');
+  await mark(page);
+  const block = page.locator('#einrichten-filme');
+  await expect(block).toContainText('Lade die App „Jellyfin“ aufs Handy.');
+  await page.route('**/einrichten/filme', async (r) => { await new Promise((res) => setTimeout(res, 400)); await r.continue(); });
+  await block.getByRole('button', { name: 'Ist eingerichtet' }).click();
+  await expect(block.getByRole('button')).toHaveText('Hakt ab …');
+  await expect(block.getByRole('button')).toHaveCount(0);
+  await expect(block).toContainText('https://media.example');
+  expect(await stays(page), 'ticked in place').toBe(true);
+  await page.goto('/aufgaben');
+  await expect(page.locator('h1')).toContainText(String(n - 1));
+  await expect(page.getByRole('link', { name: 'Noch einmal' })).toHaveCount(0);
+  await expect(page.locator('section[aria-labelledby=karte-erledigt]')).toContainText('Filme und Musik auf dem Handy einrichten');
+});
+
 // owner 2026-10-30: the wake word the speaker reports, and „Hey Mycroft“ Laib selects
 test("Mehr's Einrichtung card fills itself after the page", async ({ page, request }) => {
   await request.get('/demo/laib?ms=1500');
@@ -548,7 +570,7 @@ test('Standortverlauf, connected, leads with the timeline and ends with a quiet 
 // screen, a field to type in has room, a button is big enough for a
 // finger, and no text runs out of its box.
 const PAGES = ['/start', '/raeume', '/raeume/light.kueche', '/medien', '/energie', '/energie?zeitraum=jahr', '/kalender', '/kalender/verwalten',
-  '/notizen', '/notizen?tag=kochen', '/notizen/einkaufsliste.md', '/notizen/markdown.md', '/notizen/einkaufsliste.md?bearbeiten=1', '/mehr', '/musik', '/platte', '/discogs', '/aktivierungswort', '/aufgaben', '/dokumente', '/willkommen', '/box/geraete', '/pair-device', '/podcasts', '/gesehen', '/standort',
+  '/notizen', '/notizen?tag=kochen', '/notizen/einkaufsliste.md', '/notizen/markdown.md', '/notizen/einkaufsliste.md?bearbeiten=1', '/mehr', '/musik', '/platte', '/discogs', '/aktivierungswort', '/aufgaben', '/dokumente', '/willkommen', '/einrichten/fotos', '/box/geraete', '/pair-device', '/podcasts', '/gesehen', '/standort',
   '/einkauf', '/einkauf?liste=liste-baumarkt', '/einkauf?liste=liste-musik', '/einkauf/rezepte', '/einkauf/rezepte?n=rezepte%2Flasagne.md', '/notizen/rezepte/lasagne.md'];
 for (const path of PAGES) {
   test(`layout of ${path}`, async ({ page }) => {
