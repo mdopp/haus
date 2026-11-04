@@ -24,7 +24,7 @@ même maison sur votre écran d'accueil.
 
 ## Ce que vous obtenez
 
-L'app est en allemand ; les noms des pages et des boutons apparaissent
+Homes est en allemand ; les noms des pages et des boutons apparaissent
 ici tels que vous les voyez, avec une courte traduction.
 
 - **Start** (accueil) : les rendez-vous et rappels du jour et des jours

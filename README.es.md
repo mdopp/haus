@@ -24,7 +24,7 @@ casa a tu pantalla de inicio.
 
 ## Qué obtienes
 
-La app está en alemán; los nombres de las páginas y botones aparecen aquí
+Homes está en alemán; los nombres de las páginas y botones aparecen aquí
 tal como los ves, con una breve traducción.
 
 - **Start** (inicio): las citas y recordatorios de hoy y de los próximos
