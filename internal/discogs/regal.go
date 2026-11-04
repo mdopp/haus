@@ -61,16 +61,6 @@ func (r *Regal) Hat(ctx context.Context, artist, title string) (Platte, bool, er
 	return Platte{}, false, nil
 }
 
-// Platten is the shelf as last read.
-func (r *Regal) Platten(ctx context.Context) ([]Platte, error) {
-	if _, _, err := r.Hat(ctx, "", "\x00"); err != nil {
-		return nil, err
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return append([]Platte(nil), r.plates...), nil
-}
-
 func plain(s string) string {
 	s = strings.NewReplacer("ä", "a", "ö", "o", "ü", "u", "ß", "ss", "&", "und").Replace(strings.ToLower(s))
 	var b strings.Builder

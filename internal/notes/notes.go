@@ -104,14 +104,6 @@ func oneLine(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
 
-// Create writes "# <title>\n\n<text>" as <slug>.md, or <slug>-2.md, -3, …
-// when the name is taken: an existing note is never overwritten. The file
-// appears complete or not at all: written aside, then hard-linked into
-// place. A share without hard links gets an error, not a weaker write.
-func (d *Dir) Create(title, text string) (string, error) {
-	return d.CreateWith(title, text, Kopf{})
-}
-
 // CreateWith is Create with a head (haus#116): kind, tags, source.
 func (d *Dir) CreateWith(title, text string, k Kopf) (string, error) {
 	title = oneLine(title)

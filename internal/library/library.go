@@ -72,21 +72,6 @@ const (
 	ulp   = 1e-9 // far below the Vermittler's 0.001
 )
 
-// Cut keeps the hits close enough to the question, in qmd's order. The
-// Vermittler rounds a cosine to three places, so a hit can sit exactly on
-// the bar; it stays, whatever the float arithmetic makes of 0.75 × 0.4.
-func Cut(hits []qmd.Hit) []qmd.Hit {
-	vecs := make([]float64, len(hits))
-	for i, h := range hits {
-		vecs[i] = h.Vec
-	}
-	out := []qmd.Hit{}
-	for _, i := range cut(vecs) {
-		out = append(out, hits[i])
-	}
-	return out
-}
-
 // cut is Cut on the cosines alone: the places of those that stay.
 func cut(vecs []float64) []int {
 	best := 0.0

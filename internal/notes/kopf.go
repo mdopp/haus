@@ -339,14 +339,9 @@ func (k Kopf) Set(art string, tags []string) Kopf {
 	return k
 }
 
-// ByQuelle is the note made from this address, if there is one: a link
-// kept once is not kept twice (haus#117).
-func (d *Dir) ByQuelle(ctx context.Context, quelle string) (Entry, bool, error) {
-	return d.ByQuelleWie(ctx, quelle, func(s string) string { return s })
-}
-
-// ByQuelleWie is ByQuelle with addresses compared by key (merken.Schluessel:
-// a link shared with ?si=… or utm_… is the same link).
+// ByQuelleWie is the note made from this address, if there is one: a link
+// kept once is not kept twice (haus#117). Addresses are compared by key
+// (merken.Schluessel: a link shared with ?si=… or utm_… is the same link).
 func (d *Dir) ByQuelleWie(ctx context.Context, quelle string, key func(string) string) (Entry, bool, error) {
 	want := key(quelle)
 	root, err := os.OpenRoot(d.path)

@@ -1,14 +1,4 @@
 # scripts/ratchet.py deadcode: the number is how often
 # written by `scripts/ratchet.py --update`; lowered in the PR that fixes one, raised only with --accept
-# total 11
-1 test-only internal/bote/bote.go: Client.Ask
-1 test-only internal/caldav/caldav.go: Client.AddressBooks
-1 test-only internal/caldav/caldav.go: Client.Calendars
+# total 1
 1 test-only internal/cards/cards.go: Card.MarshalJSON
-1 test-only internal/discogs/regal.go: Regal.Platten
-1 test-only internal/library/library.go: Cut
-1 test-only internal/notes/kopf.go: Dir.ByQuelle
-1 test-only internal/notes/notes.go: Dir.Create
-1 test-only internal/pages/box.go: Box
-1 test-only internal/pages/box.go: BoxWith
-1 test-only internal/schalter/witness.go: Witness.wait

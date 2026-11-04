@@ -59,6 +59,3 @@ func (w *Witness) Saw(person, service, entity, contextID string) {
 		}
 	}()
 }
-
-// wait is until the notes under way are done (tests).
-func (w *Witness) wait() { w.notes.Wait() }
