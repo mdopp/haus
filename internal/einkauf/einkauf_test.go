@@ -219,8 +219,8 @@ func TestListeAddsUpTicksAndTidies(t *testing.T) {
 	}
 	// the list is no calendar and its lines are no reminders
 	c := l.DAV
-	if cals, _ := c.Calendars(ctx); len(cals) != 0 {
-		t.Errorf("calendars show the list: %+v", cals)
+	if cals, err := c.PersonCalendars(ctx, "anna"); err != nil || len(cals) != 0 {
+		t.Errorf("Kalender shows the list: %+v %v", cals, err)
 	}
 	if todos, _ := c.OpenTodos(ctx); len(todos) != 0 {
 		t.Errorf("reminders show the list: %+v", todos)

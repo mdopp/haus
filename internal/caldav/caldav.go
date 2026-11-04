@@ -248,13 +248,6 @@ const propfindBody = `<?xml version="1.0" encoding="utf-8"?>
   <D:prop><D:resourcetype/><D:displayname/><C:supported-calendar-component-set/><L:abgleich/><L:problem/></D:prop>
 </D:propfind>`
 
-// Calendars lists the account's calendars, sorted by address; one whose
-// href names another host is left out.
-func (c *Client) Calendars(ctx context.Context) ([]Collection, error) { return c.list(ctx, false) }
-
-// AddressBooks lists the account's address books, the same way.
-func (c *Client) AddressBooks(ctx context.Context) ([]Collection, error) { return c.list(ctx, true) }
-
 // list is the account's calendars, or its address books.
 func (c *Client) list(ctx context.Context, books bool) ([]Collection, error) {
 	home, err := c.home()

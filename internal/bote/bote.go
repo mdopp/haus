@@ -119,17 +119,6 @@ func (c *Client) request(ctx context.Context, p Person, text string, stream bool
 	return hc.Do(req)
 }
 
-// Ask sends text as p and returns the Bote's reply. Anything but a chat
-// completion with text is an error; Hermes' words stay out of it.
-func (c *Client) Ask(ctx context.Context, p Person, text string) (string, error) {
-	resp, err := c.request(ctx, p, text, false)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	return completion(resp)
-}
-
 // completion reads one whole chat completion's text.
 func completion(resp *http.Response) (string, error) {
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxReply+1))
