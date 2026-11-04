@@ -15,9 +15,6 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
-	"github.com/mdopp/homes/internal/devices"
-	"github.com/mdopp/homes/internal/discogs"
-	"github.com/mdopp/homes/internal/napi"
 	"log"
 	"math"
 	"net/http"
@@ -26,6 +23,12 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/mdopp/homes/internal/abruf"
+	"github.com/mdopp/homes/internal/devices"
+	"github.com/mdopp/homes/internal/discogs"
+	"github.com/mdopp/homes/internal/namen"
+	"github.com/mdopp/homes/internal/napi"
 
 	"github.com/mdopp/homes/internal/abs"
 	"github.com/mdopp/homes/internal/abs/absfake"
@@ -110,7 +113,7 @@ func main() {
 	absFake := absfake.New("demo")
 	defer absFake.Close()
 	pods := podcasts.Open(&abs.Client{URL: absFake.URL, Token: "demo"}, dir)
-	pods.Fetch = merken.Fetcher{AllowPrivate: true}
+	pods.Fetch = abruf.Fetcher{AllowPrivate: true}
 	cal := &caldav.Client{URL: dav.URL, User: "homes", Password: "demo", Loc: time.Local}
 	list := einkauf.Open(cal)
 	if err := list.Ensure(context.Background()); err != nil {
@@ -133,7 +136,7 @@ func main() {
 	live := &pages.Live{}
 	cfg := pages.StartConfig{Gesehen: seen, Einkauf: list, Wuensche: wishes, Discogs: shelves, Podcasts: pods, HA: &ha.Client{URL: fake.URL, Token: "demo"}, Notes: nd, Favorites: favoriten.Open(dir), MusicInbox: inbox,
 		Calendar: cal, Views: ansicht.Open(dir, "homes"),
-		RadicalePublicURL: "https://caldav.example", Fetcher: merken.Fetcher{AllowPrivate: true}}
+		RadicalePublicURL: "https://caldav.example", Fetcher: abruf.Fetcher{AllowPrivate: true}}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/start", pages.Start(cfg))
 	mux.HandleFunc("/raeume", pages.Raeume(cfg))
@@ -236,7 +239,7 @@ func (demoFilme) Geschaut(context.Context, string, int) ([]jellyfin.Gesehen, err
 }
 
 func (demoFilme) HatFilm(_ context.Context, name string) (string, bool, error) {
-	return "Dune", jellyfin.Plain(name) == "dune", nil
+	return "Dune", namen.Plain(name) == "dune", nil
 }
 
 // demoEnergyCounters gives Energie its counters, as the fallback finds

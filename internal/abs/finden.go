@@ -9,7 +9,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/mdopp/homes/internal/merken"
+	"github.com/mdopp/homes/internal/abruf"
 )
 
 // Found is a podcast's feed and how it was found, in the family's words
@@ -42,8 +42,8 @@ var (
 // Apple Podcasts page (by its id through Apple's lookup), a website's
 // feed link, or — for a Spotify show or a page without one — a search on
 // Apple's directory by the show's name.
-func FindFeed(ctx context.Context, f merken.Fetcher, link string) (Found, error) {
-	u, err := merken.Address(link)
+func FindFeed(ctx context.Context, f abruf.Fetcher, link string) (Found, error) {
+	u, err := abruf.Address(link)
 	if err != nil {
 		return Found{}, err
 	}
@@ -120,7 +120,7 @@ func pageName(body string) string {
 
 // appleLookup asks Apple's podcast directory (lookup or search) and takes
 // the first result's feedUrl.
-func appleLookup(ctx context.Context, f merken.Fetcher, api string) (string, error) {
+func appleLookup(ctx context.Context, f abruf.Fetcher, api string) (string, error) {
 	u, err := url.Parse(api)
 	if err != nil {
 		return "", err
@@ -152,8 +152,8 @@ var (
 // not a page to keep: a podcast app's or directory's address, a Spotify
 // show, a feed with audio, or a page whose own feed carries audio. A blog's
 // feed without audio is no podcast; a page is never searched by its name.
-func PodcastLink(ctx context.Context, f merken.Fetcher, link string) bool {
-	u, err := merken.Address(link)
+func PodcastLink(ctx context.Context, f abruf.Fetcher, link string) bool {
+	u, err := abruf.Address(link)
 	if err != nil {
 		return false
 	}

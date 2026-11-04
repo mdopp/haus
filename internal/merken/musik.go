@@ -7,6 +7,8 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+
+	"github.com/mdopp/homes/internal/abruf"
 )
 
 // Lied is a song or an album a music link names (owner 2026-10-25: a
@@ -56,13 +58,13 @@ func MusikLink(u *url.URL) bool {
 // is not a music video, a page without a title.
 var ErrKeinLied = errors.New("Das ist kein Lied.")
 
-// Lied reads the song behind a music link: YouTube through its oEmbed
+// LiedVon reads the song behind a music link: YouTube through its oEmbed
 // (title and channel; "Wanda - Salbei (Official Video)" by wandamusikVEVO
 // is Wanda – Salbei), Spotify from its page (og:title the song or album,
 // og:description "Artist · Album · Song · Year"). A YouTube video that is
 // no music video is ErrKeinLied: it is a page to keep as a note.
-func (f Fetcher) Lied(ctx context.Context, link string) (Lied, error) {
-	u, err := Address(link)
+func LiedVon(ctx context.Context, f abruf.Fetcher, link string) (Lied, error) {
+	u, err := abruf.Address(link)
 	if err != nil {
 		return Lied{}, err
 	}
@@ -71,12 +73,12 @@ func (f Fetcher) Lied(ctx context.Context, link string) (Lied, error) {
 	}
 	host := strings.TrimPrefix(strings.ToLower(u.Hostname()), "www.")
 	if host == "open.spotify.com" {
-		return f.spotify(ctx, u)
+		return spotify(ctx, f, u)
 	}
-	return f.youtube(ctx, u, host == "music.youtube.com")
+	return youtube(ctx, f, u, host == "music.youtube.com")
 }
 
-func (f Fetcher) youtube(ctx context.Context, u *url.URL, musicApp bool) (Lied, error) {
+func youtube(ctx context.Context, f abruf.Fetcher, u *url.URL, musicApp bool) (Lied, error) {
 	api, err := url.Parse(YouTubeBase + "/oembed?format=json&url=" + url.QueryEscape(u.String()))
 	if err != nil {
 		return Lied{}, err
@@ -113,7 +115,7 @@ func (f Fetcher) youtube(ctx context.Context, u *url.URL, musicApp bool) (Lied, 
 	return l, nil
 }
 
-func (f Fetcher) spotify(ctx context.Context, u *url.URL) (Lied, error) {
+func spotify(ctx context.Context, f abruf.Fetcher, u *url.URL) (Lied, error) {
 	final, page, err := f.Fetch(ctx, u)
 	if err != nil {
 		return Lied{}, err

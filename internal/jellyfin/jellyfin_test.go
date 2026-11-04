@@ -44,7 +44,4 @@ func TestFind(t *testing.T) {
 	if _, _, err := (&Client{URL: srv.URL + "/nix", Token: "k"}).Find(ctx, "a", "b"); err == nil {
 		t.Error("a 404 is no answer")
 	}
-	if Plain("Ärzte & Co.") != "arzteundco" {
-		t.Errorf("%q", Plain("Ärzte & Co."))
-	}
 }

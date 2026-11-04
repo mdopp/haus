@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/mdopp/homes/internal/namen"
 )
 
 // What a person watched (haus#152): Jellyfin keeps each user's played
@@ -127,7 +129,7 @@ func (c *Client) HatFilm(ctx context.Context, name string) (string, bool, error)
 		return "", false, err
 	}
 	for _, it := range out.Items {
-		if Plain(it.Name) == Plain(name) {
+		if namen.Plain(it.Name) == namen.Plain(name) {
 			return it.Name, true, nil
 		}
 	}

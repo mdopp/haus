@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mdopp/homes/internal/abruf"
 	"github.com/mdopp/homes/internal/judge"
 	"github.com/mdopp/homes/internal/judge/proxyfake"
 	"github.com/mdopp/homes/internal/notes"
@@ -93,7 +94,7 @@ func read(t *testing.T, dir, name string) string {
 func TestMerkenEinRezept(t *testing.T) {
 	srv := site(t)
 	d, dir := noteDir(t)
-	f := Fetcher{AllowPrivate: true}
+	f := abruf.Fetcher{AllowPrivate: true}
 	got, err := Merken(context.Background(), f, nil, d, "Schau mal: "+srv.URL+"/rezept #weihnachten für die Feiertage", "")
 	if err != nil {
 		t.Fatal(err)
@@ -123,7 +124,7 @@ func TestMerkenEinRezept(t *testing.T) {
 func TestMerkenSchrittInTeilen(t *testing.T) {
 	srv := site(t)
 	d, dir := noteDir(t)
-	got, err := Merken(context.Background(), Fetcher{AllowPrivate: true}, nil, d, srv.URL+"/teile", "Kürbissuppe – nach Omas Rezept | Einfach Kochen")
+	got, err := Merken(context.Background(), abruf.Fetcher{AllowPrivate: true}, nil, d, srv.URL+"/teile", "Kürbissuppe – nach Omas Rezept | Einfach Kochen")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +145,7 @@ func TestMerkenSchrittInTeilen(t *testing.T) {
 func TestMerkenEinAlbum(t *testing.T) {
 	srv := site(t)
 	d, dir := noteDir(t)
-	got, err := Merken(context.Background(), Fetcher{AllowPrivate: true}, nil, d, srv.URL+"/album", "#hören unbedingt live")
+	got, err := Merken(context.Background(), abruf.Fetcher{AllowPrivate: true}, nil, d, srv.URL+"/album", "#hören unbedingt live")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,7 +167,7 @@ func TestMerkenEinAlbum(t *testing.T) {
 func TestMerkenReiseUndArtikel(t *testing.T) {
 	srv := site(t)
 	d, dir := noteDir(t)
-	got, err := Merken(context.Background(), Fetcher{AllowPrivate: true}, nil, d, srv.URL+"/hotel", "")
+	got, err := Merken(context.Background(), abruf.Fetcher{AllowPrivate: true}, nil, d, srv.URL+"/hotel", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -181,7 +182,7 @@ func TestMerkenReiseUndArtikel(t *testing.T) {
 	defer p.Close()
 	p.Content = `{"art":"notiz","kern":"Altes Brot ist nicht trocken: Die Stärke kristallisiert neu. Kühlen beschleunigt das, Einfrieren hält es auf.","tags":["Brot","Küche"]}`
 	model := &judge.Client{URL: p.Base(), Model: "gemma-4-e4b", Key: "k"}
-	got, err = Merken(context.Background(), Fetcher{AllowPrivate: true}, model, d, srv.URL+"/weiter", "")
+	got, err = Merken(context.Background(), abruf.Fetcher{AllowPrivate: true}, model, d, srv.URL+"/weiter", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,22 +208,22 @@ func TestMerkenWhatCannotBeHad(t *testing.T) {
 	srv := site(t)
 	d, dir := noteDir(t)
 	ctx := context.Background()
-	if _, err := Merken(ctx, Fetcher{}, nil, d, "keine adresse hier", ""); !errors.Is(err, ErrNoAddress) {
+	if _, err := Merken(ctx, abruf.Fetcher{}, nil, d, "keine adresse hier", ""); !errors.Is(err, abruf.ErrNoAddress) {
 		t.Errorf("no address: %v", err)
 	}
 	for _, home := range []string{srv.URL + "/rezept", "http://192.168.178.1/", "http://localhost:8650/", "http://fritz.box/", "http://[::1]/", "http://100.64.1.2/"} {
-		if _, err := Merken(ctx, Fetcher{Wait: 2 * time.Second}, nil, d, home, ""); !errors.Is(err, ErrPrivate) {
-			t.Errorf("%s: %v, want ErrPrivate", home, err)
+		if _, err := Merken(ctx, abruf.Fetcher{Wait: 2 * time.Second}, nil, d, home, ""); !errors.Is(err, abruf.ErrPrivate) {
+			t.Errorf("%s: %v, want abruf.ErrPrivate", home, err)
 		}
 	}
 	entries, _ := os.ReadDir(dir)
 	if len(entries) != 0 {
 		t.Fatalf("a refused link made a note: %v", entries)
 	}
-	if _, err := Merken(ctx, Fetcher{AllowPrivate: true, Wait: time.Second}, nil, d, "http://127.0.0.1:1/nichts", ""); !errors.Is(err, ErrNoAnswer) {
+	if _, err := Merken(ctx, abruf.Fetcher{AllowPrivate: true, Wait: time.Second}, nil, d, "http://127.0.0.1:1/nichts", ""); !errors.Is(err, abruf.ErrNoAnswer) {
 		t.Errorf("no answer: %v", err)
 	}
-	got, err := Merken(ctx, Fetcher{AllowPrivate: true}, nil, d, srv.URL+"/fehlt", "")
+	got, err := Merken(ctx, abruf.Fetcher{AllowPrivate: true}, nil, d, srv.URL+"/fehlt", "")
 	if err != nil || !got.Teilweise || !strings.Contains(got.Kurz, "nur Link und Titel") {
 		t.Fatalf("%+v %v", got, err)
 	}
@@ -230,7 +231,7 @@ func TestMerkenWhatCannotBeHad(t *testing.T) {
 		t.Errorf("%s", n)
 	}
 	if u, _ := url.Parse("http://192.168.0.1"); u != nil {
-		if _, _, err := (Fetcher{}).Fetch(ctx, u); !errors.Is(err, ErrPrivate) {
+		if _, _, err := (abruf.Fetcher{}).Fetch(ctx, u); !errors.Is(err, abruf.ErrPrivate) {
 			t.Errorf("Fetch home: %v", err)
 		}
 	}
@@ -241,35 +242,5 @@ func TestDuration(t *testing.T) {
 		if got := duration(in); got != want {
 			t.Errorf("%q → %q, want %q", in, got, want)
 		}
-	}
-}
-
-// The owner, 2026-10-25: "es gibt zu wenig Infos warum es nicht geht" — a
-// page that does not answer says why: the name, the way, the time.
-func TestNoAnswerSaysWhy(t *testing.T) {
-	ctx := context.Background()
-	u, _ := url.Parse("https://gibt-es-nicht.invalid/rezept")
-	_, _, err := Fetcher{}.Fetch(ctx, u)
-	if !errors.Is(err, ErrNoAnswer) || !strings.Contains(err.Error(), "gibt-es-nicht.invalid") || !strings.Contains(err.Error(), "nicht") {
-		t.Errorf("no such name: %v", err)
-	}
-	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		select {
-		case <-r.Context().Done():
-		case <-time.After(time.Second):
-		}
-	}))
-	defer slow.Close()
-	su, _ := url.Parse(slow.URL)
-	_, _, err = Fetcher{AllowPrivate: true, Wait: 50 * time.Millisecond}.Fetch(ctx, su)
-	if !errors.Is(err, ErrNoAnswer) || !strings.Contains(err.Error(), "nicht rechtzeitig") {
-		t.Errorf("slow: %v", err)
-	}
-	closed := httptest.NewServer(http.NotFoundHandler())
-	cu, _ := url.Parse(closed.URL)
-	closed.Close()
-	_, _, err = Fetcher{AllowPrivate: true}.Fetch(ctx, cu)
-	if !errors.Is(err, ErrNoAnswer) || !strings.Contains(err.Error(), "kommt nicht zu 127.0.0.1 durch") {
-		t.Errorf("no way: %v", err)
 	}
 }

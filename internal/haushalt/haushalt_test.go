@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/mdopp/homes/internal/einkauf"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,6 +13,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mdopp/homes/internal/abruf"
+	"github.com/mdopp/homes/internal/einkauf"
+
 	"github.com/mdopp/homes/internal/abs"
 	"github.com/mdopp/homes/internal/abs/absfake"
 	"github.com/mdopp/homes/internal/caldav"
@@ -21,7 +23,6 @@ import (
 	"github.com/mdopp/homes/internal/judge"
 	"github.com/mdopp/homes/internal/judge/proxyfake"
 	"github.com/mdopp/homes/internal/library"
-	"github.com/mdopp/homes/internal/merken"
 	"github.com/mdopp/homes/internal/notes"
 	"github.com/mdopp/homes/internal/paperless"
 	"github.com/mdopp/homes/internal/paperless/paperlessfake"
@@ -68,7 +69,7 @@ const plToken = "pl-geheim-123"
 func newSetup(t *testing.T, w want) setup {
 	t.Helper()
 	s := setup{}
-	cfg := Config{Token: tok, Loc: berlin(t), Version: "test", PhoneCountry: w.country, PublicURL: homesPublic, Fetcher: merken.Fetcher{AllowPrivate: true}}
+	cfg := Config{Token: tok, Loc: berlin(t), Version: "test", PhoneCountry: w.country, PublicURL: homesPublic, Fetcher: abruf.Fetcher{AllowPrivate: true}}
 	if w.noPublic {
 		cfg.PublicURL = ""
 	}
@@ -1337,7 +1338,7 @@ func TestPodcastAbonnieren(t *testing.T) {
 	defer feeds.Close()
 	fake.AddFeed(feeds.URL+"/lage", "Lage der Nation")
 	svc := podcasts.Open(&abs.Client{URL: fake.URL, Token: "k"}, t.TempDir())
-	svc.Fetch = merken.Fetcher{AllowPrivate: true}
+	svc.Fetch = abruf.Fetcher{AllowPrivate: true}
 	h := Handler(Config{Token: tok, Loc: berlin(t), Podcasts: svc})
 	text, isErr := call(t, h, "podcast_abonnieren", map[string]any{"link": feeds.URL + "/lage", "person": "anna"})
 	if isErr || !strings.HasPrefix(text, "Abonniert: „Lage der Nation“.") {

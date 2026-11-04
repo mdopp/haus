@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mdopp/homes/internal/merken"
+	"github.com/mdopp/homes/internal/abruf"
 )
 
 // haus#123: the feed behind a link — the feed itself, a website's feed
@@ -51,7 +51,7 @@ func TestFindFeed(t *testing.T) {
 	old := appleBase
 	appleBase = srv.URL
 	defer func() { appleBase = old }()
-	f := merken.Fetcher{AllowPrivate: true}
+	f := abruf.Fetcher{AllowPrivate: true}
 	ctx := context.Background()
 	for link, want := range map[string]string{
 		srv.URL + "/feed.xml":              srv.URL + "/feed.xml",
@@ -106,7 +106,7 @@ func TestPodcastLink(t *testing.T) {
 		}
 	}))
 	defer srv.Close()
-	f := merken.Fetcher{AllowPrivate: true}
+	f := abruf.Fetcher{AllowPrivate: true}
 	ctx := context.Background()
 	for link, want := range map[string]bool{
 		srv.URL + "/lage":                             true,

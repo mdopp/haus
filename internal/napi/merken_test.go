@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mdopp/homes/internal/abruf"
 	"github.com/mdopp/homes/internal/abs"
 	"github.com/mdopp/homes/internal/abs/absfake"
 	"github.com/mdopp/homes/internal/caldav"
@@ -52,7 +53,7 @@ func TestShareToHomes(t *testing.T) {
 		t.Fatal(err)
 	}
 	h := Handler(Config{Validate: StaticValidator([]string{"dev1"}),
-		Haushalt: haushalt.Config{Notes: nd, Fetcher: merken.Fetcher{AllowPrivate: true}, PublicURL: "https://homes.box.test"}})
+		Haushalt: haushalt.Config{Notes: nd, Fetcher: abruf.Fetcher{AllowPrivate: true}, PublicURL: "https://homes.box.test"}})
 
 	code, out := shareText(t, h, "dev1", `{"text":"Kürbissuppe #herbst `+site.URL+`/rezept"}`)
 	if code != 200 || out["art"] != "rezept" || out["titel"] != "Kürbissuppe" || out["schon"] != false || !strings.HasPrefix(out["kurz"].(string), "Rezept gemerkt: Kürbissuppe") {
@@ -116,7 +117,7 @@ func TestShareASong(t *testing.T) {
 	l := einkauf.Open(&caldav.Client{URL: dav.URL, User: "homes", Password: "pw"})
 	nd, _ := notes.Open(t.TempDir())
 	h := Handler(Config{Validate: StaticValidator([]string{"dev1"}), Whoami: func(string) (string, bool) { return "anna", true },
-		Haushalt: haushalt.Config{Notes: nd, Fetcher: merken.Fetcher{AllowPrivate: true}, PublicURL: "https://homes.box.test", Einkauf: l, Wuensche: &einkauf.Wuensche{Listen: l}}})
+		Haushalt: haushalt.Config{Notes: nd, Fetcher: abruf.Fetcher{AllowPrivate: true}, PublicURL: "https://homes.box.test", Einkauf: l, Wuensche: &einkauf.Wuensche{Listen: l}}})
 	code, out := shareText(t, h, "dev1", `{"text":"https://youtube.com/watch?v=Ca7RfL4m744&is=x"}`)
 	if code != 200 || out["art"] != "musik" || out["kurz"] != "Auf der Musik-Wunschliste: „Wanda – Salbei“." || out["notiz"] != "https://homes.box.test/einkauf?liste=liste-musik" {
 		t.Fatalf("%d %v", code, out)
@@ -150,10 +151,10 @@ func TestShareAPodcast(t *testing.T) {
 	defer fake.Close()
 	fake.AddFeed(site.URL+"/feed/mp3/", "Lage der Nation")
 	pods := podcasts.Open(&abs.Client{URL: fake.URL, Token: "k"}, t.TempDir())
-	pods.Fetch = merken.Fetcher{AllowPrivate: true}
+	pods.Fetch = abruf.Fetcher{AllowPrivate: true}
 	nd, _ := notes.Open(t.TempDir())
 	h := Handler(Config{Validate: StaticValidator([]string{"dev1"}), Whoami: func(string) (string, bool) { return "anna", true },
-		Haushalt: haushalt.Config{Notes: nd, Fetcher: merken.Fetcher{AllowPrivate: true}, PublicURL: "https://homes.box.test", Podcasts: pods}})
+		Haushalt: haushalt.Config{Notes: nd, Fetcher: abruf.Fetcher{AllowPrivate: true}, PublicURL: "https://homes.box.test", Podcasts: pods}})
 	code, out := shareText(t, h, "dev1", `{"text":"Lage der Nation – der Politik-Podcast `+site.URL+`/"}`)
 	if code != 200 || out["art"] != "podcast" || !strings.HasPrefix(out["kurz"].(string), "Abonniert: „Lage der Nation“.") || out["notiz"] != "https://homes.box.test/podcasts" {
 		t.Fatalf("%d %v", code, out)

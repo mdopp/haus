@@ -19,14 +19,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mdopp/homes/internal/jellyfin"
-	"github.com/mdopp/homes/internal/merken"
+	"github.com/mdopp/homes/internal/abruf"
+	"github.com/mdopp/homes/internal/namen"
 )
 
 // Client is MusicBrainz's web service.
 type Client struct {
 	Base  string // https://musicbrainz.org; the tests' own
-	Fetch merken.Fetcher
+	Fetch abruf.Fetcher
 	Pause time.Duration // between requests; default 1.1 s
 
 	mu   sync.Mutex
@@ -34,7 +34,7 @@ type Client struct {
 }
 
 // New is MusicBrainz itself.
-func New(f merken.Fetcher) *Client { return &Client{Base: "https://musicbrainz.org", Fetch: f} }
+func New(f abruf.Fetcher) *Client { return &Client{Base: "https://musicbrainz.org", Fetch: f} }
 
 // Link is a place to get it: where ("Bandcamp", "Apple Music", "Label
 // Wandamusik OG"), what it is ("Platte und Download", "Download",
@@ -100,9 +100,9 @@ type credit []struct {
 }
 
 func (cr credit) is(artist string) bool {
-	want := jellyfin.Plain(artist)
+	want := namen.Plain(artist)
 	for _, a := range cr {
-		if p := jellyfin.Plain(a.Name); p != "" && (p == want || jellyfin.Plain(a.Artist.Name) == want) {
+		if p := namen.Plain(a.Name); p != "" && (p == want || namen.Plain(a.Artist.Name) == want) {
 			return true
 		}
 	}
@@ -145,7 +145,7 @@ func (c *Client) Suchen(ctx context.Context, artist, title string, album bool, n
 			return f, err
 		}
 		for _, g := range out.Groups {
-			if jellyfin.Plain(g.Title) == jellyfin.Plain(title) && g.Credit.is(artist) && len(g.Releases) > 0 {
+			if namen.Plain(g.Title) == namen.Plain(title) && g.Credit.is(artist) && len(g.Releases) > 0 {
 				f.Album, f.Datum, groupID, artistID, releaseID = g.Title, g.First, g.ID, g.Credit.id(), g.Releases[0].ID
 				break
 			}
@@ -172,7 +172,7 @@ func (c *Client) Suchen(ctx context.Context, artist, title string, album bool, n
 		type cand struct{ id, title, date, group, kind, artist string }
 		var cs []cand
 		for _, r := range out.Recordings {
-			if jellyfin.Plain(r.Title) != jellyfin.Plain(title) || !r.Credit.is(artist) {
+			if namen.Plain(r.Title) != namen.Plain(title) || !r.Credit.is(artist) {
 				continue
 			}
 			for _, rel := range r.Releases {

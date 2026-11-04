@@ -10,10 +10,11 @@
 # internal/ is in exactly one area: a new package names its area here.
 #
 # The areas, and who may import whom (production imports, `go list`):
-# - connectors: a client of one other service. It imports no Homes package:
-#   it knows its service, nothing of the household.
+# - connectors: a client of one other service. It imports only shared
+#   packages: it knows its service, nothing of the household.
 # - shared: the small shapes everyone uses (the card, Markdown, the app's
-#   names). It imports no Homes package either.
+#   names, the guarded web fetch, a name compared). It imports no Homes
+#   package.
 # - household: the household's own logic, on top of connectors and shared.
 # - napi: the app's API; pages: the family's pages; cmd: the wiring.
 #   Only cmd imports pages; only cmd and pages import napi.
@@ -23,9 +24,9 @@ set -e
 cd "$(dirname "$0")/.."
 bad=0
 p() { for x in "$@"; do printf 'internal/%s ' "$x"; done; }
-connectors=$(p bote caldav discogs ha jellyfin judge laib paperless qmd reitti samba werkstatt)
-shared=$(p app assistent cards code128 markdown mcpserver)
-household=$(p abs ansicht devices dokumente einkauf energie favoriten gesehen haushalt library merken musicbrainz notes papierkorb podcasts schalter takeout usage)
+connectors=$(p abs bote caldav discogs ha jellyfin judge laib musicbrainz paperless qmd reitti samba werkstatt)
+shared=$(p abruf app assistent cards code128 markdown mcpserver namen)
+household=$(p ansicht devices dokumente einkauf energie favoriten gesehen haushalt library merken notes papierkorb podcasts schalter takeout usage)
 
 budget() { # budget <name> <cap> <dir…>
   name=$1 cap=$2; shift 2
@@ -39,9 +40,13 @@ budget() { # budget <name> <cap> <dir…>
 budget pages 15419 internal/pages     # the family's pages, one per file: 14,684
 budget napi 5033 internal/napi        # the app's widgets' and share sheet's API: 4,793
 budget cmd 1069 cmd                   # homes' wiring and the demo on fakes: 1,018
-budget connectors 11894 $connectors   # one client per service, with its fake: 11,327
-budget household 11170 $household     # the household's own logic: 10,638
-budget shared 1070 $shared            # the card, Markdown, the app's names: 1,019
+# 2026-11-04, the caps moved with the packages, none raised (sum 24,134 as before): abs and
+# musicbrainz (1,227 lines, 1,289 of cap) from household to connectors once merken's fetcher
+# was internal/abruf (235 lines of merken, 247 of cap, to shared) and jellyfin.Plain
+# internal/namen (11 lines, 12 of cap, to shared)
+budget connectors 13171 $connectors   # one client per service, with its fake: 11,327, 12,543 with abs and musicbrainz
+budget household 9634 $household      # the household's own logic: 10,638, 9,176 without them and the fetcher
+budget shared 1329 $shared            # the card, Markdown, the app's names: 1,019; abruf, namen: 1,287
 
 # every package in one area
 for d in internal/*/; do
@@ -58,8 +63,10 @@ uses() { # uses <importer-regex> <imported-regex>: the lines that break the rule
   echo "$imports" | awk -v from="^($1)\$" -v to="^($2)\$" '$1 ~ from { for (i = 2; i <= NF; i++) if ($i ~ to) print $1 " imports " $i }'
 }
 re() { echo "$@" | sed 's/ *$//; s/ \{1,\}/|/g'; }
-leaf=$(uses "($(re $connectors $shared))(/.*)?" '(internal|cmd)/.*')
-[ -z "$leaf" ] || { echo "a connector or a shared package imports Homes:"; echo "$leaf"; bad=1; }
+leaf=$(uses "($(re $shared))(/.*)?" '(internal|cmd)/.*')
+[ -z "$leaf" ] || { echo "a shared package imports Homes:"; echo "$leaf"; bad=1; }
+conn=$(uses "($(re $connectors))(/.*)?" '(internal|cmd)/.*' | grep -vE " imports ($(re $shared))\$" || true)
+[ -z "$conn" ] || { echo "a connector imports more of Homes than shared packages:"; echo "$conn"; bad=1; }
 surface=$(uses '.*' 'internal/(pages|napi)' | grep -vE '^cmd/|^internal/pages imports internal/napi$' || true)
 [ -z "$surface" ] || { echo "only cmd imports pages, only cmd and pages import napi:"; echo "$surface"; bad=1; }
 fakes=$(uses '.*' 'internal/.*fake' | grep -v '^cmd/homesdemo ' || true)

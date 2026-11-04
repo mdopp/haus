@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mdopp/homes/internal/merken"
+	"github.com/mdopp/homes/internal/abruf"
 	"github.com/mdopp/homes/internal/notes"
 )
 
@@ -26,7 +26,7 @@ func TestNotizenAusLinkMerken(t *testing.T) {
 	defer site.Close()
 	dir := t.TempDir()
 	nd, _ := notes.Open(dir)
-	cfg := StartConfig{Notes: nd, Fetcher: merken.Fetcher{AllowPrivate: true}}
+	cfg := StartConfig{Notes: nd, Fetcher: abruf.Fetcher{AllowPrivate: true}}
 	h := Notizen(cfg)
 
 	_, body, _ := familyPage(t, Notizen, cfg, "GET", "/notizen", "family")
@@ -52,7 +52,7 @@ func TestNotizenAusLinkMerken(t *testing.T) {
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("no address: %d", rec.Code)
 	}
-	mustContain(t, rec.Body.String(), merken.ErrNoAddress.Error(), `value="kein link"`, `value="dazu"`)
+	mustContain(t, rec.Body.String(), abruf.ErrNoAddress.Error(), `value="kein link"`, `value="dazu"`)
 	if rec := post(t, h, "/notizen/merken", url.Values{"link": {site.URL}}, "anna", map[string]string{"Sec-Fetch-Site": "cross-site"}); rec.Code != http.StatusForbidden {
 		t.Errorf("cross-site → %d", rec.Code)
 	}

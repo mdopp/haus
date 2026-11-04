@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mdopp/homes/internal/merken"
+	"github.com/mdopp/homes/internal/abruf"
 )
 
 func rel(kind, u string) map[string]any {
@@ -57,7 +57,7 @@ func fake(t *testing.T) *httptest.Server {
 }
 
 func TestSuchen(t *testing.T) {
-	c := &Client{Base: fake(t).URL, Fetch: merken.Fetcher{AllowPrivate: true}, Pause: time.Millisecond}
+	c := &Client{Base: fake(t).URL, Fetch: abruf.Fetcher{AllowPrivate: true}, Pause: time.Millisecond}
 	now := time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC)
 	f, err := c.Suchen(context.Background(), "Wanda", "Salbei", false, now)
 	if err != nil || !f.Gefunden || f.Album != "Was mich umbringt" || f.Datum != "2027-04-09" || !f.Kommt || f.Label != "Problembär" {
