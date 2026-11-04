@@ -769,8 +769,8 @@ func sawPing(lines <-chan string, d time.Duration) bool {
 	}
 }
 
-// Without HOMES_HA_URL the house paths and the event stream are 404, passed
-// on to nobody (haus#26).
+// Without HOMES_HA_URL the house paths are 404, passed on to nobody
+// (haus#26); the event stream is the core's (ADR 0001 H6), live_test.go.
 func TestWithoutHATheHousePathsAre404(t *testing.T) {
 	var calls []string
 	lb := fakeLaib(t, &calls)
@@ -782,7 +782,6 @@ func TestWithoutHATheHousePathsAre404(t *testing.T) {
 		{"GET", "/napi/portal/energy", ""},
 		{"GET", "/napi/portal/active", ""},
 		{"POST", "/napi/portal/watch", `{"entity_ids":[]}`},
-		{"GET", "/napi/portal/events", ""},
 	} {
 		code, body := raw(t, h, p.method, p.path, "dev1", p.body)
 		notFound(t, p.method+" "+p.path, code, body)

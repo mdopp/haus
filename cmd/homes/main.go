@@ -84,6 +84,7 @@ type site struct {
 	podcasts                  *podcasts.Service // haus#123: the family's podcasts in Audiobookshelf; nil, no page
 	gesehen                   *gesehen.Service  // haus#152: what each person watched and heard; nil, no page
 	musik                     string            // haus#107: the music inbox's folder (musicInbox); "", no Musik page
+	boteSignal                string            // haus#175: the house's Signal number (HOMES_BOTE_SIGNAL), Willkommen's chat card; "", none
 }
 
 // routes is Homes' whole surface: /napi for the app, /mcp/haushalt for the
@@ -110,8 +111,8 @@ func routes(s site) http.Handler {
 	if s.hh.Wuensche != nil {
 		family.Discogs = s.hh.Wuensche.Regale
 	}
-	family.BoteSignal = strings.TrimSpace(os.Getenv("HOMES_BOTE_SIGNAL")) // haus#175: Willkommen's chat card
-	family.Papierkorb = &papierkorb.Korb{Dir: s.dataDir}                  // haus#174: family deletes, for 30 days
+	family.BoteSignal, family.OhneEnergie = s.boteSignal, s.napi.OhneEnergie // haus#175: Willkommen's chat card
+	family.Papierkorb = &papierkorb.Korb{Dir: s.dataDir}                     // haus#174: family deletes, for 30 days
 	family.MusicInbox = s.musik
 	if family.MusicInbox != "" { // haus#107: the music inbox beets sorts in
 		if fi, err := os.Stat(family.MusicInbox); err != nil || !fi.IsDir() {
@@ -162,8 +163,10 @@ func routes(s site) http.Handler {
 	pagesMux.HandleFunc(pages.ModulPages, pages.ModulSeite(family)) // a module, admins: where a wish leads
 	pagesMux.HandleFunc("/aufgaben", pages.DeineAufgaben(family))   // haus#188: Deine Aufgaben // the bar's fourth entry, with Abmelden (haus#67)
 	pagesMux.HandleFunc("/raeume", pages.Raeume(family))
-	pagesMux.HandleFunc("/energie", pages.Energie(family))
-	pagesMux.HandleFunc("/energie/", pages.Energie(family)) // a path it does not serve: 404 and the way back
+	if !s.napi.OhneEnergie { // energie switched off: its paths are the surface's 404
+		pagesMux.HandleFunc("/energie", pages.Energie(family))
+		pagesMux.HandleFunc("/energie/", pages.Energie(family)) // a path it does not serve: 404 and the way back
+	}
 	pagesMux.HandleFunc("/medien", pages.Medien(family))
 	pagesMux.HandleFunc("/medien/", pages.Medien(family)) // a path it does not serve: 404 and the way back
 	pagesMux.HandleFunc("/kalender", pages.Kalender(family))
@@ -455,13 +458,6 @@ func main() {
 	if counter != nil && cfg.HA != nil {
 		voice = &usage.Voice{HA: cfg.HA, Counter: counter, Since: time.Now(), Log: log.Printf}
 	}
-	// the counter stops only once the server has: a page is counted after
-	// it is answered, so the last flush waits for the requests under way (#92)
-	counting, stopCounting := context.WithCancel(context.Background())
-	defer stopCounting()
-	flushed := make(chan struct{})
-	go func() { counter.Run(counting, 5*time.Minute); close(flushed) }()
-	go voice.Run(ctx, time.Minute)
 	st := site{napi: cfg, hh: hh, store: store, ops: ops, proxySecret: proxySecret, laibURL: laibURL,
 		publicURL: os.Getenv("HOMES_PUBLIC_URL"), tickets: werkstatt.FromEnv(), favorites: cfg.Favorites, bote: b, podcasts: pods, gesehen: gs,
 		samba: samba.FromEnv(), sambaHost: os.Getenv("HOMES_SAMBA_HOST"),
@@ -469,9 +465,16 @@ func main() {
 		stt:        pages.STT{Provider: os.Getenv("HOMES_STT_PROVIDER"), Language: env("HOMES_STT_LANGUAGE", "de")},
 		gesundheit: gesundheit, haPublic: haPublic, inverted: pages.InvertedFromList(os.Getenv("HOMES_COVER_INVERTED")),
 		radicale: radicalePublic, views: ansicht.Open(dataDir, os.Getenv("HOMES_RADICALE_USER")), dataDir: dataDir,
-		docsMail: docsMail, paperlessPublic: paperlessPublic, paperlessLAN: paperlessLAN, musik: musicInbox()}
+		docsMail: docsMail, paperlessPublic: paperlessPublic, paperlessLAN: paperlessLAN, musik: musicInbox(), boteSignal: strings.TrimSpace(os.Getenv("HOMES_BOTE_SIGNAL"))}
 	st.napi.Module = logModule(&st) // HOMES_MODULE_AUS takes what it switches off out of st
-	if hh.Calendar != nil {         // the collections there from the start (owner 2026-10-24), of the modules on
+	// the counter stops only once the server has: a page is counted after
+	// it is answered, so the last flush waits for the requests under way (#92)
+	counting, stopCounting := context.WithCancel(context.Background())
+	defer stopCounting()
+	flushed := make(chan struct{})
+	go func() { st.usage.Run(counting, 5*time.Minute); close(flushed) }()
+	go st.voice.Run(ctx, time.Minute)
+	if hh.Calendar != nil { // the collections there from the start (owner 2026-10-24), of the modules on
 		go ensureHaushalt(ctx, hh.Calendar, st.napi.Module)
 	}
 	startLeaf(ctx, st)

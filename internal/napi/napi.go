@@ -45,6 +45,9 @@ type Config struct {
 	// SensorEvery: a sensor's card_state at most this often; 0 = 10s
 	SensorEvery time.Duration
 	Energy      EnergyMap // the energy entities (energy.go); empty = by friendly name
+	// OhneEnergie: energie is switched off (ADR 0001 H6) while HA stays for
+	// the house paths: /napi/portal/energy is 404
+	OhneEnergie bool
 	// Favorites: each person's ☆ things, the app's start screen first
 	// (/napi/portal/favorites); nil = an empty list
 	Favorites *favoriten.Store
@@ -242,14 +245,14 @@ func Handler(c Config) http.Handler {
 		w.Header().Set("WWW-Authenticate", "Bearer")
 		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 	})
-	if c.HA != nil { // the house paths and the event stream, from Home Assistant
-		(&homeAPI{ha: c.HA, sources: c.Energy, witness: c.Witness, whoami: c.Whoami, favs: c.Favorites, loc: c.Haushalt.Loc, now: c.Now}).routes(mux, auth)
-		lv := newLive(c.HA, c.Ping, c.SensorEvery)
-		if dav := c.Konto; dav != nil {
-			lv.shared, lv.sharedEvery = dav.FamilyVersions, c.SharedEvery
-		}
-		lv.routes(mux, auth)
+	// the event stream is the core's (ADR 0001 H6): the house's frames with
+	// Home Assistant, the account's gemeinsam frames with konto, pings always
+	lv := newLive(c.HA, c.Ping, c.SensorEvery)
+	if dav := c.Konto; dav != nil {
+		lv.shared, lv.sharedEvery = dav.FamilyVersions, c.SharedEvery
 	}
+	mux.HandleFunc("GET /napi/portal/events", auth(lv.events))
+	c.house(mux, auth, lv)
 	if t := newTools(c.Haushalt); t != nil { // the tool widgets from the Haushalt source
 		t.routes(mux, auth)
 	}
@@ -269,6 +272,20 @@ func Handler(c Config) http.Handler {
 	(&standort{r: c.Reitti, whoami: c.Whoami}).routes(mux, auth)
 	mux.HandleFunc("/napi/", auth(noSuchPath))
 	return mux
+}
+
+// house mounts the house paths and what the stream watches, from Home
+// Assistant (geraete), and the energy picture (energie, unless it is off).
+func (c Config) house(mux *http.ServeMux, auth func(http.HandlerFunc) http.HandlerFunc, lv *live) {
+	if c.HA == nil {
+		return
+	}
+	h := &homeAPI{ha: c.HA, sources: c.Energy, witness: c.Witness, whoami: c.Whoami, favs: c.Favorites, loc: c.Haushalt.Loc, now: c.Now}
+	h.routes(mux, auth)
+	mux.HandleFunc("POST /napi/portal/watch", auth(lv.watch))
+	if !c.OhneEnergie {
+		mux.HandleFunc("GET /napi/portal/energy", auth(h.energy))
+	}
 }
 
 // bearerOf is the token after the literal "Bearer "; anything else is none.

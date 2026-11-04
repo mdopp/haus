@@ -28,6 +28,7 @@ const (
 	AnfordernGibtsNicht ID = "anfordern.gibts-nicht"  // no such module, or it is on
 	AnfordernKeinLaib   ID = "anfordern.kein-laib"    // this Laib takes no wish yet
 	GrundAus            ID = "grund.aus"              // why a module is off: the owner switched it off
+	GrundBraucht        ID = "grund.braucht"          // … because the module it needs is off: „%s“ is its title
 	ModulSeiteTitel     ID = "modul.seite.titel"      // /module/<name>, admins
 	ModulAn             ID = "modul.an"               // a module that is on
 	ModulDienst         ID = "modul.dienst"           // the row naming its backend
@@ -84,6 +85,7 @@ var de = map[ID]string{
 	AnfordernGibtsNicht: "Das gibt es hier schon, oder es gibt es gar nicht.",
 	AnfordernKeinLaib:   "Diese Box nimmt noch keine Wünsche an.",
 	GrundAus:            "Auf dieser Box ausgeschaltet.",
+	GrundBraucht:        "Ausgeschaltet, weil es „%s“ braucht, und das ist hier ausgeschaltet.",
 	ModulSeiteTitel:     "Was Homes kann",
 	ModulAn:             "an",
 	ModulDienst:         "Dienst",

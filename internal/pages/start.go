@@ -43,35 +43,38 @@ import (
 // Notizen). A nil backend is not configured, and no page says anything
 // about it.
 type StartConfig struct {
-	Laib      *laib.Client
-	Module    *modul.Liste      // the box's areas (ADR 0001): Mehr's traces of what it lacks (§10); nil: none
-	Witness   *schalter.Witness // who switched what, into the log and Laib's journal (haus#89); nil: the log only
-	Fetcher   abruf.Fetcher     // how Notizen fetches a page to keep (haus#117); the tests' allows their 127.0.0.1
-	Podcasts  *podcasts.Service // the family's podcasts in Audiobookshelf (haus#123); nil: no page
-	Gesehen   *gesehen.Service  // what each person watched and heard, and the film and book wish list (haus#152); nil: no page
-	Einkauf   *einkauf.Liste    // the household's shopping list in Radicale (haus#118); nil: no page
-	Wuensche  *einkauf.Wuensche // the music wish list (owner 2026-10-25); nil: a song link is a note
-	Discogs   *discogs.Regale   // each person's records on Discogs, connected through the app (laib#696); nil: no Discogs
-	Reitti    *reitti.Reitti    // the household's timeline, each person's token (Standortverlauf, owner 2026-11-02); nil: no page
-	LaibURL   string            // where Rückgängig lives (the guarantees, admins only)
-	HA        *ha.Client
-	Energy    energie.Map // which sensors Energie reads (haus#12); empty: by friendly name
-	Calendar  *caldav.Client
-	Contacts  *caldav.Client // a contact's page (haus#28)
-	Notes     *notes.Dir
-	Library   *qmd.Client       // Notizen's search by meaning (haus#13); nil: by words, said so
-	Judge     *judge.Client     // the house model's tidy-up of Notizen's hits (haus#13); nil: none
-	Docs      *paperless.Client // a document's page sends on to Paperless (haus#28)
-	Favorites *favoriten.Store  // each person's things on Start (laib ADR 0017), pinned with ☆ (haus#35)
-	Bote      *bote.Client      // the Sprechen field's (haus#12); nil: no field, no tab
-	Samba     *samba.Dir        // the network drive's passwords (haus#52, laib#296); nil: no page
-	SambaHost string            // the box's address in the house, shown as \\<host>\data; empty: no how-to
-	Loc       *time.Location    // the house's time zone; default time.Local
-	Now       func() time.Time  // for the tests; default time.Now
-	Usage     *usage.Counter    // what the family uses, anonymously (haus#50); nil: nothing counted
-	PublicURL string            // Homes' own address, https://homes.<domain>: the apps' addresses on Willkommen (haus#56)
-	Welcome   bool              // Start sends a person to Willkommen the first time a device opens it (haus#56)
-	STT       STT               // the Sprechen field's microphone, HA's speech-to-text (haus#63); no provider: no microphone
+	Laib     *laib.Client
+	Module   *modul.Liste      // the box's areas (ADR 0001): Mehr's traces of what it lacks (§10); nil: none
+	Witness  *schalter.Witness // who switched what, into the log and Laib's journal (haus#89); nil: the log only
+	Fetcher  abruf.Fetcher     // how Notizen fetches a page to keep (haus#117); the tests' allows their 127.0.0.1
+	Podcasts *podcasts.Service // the family's podcasts in Audiobookshelf (haus#123); nil: no page
+	Gesehen  *gesehen.Service  // what each person watched and heard, and the film and book wish list (haus#152); nil: no page
+	Einkauf  *einkauf.Liste    // the household's shopping list in Radicale (haus#118); nil: no page
+	Wuensche *einkauf.Wuensche // the music wish list (owner 2026-10-25); nil: a song link is a note
+	Discogs  *discogs.Regale   // each person's records on Discogs, connected through the app (laib#696); nil: no Discogs
+	Reitti   *reitti.Reitti    // the household's timeline, each person's token (Standortverlauf, owner 2026-11-02); nil: no page
+	LaibURL  string            // where Rückgängig lives (the guarantees, admins only)
+	HA       *ha.Client
+	Energy   energie.Map // which sensors Energie reads (haus#12); empty: by friendly name
+	// OhneEnergie: energie is switched off (ADR 0001 H6) while HA stays for
+	// Geräte: no Energie tab, no energy line on Start
+	OhneEnergie bool
+	Calendar    *caldav.Client
+	Contacts    *caldav.Client // a contact's page (haus#28)
+	Notes       *notes.Dir
+	Library     *qmd.Client       // Notizen's search by meaning (haus#13); nil: by words, said so
+	Judge       *judge.Client     // the house model's tidy-up of Notizen's hits (haus#13); nil: none
+	Docs        *paperless.Client // a document's page sends on to Paperless (haus#28)
+	Favorites   *favoriten.Store  // each person's things on Start (laib ADR 0017), pinned with ☆ (haus#35)
+	Bote        *bote.Client      // the Sprechen field's (haus#12); nil: no field, no tab
+	Samba       *samba.Dir        // the network drive's passwords (haus#52, laib#296); nil: no page
+	SambaHost   string            // the box's address in the house, shown as \\<host>\data; empty: no how-to
+	Loc         *time.Location    // the house's time zone; default time.Local
+	Now         func() time.Time  // for the tests; default time.Now
+	Usage       *usage.Counter    // what the family uses, anonymously (haus#50); nil: nothing counted
+	PublicURL   string            // Homes' own address, https://homes.<domain>: the apps' addresses on Willkommen (haus#56)
+	Welcome     bool              // Start sends a person to Willkommen the first time a device opens it (haus#56)
+	STT         STT               // the Sprechen field's microphone, HA's speech-to-text (haus#63); no provider: no microphone
 	// HAPublicURL is Home Assistant's public address (HOMES_HA_PUBLIC_URL,
 	// https://home.<domain>): Geräte's "In Home Assistant öffnen" (haus#64); empty: no link
 	HAPublicURL string

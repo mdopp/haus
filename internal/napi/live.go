@@ -97,11 +97,6 @@ func (l *live) reset() {
 	l.on, l.onAt, l.onKnown = map[string]bool{}, map[string]int64{}, false
 }
 
-func (l *live) routes(mux *http.ServeMux, auth func(http.HandlerFunc) http.HandlerFunc) {
-	mux.HandleFunc("POST /napi/portal/watch", auth(l.watch))
-	mux.HandleFunc("GET /napi/portal/events", auth(l.events))
-}
-
 // a device is its token; Homes keeps only a digest of it in memory
 func deviceOf(r *http.Request) string {
 	b, _ := bearerOf(r)
