@@ -1,3 +1,5 @@
+English · [Deutsch](README.de.md) · [Español](README.es.md) · [Français](README.fr.md)
+
 # Homes
 
 **Your home at a glance: lights, energy, calendar, shopping list and notes
