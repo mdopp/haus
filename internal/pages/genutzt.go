@@ -24,10 +24,19 @@ import (
 
 // pagePaths are the pages a view is counted for, by path; the prefixes
 // are an item's own page. Anything else (the font, the icon, /healthz, a
-// path Homes does not serve) is no page view.
+// redirect, a part fetched after its page, a path Homes does not serve) is
+// no page view. Every page cmd/homes serves is here, so a page nobody opens
+// shows up as one (owner, 2026-11-04); the Box card names only the events
+// it has words for, so a page counted here is not shown until it has them.
 var pagePaths = map[string]string{"/start": "start", "/raeume": "raeume", "/energie": "energie", "/medien": "medien",
 	"/kalender": "kalender", "/notizen": "notizen", "/sprechen": "sprechen", "/box": "box", "/box/geraete": "geraete",
-	"/pair-device": "koppeln", cards.SwitchPath: "schalten", "/mehr": "mehr"}
+	"/pair-device": "koppeln", cards.SwitchPath: "schalten", "/mehr": "mehr",
+	EinkaufPath: "einkauf", EinkaufRezeptePath: "rezepte", MusikPath: "musik", PodcastsPath: "podcasts", GesehenPath: "gesehen",
+	DiscogsPath: "discogs", PlattePath: "platte", DokumentePath: "dokumente", ScannenPath: "scannen", TrennblattPath: "trennblatt",
+	AktivierungswortPath: "aktivierungswort", DatenPath: "daten", StandortPath: "standort", "/netzlaufwerk": "netzlaufwerk",
+	"/willkommen": "willkommen", "/adresse": "adresse", "/aufgaben": "aufgaben", AufgabenPath: "box-aufgaben",
+	"/box/einladen": "einladen", "/kalender/verwalten": "kalender-verwalten", "/kalender/hinzufuegen": "kalender-hinzufuegen",
+	"/kalender/aendern": "kalender-aendern"}
 
 // fragmentPaths are parts of a page fetched after it (haus#67): the plain
 // lines they show count for their page, a view does not.
