@@ -54,7 +54,6 @@ type homeAPI struct {
 func (h *homeAPI) routes(mux *http.ServeMux, auth func(http.HandlerFunc) http.HandlerFunc) {
 	mux.HandleFunc("POST /napi/ha/call", auth(h.call))
 	mux.HandleFunc("GET /napi/portal/state", auth(h.state))
-	mux.HandleFunc("GET /napi/portal/energy", auth(h.energy))
 	mux.HandleFunc("GET /napi/portal/entity-history", auth(h.history))
 	mux.HandleFunc("GET /napi/portal/active", auth(h.active))
 	mux.HandleFunc("GET /napi/portal/camera/{entity_id}/snapshot", auth(h.snapshot))

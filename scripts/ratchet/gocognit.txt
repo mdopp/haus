@@ -26,7 +26,7 @@
 62 internal/merken/notiz.go: merken.(Seite).Notiz
 31 internal/merken/seite.go: merken.(*Seite).take
 53 internal/musicbrainz/musicbrainz.go: musicbrainz.(*Client).Suchen
-47 internal/napi/napi.go: napi.Handler
+45 internal/napi/napi.go: napi.Handler
 47 internal/napi/sicherung_letzte.go: napi.(*Sicherung).Letzte
 37 internal/napi/standort_import.go: napi.(*importer).run
 45 internal/napi/upload.go: napi.(*uploads).store

@@ -489,8 +489,10 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   (`TZ`'s; the Energie page's Heute rule, `energie.Added`), for the
   app's one energy widget; a history that fails or has nothing since
   midnight leaves it out.
-- The realtime pair `POST /napi/portal/watch` + `GET /napi/portal/events`,
-  from Home Assistant too. The stream is SSE and carries state changes only
+- The realtime pair `POST /napi/portal/watch` + `GET /napi/portal/events`.
+  watch is Home Assistant's (`geraete`); the stream is the core's (ADR 0001
+  H6): it answers on every box, with the house's frames while `geraete` is
+  on and the account's `gemeinsam` frames while `konto` is. The stream is SSE and carries state changes only
   (laib ADR 0022 §2): `card_state`, a frame for each entity the device
   watches, the current cards again after every (re)subscribe, a sensor at
   most every 10s; and `active_set` (`{entity_ids}`, haus#28) for a device

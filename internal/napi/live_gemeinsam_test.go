@@ -2,6 +2,8 @@ package napi
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"sync"
 	"testing"
 	"time"
@@ -118,5 +120,36 @@ func TestSharedIsReadOnlyWhileSomeoneListens(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 	if len(reads) != 0 {
 		t.Fatal("still read after the last stream left")
+	}
+}
+
+// ADR 0001 H6: the event stream is the core's. Without Home Assistant it
+// is served all the same, and the account's gemeinsam frames arrive.
+func TestTheStreamWithoutHA(t *testing.T) {
+	fake := davfake.New("homes", "pw")
+	defer fake.Close()
+	fake.AddCalendar("/homes/haushalt/", "Haushalt", "VEVENT", "VTODO")
+	fake.AddAddressBook("/homes/haushalt-kontakte/", "Haushalt")
+	h := Handler(Config{Validate: StaticValidator([]string{"dev1"}), SharedEvery: 20 * time.Millisecond,
+		Konto: &caldav.Client{URL: fake.URL, User: "homes", Password: "pw"}})
+	srv := httptest.NewServer(h)
+	defer srv.Close()
+	resp, lines := stream(t, srv.URL, "dev1")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || resp.Header.Get("Content-Type") != "text/event-stream" {
+		t.Fatalf("the stream without HA → %d %q", resp.StatusCode, resp.Header.Get("Content-Type"))
+	}
+	time.Sleep(100 * time.Millisecond) // the baseline is read
+	fake.Put("/homes/haushalt-kontakte/oma.vcf", "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:oma\r\nFN:Oma\r\nEND:VCARD\r\n")
+	deadline := time.After(3 * time.Second)
+	for {
+		select {
+		case l := <-lines:
+			if l == "event: gemeinsam" {
+				return
+			}
+		case <-deadline:
+			t.Fatal("no gemeinsam frame on the stream without HA")
+		}
 	}
 }

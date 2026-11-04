@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"slices"
@@ -204,6 +205,13 @@ var schaltbar = map[string]func(*site){
 	"kalender": func(s *site) { s.haushalt(func(h *haushalt.Config) { h.Calendar = nil }) },
 	"kontakte": func(s *site) { s.haushalt(func(h *haushalt.Config) { h.Contacts = nil }) },
 	"konto":    func(s *site) { s.napi.Konto = nil },
+	// H6: the house, its energy, the Sprechen field, the counts. With
+	// geraete off Homes speaks no HA: the house paths, the microphone (HA's
+	// speech-to-text) and the voice counts go; the event stream stays (core)
+	"geraete":  func(s *site) { s.napi.HA, s.voice = nil, nil },
+	"energie":  func(s *site) { s.napi.OhneEnergie = true },
+	"sprechen": func(s *site) { s.bote, s.boteSignal = nil, "" },
+	"nutzung":  func(s *site) { s.usage, s.voice = nil, nil },
 }
 
 // haushalt changes the Haushalt source's backends, the Bote's and the
@@ -233,6 +241,14 @@ func ausschalten(s *site, ms []modul.Modul, liste string) []modul.Modul {
 		case ms[i].An():
 			ms[i].Warum, ms[i].Grund = modul.Aus, texte.T(texte.GrundAus)
 			schaltbar[name](s)
+		}
+	}
+	for i, m := range ms { // a module whose Braucht went off goes with it: energie with geraete
+		for _, b := range m.Braucht {
+			if j := slices.IndexFunc(ms, func(o modul.Modul) bool { return o.Name == b }); ms[i].An() && j >= 0 && !ms[j].An() {
+				ms[i].Warum, ms[i].Grund = modul.Aus, fmt.Sprintf(texte.T(texte.GrundBraucht), ms[j].Titel)
+				schaltbar[m.Name](s)
+			}
 		}
 	}
 	return ms

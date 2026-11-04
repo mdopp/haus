@@ -158,6 +158,9 @@ func energyWords(kwh float64) string {
 // the roof makes and the house uses now, the battery's charge and the
 // grid, leading to Energie. Nothing without flow legs.
 func energieZeile(cfg StartConfig, states []ha.State) string {
+	if cfg.OhneEnergie { // energie switched off (ADR 0001 H6)
+		return ""
+	}
 	legs, _, _ := cfg.Energy.Pick(states)
 	if len(legs) == 0 {
 		return ""

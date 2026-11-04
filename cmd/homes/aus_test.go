@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/mdopp/homes/internal/abs"
+	"github.com/mdopp/homes/internal/bote"
 	"github.com/mdopp/homes/internal/caldav"
 	"github.com/mdopp/homes/internal/caldav/davfake"
 	"github.com/mdopp/homes/internal/einkauf"
@@ -22,6 +23,7 @@ import (
 	"github.com/mdopp/homes/internal/podcasts"
 	"github.com/mdopp/homes/internal/reitti"
 	"github.com/mdopp/homes/internal/samba"
+	"github.com/mdopp/homes/internal/usage"
 	"github.com/mdopp/homes/internal/werkstatt"
 )
 
@@ -51,6 +53,9 @@ func leafSite(t *testing.T) site {
 		h.Wuensche = &einkauf.Wuensche{Listen: h.Einkauf, Dir: t.TempDir()}
 	})
 	s.musik, s.napi.UploadDir, s.docsMail = t.TempDir(), t.TempDir(), "scan@example.org"
+	// H6: the Bote with the house's Signal number, the counts
+	s.bote, s.boteSignal = &bote.Client{URL: "http://127.0.0.1:1/v1", Key: "k"}, "+49 170 1234567"
+	s.usage = usage.New("http://127.0.0.1:1", "u")
 	return s
 }
 
@@ -70,7 +75,7 @@ func switched(t *testing.T, s site, aus string) (site, *modul.Liste) {
 // has it an:false, warum aus; every other leaf module is as before.
 func TestEachLeafModuleOff(t *testing.T) {
 	leaves := []string{"gesundheit", "werkstatt", "netzlaufwerk", "podcasts", "gesehen", "standort", "sicherung",
-		"dokumente", "notizen", "musik", "einkauf", "kalender", "kontakte", "konto"}
+		"dokumente", "notizen", "musik", "einkauf", "kalender", "kontakte", "konto", "geraete", "energie", "sprechen", "nutzung"}
 	// what each serves while on, and what it answers off: a path and a word on it
 	type probe struct{ path, on, off string }
 	const wunschliste = "/einkauf?liste=liste-musik" // the Haushalt pills: served with einkauf or musik on
@@ -103,6 +108,13 @@ func TestEachLeafModuleOff(t *testing.T) {
 			{"napi:/napi/defs/tool", `"tool-id":"contacts"`, `!"tool-id":"contacts"`}, {"napi:/napi/portal/contacts", "#200", "#404"},
 			{"napi:POST /napi/kontakte", "#415", "#503"}, {"mcp:", `"kontakte_suchen"`, `!"kontakte_suchen"`}},
 		"konto": {{"napi:/napi/gemeinsam/kontakte", "#200", "#503"}, {"napi:/napi/gemeinsam/kalender", "#200", "#503"}},
+		// H6: the house, its energy (Braucht geraete), the Sprechen field, the counts
+		"geraete": {{"/start", "Im Haus", "!Im Haus"}, {"/start", `href=/raeume`, `!href=/raeume`}, {"/aktivierungswort", "#200", "#404"},
+			{"napi:/napi/portal/state?entity_id=light.decke", "#200", "#404"}, {"napi:POST /napi/ha/call", "#400", "#404"},
+			{"napi:POST /napi/portal/watch", "#200", "#404"}, {"napi:/napi/portal/favorites", "#200", "#404"}},
+		"energie":  {{"/start", `href=/energie`, `!href=/energie`}, {"/energie", "#200", "#404"}, {"napi:/napi/portal/energy", "#200", "#404"}},
+		"sprechen": {{"/start", "action=/sprechen", "!action=/sprechen"}, {"/willkommen", "auf Signal", "!auf Signal"}},
+		"nutzung":  {{"/box/nutzung", "box-genutzt", "!box-genutzt"}},
 	}
 	check := func(t *testing.T, s site, p probe, want string) {
 		t.Helper()
@@ -151,7 +163,7 @@ func TestEachLeafModuleOff(t *testing.T) {
 				switch {
 				case m.Name == name && (m.An || m.Warum != modul.Aus || m.SpurID != "aus"):
 					t.Errorf("kann: %s is %+v, want off, aus", name, m)
-				case m.Name != name && strings.Contains(strings.Join(leaves, ","), m.Name) && !m.An:
+				case m.Name != name && strings.Contains(strings.Join(leaves, ","), m.Name) && !m.An && !needs(l, m.Name, name):
 					t.Errorf("kann: %s went off with %s", m.Name, name)
 				}
 			}
@@ -173,7 +185,7 @@ func TestEachLeafModuleOff(t *testing.T) {
 				}
 			}
 			for _, other := range leaves {
-				if other == name {
+				if other == name || needs(l, other, name) { // energie goes with geraete
 					continue
 				}
 				for _, p := range probes[other] {
@@ -205,13 +217,14 @@ func TestLeafWorkOnlyWhileOn(t *testing.T) {
 	}
 }
 
-// An unknown name, or one that cannot be switched off yet, is ignored.
+// An unknown name is ignored; every module of the catalog can be switched
+// off (ADR 0001 H6).
 func TestModuleAusIgnoresWhatItCannot(t *testing.T) {
-	s, l := switched(t, leafSite(t), "gibtsnicht, geraete,, ")
-	if !l.An("geraete") || s.napi.HA == nil {
-		t.Error("geraete went off, which cannot be switched yet (H6)")
-	}
+	_, l := switched(t, leafSite(t), "gibtsnicht,, ")
 	for _, m := range l.Module() {
+		if !m.Schaltbar {
+			t.Errorf("%s cannot be switched off", m.Name)
+		}
 		if m.Warum == modul.Aus {
 			t.Errorf("%s is aus", m.Name)
 		}
@@ -221,6 +234,40 @@ func TestModuleAusIgnoresWhatItCannot(t *testing.T) {
 	if m, _ := l.Eins("standort"); m.Warum != modul.Fehlt {
 		t.Errorf("standort without Reitti, named off: %s", m.Warum)
 	}
+}
+
+// H6: energie goes with geraete (Braucht), saying why; the voice counts
+// and the microphone go with HA; the event stream is the core's and
+// answers with geraete off, for konto's gemeinsam frames.
+func TestGeraeteOff(t *testing.T) {
+	s, l := switched(t, leafSite(t), "geraete")
+	e, _ := l.Eins("energie")
+	if e.An() || e.Warum != modul.Aus || e.Grund != "Ausgeschaltet, weil es „Geräte“ braucht, und das ist hier ausgeschaltet." || !s.napi.OhneEnergie {
+		t.Errorf("energie with geraete off: %+v, OhneEnergie %v", e, s.napi.OhneEnergie)
+	}
+	if s.napi.HA != nil || s.voice != nil || s.napi.Konto == nil {
+		t.Errorf("geraete off: HA %v, voice %v, konto %v", s.napi.HA, s.voice, s.napi.Konto)
+	}
+	srv := httptest.NewServer(routes(s))
+	defer srv.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, "GET", srv.URL+"/napi/portal/events", nil)
+	req.Header.Set("Authorization", "Bearer dev1")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != 200 || resp.Header.Get("Content-Type") != "text/event-stream" {
+		t.Errorf("the stream with geraete off → %d %q", resp.StatusCode, resp.Header.Get("Content-Type"))
+	}
+}
+
+// needs: does module m need module b on (Braucht)?
+func needs(l *modul.Liste, m, b string) bool {
+	x, _ := l.Eins(m)
+	return slices.Contains(x.Braucht, b)
 }
 
 // angebotKeys are an offer's keys, "widgets:tool:task", "konto:kalender".
