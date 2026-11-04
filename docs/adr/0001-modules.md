@@ -391,6 +391,7 @@ module: `LAIB_URL`, `LAIB_TOKEN`, `LAIB_PUBLIC_URL`, `LAIB_DOMAIN`,
 | `fotos` | Fotos | immich (a link only, on while Laib runs it) | – | `/einrichten/fotos` | – | – | the Immich app's setup |
 | `passwoerter` | Passwörter | vaultwarden (a link only) | – | `/einrichten/passwoerter` | – | – | the Bitwarden app's setup |
 | `filme` | Filme und Musik | media (a link only) | – | `/einrichten/filme` | – | – | the Jellyfin app's setup |
+| `hoerbuecher` | Hörbücher und Podcasts | audiobookshelf (a link only, on while Laib runs it; owner 2026-11-04) | – | `/einrichten/hoerbuecher` | – | – | the Audiobookshelf app's setup (Podcasts has none, so the app is one task) |
 
 Known couplings that the migration has to take care of:
 
@@ -645,7 +646,7 @@ place; the setup belongs with each function, and as a task per app.
 - **Modules Homes only leads to.** The box's apps Homes has no page for
   are modules too, so their setup has a home and an off one leaves its
   trace (§10): `fotos` (immich), `passwoerter` (vaultwarden), `filme`
-  (media). They are on while Laib runs their service, read once at start
+  (media), `hoerbuecher` (audiobookshelf). They are on while Laib runs their service, read once at start
   from `laib status` (Homes has no wiring of them; ADR §5's "derived from
   what the box runs"). Laib silent at start: off, saying it could not
   tell. `HOMES_MODULE_AUS` switches them off like any other.

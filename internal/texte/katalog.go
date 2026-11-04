@@ -104,6 +104,7 @@ var de = map[ID]string{
 	"modul.dokumente":    "Dokumente",
 	"modul.musik":        "Musik",
 	"modul.podcasts":     "Podcasts",
+	"modul.hoerbuecher":  "Hörbücher und Podcasts",
 	"modul.gesehen":      "Gesehen & Gehört",
 	"modul.sicherung":    "Daten sichern",
 	"modul.standort":     "Standortverlauf",

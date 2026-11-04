@@ -94,8 +94,7 @@ func katalog(s site) []modul.Modul {
 			Env: []string{"HOMES_MUSIC_INBOX", "HOMES_JELLYFIN_URL", "HOMES_JELLYFIN_TOKEN", "HOMES_DISCOGS_KEY", "HOMES_DISCOGS_SECRET", "HOMES_LLM_VISION_MODEL"},
 			App: modul.Angebot{Teilen: strings.Fields(map[bool]string{true: "musik"}[musicInbox != ""])}}, // Teilen → Homes: POST /napi/musik
 			musicInbox != "" || hh.Wuensche != nil, "Auf dieser Box gibt es keinen Musik-Eingang."),
-		bau(modul.Modul{Name: "podcasts", Backend: "audiobookshelf", Env: []string{"HOMES_ABS_URL", "HOMES_ABS_TOKEN"},
-			Einrichtung: einrichten.App("Audiobookshelf", "com.audiobookshelf.app", einrichten.Web("hoerbuecher", s.domain), "https://www.audiobookshelf.org/guides/", "schritt.anmelden")},
+		bau(modul.Modul{Name: "podcasts", Backend: "audiobookshelf", Env: []string{"HOMES_ABS_URL", "HOMES_ABS_TOKEN"}}, // the app's setup is hoerbuecher's
 			s.podcasts != nil, "Auf dieser Box läuft kein Audiobookshelf."),
 		bau(modul.Modul{Name: "gesehen", Backend: "media",
 			Env: []string{"HOMES_JELLYFIN_URL", "HOMES_JELLYFIN_KEY", "HOMES_ABS_URL", "HOMES_ABS_TOKEN"}},
@@ -123,6 +122,7 @@ func katalog(s site) []modul.Modul {
 		link("passwoerter", "vaultwarden", "Vaultwarden", einrichten.App("Bitwarden", "com.x8bit.bitwarden", einrichten.Web("vault", s.domain),
 			"https://bitwarden.com/help/getting-started-mobile/", "schritt.tresor", "schritt.tresor-passwort")),
 		link("filme", "media", "Jellyfin", einrichten.App("Jellyfin", "org.jellyfin.mobile", einrichten.Web("media", s.domain), "https://jellyfin.org/docs/general/clients/", "schritt.anmelden")),
+		link("hoerbuecher", "audiobookshelf", "Audiobookshelf", einrichten.App("Audiobookshelf", "com.audiobookshelf.app", einrichten.Web("hoerbuecher", s.domain), "https://www.audiobookshelf.org/guides/", "schritt.anmelden")),
 	}
 	// what the box decides of the entries: Dokumente only with a way into the
 	// archive (haus#68); Musik with the inbox; Platte erfassen (with Discogs)
@@ -234,7 +234,7 @@ var schaltbar = map[string]func(*site){
 	"sprechen": func(s *site) { s.bote, s.boteSignal = nil, "" },
 	"nutzung":  func(s *site) { s.usage, s.voice = nil, nil },
 	// the services Homes only leads to: off, their setup and task are gone, nothing else knew of them
-	"fotos": func(*site) {}, "passwoerter": func(*site) {}, "filme": func(*site) {},
+	"fotos": func(*site) {}, "passwoerter": func(*site) {}, "filme": func(*site) {}, "hoerbuecher": func(*site) {},
 }
 
 // haushalt changes the Haushalt source's backends, the Bote's and the

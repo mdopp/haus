@@ -9,7 +9,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mdopp/homes/internal/einrichten"
 	"github.com/mdopp/homes/internal/modul"
+	"github.com/mdopp/homes/internal/podcasts"
 	"github.com/mdopp/homes/internal/texte"
 )
 
@@ -85,8 +87,8 @@ func TestTheCatalogBuilds(t *testing.T) {
 	for _, m := range katalog(site{}) {
 		names[m.Name] = true
 	}
-	if len(names) != 21 {
-		t.Errorf("the catalog has %d modules, ADR 0001 §7 lists 21", len(names))
+	if len(names) != 22 {
+		t.Errorf("the catalog has %d modules, ADR 0001 §7 lists 22", len(names))
 	}
 }
 
@@ -137,5 +139,47 @@ func TestTheSetupsAreWhole(t *testing.T) {
 	l, _ = modul.Bauen(katalog(s))
 	if m, _ := l.Eins("fotos"); m.An() || !strings.Contains(m.Grund, "ließ sich beim Start nicht lesen") {
 		t.Errorf("Laib silent: %+v", m)
+	}
+}
+
+// owner 2026-11-04: „Ich sehe keine Beschreibung für Audiobookshelf.“ Audiobookshelf's app is
+// set up once, as Hörbücher und Podcasts, whenever Laib runs it — with Homes' own ABS token
+// or without; the phone saying it has the app ticks the task; Podcasts adds no second one.
+func TestHoerbuecherIsSetUpOnce(t *testing.T) {
+	s, _, _ := fullSite(t)
+	s.dataDir, s.publicURL = t.TempDir(), "https://homes.example"
+	s.dienste["audiobookshelf"] = true
+	for _, pods := range []*podcasts.Service{nil, {}} { // no ABS token, then Podcasts on
+		s.podcasts = pods
+		l, err := modul.Bauen(katalog(s))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if m, _ := l.Eins("podcasts"); m.An() != (pods != nil) || m.Einrichtung != nil {
+			t.Errorf("podcasts: on %v, setup %+v", m.An(), m.Einrichtung)
+		}
+		s.napi.Module = l
+		q := einrichtung(s, nil, nil)
+		var abs []einrichten.Aufgabe
+		for _, a := range q.Fuer("anna") {
+			if a.Einrichtung.Paket == "com.audiobookshelf.app" {
+				abs = append(abs, a)
+			}
+		}
+		if len(abs) != 1 || abs[0].Modul != "hoerbuecher" || abs[0].Titel != "Hörbücher und Podcasts auf dem Handy einrichten" ||
+			abs[0].Einrichtung.Web != "https://hoerbuecher.example" || abs[0].Erledigt != nil {
+			t.Fatalf("podcasts %v: %+v", pods != nil, abs)
+		}
+	}
+	q := einrichtung(s, nil, nil)
+	if n, err := q.Installiert("anna", []string{"com.audiobookshelf.app"}); err != nil || n != 1 {
+		t.Fatalf("ticked %d, %v", n, err)
+	}
+	if a, _ := q.Eine("anna", "hoerbuecher"); a.Erledigt == nil || a.Erledigt.Wie != einrichten.Handy {
+		t.Errorf("not ticked by the phone: %+v", a.Erledigt)
+	}
+	delete(s.dienste, "audiobookshelf")
+	if l, _ := modul.Bauen(katalog(s)); l.An("hoerbuecher") {
+		t.Error("on without Audiobookshelf")
 	}
 }
