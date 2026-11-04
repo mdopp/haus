@@ -462,8 +462,8 @@ func (im *importer) run(ctx context.Context, person, id string) {
 		return
 	}
 	part := im.teil(person, id)
-	defer os.Remove(part)
-	end := func(stand, text, why, grund string) {
+	end := func(stand, text, why, grund string) { // the file goes before the end is said, so a GET that sees the end finds it gone
+		os.Remove(part)
 		st.Stand, st.Text, st.Fehler, st.Grund = stand, text, why, grund
 		if err := im.write(person, id, st); err != nil {
 			log.Printf("homes: standort-import: %s/%s: %v", person, id, err)
