@@ -87,16 +87,6 @@ gates run in CI; run them before a PR.
   moved function counts as new under its new name. The script is the
   same as laib's `scripts/ratchet.py`; change both.
 
-## README in four languages
-
-README changes: update all four languages in the same PR. `README.md` is
-English; `README.de.md` (du), `README.es.md` (tú, no region) and
-`README.fr.md` (vous) carry the same sections, pictures and diagrams, with
-the language switcher on top. The app's German UI words stay German (in
-ES and FR with a short gloss). `scripts/readme_langs.py` (CI job
-`readme`) fails when a translation is missing, has another number of
-`#` headings than the English one, or when a PR changes `README.md`
-without the other three.
 
 ## Layout
 
