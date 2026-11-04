@@ -121,7 +121,10 @@ func TestTheSetupsAreWhole(t *testing.T) {
 	}
 	s.napi.Module = l
 	check("homes", einrichtung(s, nil, nil).HomesApp)
-	if apps != 6 || steps < 10 {
+	if m, _ := l.Eins("kalender"); m.Einrichtung != nil { // owner 2026-11-04: no calendar task, iPhone to be thought anew
+		t.Errorf("kalender has a setup: %+v", m.Einrichtung)
+	}
+	if apps != 5 || steps < 9 {
 		t.Errorf("%d modules with a setup, %d steps", apps, steps)
 	}
 	if !l.An("fotos") || !l.An("filme") || l.An("passwoerter") {

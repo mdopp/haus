@@ -123,12 +123,12 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   steps (`internal/texte`, `schritt.*`) and the vendor's guide. A module
   that is on and has an app is one task per person
   (`internal/einrichten`), „<Titel> auf dem Handy einrichten“, and so is
-  the Homes app; a module that is off has none. Today: Kalender (DAVx⁵,
-  with `HOMES_RADICALE_PUBLIC_URL`), Podcasts (Audiobookshelf), Sprechen
+  the Homes app; a module that is off has none. Today: Podcasts (Audiobookshelf), Sprechen
   (Signal, with `HOMES_BOTE_SIGNAL`), and three modules Homes only leads
   to, on while Laib runs their service (asked once at start: `laib
   status`): `fotos` (immich, the Immich app), `passwoerter` (vaultwarden,
-  Bitwarden), `filme` (media, Jellyfin). A task is done when Homes can
+  Bitwarden), `filme` (media, Jellyfin). Kalender has no setup task (owner
+  2026-11-04: the iPhone's way is to be thought anew first). A task is done when Homes can
   tell — a phone paired for the person (the Homes app), the phone
   reporting the module's app installed (`POST /napi/einrichtung/apps`),
   Jellyfin knowing a device of theirs other than its web page (`GET
@@ -137,7 +137,7 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   Homes' own page, back to `zurueck`). Done tasks are kept per person in
   `HOMES_DATA/einrichtung.json` (`{"anna":{"fotos":{"am":"2026-11-04",
   "wie":"hand|app|erkannt"}}}`). The block sits on the module's own page
-  (`/kalender`, `/podcasts`, `/sprechen`) on top while the task is open,
+  (`/podcasts`, `/sprechen`) on top while the task is open,
   and shrinks to a quiet „Auf einem weiteren Gerät einrichten“ at the
   bottom once done; a module without a page has `/einrichten/<name>`.
   *Deine Aufgaben* (`/aufgaben`) lists them with Homes' other tasks

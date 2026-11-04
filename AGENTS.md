@@ -72,6 +72,8 @@ gates run in CI; run them before a PR.
   a shared package imports no Homes package; only `cmd/` imports pages; only `cmd/` and pages
   import napi; a fake only the tests and `cmd/homesdemo`. Crossing a cap
   means raising it in the same PR with its reason and the owner's yes.
+  The text catalog (`internal/texte/katalog.go`, the family's words and
+  their translations) is not counted: words, not code (owner 2026-11-04).
   CI also fails on a file gofmt would change (lines count as gofmt
   writes them).
 - `scripts/ratchet.py` — deadcode (`dead`: no caller even in a test;

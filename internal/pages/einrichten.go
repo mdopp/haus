@@ -21,7 +21,7 @@ const EinrichtenPages = "/einrichten/"
 
 // mitSeite are the modules whose own page carries their setup block, and
 // where the task leads: the block leads that page while it is open.
-var mitSeite = map[string]string{"kalender": "/kalender", "podcasts": PodcastsPath, "sprechen": "/sprechen"}
+var mitSeite = map[string]string{"podcasts": PodcastsPath, "sprechen": "/sprechen"}
 
 // einrichtenHref is where a module's task is done.
 func einrichtenHref(name string) string {

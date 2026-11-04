@@ -643,7 +643,7 @@ test('what the box lacks is a quiet trace; a wish follows Laib', async ({ page, 
   const standort = card.locator('#spur-standort');
   await expect(standort).toContainText('Standortverlauf');
   await expect(standort).toContainText('auf dieser Box nicht eingerichtet');
-  await expect(card.locator('#spur-podcasts')).toContainText('ausgeschaltet');
+  await expect(card.locator('#spur-netzlaufwerk')).toContainText('ausgeschaltet');
   await expect(card.locator('#spur-geraete')).toHaveCount(0);
   // quiet: the trace's text is the muted colour, never the danger colour
   const color = await standort.evaluate((el) => getComputedStyle(el).color);
@@ -685,12 +685,12 @@ test('a wish Laib cannot take is said on the page, the trace stays', async ({ pa
   await request.get('/demo/laib?ms=0&fehler=0');
   await page.goto('/mehr');
   await mark(page);
-  const podcasts = page.locator('#spur-podcasts');
-  await expect(podcasts.getByRole('button')).toBeVisible();
+  const spur = page.locator('#spur-netzlaufwerk'); // switched off in the demo
+  await expect(spur.getByRole('button')).toBeVisible();
   await request.get('/demo/laib?ms=0&fehler=1');
-  await podcasts.getByRole('button').click();
+  await spur.getByRole('button').click();
   await expect(page.locator('#homes-hinweis')).toContainText('nicht aufschreiben');
-  await expect(podcasts.getByRole('button')).toHaveText('Hier anfordern');
+  await expect(spur.getByRole('button')).toHaveText('Hier anfordern');
   expect(await stays(page)).toBe(true);
   await page.screenshot({ path: info.outputPath('spuren-7-fehler.png') });
   await request.get('/demo/laib?ms=0&fehler=0');

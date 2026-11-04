@@ -13,17 +13,18 @@ import (
 	"github.com/mdopp/homes/internal/samba/sambafake"
 )
 
-// setupBox is a box with Fotos (Immich) and Kalender (DAVx⁵), both with an
+// setupBox is a box with Fotos (Immich) and Podcasts (Audiobookshelf), both with an
 // app, and Notizen without one; the Homes app is paired by nobody.
 func setupBox(t *testing.T, mods ...string) StartConfig {
 	t.Helper()
 	all := map[string]modul.Modul{
 		"fotos":    {Name: "fotos", Titel: "Fotos", Einrichtung: einrichten.App("Immich", "app.alextran.immich", "https://photos.box.test", "https://immich.app/docs", "schritt.fotos", "schritt.fotos-sichern")},
-		"kalender": {Name: "kalender", Titel: "Kalender", Einrichtung: einrichten.App("DAVx⁵", "at.bitfire.davdroid", "https://caldav.box.test", "https://manual.davx5.com/", "schritt.davx")},
+		"podcasts": {Name: "podcasts", Titel: "Podcasts", Einrichtung: einrichten.App("Audiobookshelf", "com.audiobookshelf.app", "https://hoerbuecher.box.test", "https://www.audiobookshelf.org/guides/", "schritt.anmelden")},
+		"kalender": {Name: "kalender", Titel: "Kalender"}, // owner 2026-11-04: no setup task (iPhone to be thought anew)
 		"notizen":  {Name: "notizen", Titel: "Notizen"},
 	}
 	if len(mods) == 0 {
-		mods = []string{"fotos", "kalender", "notizen"}
+		mods = []string{"fotos", "podcasts", "kalender", "notizen"}
 	}
 	var ms []modul.Modul
 	for _, m := range mods {
@@ -53,13 +54,13 @@ func TestWillkommenListsOnlyTheOpenTasks(t *testing.T) {
 	cfg := setupBox(t)
 	fs := sambafake.New(t, map[string]int64{"anna": 0}, true)
 	cfg.Samba = &samba.Dir{Path: fs.Dir}
-	cfg.Einrichtung.Haken.Setzen("anna", "kalender", einrichten.Hand, time.Now())
+	cfg.Einrichtung.Haken.Setzen("anna", "podcasts", einrichten.Hand, time.Now())
 	rec := welcomePage(t, cfg)
 	page := rec.Body.String()
 	mustContain(t, page, "<h1>Hallo Anna</h1>", "Dein Benutzername:", ">anna</span>", "Deine nächsten Schritte",
 		`<a href="/einrichten/fotos">Fotos auf dem Handy einrichten</a>`, "Mit der App „Immich“.",
 		`<a href="/netzlaufwerk">Netzlaufwerk-Passwort festlegen</a>`, "href=/start>Weiter zur Startseite")
-	mustNotContain(t, page, "Kalender auf dem Handy", "Notizen auf dem Handy", "Bitwarden", "drucken", "Apps einrichten")
+	mustNotContain(t, page, "Podcasts auf dem Handy", "Kalender auf dem Handy", "DAVx", "Notizen auf dem Handy", "Bitwarden", "drucken", "Apps einrichten")
 	before(t, page, "Netzlaufwerk-Passwort", "Fotos auf dem Handy") // the important first
 	if c := rec.Header().Get("Set-Cookie"); !strings.Contains(c, welcomeCookie+"=gesehen") {
 		t.Errorf("the device is not marked: %q", c)

@@ -68,7 +68,7 @@ func katalog(s site) []modul.Modul {
 		bau(modul.Modul{Name: "sprechen", Backend: "bote", Einrichtung: einrichten.App("Signal", "org.thoughtcrime.securesms", einrichten.Signal(s.boteSignal), "https://support.signal.org/hc/de/articles/360007318691", "schritt.signal"),
 			Env: []string{"HOMES_BOTE_URL", "HOMES_BOTE_KEY", "HOMES_STT_PROVIDER", "HOMES_STT_LANGUAGE", "HOMES_BOTE_SIGNAL"}},
 			s.bote != nil, "Auf dieser Box läuft kein Bote."),
-		bau(modul.Modul{Name: "kalender", Backend: "radicale", Standard: "caldav", Einrichtung: einrichten.App("DAVx⁵", "at.bitfire.davdroid", s.radicale, "https://manual.davx5.com/accounts_collections.html", "schritt.davx"),
+		bau(modul.Modul{Name: "kalender", Backend: "radicale", Standard: "caldav",
 			Env: append([]string{"HOMES_RADICALE_CALENDAR", "HOMES_RADICALE_PUBLIC_URL"}, radicale...), Start: []string{"heute"},
 			App: modul.Angebot{Widgets: []string{"tool:task"}}},
 			hh.Calendar != nil, "Auf dieser Box läuft kein Radicale."),

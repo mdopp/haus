@@ -8,7 +8,7 @@ import (
 
 // TestEveryIDHasGerman: each id the package declares is in German.
 func TestEveryIDHasGerman(t *testing.T) {
-	src, err := os.ReadFile("texte.go")
+	src, err := os.ReadFile("katalog.go")
 	if err != nil {
 		t.Fatal(err)
 	}
