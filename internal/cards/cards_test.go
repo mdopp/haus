@@ -106,3 +106,21 @@ func TestRowWithMoreButtonsAndAPin(t *testing.T) {
 		t.Fatalf("buttons then the ☆, in one row of buttons:\n%s", got)
 	}
 }
+
+// owner, 2026-11-04: a slider's Off word ("aus") is the button only as a
+// word of its own, never inside another ("Haus"); a line without it gets
+// the button after its detail.
+func TestSliderOffWordIsAWordOfItsOwn(t *testing.T) {
+	s := &Slider{Label: "Helligkeit", Name: "Hauslicht", Entity: "light.haus", Do: "light.turn_on", Off: "aus"}
+	want := `<button type=button class=stufe popovertarget=regler-light-haus aria-haspopup=dialog aria-label="Hauslicht Helligkeit aus, einstellen">aus</button>`
+	for line, ok := range map[string]bool{"aus": true, "aus · seit 10:00": true, "Haus": false, "ausgeschaltet": false, "": false} {
+		got, found := s.inline(line)
+		if found != ok || ok && !strings.Contains(got, want) {
+			t.Errorf("inline(%q) = %q, %v; want the button: %v", line, got, found, ok)
+		}
+	}
+	s.Value = 40
+	if got, ok := s.inline("an · 40 %"); !ok || !strings.Contains(got, `>40 %</button>`) {
+		t.Errorf("a lamp at 40 %%: %q", got)
+	}
+}

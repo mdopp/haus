@@ -7,7 +7,7 @@
 //
 // /demo/fehler?status=503 makes every switch fail (0: work again);
 // /demo/setze?id=light.flur&state=on changes a state as if someone
-// switched it elsewhere; /demo/laib?ms=800&fehler=0 makes Mehr's Laib
+// switched it elsewhere (&dimmbar=1: a lamp HA can dim); /demo/laib?ms=800&fehler=0 makes Mehr's Laib
 // answer its task list that slowly (or fail), and forgets the kept list.
 package main
 
@@ -216,7 +216,11 @@ func main() {
 	})
 	mux.HandleFunc("/demo/setze", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
-		fake.Change(q.Get("id"), q.Get("state"), map[string]any{"friendly_name": q.Get("name")})
+		attrs := map[string]any{"friendly_name": q.Get("name")}
+		if q.Get("dimmbar") != "" {
+			attrs["supported_color_modes"] = []any{"brightness"}
+		}
+		fake.Change(q.Get("id"), q.Get("state"), attrs)
 	})
 	anna := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		r.Header.Set("Remote-User", "anna")

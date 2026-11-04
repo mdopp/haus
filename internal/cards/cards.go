@@ -10,6 +10,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 // Row is one line: what it is, a quieter detail, and where it leads, if
@@ -52,6 +54,9 @@ type Slider struct {
 	Back   string `json:"back"`
 	Value  int    `json:"value"`
 	Steps  []Step `json:"steps,omitempty"`
+	// Off is what the line says at level 0 ("aus": a lamp that is off,
+	// owner 2026-11-04); the button and the sheet say it for "0 %"
+	Off string `json:"off,omitempty"`
 }
 
 // Step is one quick level in a slider's sheet: "50 %", "Zu".
@@ -314,6 +319,14 @@ func (a *Action) form() string {
 // percent is a level as the page says it.
 func percent(v int) string { return strconv.Itoa(max(0, min(v, 100))) + " %" }
 
+// says is the slider's level as the line says it: "60 %", or Off at 0.
+func (s *Slider) says() string {
+	if s.Value <= 0 && s.Off != "" {
+		return s.Off
+	}
+	return percent(s.Value)
+}
+
 // id is the slider's sheet's element id, from its thing.
 func (s *Slider) id() string {
 	return "regler-" + strings.NewReplacer(".", "-", "_", "-").Replace(strings.ToLower(s.Entity))
@@ -323,17 +336,22 @@ func (s *Slider) id() string {
 // opens without script too, and says aria-expanded on its own.
 func (s *Slider) button() string {
 	return `<button type=button class=stufe popovertarget=` + s.id() + ` aria-haspopup=dialog aria-label="` +
-		html.EscapeString(s.Name+" "+s.Label+" "+percent(s.Value)+", einstellen") + `">` + percent(s.Value) + `</button>`
+		html.EscapeString(s.Name+" "+s.Label+" "+s.says()+", einstellen") + `">` + html.EscapeString(s.says()) + `</button>`
 }
 
-// inline is line, escaped, with its last "60 %" as the button; !ok when
-// the line does not say the level.
+// inline is line, escaped, with its last "60 %" (or "aus", a word of its
+// own) as the button; !ok when the line does not say the level.
 func (s *Slider) inline(line string) (string, bool) {
-	i := strings.LastIndex(line, percent(s.Value))
-	if i < 0 || (i > 0 && line[i-1] >= '0' && line[i-1] <= '9') {
+	w := s.says()
+	i := strings.LastIndex(line, w)
+	if i < 0 {
 		return html.EscapeString(line), false
 	}
-	return html.EscapeString(line[:i]) + s.button() + html.EscapeString(line[i+len(percent(s.Value)):]), true
+	before, _ := utf8.DecodeLastRuneInString(line[:i])
+	if after, _ := utf8.DecodeRuneInString(line[i+len(w):]); unicode.IsLetter(before) || unicode.IsDigit(before) || unicode.IsLetter(after) {
+		return html.EscapeString(line), false
+	}
+	return html.EscapeString(line[:i]) + s.button() + html.EscapeString(line[i+len(w):]), true
 }
 
 // hidden are a slider form's fields but wert.
@@ -352,7 +370,7 @@ func (s *Slider) sheet() string {
 	b.WriteString(`<div popover id=` + id + ` class=blatt role=dialog aria-labelledby=` + id + `-titel>`)
 	b.WriteString(`<p class=blatt-titel id=` + id + `-titel>` + html.EscapeString(s.Name) + `</p>`)
 	b.WriteString(`<form method=post action=` + SwitchPath + ` class=regler>` + s.hidden())
-	b.WriteString(`<p class=blatt-wert><span class=k>` + html.EscapeString(s.Label) + `</span> <output>` + v + ` %</output></p>`)
+	b.WriteString(`<p class=blatt-wert><span class=k>` + html.EscapeString(s.Label) + `</span> <output>` + html.EscapeString(s.says()) + `</output></p>`)
 	b.WriteString(`<input type=range name=wert min=0 max=100 step=1 value=` + v + ` aria-label="` + html.EscapeString(s.Name+" "+s.Label) +
 		`" oninput="this.form.querySelector('output').value=this.value+' %'" onchange="this.form.requestSubmit?this.form.requestSubmit():this.form.submit()">`)
 	b.WriteString(`<noscript><button data-laeuft="Setzt …">Setzen</button></noscript></form>`)
