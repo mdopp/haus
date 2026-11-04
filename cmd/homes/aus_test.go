@@ -5,12 +5,15 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/mdopp/homes/internal/abs"
 	"github.com/mdopp/homes/internal/caldav"
+	"github.com/mdopp/homes/internal/caldav/davfake"
 	"github.com/mdopp/homes/internal/einkauf"
 	"github.com/mdopp/homes/internal/gesehen"
 	"github.com/mdopp/homes/internal/haushalt"
@@ -67,9 +70,10 @@ func switched(t *testing.T, s site, aus string) (site, *modul.Liste) {
 // has it an:false, warum aus; every other leaf module is as before.
 func TestEachLeafModuleOff(t *testing.T) {
 	leaves := []string{"gesundheit", "werkstatt", "netzlaufwerk", "podcasts", "gesehen", "standort", "sicherung",
-		"dokumente", "notizen", "musik", "einkauf"}
+		"dokumente", "notizen", "musik", "einkauf", "kalender", "kontakte", "konto"}
 	// what each serves while on, and what it answers off: a path and a word on it
 	type probe struct{ path, on, off string }
+	const wunschliste = "/einkauf?liste=liste-musik" // the Haushalt pills: served with einkauf or musik on
 	probes := map[string][]probe{
 		"gesundheit":   {{"/mehr", "gesundheit.example/werte", "!gesundheit.example/werte"}},
 		"werkstatt":    {{"/box", `box-werkstatt`, "!box-werkstatt"}},
@@ -82,14 +86,23 @@ func TestEachLeafModuleOff(t *testing.T) {
 		"dokumente": {{"/mehr", `href="/dokumente"`, `!href="/dokumente"`}, {"/dokumente", "scan@example.org", "noch nicht eingerichtet"},
 			{"napi:/napi/defs/tool", `"tool-id":"doc"`, `!"tool-id":"doc"`}, {"napi:/napi/portal/documents", "#200", "#404"},
 			{"napi:POST /napi/upload", "#400", "#404"}, {"mcp:", `"dokumente_suchen"`, `!"dokumente_suchen"`}},
-		"notizen": {{"/kalender", `href=/notizen`, `!href=/notizen`}, {"/notizen", "Neue Notiz", "noch nicht eingerichtet"},
+		"notizen": {{wunschliste, `href=/notizen`, `!href=/notizen`}, {"/notizen", "Neue Notiz", "noch nicht eingerichtet"},
 			{"napi:/napi/defs/tool", `"tool-id":"note"`, `!"tool-id":"note"`}, {"napi:/napi/portal/notes", "#200", "#404"},
 			{"napi:POST /napi/merken", "#400", "#404"}, {"mcp:", `"notiz_anlegen"`, `!"notiz_anlegen"`}},
 		"musik": {{"/mehr", `href="/musik"`, `!href="/musik"`}, {"/musik", "Musik hinzufügen", "#404"}, {"/discogs", "#200", "#404"}},
 		// the music wish list is musik's: it stays with einkauf off, the other lists go
-		"einkauf": {{"/kalender", `href=/einkauf`, `!href=/einkauf`}, {"/einkauf", "<h1>Einkauf</h1>", "#404"},
+		"einkauf": {{wunschliste, `href=/einkauf`, `!href=/einkauf`}, {"/einkauf", "<h1>Einkauf</h1>", "#404"},
 			{"/einkauf?liste=liste-musik", "<h1>Musik</h1>", "<h1>Musik</h1>"}, {"/einkauf?liste=liste-musik", "Listen verwalten", "!Listen verwalten"},
 			{"mcp:", `"einkaufsliste_dazu"`, `!"einkaufsliste_dazu"`}},
+		// H5, one Radicale account: each goes alone, the others keep theirs
+		"kalender": {{wunschliste, `href=/kalender`, `!href=/kalender`}, {"/kalender", "Milch kaufen", "noch nicht eingerichtet"},
+			{"/start", "Heute und demnächst", "!Heute und demnächst"}, {"/kalender/erinnerung/milch-1", "Milch kaufen", "!Milch kaufen"},
+			{"napi:/napi/defs/tool", `"tool-id":"task"`, `!"tool-id":"task"`}, {"napi:/napi/portal/tasks", "#200", "#404"},
+			{"mcp:", `"termin_anlegen"`, `!"termin_anlegen"`}},
+		"kontakte": {{"/kontakte/urn:uuid:b", "Bernd Bauer", "!Bernd Bauer"},
+			{"napi:/napi/defs/tool", `"tool-id":"contacts"`, `!"tool-id":"contacts"`}, {"napi:/napi/portal/contacts", "#200", "#404"},
+			{"napi:POST /napi/kontakte", "#415", "#503"}, {"mcp:", `"kontakte_suchen"`, `!"kontakte_suchen"`}},
+		"konto": {{"napi:/napi/gemeinsam/kontakte", "#200", "#503"}, {"napi:/napi/gemeinsam/kalender", "#200", "#503"}},
 	}
 	check := func(t *testing.T, s site, p probe, want string) {
 		t.Helper()
@@ -142,6 +155,23 @@ func TestEachLeafModuleOff(t *testing.T) {
 					t.Errorf("kann: %s went off with %s", m.Name, name)
 				}
 			}
+			// none of its offers is left in app, unless a module that is on offers it too
+			k, others := l.Kann(modul.Wuensche{}), map[string]bool{}
+			var bietet []string
+			for _, m := range k.Module {
+				if m.Name == name {
+					bietet = angebotKeys(m.Bietet)
+				} else if m.An {
+					for _, key := range angebotKeys(m.Bietet) {
+						others[key] = true
+					}
+				}
+			}
+			for _, key := range bietet {
+				if !others[key] && slices.Contains(angebotKeys(k.App), key) {
+					t.Errorf("kann: %s is off, and app still offers %s", name, key)
+				}
+			}
 			for _, other := range leaves {
 				if other == name {
 					continue
@@ -177,9 +207,9 @@ func TestLeafWorkOnlyWhileOn(t *testing.T) {
 
 // An unknown name, or one that cannot be switched off yet, is ignored.
 func TestModuleAusIgnoresWhatItCannot(t *testing.T) {
-	s, l := switched(t, leafSite(t), "gibtsnicht, kalender,, ")
-	if !l.An("kalender") || s.hh.Calendar == nil {
-		t.Error("kalender went off, which H3 cannot switch yet")
+	s, l := switched(t, leafSite(t), "gibtsnicht, geraete,, ")
+	if !l.An("geraete") || s.napi.HA == nil {
+		t.Error("geraete went off, which cannot be switched yet (H6)")
 	}
 	for _, m := range l.Module() {
 		if m.Warum == modul.Aus {
@@ -190,6 +220,48 @@ func TestModuleAusIgnoresWhatItCannot(t *testing.T) {
 	_, l = switched(t, kannSite(t), "standort")
 	if m, _ := l.Eins("standort"); m.Warum != modul.Fehlt {
 		t.Errorf("standort without Reitti, named off: %s", m.Warum)
+	}
+}
+
+// angebotKeys are an offer's keys, "widgets:tool:task", "konto:kalender".
+func angebotKeys(a modul.Angebot) []string {
+	var out []string
+	for list, keys := range map[string][]string{"widgets": a.Widgets, "teilen": a.Teilen, "konto": a.Konto, "sicherung": a.Sicherung, "mehr": a.Mehr} {
+		for _, k := range keys {
+			out = append(out, list+":"+k)
+		}
+	}
+	return out
+}
+
+// H5: the account and the contacts leave kann on their own (konto's parts,
+// the backup's contacts); ensureHaushalt makes only the collections of the
+// modules that are on.
+func TestRadicaleModulesApart(t *testing.T) {
+	_, l := switched(t, leafSite(t), "konto")
+	if k := l.Kann(modul.Wuensche{}); len(k.App.Konto) != 0 || !slices.Contains(k.App.Sicherung, "kontakte") {
+		t.Errorf("konto off: app konto %v, sicherung %v", k.App.Konto, k.App.Sicherung)
+	}
+	_, l = switched(t, leafSite(t), "kontakte")
+	if k := l.Kann(modul.Wuensche{}); slices.Contains(k.App.Sicherung, "kontakte") || len(k.App.Konto) != 2 {
+		t.Errorf("kontakte off: app sicherung %v, konto %v", k.App.Sicherung, k.App.Konto)
+	}
+	for _, c := range []struct {
+		aus            string
+		calendar, book bool
+	}{{"", true, true}, {"kalender", true, true}, {"kalender,konto", false, true}, {"kontakte,konto", true, false}, {"kalender,kontakte,konto", false, false}} {
+		dav := davfake.New("homes", "pw")
+		_, l := switched(t, leafSite(t), c.aus)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ensureHaushalt(ctx, &caldav.Client{URL: dav.URL, User: "homes", Password: "pw"}, l)
+		cancel()
+		if got := dav.DisplayName("/homes/haushalt/") != ""; got != c.calendar {
+			t.Errorf("%q off: the calendar made %v, want %v", c.aus, got, c.calendar)
+		}
+		if got := dav.DisplayName("/homes/haushalt-kontakte/") != ""; got != c.book {
+			t.Errorf("%q off: the address book made %v, want %v", c.aus, got, c.book)
+		}
+		dav.Close()
 	}
 }
 

@@ -70,6 +70,7 @@ func fullSite(t *testing.T) (site, *hafake.HA, *davfake.Server) {
 		Documents: &paperless.Client{URL: docs.URL, Token: "pl-token", PublicURL: "https://paperless.example"}}
 	s.napi.HA = &ha.Client{URL: fake.URL, Token: "ha-token"}
 	s.napi.Haushalt = s.hh
+	s.napi.Konto = cal // the phone's Homes account, on the same Radicale
 	s.napi.Validate = func(_ context.Context, b string) bool { return b == "dev1" }
 	return s, fake, dav
 }

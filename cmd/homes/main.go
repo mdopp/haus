@@ -33,6 +33,7 @@ import (
 	"github.com/mdopp/homes/internal/haushalt"
 	"github.com/mdopp/homes/internal/jellyfin"
 	"github.com/mdopp/homes/internal/laib"
+	"github.com/mdopp/homes/internal/modul"
 	"github.com/mdopp/homes/internal/musicbrainz"
 	"github.com/mdopp/homes/internal/napi"
 	"github.com/mdopp/homes/internal/pages"
@@ -299,21 +300,43 @@ func tellNewEpisodes(ctx context.Context, pods *podcasts.Service, l *laib.Client
 	}
 }
 
-// ensureHaushalt makes the household's calendar, address book and shopping list in
-// Radicale, trying again with a growing pause while Radicale does not
-// answer; done once they are there.
-func ensureHaushalt(ctx context.Context, c *caldav.Client) {
+// ensureHaushalt makes, in the household's one Radicale account, the
+// collections of the modules that are on (ADR 0001 H5): the calendar for
+// kalender and konto, the address book for kontakte and konto, the
+// shopping list for einkauf (haus#118), the music wish list for musik;
+// trying again with a growing pause while Radicale does not answer; done
+// once they are there.
+func ensureHaushalt(ctx context.Context, c *caldav.Client, l *modul.Liste) {
+	var steps []func(context.Context) error
+	if l.An("kalender") || l.An("konto") {
+		steps = append(steps, c.EnsureCalendar)
+	}
+	if l.An("kontakte") || l.An("konto") {
+		steps = append(steps, c.EnsureBook)
+	}
+	for _, list := range []struct {
+		modul string
+		ref   caldav.ListRef
+		name  string
+	}{{"einkauf", caldav.Einkauf, einkauf.Name}, {"musik", einkauf.MusikListe, einkauf.MusikName}} {
+		if l.An(list.modul) {
+			steps = append(steps, func(ctx context.Context) error { return c.EnsureList(ctx, list.ref, list.name) })
+		}
+	}
 	wait := 10 * time.Second
-	for {
+	for len(steps) > 0 {
 		tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		err := errors.Join(c.EnsureHaushalt(tctx), c.EnsureList(tctx, caldav.Einkauf, einkauf.Name), // and the shopping list (haus#118)
-			c.EnsureList(tctx, einkauf.MusikListe, einkauf.MusikName)) // and the music wish list
+		var errs []error
+		for _, step := range steps {
+			errs = append(errs, step(tctx))
+		}
 		cancel()
+		err := errors.Join(errs...)
 		if err == nil {
-			log.Printf("homes: Haushalt: calendar, address book and shopping list are there")
+			log.Printf("homes: Haushalt: the collections of the modules on are there")
 			return
 		}
-		log.Printf("homes: Haushalt: making the calendar and address book: %v (again in %v)", err, wait)
+		log.Printf("homes: Haushalt: making the collections: %v (again in %v)", err, wait)
 		select {
 		case <-ctx.Done():
 			return
@@ -379,7 +402,8 @@ func main() {
 			hh.Wuensche.Regale = &discogs.Regale{App: app, Dir: dataDir}
 		}
 	}
-	cfg.Haushalt = hh // haus#10: the tool widgets from the same backends; none set, 404
+	cfg.Haushalt = hh       // haus#10: the tool widgets from the same backends; none set, 404
+	cfg.Konto = hh.Calendar // haus#218: the phone's Homes account, on the same Radicale account
 	// haus#10: the camera capture into the share's Paperless consume folder; unset, 404
 	if cfg.UploadDir = os.Getenv("HOMES_UPLOAD_DIR"); cfg.UploadDir != "" {
 		if fi, err := os.Stat(cfg.UploadDir); err != nil || !fi.IsDir() {
@@ -426,9 +450,6 @@ func main() {
 	// from HA's Assist runs every minute, as HA keeps only the last ten
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, os.Interrupt)
 	defer stop()
-	if hh.Calendar != nil { // the household's calendar and address book there from the start (owner 2026-10-24)
-		go ensureHaushalt(ctx, hh.Calendar)
-	}
 	counter := usage.FromEnv(os.Getenv)
 	var voice *usage.Voice
 	if counter != nil && cfg.HA != nil {
@@ -450,6 +471,9 @@ func main() {
 		radicale: radicalePublic, views: ansicht.Open(dataDir, os.Getenv("HOMES_RADICALE_USER")), dataDir: dataDir,
 		docsMail: docsMail, paperlessPublic: paperlessPublic, paperlessLAN: paperlessLAN, musik: musicInbox()}
 	st.napi.Module = logModule(&st) // HOMES_MODULE_AUS takes what it switches off out of st
+	if hh.Calendar != nil {         // the collections there from the start (owner 2026-10-24), of the modules on
+		go ensureHaushalt(ctx, hh.Calendar, st.napi.Module)
+	}
 	startLeaf(ctx, st)
 	go schliesseWuensche(ctx, ops, st.napi.Module, time.Minute) // a wish for what is on now is done (ADR 0001 §10)
 	mux := routes(st)

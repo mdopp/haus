@@ -2,6 +2,7 @@ package caldav
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 	"testing"
@@ -420,7 +421,13 @@ func TestEnsureHaushaltMakesBothOnce(t *testing.T) {
 	defer fake.Close()
 	c := &Client{URL: fake.URL, User: "homes", Password: "pw"}
 	ctx := context.Background()
-	if err := c.EnsureHaushalt(ctx); err != nil {
+	if err := c.EnsureCalendar(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if fake.DisplayName("/homes/haushalt-kontakte/") != "" {
+		t.Fatal("the calendar alone made the address book too (ADR 0001 H5: each for its module)")
+	}
+	if err := c.EnsureBook(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if got := fake.Calendars(); len(got) != 1 || got[0] != "/homes/haushalt/" {
@@ -430,7 +437,8 @@ func TestEnsureHaushaltMakesBothOnce(t *testing.T) {
 		t.Fatal("no address book")
 	}
 	before := count(fake.Methods, "MKCALENDAR") + count(fake.Methods, "MKCOL")
-	if err := (&Client{URL: fake.URL, User: "homes", Password: "pw"}).EnsureHaushalt(ctx); err != nil {
+	again := &Client{URL: fake.URL, User: "homes", Password: "pw"}
+	if err := errors.Join(again.EnsureCalendar(ctx), again.EnsureBook(ctx)); err != nil {
 		t.Fatal(err)
 	}
 	if n := count(fake.Methods, "MKCALENDAR") + count(fake.Methods, "MKCOL"); n != before {
