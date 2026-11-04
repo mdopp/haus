@@ -17,6 +17,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/mdopp/homes/internal/jsonfile"
 	"github.com/mdopp/homes/internal/reitti"
 )
 
@@ -145,12 +146,7 @@ func (im *importer) read(person, id string) (importStand, error) {
 
 func (im *importer) write(person, id string, st importStand) error {
 	st.Geaendert = im.now().UTC()
-	b, _ := json.Marshal(st)
-	p := filepath.Join(im.folder(person), id+".json")
-	if err := os.WriteFile(p+".neu", b, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(p+".neu", p)
+	return jsonfile.Save(filepath.Join(im.folder(person), id+".json"), st)
 }
 
 func partLen(p string) int64 {

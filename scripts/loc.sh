@@ -25,7 +25,7 @@ cd "$(dirname "$0")/.."
 bad=0
 p() { for x in "$@"; do printf 'internal/%s ' "$x"; done; }
 connectors=$(p abs bote caldav discogs ha jellyfin judge laib musicbrainz paperless qmd reitti samba werkstatt)
-shared=$(p abruf app assistent cards code128 markdown mcpserver namen)
+shared=$(p abruf app assistent cards code128 jsonfile markdown mcpserver namen)
 household=$(p ansicht devices dokumente einkauf energie favoriten gesehen haushalt library merken notes papierkorb podcasts schalter takeout usage)
 
 budget() { # budget <name> <cap> <dir…>
@@ -45,8 +45,10 @@ budget cmd 1069 cmd                   # homes' wiring and the demo on fakes: 1,0
 # was internal/abruf (235 lines of merken, 247 of cap, to shared) and jellyfin.Plain
 # internal/namen (11 lines, 12 of cap, to shared)
 budget connectors 13171 $connectors   # one client per service, with its fake: 11,327, 12,543 with abs and musicbrainz
-budget household 9634 $household      # the household's own logic: 10,638, 9,176 without them and the fetcher
-budget shared 1329 $shared            # the card, Markdown, the app's names: 1,019; abruf, namen: 1,287
+# 2026-11-04, internal/jsonfile (47 lines, 50 of cap) from household's cap to shared's: it
+# replaces nine copies of a save, 62 of their lines in household
+budget household 9584 $household      # the household's own logic: 10,638, 9,176 without them and the fetcher
+budget shared 1379 $shared            # the card, Markdown, the app's names: 1,019; abruf, namen: 1,287; jsonfile: 1,334
 
 # every package in one area
 for d in internal/*/; do

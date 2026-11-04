@@ -16,6 +16,8 @@ import (
 	"regexp"
 	"sort"
 	"time"
+
+	"github.com/mdopp/homes/internal/jsonfile"
 )
 
 // Frist is how long a deleted thing can be put back.
@@ -66,12 +68,7 @@ func (k *Korb) Rein(art, name, wer string, daten any) (Eintrag, error) {
 	if err := os.MkdirAll(k.dir(), 0o700); err != nil {
 		return Eintrag{}, err
 	}
-	out, _ := json.Marshal(e)
-	tmp := filepath.Join(k.dir(), "."+e.ID+".neu")
-	if err := os.WriteFile(tmp, out, 0o600); err != nil {
-		return Eintrag{}, err
-	}
-	return e, os.Rename(tmp, filepath.Join(k.dir(), e.ID+".json"))
+	return e, jsonfile.Save(filepath.Join(k.dir(), e.ID+".json"), e)
 }
 
 // Liste is the entries of a kind ("" for all), newest first; older than Frist go.
