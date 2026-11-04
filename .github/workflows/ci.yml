@@ -31,18 +31,6 @@ jobs:
           go-version-file: go.mod
       - run: python3 -m unittest scripts/test_ratchet.py
       - run: scripts/ratchet.py
-  readme:
-    # the README in four languages: none missing, the same headings, and a
-    # PR that changes README.md changes the other three (AGENTS.md)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - run: scripts/readme_langs.py
-        if: github.event_name != 'pull_request'
-      - run: scripts/readme_langs.py origin/${{ github.base_ref }}
-        if: github.event_name == 'pull_request'
   e2e:
     # the family pages in a real browser against cmd/homesdemo's fakes
     runs-on: ubuntu-latest

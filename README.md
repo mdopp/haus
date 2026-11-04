@@ -1,9 +1,9 @@
-English · [Deutsch](README.de.md) · [Español](README.es.md) · [Français](README.fr.md)
-
 # Homes
 
 **Your home at a glance: lights, energy, calendar, shopping list and notes
 for the whole family, served by your own box, not by somebody's cloud.**
+
+> **Language:** the pages and the app speak German today; English, Spanish and French are on the way.
 
 Homes is the family's web page on a [Laib](https://github.com/mdopp/laib)
 box. Open `homes.<your domain>` on any phone or computer, sign in once,
