@@ -534,6 +534,12 @@ silent: it leaves **a trace**, one quiet line where its entry would be.
   those without one (Sprechen, Kontakte, Homes-Konto). `werkstatt` and
   `nutzung` (admins) leave theirs on the Box page's „Was Homes kann“
   (H7), which lists every module.
+- **A Mehr module's own page** (owner 2026-11-04, the Mehr audit): `/dokumente`,
+  `/podcasts`, `/gesehen`, `/daten-sichern`, `/standort` and `/netzlaufwerk` on
+  a box without the module are its trace with „Hier anfordern“ (`modulAus`),
+  never „Nicht gefunden“ or a setting's name; the wish ends back on that page,
+  and an admin gets the module's `/module/<name>`. A bookmark or an app's link
+  lands on the trace, not on a dead end.
 - **App:** its Mehr list has the same quiet section from `/napi/kann`.
   The widget picker shows a type the box lacks as a muted entry with its
   trace instead of leaving it out. The account and the backup show a

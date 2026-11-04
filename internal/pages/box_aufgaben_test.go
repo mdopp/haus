@@ -113,7 +113,7 @@ func TestBoxAufgaben(t *testing.T) {
 	var parts map[string]string
 	json.Unmarshal(rec.Body.Bytes(), &parts)
 	card := parts["box-aufgaben"]
-	mustContain(t, card, "<h2>Box-Aufgaben <span class=k>· 3 offen · <span class=gelb>1 fällig</span></span></h2>",
+	mustContain(t, card, "<p class=k>3 offen · <span class=gelb>1 fällig</span></p>",
 		"<li id=aufgabe-3><b>Voice PE flashen</b>", "fällig seit ", "erinnert am ", "Laib hakt sie selbst ab, wenn der Befund (backup offsite) weg ist",
 		`<input type=hidden name=tun value=erledigt><input type=hidden name=id value=1><button data-laeuft="Hakt ab …">Erledigt</button>`,
 		`<input type=date name=erinnern value=`+time.Now().AddDate(0, 0, 7).Format("2006-01-02"), "Zuletzt erledigt (2)", "Laib: erledigt, der Befund ist weg", "von ben")

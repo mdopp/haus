@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/mdopp/homes/internal/laib"
-	"github.com/mdopp/homes/internal/texte"
 	"github.com/mdopp/homes/internal/usage"
 	"github.com/mdopp/homes/internal/werkstatt"
 )
@@ -32,13 +31,13 @@ func adminHead(r *http.Request, cfg StartConfig, title string) *strings.Builder 
 
 // adminStyle is the admin cards in the house palette: tables as cards,
 // section labels, the states' colours, Box's sub-links as pills.
-const adminStyle = `<style>.unter{display:flex;gap:8px;margin:18px 0 0;overflow-x:auto;padding-bottom:4px}.unter a{flex:none}.unter a{display:inline-flex;align-items:center;min-height:40px;padding:0 16px;border-radius:999px;background:var(--card);border:1px solid var(--edge);color:var(--ink);text-decoration:none;font-size:.85rem}.unter a[aria-current]{color:var(--accent);border-color:var(--accent)}
+const adminStyle = `<style>.unter{display:flex;gap:8px;margin:18px 0 0;overflow-x:auto;padding-bottom:4px}.unter a{flex:none}.unter a{display:inline-flex;align-items:center;min-height:40px;padding:0 16px;border-radius:999px;background:var(--card);color:var(--ink);text-decoration:none;font-size:.85rem}.unter a[aria-current]{color:var(--accent);background:var(--accent-soft);font-weight:600}
 h2{font-size:.95rem;font-weight:700;color:var(--muted);margin:26px 2px 8px}
-table{width:100%;border-collapse:separate;border-spacing:0;background:var(--card);border:1px solid var(--edge);border-radius:14px;overflow:hidden}
+table{width:100%;border-collapse:separate;border-spacing:0;background:var(--card);border-radius:14px;overflow:hidden}
 td,th{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top;overflow-wrap:break-word}tr:last-child td{border-bottom:0}
 .gruen{color:var(--ok)}.gelb{color:var(--warn)}.rot{color:var(--danger)}.k{font-variant-numeric:tabular-nums}
 form{display:inline}input:not([type]),input[type=text],input[type=email]{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--edge);border-radius:999px;padding:0 16px;min-height:44px;max-width:100%}
-.zeilen{list-style:none;margin:0;padding:0;background:var(--card);border:1px solid var(--edge);border-radius:14px;overflow:hidden}
+.zeilen{list-style:none;margin:0;padding:0;background:var(--card);border-radius:14px;overflow:hidden}
 .zeilen li{display:flex;gap:10px;align-items:flex-start;padding:10px 14px;border-bottom:1px solid var(--line)}.zeilen li:last-child{border-bottom:0}
 .zeilen .was{flex:1;min-width:0;overflow-wrap:break-word}.zeilen b{font-weight:600}.zeilen .wann{display:block;font-size:.8rem;color:var(--muted);font-variant-numeric:tabular-nums}
 .zeilen .text{display:block;font-size:.9rem;color:var(--muted)}.punkt.gelb{background:var(--warn)}.punkt.rot{background:var(--danger)}.punkt.k{background:var(--faint)}
@@ -149,21 +148,21 @@ type boxSlot struct{ id, title, part string }
 func boxSlotsOn(cfg BoxConfig, page string) []boxSlot {
 	switch page {
 	case "/box":
-		slots := []boxSlot{{"box-stand", "", "stand"}, {"box-inbox", "Inbox", "inbox"}, {"box-bericht", "Morgenbericht", "bericht"}}
+		slots := []boxSlot{{"box-stand", "", "stand"}, {"box-inbox", "Entscheidungen", "inbox"}, {"box-bericht", "Morgenbericht", "bericht"}}
 		if cfg.Tickets != nil {
 			slots = append(slots, boxSlot{"box-werkstatt", "Werkstatt", "werkstatt"})
 		}
 		return slots
 	case AufgabenPath:
-		return []boxSlot{{"box-aufgaben", "Box-Aufgaben", "aufgaben"}}
+		return []boxSlot{{"box-aufgaben", "", "aufgaben"}}
 	case "/box/dienste":
 		return []boxSlot{{"box-dienste", "Nicht grün", "stand"}}
 	case "/box/personen":
 		return []boxSlot{{"box-einladen", "Person einladen", "einladen"}}
 	case "/box/operator": // owner 2026-10-27: the skills, read only (laib#839)
-		return []boxSlot{{"box-operator", "Was der Operator kann", "operator"}}
+		return []boxSlot{{"box-operator", "", "operator"}}
 	case moduleBoxPath:
-		return []boxSlot{{"box-module", texte.T(texte.ModulSeiteTitel), "module"}}
+		return []boxSlot{{"box-module", "", "module"}}
 	case "/box/nutzung":
 		if cfg.Family.Usage != nil {
 			return []boxSlot{{"box-genutzt", "Was wird genutzt", "genutzt"}}
@@ -195,9 +194,12 @@ func boxPart(ctx context.Context, r *http.Request, cfg BoxConfig, part string, i
 		}
 		var b strings.Builder
 		// the three guarantees, for everyone in the family (haus#2)
-		b.WriteString(guarantees(ready, rows, isAdmin(r), cfg.LaibURL))
-		fmt.Fprintf(&b, "<h1>Box · <span class=%s>%s</span> <span class=k>· %d Dienste · %d grün · %d gelb · %d rot · Drift %d</span></h1>",
-			readyClass(ready), html.EscapeString(ready.State), ready.Services, ready.Green, ready.Yellow, ready.Red, ready.Drift)
+		b.WriteString("<h1>Box</h1>" + guarantees(ready, rows, isAdmin(r), cfg.LaibURL))
+		state := fmt.Sprintf("%s · %d Dienste: %d grün, %d gelb, %d rot", ready.State, ready.Services, ready.Green, ready.Yellow, ready.Red)
+		if ready.Drift > 0 { // the running box differs from what Laib rendered
+			state += fmt.Sprintf(" · %d weichen vom Plan ab", ready.Drift)
+		}
+		b.WriteString(zustand(map[bool]string{true: "", false: "gelb"}[ready.State == "bereit" && ready.Red == 0], state))
 		fmt.Fprintf(&b, "<p>Operator: <span class=%s>%s</span></p>", operatorClass(ready.Operator), html.EscapeString(ready.Operator))
 		if ready.Aufgaben > 0 { // the Box-Aufgaben's badge (haus#115)
 			due := ""
@@ -225,7 +227,7 @@ func boxPart(ctx context.Context, r *http.Request, cfg BoxConfig, part string, i
 		// a count and the way to Laib's inbox: the cards and deciding are
 		// Laib's page's (ADR 0012, haus#157)
 		var b strings.Builder
-		b.WriteString("<h2>Inbox</h2>")
+		b.WriteString("<h2>Entscheidungen</h2>")
 		if ps, err := c.Inbox(ctx); err != nil {
 			b.WriteString("<p class=gelb>Laib antwortet gerade nicht.</p>")
 		} else {
@@ -341,9 +343,9 @@ func writeBoxWith(w http.ResponseWriter, r *http.Request, cfg BoxConfig, code in
 	for _, s := range slots {
 		h, ok := filled[s.id]
 		if !ok {
-			if s.title == "" {
+			if s.id == "box-stand" {
 				h = "<h1>Box</h1>"
-			} else {
+			} else if s.title != "" {
 				h = "<h2>" + html.EscapeString(s.title) + "</h2>"
 			}
 			h += "<p class=k>" + saysPartLoading + "</p>"
@@ -393,12 +395,6 @@ func operatorClass(s string) string {
 	return "gelb"
 }
 
-func readyClass(r laib.Readiness) string {
-	if r.State == "bereit" {
-		return "gruen"
-	}
-	return "gelb"
-}
 func cls(s string) string {
 	switch s {
 	case "grün":

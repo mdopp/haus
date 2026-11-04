@@ -523,7 +523,7 @@ margin:1.4rem 0;padding:16px;background:var(--card);color:var(--ink);border:1px 
 .genutzt h2{margin:0 0 4px;color:var(--ink);text-transform:none;letter-spacing:0;font-size:1.1rem}
 .genutzt h3{margin:18px 0 6px;font-size:.95rem;font-weight:700;color:var(--muted)}
 .genutzt p{margin:6px 0}.genutzt .leise{color:var(--muted);font-size:.85rem}
-.genutzt .achtung{padding:10px 12px;background:var(--warn-soft);border:1px solid var(--warn);border-radius:10px}
+.genutzt .achtung{padding:10px 12px;background:var(--warn-soft);border-radius:10px}
 .genutzt .zeilen{list-style:none;margin:0;padding:0}
 .genutzt .zeilen li{display:flex;gap:12px;justify-content:space-between;align-items:baseline;padding:8px 12px;border-bottom:1px solid var(--line)}
 .genutzt .zeilen li:last-child{border-bottom:0}

@@ -31,7 +31,7 @@ func TestDatenSichernShowsTheStandAndTheGuide(t *testing.T) {
 	}
 	for _, want := range []string{"<h1>Daten sichern</h1>", "Dein Stand",
 		"zuletzt am 31. Oktober 2026 um 03:11 · 2 Dateien, 3,2 GB · 1 Datei wartet auf dein Archiv", // WhatsApp, Berlin time
-		"noch nichts angekommen", " frei.", "Vaultwarden",
+		"noch nichts angekommen", " frei.", "Bitwarden",
 		"<h2>Signal</h2>", "Chat-Backups", "Backups → Auf dem Gerät", "30-stellige Passphrase", "In deinem Archiv die Passphrase eingeben",
 		"<h2>WhatsApp</h2>", "Einstellungen → Chats → Chat-Backup", "Ende-zu-Ende-verschlüsseltes Backup", "64-stelligen Schlüssel verwenden", "nicht Passkey",
 		"<h2>SMS und Anrufe</h2>", "„SMS und Anrufe übertragen“ einschalten",
@@ -98,7 +98,7 @@ func TestDatenSichernShowsWhatANewPhoneGetsBack(t *testing.T) {
 		"Sicherung vom 2. November 2026, 03:00 · 3,0 MB", // Berlin time
 		"Chats vom 2. November 2026, 04:00 · 2,0 MB · 2 Fotos und Sprachnachrichten, 2,0 KB",
 		"<h2>Handy wechseln</h2>", "„Sicherung zurückholen“", "noch nicht öffnen", "Android/media/com.whatsapp/WhatsApp",
-		"„Aus Sicherung wiederherstellen“", "30-stellige Passphrase aus Vaultwarden", "„Wiederherstellen“ wählen",
+		"„Aus Sicherung wiederherstellen“", "30-stellige Passphrase aus Bitwarden", "„Wiederherstellen“ wählen",
 		"während dein Archiv offen ist"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the page lacks %q", want)
@@ -116,11 +116,11 @@ func TestDatenSichernShowsWhatANewPhoneGetsBack(t *testing.T) {
 
 func TestDatenSichernWithoutTheArchiv(t *testing.T) {
 	code, body, _ := familyPage(t, Nachrichten, StartConfig{}, "GET", DatenPath, "family")
-	if code != 200 || !strings.Contains(body, "Das Archiv ist auf dieser Box nicht eingerichtet.") || strings.Contains(body, "Dein Stand") {
+	if code != 200 || !strings.Contains(body, "Gibt es hier noch nicht") || strings.Contains(body, "Dein Stand") {
 		t.Fatalf("%d %s", code, body)
 	}
-	if _, admin, _ := familyPage(t, Nachrichten, StartConfig{}, "GET", DatenPath, "admins"); !strings.Contains(admin, "HOMES_ARCHIV_DIR") {
-		t.Error("an admin hears what is missing")
+	if _, admin, _ := familyPage(t, Nachrichten, StartConfig{}, "GET", DatenPath, "admins"); strings.Contains(admin, "HOMES_ARCHIV_DIR") {
+		t.Error("the trace names no setting, an admin's way is the module's page")
 	}
 	if _, mehr, _ := familyPage(t, Mehr, StartConfig{}, "GET", mehrPath, "family"); strings.Contains(mehr, DatenPath) {
 		t.Error("Mehr lists a page the box does not have")

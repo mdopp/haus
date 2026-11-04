@@ -64,9 +64,9 @@ func TestDokumenteShowsTheWaysIn(t *testing.T) {
 	if strings.Contains(only, "<form") || strings.Contains(only, "In Paperless öffnen") || !strings.Contains(only, "mailto:") {
 		t.Errorf("mail only:\n%s", only)
 	}
-	// nothing set: said, for an admin what is missing (laib#418)
+	// nothing set: the module's trace, no setting's name (laib#418, the audit)
 	rec := getDokumente(StartConfig{}, "/dokumente", map[string]string{"Remote-Groups": "admins"})
-	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "noch nicht eingerichtet") || !strings.Contains(rec.Body.String(), "HOMES_DOCUMENTS_MAIL") {
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "Gibt es hier noch nicht") || strings.Contains(rec.Body.String(), "HOMES_DOCUMENTS_MAIL") {
 		t.Errorf("%d %s", rec.Code, rec.Body.String())
 	}
 }

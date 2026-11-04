@@ -77,7 +77,7 @@ func TestBoxInboxIsACountAndTheLink(t *testing.T) {
 	for n, want := range map[int]string{0: "Keine Karte wartet auf eine Entscheidung.", 1: "1 Karte wartet auf eine Entscheidung.", 3: "3 Karten warten auf eine Entscheidung."} {
 		var asked []string
 		page := get(BoxPage(dedupLaib(t, nil, n, &asked)), "admins")
-		mustContain(t, page, "<h2>Inbox</h2>", want, link)
+		mustContain(t, page, "<h2>Entscheidungen</h2>", want, link)
 		mustNotContain(t, page, "immich: mehr Speicher", "#40", "<table>")
 	}
 }

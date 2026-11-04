@@ -328,7 +328,7 @@ func count(n int, one, many string) string {
 }
 
 const einkaufStyle = `<style>.einkauf-korb{list-style:none;padding:0;margin:8px 0}.einkauf-korb li{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:6px 0}.einkauf-korb .was{flex:1;min-width:0}.einkauf{list-style:none;margin:16px 0 0;padding:0;display:grid;gap:8px}
-.einkauf form{margin:0}.einkauf button.posten{width:100%;display:flex;align-items:center;gap:14px;min-height:56px;padding:10px 16px;text-align:left;font:inherit;font-size:1.1rem;color:var(--ink);background:var(--card);border:1px solid var(--edge);border-radius:14px;cursor:pointer}
+.einkauf form{margin:0}.einkauf button.posten{width:100%;display:flex;align-items:center;gap:14px;min-height:56px;padding:10px 16px;text-align:left;font:inherit;font-size:1.1rem;color:var(--ink);background:var(--card);border:0;border-radius:14px;cursor:pointer}
 .einkauf .haken{flex:none;width:26px;height:26px;border-radius:8px;border:2px solid var(--edge);display:grid;place-items:center}
 .einkauf button[aria-checked=true] .haken{background:var(--ok);border-color:var(--ok)}.einkauf button[aria-checked=true] .haken::after{content:"";width:7px;height:13px;border:solid var(--card);border-width:0 3px 3px 0;transform:translateY(-2px) rotate(45deg)}
 .einkauf button[aria-checked=true] .was{text-decoration:line-through;color:var(--muted)}.einkauf .was{overflow-wrap:anywhere}.einkauf small{display:block;font-size:.8rem;color:var(--muted)}
@@ -338,8 +338,8 @@ const einkaufStyle = `<style>.einkauf-korb{list-style:none;padding:0;margin:8px 
 .rezeptwahl{margin:12px 0 0}.rezeptwahl label{display:flex;align-items:center;gap:12px;min-height:48px;padding:6px 0;border-bottom:1px solid var(--line)}.rezeptwahl label small{color:var(--muted)}
 .rezeptwahl input[type=checkbox]{width:22px;height:22px;flex:none}.rezeptwahl .portionen{display:flex;align-items:center;gap:10px;margin:14px 0}.rezeptwahl .portionen input{width:8rem;min-height:44px;font:inherit;padding:0 10px;border:1px solid var(--edge);border-radius:12px;background:var(--card);color:var(--ink)}
 .rezeptwahl button{margin:12px 0 0}.rezeptwahl select{min-height:44px;min-width:10rem;font:inherit;padding:0 10px;border:1px solid var(--edge);border-radius:12px;background:var(--card);color:var(--ink)}
-.listen{display:flex;flex-wrap:wrap;gap:8px;margin:22px 0 -8px}.listen a{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 16px;border-radius:999px;background:var(--card);border:1px solid var(--edge);color:var(--ink);text-decoration:none;font-size:.9rem;white-space:nowrap}
-.listen a[aria-current]{color:var(--accent);border-color:var(--accent);font-weight:600}.einkauf .kaufen{margin:6px 4px 0;font-size:.85rem;color:var(--muted)}.einkauf .kaufen a{display:inline-block;padding:10px 2px}
+.listen{display:flex;flex-wrap:wrap;gap:8px;margin:22px 0 -8px}.listen a{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 16px;border-radius:999px;background:var(--card);color:var(--ink);text-decoration:none;font-size:.9rem;white-space:nowrap}
+.listen a[aria-current]{color:var(--accent);background:var(--accent-soft);font-weight:600}.einkauf .kaufen{margin:6px 4px 0;font-size:.85rem;color:var(--muted)}.einkauf .kaufen a{display:inline-block;padding:10px 2px}
 .wunsch{margin:6px 4px 4px}.wunsch p{margin:4px 0}.wunsch .chip{display:inline-block;padding:2px 10px;margin-right:6px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-weight:600;font-size:.8rem}
 .wunsch .fund{font-size:.9rem}.wunsch ul.wo{list-style:none;margin:4px 0;padding:0}.wunsch ul.wo li{padding:0}.wunsch ul.wo a{display:inline-block;padding:10px 2px;font-weight:600}.wunsch ul.wo small{color:var(--muted)}
 .wunsch .schritte{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 0}.wunsch .schritte form{margin:0}.listen .meine{font-size:.7rem;color:var(--muted);font-weight:400}</style>`

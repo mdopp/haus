@@ -23,14 +23,11 @@ const NachrichtenPath = "/nachrichten-sichern"
 const (
 	saysDatenLead     = "Deine Nachrichten, Kontakte, Mails und Termine kommen in dein eigenes Archiv auf der Box. Öffnen kannst nur du es, mit deinem Archiv-Passwort."
 	saysWieSieLiegen  = "Auf der Box liegen die Sicherungen so verschlüsselt, wie WhatsApp und Signal sie schreiben. Lesbar werden sie erst in deinem Archiv, mit deinen Schlüsseln."
-	saysSchluessel    = "Archiv-Passwort, Signal-Passphrase und WhatsApp-Schlüssel gehören in Vaultwarden. Wer einen davon verliert, kann diese Sicherungen nicht mehr lesen."
+	saysSchluessel    = "Archiv-Passwort, Signal-Passphrase und WhatsApp-Schlüssel gehören in Bitwarden. Wer einen davon verliert, kann diese Sicherungen nicht mehr lesen."
 	saysStandFehlt    = "Der Stand lässt sich gerade nicht lesen. Später noch einmal versuchen."
-	saysStandortNicht = "Dein Standortverlauf gehört nicht dazu: er geht in deinen Reitti-Zeitstrahl (Mehr → Standortverlauf)."
+	saysStandortNicht = "Dein Standortverlauf gehört nicht dazu: er geht in deine Zeitleiste (Mehr → Standortverlauf)."
 	saysMenues        = "Die Menüs heißen je nach App-Version etwas anders. Findest du einen Punkt nicht, such in den Einstellungen der App nach „Backup“."
 )
-
-var notSetArchiv = notSet{"Das Archiv ist auf dieser Box nicht eingerichtet.",
-	"Für Admins: Homes hat keinen Archiv-Eingang (HOMES_ARCHIV_DIR; laibs homes-Template hängt ${DATA_DIR}/archiv-eingang als /archiv-eingang ein)."}
 
 // quelleName is how the page names a quelle.
 var quelleName = map[string]string{"whatsapp": "WhatsApp", "signal": "Signal", "sms": "SMS und Anrufe"}
@@ -43,14 +40,14 @@ var datenAnleitung = []struct {
 }{
 	{"Signal", []string{
 		"In Signal: Einstellungen → Chats → Chat-Backups (je nach Version: Backups → Auf dem Gerät) einschalten und einen Ordner wählen, zum Beispiel „Signal-Backups“.",
-		"Die 30-stellige Passphrase in Vaultwarden ablegen. Signal zeigt sie nur dieses eine Mal.",
+		"Die 30-stellige Passphrase in Bitwarden ablegen. Signal zeigt sie nur dieses eine Mal.",
 		"In der Homes-App: Mehr → Daten sichern → bei Signal den Ordner freigeben, den du gewählt hast.",
 		"In deinem Archiv die Passphrase eingeben.",
 	}, "Signal legt jede Nacht eine Sicherung an, die App bringt sie auf die Box. Gelesen wird sie, während dein Archiv offen ist."},
 	{"WhatsApp", []string{
 		"In WhatsApp: Einstellungen → Chats → Chat-Backup → „Ende-zu-Ende-verschlüsseltes Backup“ einschalten.",
 		"„64-stelligen Schlüssel verwenden“ wählen, nicht Passwort und nicht Passkey: aus einem Passkey lässt sich der Schlüssel nicht auslesen. Nutzt WhatsApp schon einen Passkey: das Backup aus- und gleich wieder einschalten, diesmal mit dem 64-stelligen Schlüssel.",
-		"Den Schlüssel in Vaultwarden ablegen.",
+		"Den Schlüssel in Bitwarden ablegen.",
 		"In der Homes-App: Mehr → Daten sichern → bei WhatsApp den Ordner freigeben (Android → media → com.whatsapp → WhatsApp).",
 		"In deinem Archiv den Schlüssel eingeben.",
 	}, "Die Nachrichten kommen ins Archiv, sobald es offen ist. Fotos und Videos bringt die App verschlüsselt mit auf die Box; durchsuchen kannst du im Archiv vorerst die Nachrichten."},
@@ -72,7 +69,7 @@ var datenAnleitung = []struct {
 var neuesHandy = []string{
 	"Auf dem neuen Handy die Homes-App installieren und mit deinem Namen koppeln.",
 	"In der Homes-App: Mehr → Daten sichern → „Sicherung zurückholen“. Für Signal einen Ordner wählen, etwa „Dokumente/Signal“. WhatsApp vorher installieren, aber noch nicht öffnen, und den Ordner „Android/media/com.whatsapp/WhatsApp“ freigeben (gibt es ihn noch nicht: „Android/media“).",
-	"Signal neu installieren, bei der Einrichtung „Aus Sicherung wiederherstellen“ wählen, die Datei auswählen und die 30-stellige Passphrase aus Vaultwarden eingeben. WhatsApp öffnen, mit derselben Nummer anmelden und „Wiederherstellen“ wählen.",
+	"Signal neu installieren, bei der Einrichtung „Aus Sicherung wiederherstellen“ wählen, die Datei auswählen und die 30-stellige Passphrase aus Bitwarden eingeben. WhatsApp öffnen, mit derselben Nummer anmelden und „Wiederherstellen“ wählen.",
 }
 
 const saysNeuesHandyMedien = "Fotos und Sprachnachrichten kommen nur zurück, während dein Archiv offen ist. Die App überschreibt nichts, ohne zu fragen."
@@ -83,7 +80,7 @@ var datenNie = []string{
 	"Fotos und Videos zur einmaligen Ansicht.",
 }
 
-const nachrichtenStyle = `<style>.lead{color:var(--muted)}.schritte ol{margin:0;padding:10px 14px 10px 34px;background:var(--card);border:1px solid var(--edge);border-radius:14px}
+const nachrichtenStyle = `<style>.lead{color:var(--muted)}.schritte ol{margin:0;padding:10px 14px 10px 34px;background:var(--card);border-radius:14px}
 .schritte ol li{margin:6px 0;overflow-wrap:anywhere}.schritte p.k{font-size:.85rem;margin:8px 2px 0}</style>`
 
 // Nachrichten is the page „Daten sichern“: the person's state — what
@@ -101,7 +98,7 @@ func Nachrichten(cfg StartConfig) http.HandlerFunc {
 			return
 		}
 		if cfg.Sicherung == nil {
-			notSetArchiv.write(w, r, cfg, "Daten sichern")
+			modulAus(w, r, cfg, "sicherung", DatenPath)
 			return
 		}
 		person := r.Header.Get("Remote-User")

@@ -23,7 +23,7 @@ func TestEinrichtungKommtUndGeht(t *testing.T) {
 	cfg := StartConfig{Samba: &samba.Dir{Path: fs.Dir}, Discogs: dc}
 
 	_, body, _ := familyPage(t, Mehr, cfg, "GET", mehrPath, "family")
-	e := body[strings.Index(body, "<h2 id=karte-einrichtung>Einrichtung</h2>"):]
+	e := body[strings.Index(body, "<h2 id=karte-deine-aufgaben>Deine Aufgaben</h2>"):]
 	e = e[:strings.Index(e, "</section>")]
 	mustContain(t, e, `<a href="/netzlaufwerk">Netzlaufwerk-Passwort festlegen</a>`)
 	mustNotContain(t, e, "Discogs verbinden", "Stimme", "Aufnahmen") // connected already; nothing trains a wake word any more
@@ -35,7 +35,7 @@ func TestEinrichtungKommtUndGeht(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, body, _ = familyPage(t, Mehr, cfg, "GET", mehrPath, "family")
-	mustNotContain(t, body, "karte-einrichtung")
+	mustNotContain(t, body, "karte-deine-aufgaben")
 	_, start = startPage(t, cfg, "family")
 	mustNotContain(t, start, "einzurichten")
 

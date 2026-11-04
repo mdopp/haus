@@ -112,7 +112,7 @@ func TestEinladenWithMailSaysWhatHappens(t *testing.T) {
 			t.Errorf("person_invite %s = %v, want %v (%v)", k, f.calls[0][k], v, f.calls[0])
 		}
 	}
-	if !strings.Contains(page, "--group admins") || strings.Contains(page, "name=gruppe") {
+	if !strings.Contains(page, saysFamilyOnly) || strings.Contains(page, "--group") || strings.Contains(page, "name=gruppe") {
 		t.Errorf("no group choice; admins are made at the console")
 	}
 	if _, ok := f.calls[0]["resend"]; ok {

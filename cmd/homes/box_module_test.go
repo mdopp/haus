@@ -41,7 +41,7 @@ func TestBoxModuleListsEveryModule(t *testing.T) {
 		t.Fatalf("the part → %d %s", rec.Code, rec.Body)
 	}
 	card := parts["box-module"]
-	for _, want := range []string{"Was Homes kann", `href="/module/geraete"`, "home-assistant · an", "Podcasts", "ausgeschaltet: Auf dieser Box ausgeschaltet.",
+	for _, want := range []string{`href="/module/geraete"`, "home-assistant · an", "Podcasts", "ausgeschaltet: Auf dieser Box ausgeschaltet.",
 		"Standortverlauf", "auf dieser Box nicht eingerichtet: Auf dieser Box läuft kein Reitti.", "wartet auf Freigabe, gewünscht von anna seit", "Werkstatt", "Was wird genutzt"} {
 		if !strings.Contains(card, want) {
 			t.Errorf("the card lacks %q:\n%s", want, card)

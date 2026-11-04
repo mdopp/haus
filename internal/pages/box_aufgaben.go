@@ -135,9 +135,7 @@ func day(s string) string {
 func aufgabenCard(ctx context.Context, c *laib.Client, now time.Time, said, problem string) string {
 	var b strings.Builder
 	all, err := c.BoxAufgaben(ctx)
-	head := func(extra string) { b.WriteString("<h2>Box-Aufgaben" + extra + "</h2>") }
 	if err != nil {
-		head("")
 		if errors.Is(err, laib.ErrNoTool) {
 			b.WriteString("<p class=k>" + html.EscapeString(saysAufgabenNoTool) + "</p>")
 		} else {
@@ -183,11 +181,11 @@ func aufgabenCard(ctx context.Context, c *laib.Client, now time.Time, said, prob
 			due++
 		}
 	}
-	extra := fmt.Sprintf(" <span class=k>· %d offen", len(open))
+	extra := fmt.Sprintf("%d offen", len(open))
 	if due > 0 {
 		extra += fmt.Sprintf(" · <span class=gelb>%d fällig</span>", due)
 	}
-	head(extra + "</span>")
+	b.WriteString("<p class=k>" + extra + "</p>") // the page's h1 names it
 	b.WriteString(gesagt(said, problem))
 	if len(open) == 0 {
 		b.WriteString("<p class=k>" + saysAufgabenNone + "</p>")

@@ -19,7 +19,7 @@ import (
 const (
 	saysWhatItIs     = "Mit dem Netzlaufwerk öffnest du die Dateien des Hauses – Fotos, Dokumente, Musik – direkt im Explorer unter Windows, im Finder auf dem Mac oder in der Dateien-App auf dem Handy. Du meldest dich dort mit deinem Namen und einem eigenen Passwort an, das du hier festlegst."
 	saysNoneYet      = "Noch kein Passwort – bis du eins festlegst, kommst du nicht aufs Netzlaufwerk."
-	saysSameIsFine   = "Mindestens 8 Zeichen. Es darf dasselbe sein wie dein Familien-Passwort, wenn du magst – dann merkst du dir nur eins. Geräte, die schon verbunden sind, fragen nach dem neuen."
+	saysSameIsFine   = "Mindestens 8 Zeichen. Es darf dasselbe sein wie das Passwort deines Familienkontos, wenn du magst – dann merkst du dir nur eins. Geräte, die schon verbunden sind, fragen nach dem neuen."
 	saysNotFreed     = "Dein Konto ist nicht für das Netzlaufwerk freigegeben: es ist für die Familie und die Admins. Ein neues Konto kommt nach ein paar Minuten dazu."
 	saysNoDrive      = "Auf dieser Box gibt es kein Netzlaufwerk."
 	saysDiffer       = "Die beiden Passwörter sind nicht gleich. Bitte noch einmal."
@@ -38,7 +38,7 @@ const (
 func Netzlaufwerk(cfg StartConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if cfg.Samba == nil {
-			notSetSamba.write(w, r, cfg, "Netzlaufwerk")
+			modulAus(w, r, cfg, "netzlaufwerk", r.URL.Path)
 			return
 		}
 		w.Header().Set("Cache-Control", "no-store")
@@ -129,14 +129,13 @@ func Netzlaufwerk(cfg StartConfig) http.HandlerFunc {
 // button on the phone.
 const netzStyle = `<style>.lead{color:var(--muted)}.feld{margin:14px 0 0}.feld label{display:block;font-size:.85rem;color:var(--muted);margin:0 0 6px}
 .feld input,.feld select{width:100%;font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--edge);border-radius:12px;padding:0 14px;min-height:44px}
-.passwort{margin:22px 0 0;padding:14px;background:var(--card);border:1px solid var(--edge);border-radius:14px}.passwort h2{margin:0;font-size:1rem}
+.passwort{margin:22px 0 0;padding:14px;background:var(--card);border-radius:14px}.passwort h2{margin:0;font-size:1rem}
 .passwort .feld:first-of-type{margin-top:10px}.passwort p.k{font-size:.85rem;margin:10px 0 0}.passwort button{margin:14px 0 0;width:100%}
-@media (min-width:36rem){.passwort button{width:auto}}.adresse{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.9rem;color:var(--ink)}
-.gut{display:flex;gap:8px;align-items:flex-start;margin:16px 0 0;padding:12px 14px;border:1px solid var(--ok);border-radius:14px}.gut p{margin:0}</style>`
+@media (min-width:36rem){.passwort button{width:auto}}.adresse{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.9rem;color:var(--ink)}</style>`
 
 func writeNetzlaufwerk(w http.ResponseWriter, r *http.Request, cfg StartConfig, code int, done, problem string) {
 	person := r.Header.Get("Remote-User")
-	b := familyHead(r, cfg, "Netzlaufwerk", "")
+	b := familyHead(r, cfg, "Netzlaufwerk", "Netzlaufwerk")
 	b.WriteString(netzStyle)
 	b.WriteString("<h1>Netzlaufwerk</h1><p class=lead>" + html.EscapeString(saysWhatItIs) + "</p>" + gesagt(done, problem))
 	acc, err := cfg.Samba.Accounts()
@@ -267,7 +266,7 @@ func gesagt(said, problem string) string {
 // aber das wichtigste“): what the person came for first and big (vorne), its state in one
 // line (zustand), a step only while it is still needed, the quiet Trennen last.
 const gekoppeltStyle = `<style>.vorne{display:flex;align-items:center;justify-content:center;min-height:52px;margin:18px 0 0;padding:0 20px;border-radius:999px;background:var(--accent);color:var(--card);font-size:1.05rem;font-weight:600;text-decoration:none}
-.zustand{display:flex;gap:8px;margin:14px 2px 0;color:var(--muted)}.schritt{margin:14px 0 0;padding:12px 14px;border-radius:14px;background:var(--accent-soft)}.leise-weg{margin:40px 0 0;text-align:center}.leise-weg button{background:none;color:var(--muted);font-weight:400;text-decoration:underline}</style>`
+.schritt{margin:14px 0 0;padding:12px 14px;border-radius:14px;background:var(--accent-soft)}.leise-weg{margin:40px 0 0;text-align:center}.leise-weg button{background:none;color:var(--muted);font-weight:400;text-decoration:underline}</style>`
 
 func vorne(href, label string) string {
 	return `<a class=vorne href="` + html.EscapeString(href) + `">` + html.EscapeString(label) + `</a>`

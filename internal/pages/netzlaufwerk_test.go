@@ -38,7 +38,7 @@ func TestNetzlaufwerkSaysWhatItIsAndWhetherYouHaveOne(t *testing.T) {
 	rec := getNetzlaufwerk(cfg, "anna", "family", "")
 	page := rec.Body.String()
 	for _, want := range []string{"<h1>Netzlaufwerk</h1>", "Windows", "Mac", "Dateien-App", "Noch kein Passwort",
-		"dasselbe sein wie dein Familien-Passwort", `\\192.168.1.10\data`, "smb://192.168.1.10/data", "type=password", "autocomplete=new-password", ">anna<"} {
+		"dasselbe sein wie das Passwort deines Familienkontos", `\\192.168.1.10\data`, "smb://192.168.1.10/data", "type=password", "autocomplete=new-password", ">anna<"} {
 		if !strings.Contains(page, want) {
 			t.Errorf("the page lacks %q", want)
 		}
@@ -56,7 +56,7 @@ func TestNetzlaufwerkSaysWhatItIsAndWhetherYouHaveOne(t *testing.T) {
 	if !strings.Contains(admin, "Passwörter der Familie") || !strings.Contains(admin, "<option>ben</option>") || !strings.Contains(admin, "Entfernen") {
 		t.Errorf("an admin sees everyone's and can reset them:\n%s", admin)
 	}
-	if rec := getNetzlaufwerk(StartConfig{}, "anna", "family", ""); rec.Code != 200 || !strings.Contains(rec.Body.String(), "noch nicht eingerichtet") || strings.Contains(rec.Body.String(), "<form") {
+	if rec := getNetzlaufwerk(StartConfig{}, "anna", "family", ""); rec.Code != 200 || !strings.Contains(rec.Body.String(), "nicht eingerichtet") || strings.Contains(rec.Body.String(), "<form") {
 		t.Errorf("without file-share the page says so and has no form (laib#418): %d %s", rec.Code, rec.Body.String())
 	}
 }

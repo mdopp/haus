@@ -73,7 +73,7 @@ func kern(cfg StartConfig) []modul.Eintrag {
 		{Titel: "Start", Pfad: "/start", Icon: iconStart, Ort: modul.Leiste, Rang: 10},
 		{Titel: "Haushalt", Pfad: "/kalender", Icon: iconHaushalt, Ort: modul.Leiste, Rang: 30},
 		{Titel: "Mehr", Pfad: mehrPath, Icon: iconMehr, Ort: modul.Leiste, Rang: 50},
-		{Titel: "Aufgaben", Pfad: aufgabenPath, Icon: iconAufgaben, Ort: modul.Mehr, Rang: 110,
+		{Titel: "Deine Aufgaben", Pfad: aufgabenPath, Icon: iconAufgaben, Ort: modul.Mehr, Rang: 110,
 			Fuer: func(r *http.Request) bool { return angemeldet(r) && (cfg.Laib != nil || len(einrichtung(r, cfg)) > 0) }},
 		{Titel: "Box", Pfad: "/box", Icon: iconBox, Ort: modul.Mehr, Rang: 120, Fuer: isAdmin},
 	}

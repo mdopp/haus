@@ -36,8 +36,6 @@ const (
 	saysStandortNotSaved  = "Das ließ sich gerade nicht speichern. Versuch es noch einmal; hilft das nicht, sag dem Admin Bescheid."
 )
 
-var notSetReitti = notSet{"Der Standortverlauf ist hier noch nicht eingerichtet.", "Für Admins: Homes kennt Reitti nicht (HOMES_REITTI_URL, die Adresse von Reitti in der Box)."}
-
 // Standort is the page and its two forms (tun=verbinden with the token,
 // tun=trennen).
 func Standort(cfg StartConfig) http.HandlerFunc {
@@ -47,7 +45,7 @@ func Standort(cfg StartConfig) http.HandlerFunc {
 			return
 		}
 		if cfg.Reitti == nil {
-			notSetReitti.write(w, r, cfg, "Standortverlauf")
+			modulAus(w, r, cfg, "standort", StandortPath)
 			return
 		}
 		w.Header().Set("Cache-Control", "no-store")
@@ -125,7 +123,7 @@ func Standort(cfg StartConfig) http.HandlerFunc {
 func writeStandort(w http.ResponseWriter, r *http.Request, cfg StartConfig, code int, said, problem string) {
 	k, verbunden := cfg.Reitti.Konto(r.Header.Get("Remote-User"))
 	reittiURL := AppURL(OnDomain(cfg.Reitti.PublicURL, cfg.PublicURL))
-	b := familyHead(r, cfg, "Standortverlauf", "")
+	b := familyHead(r, cfg, "Standortverlauf", "Standortverlauf")
 	b.WriteString(netzStyle + keyHintStyle + gekoppeltStyle + "<h1>Standortverlauf</h1>")
 	if verbunden { // connected: the timeline first, the step only while no point came, Trennen last and quiet
 		b.WriteString("<p class=lead>" + html.EscapeString(texte.T(texte.StandortKurz)) + "</p>" + gesagt(said, problem))

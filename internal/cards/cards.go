@@ -404,7 +404,7 @@ var colorRE = regexp.MustCompile(`^#[0-9a-f]{6}$`)
 
 const Style = `<style>.farbe{display:inline-block;width:.65em;height:.65em;border-radius:50%;margin-right:.45em;vertical-align:.05em}.karte{margin:22px 0 0}
 .karte h2{font-size:.95rem;font-weight:700;color:var(--ink);margin:0 0 8px}
-.karte ul{list-style:none;margin:0;padding:0;background:var(--card);border:1px solid var(--edge);border-radius:14px}
+.karte ul{list-style:none;margin:0;padding:0;background:var(--card);border-radius:14px}
 .karte li{position:relative;padding:11px 14px;border-top:1px solid var(--line);overflow-wrap:anywhere;min-height:44px}.karte li:first-child{border-top:0}
 .karte li a{display:block;color:inherit;text-decoration:none}.karte li a::after{content:"";position:absolute;inset:0}
 .karte li .k{display:block;font-size:.82rem;margin-top:1px}
@@ -412,13 +412,13 @@ const Style = `<style>.farbe{display:inline-block;width:.65em;height:.65em;borde
 .knoepfe{position:relative;z-index:1;flex:none;display:flex;align-items:center;gap:2px}
 .karte li.viele{flex-wrap:wrap;gap:8px}.karte li.viele>div:first-child{flex:1 1 100%}.viele .knoepfe{gap:8px;flex-wrap:wrap}
 .anheften{width:44px;min-height:44px;padding:0;background:none;border-radius:50%;color:var(--muted);font-size:1.35rem;font-weight:400;line-height:1}.anheften.an{color:var(--state)}
-.einzeln ul{background:none;border:0;border-radius:0;display:grid;gap:6px}.einzeln li,.einzeln li:first-child{background:var(--card);border:1px solid var(--edge);border-radius:14px}
+.einzeln ul{background:none;border:0;border-radius:0;display:grid;gap:6px}.einzeln li,.einzeln li:first-child{background:var(--card);border:0;border-radius:14px}
 .schalter{position:relative;width:52px;min-height:40px;padding:0;margin-right:-6px;background:none;border-radius:20px}
 .schalter::before{content:"";position:absolute;left:8px;top:10px;width:36px;height:20px;border-radius:10px;background:var(--track)}
 .schalter::after{content:"";position:absolute;left:11px;top:13px;width:14px;height:14px;border-radius:50%;background:#fff}
 .schalter[aria-checked=true]::before{background:var(--state)}.schalter[aria-checked=true]::after{left:27px}
 .karte li button.stufe{position:relative;z-index:1;display:inline-flex;align-items:center;min-height:44px;margin:-12px 0;padding:0 6px;background:none;border-radius:8px;font-size:inherit;color:var(--accent);text-decoration:underline dotted;text-underline-offset:3px;vertical-align:baseline}
-.blatt{position:fixed;inset:auto 0 0 0;margin:0 auto;width:min(32rem,100%);max-width:100%;box-sizing:border-box;padding:18px 20px calc(18px + env(safe-area-inset-bottom));border:1px solid var(--edge);border-bottom:0;border-radius:22px 22px 0 0;background:var(--panel);color:var(--ink)}
+.blatt{position:fixed;inset:auto 0 0 0;margin:0 auto;width:min(32rem,100%);max-width:100%;box-sizing:border-box;padding:18px 20px calc(18px + env(safe-area-inset-bottom));border:0;border-radius:22px 22px 0 0;background:var(--panel);color:var(--ink)}
 .blatt::backdrop{background:rgba(0,0,0,.55)}.blatt-titel{margin:0 0 4px;font-weight:700;font-size:1.05rem}
 .blatt-wert{margin:0 0 6px;display:flex;align-items:baseline;gap:10px}.blatt-wert output{font-size:2.4rem;font-weight:700;font-variant-numeric:tabular-nums;color:var(--ink)}
 .blatt form.regler{display:block}.blatt input[type=range]{display:block;width:100%;min-height:48px;margin:0;accent-color:var(--accent)}

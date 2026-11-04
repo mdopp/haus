@@ -217,7 +217,7 @@ func TestFamilyPagesWithoutBackendSayWhatIsMissing(t *testing.T) {
 	}{{Raeume, "/raeume", "Licht und Geräte"}, {Energie, "/energie", "Licht und Geräte"}, {Medien, "/medien", "Licht und Geräte"},
 		{Kalender, "/kalender", "Der Kalender ist hier noch nicht eingerichtet."}, {Notizen, "/notizen", "Die Notizen"}, {Notizen, "/notizen/einkaufsliste.md", "Die Notizen"},
 		{Ding, "/raeume/light.flur", "Licht und Geräte"}, {Erinnerung, "/kalender/erinnerung/a", "Der Kalender"}, {Kontakt, "/kontakte/a", "Die Kontakte"},
-		{Dokument, "/dokumente/2", "Die Dokumente"}, {Netzlaufwerk, "/netzlaufwerk", "Das Netzlaufwerk"}} {
+		{Dokument, "/dokumente/2", "Die Dokumente"}} {
 		code, body, h := familyPage(t, p.page, StartConfig{}, "GET", p.path, "family")
 		if code != http.StatusOK || h.Get("Location") != "" {
 			t.Fatalf("%s without its backend → %d %q, want the page saying what is missing", p.path, code, h.Get("Location"))

@@ -106,6 +106,37 @@ func TestHierAnfordern(t *testing.T) {
 	}
 }
 
+// A module's own page on a box without it (the audit, owner 2026-11-04):
+// its trace with „Hier anfordern“, as on Mehr, never „Nicht gefunden“ or a
+// setting's name; the wish ends on that page; an admin gets the module's page.
+func TestOffModulePageIsItsTrace(t *testing.T) {
+	fresh, f := spurSite(t)
+	h := fresh()
+	for _, path := range []string{"/standort", "/podcasts"} {
+		page := as(h, "GET", path, "anna", "family", nil).Body.String()
+		for _, want := range []string{"Gibt es hier noch nicht", ">Hier anfordern</button>", `name=zurueck value="` + path + `"`} {
+			if !strings.Contains(page, want) {
+				t.Errorf("%s lacks %q:\n%s", path, want, page)
+			}
+		}
+		for _, not := range []string{"Nicht gefunden", "HOMES_", "Für Admins", `href="/module/`} {
+			if strings.Contains(page, not) {
+				t.Errorf("%s shows %q", path, not)
+			}
+		}
+	}
+	if admin := as(h, "GET", "/standort", "anna", "family,admins", nil).Body.String(); !strings.Contains(admin, `href="/module/standort"`) {
+		t.Errorf("an admin lacks the module's page")
+	}
+	rec := as(h, "POST", "/mehr/anfordern", "anna", "family", url.Values{"modul": {"standort"}, "zurueck": {"/standort"}})
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/standort" || f.Stand("standort") != "angefordert" {
+		t.Errorf("the wish from its page → %d %q, %q", rec.Code, rec.Header().Get("Location"), f.Stand("standort"))
+	}
+	if rec := as(h, "POST", "/mehr/anfordern", "anna", "family", url.Values{"modul": {"podcasts"}, "zurueck": {"//elsewhere.example"}}); rec.Header().Get("Location") != "/mehr#spur-podcasts" {
+		t.Errorf("another site is no way back: %q", rec.Header().Get("Location"))
+	}
+}
+
 func TestHierAnfordernRefuses(t *testing.T) {
 	fresh, f := spurSite(t)
 	h := fresh()
