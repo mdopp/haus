@@ -33,7 +33,7 @@ const (
 	saysNoPrecondition = "Homes schreibt nur mit If-Match (ändern, löschen) oder If-None-Match: * (neu)."
 	saysNoKorb         = "Ohne Papierkorb löscht Homes nichts."
 	saysNoCalendarHere = "Kalender und Kontakte (Radicale) sind auf dieser Box nicht eingerichtet."
-	saysGemeinsamCut   = "Das Adressbuch des Haushalts ist zu groß, um es ganz zu lesen. Sag dem Admin Bescheid."
+	saysGemeinsamCut   = "Es sind zu viele Haushalts-Kontakte, um sie ganz zu lesen. Sag dem Admin Bescheid."
 	saysGemeinsamFail  = "Die Box kommt gerade nicht an Kalender und Kontakte. Die App versucht es später noch einmal."
 )
 

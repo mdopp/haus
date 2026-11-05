@@ -39,7 +39,7 @@ func TestKontakteListsTheAddressBookByName(t *testing.T) {
 		t.Fatalf("status %d", code)
 	}
 	mustContain(t, body, "<h1>Kontakte</h1>",
-		"Neue Kontakte und Änderungen machst du auf dem Handy im Homes-Adressbuch oder über den Boten.",
+		"Neue Kontakte und Änderungen machst du auf dem Handy in den Haushalts-Kontakten oder über den Boten.",
 		`<h2 id=karte-adressbuch>Adressbuch</h2>`,
 		`<a href="/kontakte/a">Anna</a> <a class=ruf href="tel:+491512222">+49 151 2222</a>`, // the number before the e-mail
 		`<a href="/kontakte/o">Örtel, Jana</a> <a class=ruf href="mailto:jana@example.org">jana@example.org</a>`,
@@ -50,7 +50,7 @@ func TestKontakteListsTheAddressBookByName(t *testing.T) {
 	before(t, body, ">Örtel, Jana<", ">Xaver<")
 	before(t, body, ">Xaver<", ">Zahnarzt Dr. Berg<")
 	mustNotContain(t, body, "<form method=post", "Bearbeiten", "Löschen")
-	if _, kal, _ := familyPage(t, Kalender, StartConfig{Calendar: c}, "GET", "/kalender", "family"); !strings.Contains(kal, "machst du auf dem Handy im Homes-Kalender oder über den Boten.") {
+	if _, kal, _ := familyPage(t, Kalender, StartConfig{Calendar: c}, "GET", "/kalender", "family"); !strings.Contains(kal, "machst du auf dem Handy im Haushalts-Kalender oder über den Boten.") {
 		t.Errorf("the calendar does not say where to edit, as the contacts do:\n%s", kal)
 	}
 }
