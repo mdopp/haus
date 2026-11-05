@@ -802,12 +802,13 @@ for (const scheme of ['dark', 'light']) {
       await page.getByRole('link', { name: /So hängt alles zusammen/ }).first().click();
       await expect(page).toHaveURL(/\/zusammen$/);
       await expect(page.getByRole('img', { name: /Haushalts-Kontakt/ })).toBeVisible();
+      await expect(page.getByRole('link', { name: 'Fotos vom Handy landen von selbst in Immich' })).toHaveAttribute('href', 'https://photos.example');
       const wide = await page.evaluate(() => document.documentElement.scrollWidth);
       expect(wide).toBeLessThanOrEqual(411);
       const geht = page.locator('section[aria-labelledby=karte-das-geht] li a');
       await expect(geht).not.toHaveCount(0);
       for (const href of await geht.evaluateAll((as) => as.map((a) => a.getAttribute('href')))) {
-        expect(href).toMatch(/^\/(kontakte|kalender|standort|raeume|mehr#spuren)$/);
+        expect(href).toMatch(/^(\/(kontakte|kalender|standort|raeume|mehr#spuren)|https:\/\/photos\.example)$/);
       }
       await page.screenshot({ path: info.outputPath(`zusammen-411-${scheme}.png`), fullPage: true });
     });

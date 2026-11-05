@@ -38,13 +38,8 @@ var knoten = []struct {
 var momente = []struct {
 	key, href string
 	braucht   []string
-}{
-	{"rechnung", KontaktePath, []string{"dokumente", "kontakte", "konto"}},
-	{"tipp", KontaktePath, []string{"dokumente", "kontakte"}},
-	{"termin", "/kalender", []string{"kalender", "konto"}},
-	{"zeitachse", StandortPath, []string{"standort"}},
-	{"waschmaschine", "/raeume", []string{"geraete", "sprechen"}},
-}
+}{{"rechnung", KontaktePath, []string{"dokumente", "kontakte", "konto"}}, {"tipp", KontaktePath, []string{"dokumente", "kontakte"}},
+	{"termin", "/kalender", []string{"kalender", "konto"}}, {"zeitachse", StandortPath, []string{"standort"}}, {"waschmaschine", "/raeume", []string{"geraete", "sprechen"}}}
 
 const zusammenStyle = `<style>.netz{display:block;width:100%;height:auto;margin:8px 0 4px;font-family:inherit}.netz .bahn{fill:none;stroke:var(--edge);stroke-dasharray:3 5}
 .netz line{stroke:var(--accent);stroke-opacity:.45;stroke-width:1.5}.netz rect{fill:var(--card);stroke:var(--edge)}.netz .aussen rect{fill:var(--bg);stroke-dasharray:3 3}
@@ -69,6 +64,9 @@ func Zusammen(cfg StartConfig) http.HandlerFunc {
 			if alleAn(cfg, m.braucht) {
 				c.AddLink(z(m.key), z(m.key+".so"), m.href)
 			}
+		}
+		if f, ok := cfg.Module.Eins("fotos"); ok && f.An() && f.Einrichtung != nil && f.Einrichtung.Web != "" { // Immich, at the address its setup knows
+			c.AddLink(z("fotos"), z("fotos.so"), f.Einrichtung.Web)
 		}
 		if len(spurModule(cfg)) > 0 {
 			c.AddLink(z("fehlt"), z("fehlt.so"), mehrPath+"#spuren")

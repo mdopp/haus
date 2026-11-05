@@ -268,6 +268,8 @@ var de = map[ID]string{
 	"zusammen.zeitachse.so":             "Den Takeout mit der Homes-App teilen: Jahre voller Orte in deinem Standortverlauf, nur für dich.",
 	"zusammen.waschmaschine":            "Waschmaschine fertig, Nachricht in Signal",
 	"zusammen.waschmaschine.so":         "Geräte im Haus sagen Bescheid, der Bote schreibt dir.",
+	"zusammen.fotos":                    "Fotos vom Handy landen von selbst in Immich",
+	"zusammen.fotos.so":                 "Einmal in der Immich-App die Sicherung einschalten; ein Tipp öffnet deine Fotos.",
 	"zusammen.fehlt":                    "Etwas fehlt? Hier anfordern",
 	"zusammen.fehlt.so":                 "Was diese Box noch nicht kann, steht unten auf Mehr. Eine Anfrage, und der Admin sieht es.",
 }

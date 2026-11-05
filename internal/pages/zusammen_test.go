@@ -21,8 +21,15 @@ func TestZusammenShowsOnlyWhatTheBoxHas(t *testing.T) {
 		`href="/kontakte"`, "Von der Rechnung zum Anruf", "Ein Tipp zu allen Dokumenten eines Kontakts", `href="/kalender"`, `href="/standort"`,
 		"Waschmaschine fertig, Nachricht in Signal", `href="/raeume"`, "prefers-reduced-motion")
 	mustNotContain(t, body, "Etwas fehlt?")
+	ms := []modul.Modul{{Name: "fotos", Einrichtung: &modul.Einrichtung{Web: "https://photos.box.test"}}}
+	fotos, err := modul.Bauen(ms)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, body, _ = familyPage(t, Zusammen, StartConfig{Module: fotos}, "GET", ZusammenPath, "family")
+	mustContain(t, body, ">Fotos<", `<a href="https://photos.box.test">Fotos vom Handy landen von selbst in Immich</a>`)
 
-	ms := []modul.Modul{{Name: "kalender"}, {Name: "konto"}, {Name: "standort", Warum: modul.Fehlt, Grund: "kein Reitti"}}
+	ms = []modul.Modul{{Name: "kalender"}, {Name: "konto"}, {Name: "standort", Warum: modul.Fehlt, Grund: "kein Reitti"}}
 	wenig, err := modul.Bauen(ms)
 	if err != nil {
 		t.Fatal(err)
