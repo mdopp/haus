@@ -100,7 +100,7 @@ func kontaktSprung(w http.ResponseWriter, r *http.Request, cfg StartConfig, ct c
 
 // dokumenteVon is Paperless's document list for the contact: filtered by
 // the correspondent of its name or else its organisation (the API, with
-// the token), otherwise Paperless's full-text search for the name. The
+// the token), otherwise Paperless's full-text search for the name as one phrase. The
 // list's address as Paperless's own frontend reads it: correspondent__id__in
 // and query (src-ui/src/app/data/filter-rule-type.ts).
 func dokumenteVon(r *http.Request, cfg StartConfig, ct caldav.Contact) string {
@@ -120,7 +120,7 @@ func dokumenteVon(r *http.Request, cfg StartConfig, ct caldav.Contact) string {
 		}
 	}
 	if q := cmp.Or(names...); q != "" {
-		return "/documents?" + url.Values{"query": {q}}.Encode()
+		return "/documents?" + url.Values{"query": {`"` + strings.ReplaceAll(q, `"`, "") + `"`}}.Encode() // a phrase: Paperless ORs loose words
 	}
 	return "/documents"
 }
