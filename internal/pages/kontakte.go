@@ -33,7 +33,8 @@ type kontaktZeile struct{ name, seite, ziel, zielText, suche string }
 // each leading to its page (Kontakt) with its first number or e-mail to
 // tap; a search by name, number and e-mail, live and as ?q=. Where to
 // change them is one quiet line, as on the calendar; Radicale not
-// answering is Kontakt's plain line (haus#33).
+// answering is Kontakt's plain line (haus#33). Under it, Immich's named
+// people without a contact (kontakte_immich.go).
 func Kontakte(cfg StartConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !showOnly(w, r, "Die Kontakte") {
@@ -54,6 +55,7 @@ func Kontakte(cfg StartConfig) http.HandlerFunc {
 			writePage(w, http.StatusOK, b)
 			return
 		}
+		b.WriteString(gesagtKontakte(r, all))
 		q := trimRunes(oneLine(r.URL.Query().Get("q")), 80)
 		field := texte.T(texte.KontakteSuchen)
 		b.WriteString(`<form method=get action=` + KontaktePath + ` role=search><input type=search id=kontakte-suche name=q value="` + html.EscapeString(q) +
@@ -70,7 +72,7 @@ func Kontakte(cfg StartConfig) http.HandlerFunc {
 			b.WriteString(keiner + " hidden></p>")
 			kontakteListe(b, zeilen, len(all) >= kontakteBuchstaben)
 		}
-		b.WriteString(kontakteScript)
+		b.WriteString(vorschlaegeStyle + vorschlaege(cfg, all) + kontakteScript)
 		writePage(w, http.StatusOK, b)
 	}
 }

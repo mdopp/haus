@@ -249,7 +249,20 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     of its own. The search (`?q=`, and live while typing) finds name,
     number and e-mail, compared as `namen.Plain`. The same quiet line as
     Kalender says where to edit; Radicale not answering is *Die Kontakte
-    lassen sich gerade nicht lesen.*, once. It changes nothing.
+    lassen sich gerade nicht lesen.*, once. Under the list, with the module
+    `fotos` and `HOMES_IMMICH_KEY` (owner 2026-11-05): *In Immich, aber noch
+    kein Haushalts-Kontakt*, at most 8 of Immich's named people without a
+    contact of their name, each with its face, *als Haushalts-Kontakt
+    anlegen* and *ausblenden*. Both post to `/kontakte/aus-immich`
+    (`tun=anlegen|ausblenden`, `id=<Immich person id>`): *anlegen* writes a
+    card with the name only (a vCard 4.0 into the Haushalt's address book;
+    one of that name there already is taken instead) and answers 303 to
+    `/kontakte?angelegt=<uid>`; *ausblenden* keeps the id in
+    `HOMES_DATA/immich-ausgeblendet.json` and answers 303 to
+    `/kontakte?ausgeblendet=1`; each then says what happened above the list.
+    Nothing is made without a tap. Immich is asked in the background only:
+    its named people hourly, a face once and again when Immich changed it
+    or after 7 days, 96 px, in `HOMES_DATA/immich-gesichter.json`.
   - *Deine Kalender* (`/kalender/verwalten`, haus#66), linked from
     Kalender: every calendar with where it comes from (*aus Google, nur
     lesen · verbunden seit … · zuletzt abgeglichen vor 5 min*, laib's
@@ -410,7 +423,7 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     tracker, a hidden entity are a 404),
     `/kalender/erinnerung/<uid>` (a reminder: open and due, done, or
     cancelled), `/kontakte/<uid>` (a contact: numbers and email addresses to
-    tap, the birthday, the postal addresses, and its two fixed links as
+    tap, the birthday, the postal addresses, and its fixed links as
     quiet buttons, each only where its backend is on the box: owner
     2026-11-05), `/kontakte/<uid>/dokumente` (a 302 to Paperless's document
     list of that contact: `/documents?correspondent__id__in=<id>` when a
@@ -422,7 +435,12 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     msgvault's search for the contact's numbers as `+<country>…` and its
     e-mails, quoted, as alternatives ` | `, at most 8, else its name; a
     viewer without an archive in `HOMES_ARCHIV_INTERN`, or away from home,
-    gets one plain line), `/dokumente/<id>` (a 302 to the document's page in
+    gets one plain line), `/kontakte/<uid>/fotos` (a 302 to Immich,
+    `HOMES_IMMICH_PUBLIC_URL`, while the module `fotos` is on: the person
+    page `/people/<id>` of the one Immich person named as the contact,
+    umlauts and case aside, read with `HOMES_IMMICH_KEY`; else, or without
+    the key, Immich's search `/search?query={"query":"<name>"}`; the Immich
+    3.3 web app's own addresses, `web/src/lib/route.ts`), `/dokumente/<id>` (a 302 to the document's page in
     Paperless, `HOMES_PAPERLESS_PUBLIC_URL`; without it a 404), and a note's
     `/notizen/<file>`.
     Something not there is a 404 that says so, with the way back. A
@@ -833,9 +851,16 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   Each card with a UID carries the contact's links (owner 2026-11-05), made
   when served and never stored: `homes-dokumente.URL;TYPE=homes:<HOMES_PUBLIC_URL>/kontakte/<uid>/dokumente`
   with `homes-dokumente.X-ABLabel:Dokumente`, the same for `nachrichten`,
-  each only where its backend is on the box; a card a phone sends back
-  loses every URL that is one of its UID's links (on any host), and keeps
-  the person's own.
+  and `fotos`, each only where its backend is on the box. A card without a
+  PHOTO gets the face of its Immich person (with `HOMES_IMMICH_KEY`), a
+  JPEG of at most 96 px from Homes' cache, as
+  `homes-foto.PHOTO;ENCODING=b;TYPE=JPEG;X-HOMES=immich:<base64>` (vCard
+  4.0: `…;MEDIATYPE=image/jpeg;X-HOMES=immich:data:image/jpeg;base64,…`).
+  A card a phone sends back loses every URL that is one of its UID's links
+  (on any host), and the face Homes made: a PHOTO in a `homes-` group,
+  with `X-HOMES`, or with exactly the bytes Homes serves for it; the
+  person's own URLs stay, and a PHOTO of their own replaces the stored one
+  (a card sent without one keeps it).
   `PUT|DELETE /napi/gemeinsam/kalender/{kalender}/{uid}` (`text/calendar`,
   a VCALENDAR with the VEVENT of that UID) and `PUT|DELETE
   /napi/gemeinsam/kontakte/{uid}` (`text/vcard` 3.0, the VCARD of that UID)

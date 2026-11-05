@@ -803,6 +803,13 @@ for (const scheme of ['dark', 'light']) {
       await expect(page).toHaveURL(/\/zusammen$/);
       await expect(page.getByRole('img', { name: /Haushalts-Kontakt/ })).toBeVisible();
       await expect(page.getByRole('link', { name: 'Fotos vom Handy landen von selbst in Immich' })).toHaveAttribute('href', 'https://photos.example');
+      // owner 2026-11-05: the contact's Fotos and the Standortverlauf are in the picture
+      const netz = page.locator('svg.netz');
+      await expect(netz.locator('text', { hasText: 'Zeitleiste' })).toBeVisible();
+      await expect(netz.locator('text', { hasText: /^Fotos$/ })).toBeVisible();
+      await expect(netz.locator('line[x2="180"][y2="316"]')).toHaveCount(1);
+      await expect(page.getByRole('link', { name: 'Ein Tipp vom Kontakt zu allen Fotos dieser Person' })).toHaveAttribute('href', '/kontakte');
+      await expect(page.getByRole('link', { name: 'Google-Zeitachse teilen, die Zeitleiste füllt sich' })).toHaveAttribute('href', '/standort');
       const wide = await page.evaluate(() => document.documentElement.scrollWidth);
       expect(wide).toBeLessThanOrEqual(411);
       const geht = page.locator('section[aria-labelledby=karte-das-geht] li a');

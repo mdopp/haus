@@ -104,6 +104,21 @@ const (
 	KontaktKeinPaperless   ID = "kontakt.kein-paperless"   // the box has no Paperless (any more)
 	KontaktKeinArchiv      ID = "kontakt.kein-archiv"      // the viewer has no message archive
 	KontaktArchivDaheim    ID = "kontakt.archiv-daheim"    // the archive opens at home only, and the viewer is away
+	// Immich for the contacts (owner 2026-11-05): the third link, and the Kontakte page's suggestions
+	KontaktFotos            ID = "kontakt.fotos"              // the button to the Immich person
+	KontaktFotosKurz        ID = "kontakt.fotos-kurz"         // the web address's label in the phone book
+	KontaktKeinImmich       ID = "kontakt.kein-immich"        // the box has no Immich (any more)
+	KontakteImmich          ID = "kontakte.immich"            // the suggestions' title
+	KontakteImmichHinweis   ID = "kontakte.immich.hinweis"    // their quiet line
+	KontakteAnlegen         ID = "kontakte.anlegen"           // a suggestion's button
+	KontakteAnlegend        ID = "kontakte.anlegen.laeuft"    // pressed
+	KontakteAusblenden      ID = "kontakte.ausblenden"        // a suggestion's other button
+	KontakteAusblendend     ID = "kontakte.ausblenden.laeuft" // pressed
+	KontakteAngelegt        ID = "kontakte.angelegt"          // „%s“ was made
+	KontakteAusgeblendet    ID = "kontakte.ausgeblendet"      // hidden for good
+	KontakteAnlegenNicht    ID = "kontakte.anlegen.nicht"     // Radicale did not take it
+	KontakteAusblendenNicht ID = "kontakte.ausblenden.nicht"  // not saved
+	KontakteVorschlagWeg    ID = "kontakte.vorschlag.weg"     // a suggestion Homes does not know (any more)
 )
 
 var de = map[ID]string{
@@ -197,46 +212,60 @@ var de = map[ID]string{
 	ZurStartseite:       "Weiter zur Startseite",
 	GrundDienst:         "Auf dieser Box läuft %s nicht.",
 
-	"schritt.anmelden":         "Trag als Server-Adresse {adresse} ein und melde dich mit deinem Benutzernamen und Passwort an.",
-	"schritt.fotos":            "Trag als Server-Adresse {adresse} ein, tippe auf „Mit Familienkonto anmelden“ und melde dich an.",
-	"schritt.fotos-sichern":    "Schalte unter „Sicherung“ ein, dass neue Fotos von selbst auf die Box kommen.",
-	"schritt.tresor":           "Wähle „Selbst gehostet“, trag {adresse} ein und melde dich mit „Single Sign-On“ und deinem Familienkonto an.",
-	"schritt.tresor-passwort":  "Beim ersten Mal legst du ein Master-Passwort fest. Das kennst nur du, niemand kann es zurücksetzen: Schreib es auf.",
-	"schritt.signal":           "Tippe unten auf „Öffnen“ und schreib „Hallo“. {name} antwortet, sobald ein Admin dich einmal freigegeben hat.",
-	"schritt.homes":            "Öffne die App, trag {adresse} ein und melde dich an. Die App richtet sich dann selbst ein.",
-	"schritt.homes-iphone":     "iPhone: Öffne {adresse} in Safari, tippe auf „Teilen“ und dann auf „Zum Home-Bildschirm“.",
-	"musik.dazu":               "Hinzufügen",
-	"musik.handy":              "Auf dem Handy: Lieder oder ein ganzes Album als ZIP teilen und Homes wählen. Die Box sortiert sie selbst ein.",
-	"musik.computer":           "Am Computer, zu Hause: in den Ordner „musik-eingang“ auf dem Netzlaufwerk legen.",
-	"musik.wird-einsortiert":   "wird einsortiert …",
-	"musik.dauert":             "Das dauert länger als sonst; sobald es fertig ist, bekommst du eine Nachricht.",
-	"musik.fertig":             "fertig: %s in der Musik",
-	"musik.nicht":              "nicht übernommen",
-	"musik.platten":            "Platten",
-	"musik.platte-erfassen":    "Platte erfassen",
-	"musik.wunschliste":        "Wunschliste",
-	"musik.discogs-verbunden":  "Discogs: verbunden mit „%s“",
-	"musik.discogs-verbinden":  "Mit Discogs verbinden",
-	"musik.discogs-bringt":     "dann erfasst du Platten mit einem Foto in deine Sammlung.",
-	"kalender.bearbeiten":      "Neue Termine und Änderungen machst du auf dem Handy im Haushalts-Kalender oder über den Boten.",
-	"kontakte.bearbeiten":      "Neue Kontakte und Änderungen machst du auf dem Handy in den Haushalts-Kontakten oder über den Boten.",
-	"kontakte.suchen":          "Name, Nummer, E-Mail",
-	"kontakte.leer":            "Im Adressbuch steht noch niemand.",
-	"kontakte.keiner":          "Kein Kontakt passt zu „%s“.",
-	"kontakte.adressbuch":      "Adressbuch",
-	"kontakt.dokumente":        "Dokumente in Paperless",
-	"kontakt.nachrichten":      "Nachrichten im Archiv",
-	"kontakt.dokumente-kurz":   "Dokumente",
-	"kontakt.nachrichten-kurz": "Nachrichten",
-	"kontakt.kein-paperless":   "Auf dieser Box gibt es kein Paperless.",
-	"kontakt.kein-archiv":      "Für dich gibt es auf dieser Box noch kein Archiv für Nachrichten.",
-	"kontakt.archiv-daheim":    "Dein Archiv öffnet sich nur zu Hause im WLAN; gerade bist du unterwegs.",
+	"schritt.anmelden":           "Trag als Server-Adresse {adresse} ein und melde dich mit deinem Benutzernamen und Passwort an.",
+	"schritt.fotos":              "Trag als Server-Adresse {adresse} ein, tippe auf „Mit Familienkonto anmelden“ und melde dich an.",
+	"schritt.fotos-sichern":      "Schalte unter „Sicherung“ ein, dass neue Fotos von selbst auf die Box kommen.",
+	"schritt.tresor":             "Wähle „Selbst gehostet“, trag {adresse} ein und melde dich mit „Single Sign-On“ und deinem Familienkonto an.",
+	"schritt.tresor-passwort":    "Beim ersten Mal legst du ein Master-Passwort fest. Das kennst nur du, niemand kann es zurücksetzen: Schreib es auf.",
+	"schritt.signal":             "Tippe unten auf „Öffnen“ und schreib „Hallo“. {name} antwortet, sobald ein Admin dich einmal freigegeben hat.",
+	"schritt.homes":              "Öffne die App, trag {adresse} ein und melde dich an. Die App richtet sich dann selbst ein.",
+	"schritt.homes-iphone":       "iPhone: Öffne {adresse} in Safari, tippe auf „Teilen“ und dann auf „Zum Home-Bildschirm“.",
+	"musik.dazu":                 "Hinzufügen",
+	"musik.handy":                "Auf dem Handy: Lieder oder ein ganzes Album als ZIP teilen und Homes wählen. Die Box sortiert sie selbst ein.",
+	"musik.computer":             "Am Computer, zu Hause: in den Ordner „musik-eingang“ auf dem Netzlaufwerk legen.",
+	"musik.wird-einsortiert":     "wird einsortiert …",
+	"musik.dauert":               "Das dauert länger als sonst; sobald es fertig ist, bekommst du eine Nachricht.",
+	"musik.fertig":               "fertig: %s in der Musik",
+	"musik.nicht":                "nicht übernommen",
+	"musik.platten":              "Platten",
+	"musik.platte-erfassen":      "Platte erfassen",
+	"musik.wunschliste":          "Wunschliste",
+	"musik.discogs-verbunden":    "Discogs: verbunden mit „%s“",
+	"musik.discogs-verbinden":    "Mit Discogs verbinden",
+	"musik.discogs-bringt":       "dann erfasst du Platten mit einem Foto in deine Sammlung.",
+	"kalender.bearbeiten":        "Neue Termine und Änderungen machst du auf dem Handy im Haushalts-Kalender oder über den Boten.",
+	"kontakte.bearbeiten":        "Neue Kontakte und Änderungen machst du auf dem Handy in den Haushalts-Kontakten oder über den Boten.",
+	"kontakte.suchen":            "Name, Nummer, E-Mail",
+	"kontakte.leer":              "Im Adressbuch steht noch niemand.",
+	"kontakte.keiner":            "Kein Kontakt passt zu „%s“.",
+	"kontakte.adressbuch":        "Adressbuch",
+	"kontakt.dokumente":          "Dokumente in Paperless",
+	"kontakt.nachrichten":        "Nachrichten im Archiv",
+	"kontakt.dokumente-kurz":     "Dokumente",
+	"kontakt.nachrichten-kurz":   "Nachrichten",
+	"kontakt.kein-paperless":     "Auf dieser Box gibt es kein Paperless.",
+	"kontakt.kein-archiv":        "Für dich gibt es auf dieser Box noch kein Archiv für Nachrichten.",
+	"kontakt.archiv-daheim":      "Dein Archiv öffnet sich nur zu Hause im WLAN; gerade bist du unterwegs.",
+	"kontakt.fotos":              "Fotos in Immich",
+	"kontakt.fotos-kurz":         "Fotos",
+	"kontakt.kein-immich":        "Auf dieser Box gibt es kein Immich.",
+	"kontakte.immich":            "In Immich, aber noch kein Haushalts-Kontakt",
+	"kontakte.immich.hinweis":    "Personen, die in Immich einen Namen haben. Homes legt nichts von selbst an.",
+	"kontakte.anlegen":           "als Haushalts-Kontakt anlegen",
+	"kontakte.anlegen.laeuft":    "Legt an …",
+	"kontakte.ausblenden":        "ausblenden",
+	"kontakte.ausblenden.laeuft": "Blendet aus …",
+	"kontakte.angelegt":          "„%s“ ist jetzt ein Haushalts-Kontakt, mit dem Gesicht aus Immich. Nummern und Adressen ergänzt du auf dem Handy.",
+	"kontakte.ausgeblendet":      "Ausgeblendet: Homes schlägt diese Person nicht mehr vor.",
+	"kontakte.anlegen.nicht":     "Der Kontakt ließ sich gerade nicht anlegen. Versuch es gleich noch einmal.",
+	"kontakte.ausblenden.nicht":  "Das ließ sich gerade nicht speichern. Versuch es gleich noch einmal.",
+	"kontakte.vorschlag.weg":     "Diese Person kennt Homes aus Immich nicht mehr. Lade die Seite neu.",
 
 	// „So hängt alles zusammen“ (owner 2026-11-05): the page, its web's nodes ("knoten.<…>", a word and a line under it), its moments ("<…>" and "<…>.so")
 	"zusammen.titel":                    "So hängt alles zusammen",
 	"zusammen.mehr":                     "Von der Rechnung zum Anruf: was deine Daten miteinander können",
 	"zusammen.kurz":                     "Kontakte, Dokumente, Nachrichten und Termine kennen einander. Das macht vieles leichter.",
-	"zusammen.bild":                     "In der Mitte ein Haushalts-Kontakt, verbunden mit Dokumenten, Nachrichten, Terminen, Bank und Telefonbuch; drumherum Zeitleiste, Musik, Fotos und Geräte.",
+	"zusammen.bild":                     "In der Mitte ein Haushalts-Kontakt, verbunden mit Dokumenten, Nachrichten, Terminen, Bank, Telefonbuch und seinen Fotos; drumherum Zeitleiste, Musik und Geräte.",
 	"zusammen.mitte":                    "Haushalts-",
 	"zusammen.mitte.unter":              "Kontakt",
 	"zusammen.knoten.termine":           "Termine",
@@ -254,7 +283,7 @@ var de = map[ID]string{
 	"zusammen.knoten.musik":             "Musik",
 	"zusammen.knoten.musik.unter":       "Wunschliste",
 	"zusammen.knoten.fotos":             "Fotos",
-	"zusammen.knoten.fotos.unter":       "vom Handy",
+	"zusammen.knoten.fotos.unter":       "Immich",
 	"zusammen.knoten.geraete":           "Geräte",
 	"zusammen.knoten.geraete.unter":     "per Signal",
 	"zusammen.geht":                     "Das geht",
@@ -262,6 +291,8 @@ var de = map[ID]string{
 	"zusammen.rechnung.so":              "Eine Rechnung wird gescannt, die Firma landet mit ihrer IBAN in den Haushalts-Kontakten, und du rufst sie aus dem Telefonbuch an.",
 	"zusammen.tipp":                     "Ein Tipp zu allen Dokumenten eines Kontakts",
 	"zusammen.tipp.so":                  "Beim Kontakt auf „Dokumente“ tippen: alles, was er geschickt hat, in Paperless.",
+	"zusammen.gesichter":                "Ein Tipp vom Kontakt zu allen Fotos dieser Person",
+	"zusammen.gesichter.so":             "Beim Kontakt auf „Fotos“ tippen: Immich zeigt alle Bilder, auf denen es dieses Gesicht erkannt hat.",
 	"zusammen.termin":                   "Termin auf dem Handy verschieben, alle sehen es",
 	"zusammen.termin.so":                "Im Haushalts-Kalender geändert, kurz darauf auf allen Handys.",
 	"zusammen.zeitachse":                "Google-Zeitachse teilen, die Zeitleiste füllt sich",

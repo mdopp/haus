@@ -32,7 +32,9 @@ here.
 | **prüfen** | A tag: a person should look at this Dokument. | Paperless tag `prüfen` | dokumente sets it |
 | **Archiv** | A person's own message archive (mail, WhatsApp, Signal, SMS), in a vault only that person opens. | Laib template `archiv` (msgvault), one per person; `archiv.<domain>`; `HOMES_ARCHIV_DIR/<person>` | Archiv |
 | **Daten sichern** | The phone's backups going to the person's Archiv. | module `sicherung`; app `sicherung/`; `/napi/sicherung/…` | Homes app → Archiv |
-| **„Dokumente“, „Nachrichten“** | The two links on a contact: its Dokumente in Paperless, and the viewer's own messages with it in their Archiv. | vCard `homes-dokumente.URL`, `homes-nachrichten.URL`; `/kontakte/<uid>/dokumente`, `…/nachrichten` | Homes; made when served, never stored |
+| **„Dokumente“, „Nachrichten“, „Fotos“** | The links on a contact: its Dokumente in Paperless, the viewer's own messages with it in their Archiv, and the Immich person of its name. | vCard `homes-dokumente.URL`, `homes-nachrichten.URL`, `homes-fotos.URL`; `/kontakte/<uid>/dokumente`, `…/nachrichten`, `…/fotos` | Homes; made when served, never stored |
+| **Gesicht** (Kontaktbild aus Immich) | The face of a contact's Immich person, as the phones' picture of a card that has none. | vCard `homes-foto.PHOTO;X-HOMES=immich`; `internal/gesichter`; `HOMES_IMMICH_KEY` | Immich (Homes keeps a small copy); made when served, never stored |
+| **Person** (in Immich) | Someone Immich's face recognition knows by a name. One without a Haushalts-Kontakt is offered on Kontakte. | Immich `/api/people`; `/kontakte/aus-immich` | Immich |
 | **Standortverlauf** | Where a person was: recorded by the app or imported from Google. | module `standort`; `/napi/standort`, `/napi/standort/import` | Reitti |
 | **Hochladen** | The app's job for shared files: songs, albums and Takeout ZIPs. It goes on with the screen off. | app `hochladen/Hochladen.kt` | Homes app |
 | **Musik-Eingang** | The inbox folder that beets sorts into the music. | `musik-eingang`; `HOMES_MUSIC_INBOX`; `/napi/musik` | beets |
@@ -58,6 +60,7 @@ flowchart LR
   dok["dokumente<br/>Stapel, Verträge"]
   arch[("Archiv<br/>msgvault, je Person")]
   reitti[("Reitti<br/>Standortverlauf")]
+  immich[("Immich<br/>Fotos, Personen")]
   ha["Home Assistant"]
   bote["Bote<br/>(Signal)"]
   beets["beets<br/>Musik"]
@@ -71,6 +74,7 @@ flowchart LR
   homes -- "Sicherungen, Such-Link" --> arch
   arch -- "liest Handy-Kontakte" --> rad
   homes -- "Punkte, Importe" --> reitti
+  homes -- "Personen, Gesichter, Links" --> immich
   homes -- "Zustände, Schalten" --> ha
   ha -- "Mitteilung" --> bote
   bote -- "Haushalts-Werkzeuge" --> homes
@@ -90,12 +94,13 @@ else reads it, writes it through its owner, or only links to it.
 | **Paperless** | Dokumente, Korrespondenten, tags, custom fields | dokumente files Stapel and fills only empty fields. Homes searches Paperless, drops uploads into its consume folder, and links into it. |
 | **dokumente** (`mdopp/dokumente`) | the Stapel's state, and its record of what it read and reminded (`laib-vertraege.json`) | It is Paperless' reader. It completes contacts only through Homes' `kontakt_ergaenzen`. |
 | **Archiv** (msgvault, Laib template `archiv`) | a person's messages and mail, and the vault's key | Homes only drops the phone's backups into its inbox and links to its search. It cannot read the archive. |
+| **Immich** | the photos, its people and their faces (per Immich user: Homes reads the owner's) | Homes reads the named people and their faces with the owner's key, keeps small faces as a cache, and links to a person's page. It writes nothing there. |
 | **Reitti** | the Standortverlauf's points | Homes passes points and imports on. It keeps only the person's Reitti token and which hours an import already brought. |
 | **Home Assistant** | devices, their states, automations | Homes shows and switches them. Automations speak to people through the Bote. |
 | **Bote** | the chat channel to each person (`people` in box.yml) | Home Assistant, beets and Laib send it Mitteilungen. It calls Homes' household tools. |
 | **beets** | the music library, and its verdict on each upload | Homes shows the Musik-Eingang's rows and moves a deleted upload into its Papierkorb. |
 | **Laib** | what the box runs, its wiring and values (`MODULE_AUS`), Anfragen, Box-Aufgaben, the Inbox | Homes asks Laib and files Anfragen. It never decides (haus#1). |
-| **Homes** | the module list, the Papierkorb, the paired devices, the backup ledger, the contact links (made when served) | the pages and `/napi` |
+| **Homes** | the module list, the Papierkorb, the paired devices, the backup ledger, the contact links and faces (made when served), who was hidden from the Immich suggestions | the pages and `/napi` |
 | **Homes app** | the phone's copy in the Homes-Konto, the Hochladen queue, positions not yet sent | It sends only through Homes' `/napi`. |
 
 ## 3. Event flows
@@ -115,6 +120,7 @@ flowchart TD
   a5 --> a6(["Kontakt aufs Handy gekommen<br/>Homes-Konto"])
   a6 --> a7(["„Dokumente“ angetippt"]) --> a8(["Paperless-Korrespondent geöffnet"])
   a6 --> a9(["„Nachrichten“ angetippt"]) --> a10(["Archiv-Suche geöffnet<br/>das eigene Archiv"])
+  a6 --> a11(["„Fotos“ angetippt"]) --> a12(["Immich-Person geöffnet<br/>sonst die Suche nach dem Namen"])
 ```
 
 - **Rechnung gescannt:** a Stapel from the scanner or the inbox folder is
@@ -135,6 +141,12 @@ flowchart TD
   numbers and e-mail addresses. Each link appears only when its backend
   is on the box. Away from home (for Paperless: when it is LAN-only), or
   for a viewer without an Archiv, the link opens a plain line instead.
+- **„Fotos“ / the face:** „Fotos“ opens the one Immich person named as the
+  contact, or Immich's search for the name. A card without a picture of
+  its own reaches the phones with that person's face, made when served:
+  a phone sending it back loses it again. Immich's named people without a
+  contact appear on Kontakte as a quiet suggestion; only a tap makes a
+  card, „ausblenden“ hides one for good.
 
 ### b. A Termin changed on a phone
 
@@ -169,7 +181,9 @@ sequenceDiagram
   own change and takes Homes' version. The app says so in one sentence.
 - **Only what a phone shows** is taken from the phone (title, place,
   times, series, alarms; for a card: names, numbers, addresses, note).
-  Attendees, photos and IBANs stay as stored.
+  Attendees and IBANs stay as stored. A picture the person set on the
+  phone replaces the stored one; a card sent without one keeps it, and
+  the face Homes added never is stored.
 - **Gelöscht:** a delete on the phone moves the Termin or Kontakt into
   Homes' **Papierkorb** first, then removes it from Radicale. It can be
   restored for 30 days („Gelöscht, noch 30 Tage zurückzuholen“).

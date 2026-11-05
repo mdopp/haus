@@ -24,6 +24,7 @@ import (
 	"github.com/mdopp/homes/internal/energie"
 	"github.com/mdopp/homes/internal/favoriten"
 	"github.com/mdopp/homes/internal/gesehen"
+	"github.com/mdopp/homes/internal/gesichter"
 	"github.com/mdopp/homes/internal/ha"
 	"github.com/mdopp/homes/internal/judge"
 	"github.com/mdopp/homes/internal/laib"
@@ -114,6 +115,9 @@ type StartConfig struct {
 	Archive      map[string]bool
 	ArchivURL    string
 	PhoneCountry string
+	// Gesichter is Immich for the contacts (owner 2026-11-05): their „Fotos“,
+	// a face for a card without a picture, the suggestions; nil: none of it
+	Gesichter *gesichter.Gesichter
 }
 
 // backendWait is how long a page waits for any one backend: a slow one
