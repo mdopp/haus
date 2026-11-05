@@ -790,3 +790,27 @@ test('a wish Laib cannot take is said on the page, the trace stays', async ({ pa
   await page.screenshot({ path: info.outputPath('spuren-7-fehler.png') });
   await request.get('/demo/laib?ms=0&fehler=0');
 });
+
+// owner 2026-11-05: „So hängt alles zusammen“, from Mehr; the web fits a 411 px phone in
+// both themes, and each „Das geht“ moment is a tap to the real place
+for (const scheme of ['dark', 'light']) {
+  test.describe(`zusammen ${scheme}`, () => {
+    test.use({ colorScheme: scheme });
+    test(`So hängt alles zusammen at 411 px, ${scheme}`, async ({ page }, info) => {
+      await page.setViewportSize({ width: 411, height: 900 });
+      await page.goto('/mehr');
+      await page.getByRole('link', { name: /So hängt alles zusammen/ }).first().click();
+      await expect(page).toHaveURL(/\/zusammen$/);
+      await expect(page.getByRole('img', { name: /Haushalts-Kontakt/ })).toBeVisible();
+      await expect(page.getByRole('link', { name: 'Fotos vom Handy landen von selbst in Immich' })).toHaveAttribute('href', 'https://photos.example');
+      const wide = await page.evaluate(() => document.documentElement.scrollWidth);
+      expect(wide).toBeLessThanOrEqual(411);
+      const geht = page.locator('section[aria-labelledby=karte-das-geht] li a');
+      await expect(geht).not.toHaveCount(0);
+      for (const href of await geht.evaluateAll((as) => as.map((a) => a.getAttribute('href')))) {
+        expect(href).toMatch(/^(\/(kontakte|kalender|standort|raeume|mehr#spuren)|https:\/\/photos\.example)$/);
+      }
+      await page.screenshot({ path: info.outputPath(`zusammen-411-${scheme}.png`), fullPage: true });
+    });
+  });
+}
