@@ -61,13 +61,13 @@ func TestKontaktSprungDokumente(t *testing.T) {
 	}
 	// none: Paperless's full-text search for the name
 	if rec := oeffne(cfg, "/kontakte/x/dokumente", "anna", zuHause); rec.Code != http.StatusFound ||
-		rec.Header().Get("Location") != "https://paperless.box.test/documents?query=Xaver" {
+		rec.Header().Get("Location") != "https://paperless.box.test/documents?query=%22Xaver%22" {
 		t.Fatalf("no match: %d %q", rec.Code, rec.Header().Get("Location"))
 	}
 	// without the token Homes cannot ask: the search
 	cfg.Docs = nil
 	if rec := oeffne(cfg, "/kontakte/oma/dokumente", "anna", zuHause); rec.Code != http.StatusFound ||
-		rec.Header().Get("Location") != "https://paperless.box.test/documents?query=Oma+Erna" {
+		rec.Header().Get("Location") != "https://paperless.box.test/documents?query=%22Oma+Erna%22" {
 		t.Fatalf("no token: %d %q", rec.Code, rec.Header().Get("Location"))
 	}
 	// away: the Dokumente page's line, no dead redirect
