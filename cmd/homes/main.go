@@ -382,6 +382,7 @@ func main() {
 	}
 	cfg.Haushalt = hh       // haus#10: the tool widgets from the same backends; none set, 404
 	cfg.Konto = hh.Calendar // haus#218: the phone's Homes account, on the same Radicale account
+	cfg.Papierkorb = &papierkorb.Korb{Dir: dataDir}
 	// haus#10: the camera capture into the share's Paperless consume folder; unset, 404
 	if cfg.UploadDir = os.Getenv("HOMES_UPLOAD_DIR"); cfg.UploadDir != "" {
 		if fi, err := os.Stat(cfg.UploadDir); err != nil || !fi.IsDir() {

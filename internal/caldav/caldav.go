@@ -681,15 +681,8 @@ func (c *Client) CompleteTodo(ctx context.Context, uid string) error {
 	if err != nil {
 		return err
 	}
-	var esc strings.Builder
-	xml.EscapeText(&esc, []byte(uid))
-	body := `<?xml version="1.0" encoding="utf-8"?>
-<C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
-  <D:prop><D:getetag/><C:calendar-data/></D:prop>
-  <C:filter><C:comp-filter name="VCALENDAR"><C:comp-filter name="VTODO"><C:prop-filter name="UID"><C:text-match collation="i;octet">` + esc.String() + `</C:text-match></C:prop-filter></C:comp-filter></C:comp-filter></C:filter>
-</C:calendar-query>`
 	for _, col := range cols {
-		objs, err := c.objects(ctx, col, body)
+		objs, err := c.objects(ctx, col, uidQuery("VTODO", uid))
 		var st *ErrStatus
 		if errors.As(err, &st) && st.Code == http.StatusNotFound {
 			continue
@@ -698,53 +691,89 @@ func (c *Client) CompleteTodo(ctx context.Context, uid string) error {
 			return err
 		}
 		for _, o := range objs {
-			root, err := Parse(o.data)
-			if err != nil {
-				continue
-			}
-			var mine []*Component
-			root.Walk(func(t *Component) {
-				if t.Name == "VTODO" && strings.TrimSpace(t.Text("UID")) == uid { // the server matches in part; the UID is whole
-					mine = append(mine, t)
-				}
-			})
+			mine := withUID(o.data, "VTODO", uid)
 			if len(mine) == 0 {
 				continue
 			}
-			if len(mine) > 1 || recurring(mine[0]) {
-				return ErrRecurring
-			}
-			if _, done := mine[0].Get("COMPLETED"); done {
-				return nil
-			}
-			switch strings.ToUpper(mine[0].Text("STATUS")) {
-			case "COMPLETED":
-				return nil
-			case "CANCELLED":
-				return ErrCancelled
-			}
-			if o.etag == "" {
-				return errors.New("Kalender: Radicale nennt kein ETag; ohne schreibt Homes nicht zurück")
-			}
-			u, err := c.resolve(o.href)
-			if err != nil {
-				return err
-			}
-			code, _, err := c.do(ctx, http.MethodPut, u, "", completed(o.data, uid, c.now()),
-				map[string]string{"Content-Type": "text/calendar; charset=utf-8", "If-Match": o.etag})
-			if err != nil {
-				return err
-			}
-			switch code {
-			case http.StatusOK, http.StatusCreated, http.StatusNoContent:
-				return nil
-			case http.StatusPreconditionFailed:
-				return ErrChanged
-			}
-			return &ErrStatus{"PUT", code}
+			return c.complete(ctx, o, mine, uid)
 		}
 	}
 	return ErrNoTodo
+}
+
+// complete ticks off the reminder uid of o, whose VTODOs of that UID are mine.
+func (c *Client) complete(ctx context.Context, o object, mine []*Component, uid string) error {
+	if len(mine) > 1 || recurring(mine[0]) {
+		return ErrRecurring
+	}
+	if _, done := mine[0].Get("COMPLETED"); done {
+		return nil
+	}
+	switch strings.ToUpper(mine[0].Text("STATUS")) {
+	case "COMPLETED":
+		return nil
+	case "CANCELLED":
+		return ErrCancelled
+	}
+	if o.etag == "" {
+		return errors.New("Kalender: Radicale nennt kein ETag; ohne schreibt Homes nicht zurück")
+	}
+	u, err := c.resolve(o.href)
+	if err != nil {
+		return err
+	}
+	_, err = c.rewrite(ctx, u, "text/calendar", o.etag, completed(o.data, uid, c.now()))
+	return err
+}
+
+// uidQuery asks a calendar for the objects with a comp of that UID; the
+// server matches in part, withUID then whole.
+func uidQuery(comp, uid string) string {
+	var esc strings.Builder
+	xml.EscapeText(&esc, []byte(uid))
+	return `<?xml version="1.0" encoding="utf-8"?>
+<C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+  <D:prop><D:getetag/><C:calendar-data/></D:prop>
+  <C:filter><C:comp-filter name="VCALENDAR"><C:comp-filter name="` + comp + `"><C:prop-filter name="UID"><C:text-match collation="i;octet">` + esc.String() + `</C:text-match></C:prop-filter></C:comp-filter></C:comp-filter></C:filter>
+</C:calendar-query>`
+}
+
+// withUID is the comps in an object's text whose UID is exactly uid,
+// trimmed, as the app trims a row's id.
+func withUID(data, comp, uid string) []*Component {
+	root, err := Parse(data)
+	if err != nil {
+		return nil
+	}
+	var mine []*Component
+	root.Walk(func(t *Component) {
+		if t.Name == comp && strings.TrimSpace(t.Text("UID")) == uid {
+			mine = append(mine, t)
+		}
+	})
+	return mine
+}
+
+// rewrite puts text at u over the ETag it was read with (If-Match), or
+// where nothing is yet when etag is "" (If-None-Match): the new ETag
+// Radicale names, or ErrChanged when it changed since.
+func (c *Client) rewrite(ctx context.Context, u, ctype, etag, text string) (string, error) {
+	hdr := map[string]string{"Content-Type": ctype + "; charset=utf-8", "If-Match": etag}
+	if etag == "" {
+		hdr = map[string]string{"Content-Type": ctype + "; charset=utf-8", "If-None-Match": "*"}
+	}
+	resp, err := c.send(ctx, http.MethodPut, u, "", text, hdr)
+	if err != nil {
+		return "", err
+	}
+	resp.Body.Close()
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusCreated, http.StatusNoContent:
+		return resp.Header.Get("ETag"), nil
+	case http.StatusPreconditionFailed:
+		return "", ErrChanged
+	}
+	return "", &ErrStatus{"PUT", resp.StatusCode}
 }
 
 func recurring(t *Component) bool {
@@ -762,65 +791,84 @@ var completion = map[string]bool{"STATUS": true, "COMPLETED": true, "PERCENT-COM
 // completed is the object's text with the VTODO uid ticked off at now:
 // every other line as it was, the new properties before its first alarm.
 func completed(data, uid string, now time.Time) string {
-	return patchTodo(data, uid, []string{"STATUS:COMPLETED", "COMPLETED:" + utc(now), "PERCENT-COMPLETE:100", "DTSTAMP:" + utc(now), "LAST-MODIFIED:" + utc(now)}, completion)
+	return patch(data, "VTODO", uid, []string{"STATUS:COMPLETED", "COMPLETED:" + utc(now), "PERCENT-COMPLETE:100", "DTSTAMP:" + utc(now), "LAST-MODIFIED:" + utc(now)}, completion)
 }
 
-// patchTodo is the object's text with the VTODO uid's own properties named
-// in replace dropped and set written in their place, before its first
-// alarm; every other line as it was.
-func patchTodo(data, uid string, set []string, replace map[string]bool) string {
-	lines := unfold(data)
+// patch is the object's text with the master comp of uid (its own UID,
+// no RECURRENCE-ID) changed: its own properties and components named in
+// replace dropped, and set written in their place, before its first
+// component; every other line as it was.
+func patch(data, comp, uid string, set []string, replace map[string]bool) string {
 	var b strings.Builder
-	for i := 0; i < len(lines); i++ {
-		if !strings.EqualFold(lines[i], "BEGIN:VTODO") {
-			fold(&b, lines[i])
-			continue
+	blocks(unfold(data), comp, func(ls []string, block bool) {
+		if own, override := ownUID(ls); block && own == uid && !override {
+			patched(&b, ls, set, replace)
+			return
 		}
-		end := i + 1
-		for end < len(lines) && !strings.EqualFold(lines[end], "END:VTODO") {
-			end++
-		}
-		block := lines[i:min(end+1, len(lines))]
-		i = end
-		if !ownUID(block, uid) {
-			for _, l := range block {
-				fold(&b, l)
-			}
-			continue
-		}
-		added, depth := false, 0
-		add := func() {
-			if !added {
-				for _, l := range set {
-					fold(&b, l)
-				}
-				added = true
-			}
-		}
-		for j, l := range block {
-			p, ok := parseLine(l)
-			switch {
-			case j == 0:
-			case j == len(block)-1 && depth == 0:
-				add()
-			case ok && p.Name == "BEGIN":
-				if depth == 0 {
-					add()
-				}
-				depth++
-			case ok && p.Name == "END":
-				depth--
-			case ok && depth == 0 && replace[p.Name]:
-				continue
-			}
+		for _, l := range ls {
 			fold(&b, l)
 		}
-	}
+	})
 	return b.String()
 }
 
-// ownUID says whether a BEGIN:VTODO … END:VTODO block's own UID is uid.
-func ownUID(block []string, uid string) bool {
+// blocks walks lines: each BEGIN:<comp> … END:<comp> as one block, every
+// other line alone.
+func blocks(lines []string, comp string, fn func(ls []string, block bool)) {
+	for i := 0; i < len(lines); i++ {
+		if !strings.EqualFold(lines[i], "BEGIN:"+comp) {
+			fn(lines[i:i+1], false)
+			continue
+		}
+		end := i + 1
+		for end < len(lines) && !strings.EqualFold(lines[end], "END:"+comp) {
+			end++
+		}
+		fn(lines[i:min(end+1, len(lines))], true)
+		i = end
+	}
+}
+
+// patched writes block with replace dropped and set added (patch).
+func patched(b *strings.Builder, block, set []string, replace map[string]bool) {
+	added, depth, skip := false, 0, false
+	add := func() {
+		if !added {
+			for _, l := range set {
+				fold(b, l)
+			}
+			added = true
+		}
+	}
+	for j, l := range block {
+		p, ok := parseLine(l)
+		switch {
+		case j == 0:
+		case j == len(block)-1 && depth == 0:
+			add()
+		case ok && p.Name == "BEGIN":
+			if depth == 0 {
+				add()
+				skip = replace[strings.ToUpper(p.Value)]
+			}
+			depth++
+		case ok && p.Name == "END":
+			if depth--; depth == 0 && skip {
+				skip = false
+				continue
+			}
+		case ok && depth == 0 && replace[propName(p.Name)]:
+			continue
+		}
+		if !skip {
+			fold(b, l)
+		}
+	}
+}
+
+// ownUID is a block's own UID, and whether it is a series' changed
+// instance (a RECURRENCE-ID of its own).
+func ownUID(block []string) (uid string, override bool) {
 	depth := 0
 	for _, l := range block[1:] {
 		p, ok := parseLine(l)
@@ -830,11 +878,13 @@ func ownUID(block []string, uid string) bool {
 			depth++
 		case p.Name == "END":
 			depth--
-		case depth == 0 && p.Name == "UID":
-			return strings.TrimSpace(UnescapeText(p.Value)) == uid
+		case depth == 0 && propName(p.Name) == "UID":
+			uid = strings.TrimSpace(UnescapeText(p.Value))
+		case depth == 0 && p.Name == "RECURRENCE-ID":
+			override = true
 		}
 	}
-	return false
+	return uid, override
 }
 
 // NewUID is a fresh object id.
@@ -887,19 +937,23 @@ func exists(err error) error {
 	return err
 }
 
+// objectName is a file name for an object: no path in it.
+func objectName(name string) string {
+	return strings.Map(func(r rune) rune {
+		if r == '/' || r == '\\' || r < 0x20 {
+			return '-'
+		}
+		return r
+	}, name)
+}
+
 // put writes a new object named name into the kind's write collection.
 func (c *Client) put(ctx context.Context, k kind, comp, name, ctype, body string) (Collection, error) {
 	col, err := c.target(ctx, k, comp)
 	if err != nil {
 		return col, err
 	}
-	name = strings.Map(func(r rune) rune {
-		if r == '/' || r == '\\' || r < 0x20 {
-			return '-'
-		}
-		return r
-	}, name)
-	code, _, err := c.do(ctx, http.MethodPut, col.URL+url.PathEscape(name), "", body,
+	code, _, err := c.do(ctx, http.MethodPut, col.URL+url.PathEscape(objectName(name)), "", body,
 		map[string]string{"Content-Type": ctype + "; charset=utf-8", "If-None-Match": "*"})
 	if err != nil {
 		return col, err

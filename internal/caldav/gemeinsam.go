@@ -4,9 +4,9 @@ import (
 	"cmp"
 	"context"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"path"
 	"sort"
 	"strings"
@@ -29,7 +29,14 @@ type FeedCalendar struct {
 	ID, Name, Kind string
 	Events         []Event
 	Todos          []Todo // the reminders' calendar only
+	// for a phone that writes back (FamilyFeed's whole): the objects as
+	// stored, and whether the phone may write into the calendar
+	Objects  []Stored
+	Writable bool
 }
+
+// feedID is a calendar's id in the feed: the last part of its path.
+func feedID(col Collection) string { return path.Base(strings.TrimRight(urlPath(col.URL), "/")) }
 
 // RemindersID names the calendar the phones show the reminders in: no
 // collection of Radicale's, the open reminders of every shared calendar.
@@ -62,13 +69,24 @@ func (c *Client) familyCalendars(ctx context.Context) ([]Collection, error) {
 // FamilyFeed is the shared calendars with their appointments overlapping
 // [from, to), recurring ones expanded by Radicale, and last the reminders'
 // calendar: every open reminder of the shared calendars that has a due
-// time, recurring ones as they repeat.
-func (c *Client) FamilyFeed(ctx context.Context, from, to time.Time) ([]FeedCalendar, error) {
+// time, recurring ones as they repeat. whole, for a phone that writes
+// back, gives each calendar's objects as stored instead (a series whole,
+// with its changed instances and alarms) and says where it may write.
+func (c *Client) FamilyFeed(ctx context.Context, from, to time.Time, whole bool) ([]FeedCalendar, error) {
 	cols, err := c.familyCalendars(ctx)
 	if err != nil {
 		return nil, err
 	}
-	evs, err := c.events(ctx, cols, from, to)
+	var evs []Event
+	objs := make([][]object, len(cols))
+	errs := make([]error, len(cols))
+	if whole {
+		q := strings.Replace(allesBody, `name="KIND"/>`, `name="VEVENT"><C:time-range start="`+utc(from)+`" end="`+utc(to)+`"/></C:comp-filter>`, 1)
+		parallel(len(cols), func(i int) { objs[i], errs[i] = c.objects(ctx, cols[i], q) })
+		err = errors.Join(errs...)
+	} else {
+		evs, err = c.events(ctx, cols, from, to)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -78,11 +96,13 @@ func (c *Client) FamilyFeed(ctx context.Context, from, to time.Time) ([]FeedCale
 	}
 	var out []FeedCalendar
 	at := map[string]int{}
-	for _, col := range cols {
-		u, _ := url.Parse(col.URL)
-		id := path.Base(strings.TrimRight(u.Path, "/"))
+	for i, col := range cols {
 		at[col.URL] = len(out)
-		out = append(out, FeedCalendar{ID: id, Name: col.Name, Kind: kindOf(id)})
+		k := FeedCalendar{ID: feedID(col), Name: col.Name, Kind: kindOf(feedID(col)), Writable: whole && !isMirror(col.URL)}
+		for _, o := range objs[i] {
+			k.Objects = append(k.Objects, Stored{ETag: o.etag, Data: o.data})
+		}
+		out = append(out, k)
 	}
 	for _, e := range evs {
 		if i, ok := at[e.Calendar]; ok {
@@ -113,57 +133,89 @@ func FeedICS(cals []FeedCalendar, now time.Time, loc *time.Location) string {
 			"X-WR-CALNAME:" + EscapeText(k.Name), "X-HAUS-KALENDER:" + EscapeText(k.ID), "X-HAUS-ART:" + EscapeText(k.Kind)} {
 			fold(&b, l)
 		}
-		uids := map[string]int{}
-		for _, e := range k.Events {
-			uids[e.UID]++
+		if k.Writable {
+			fold(&b, "X-HOMES-SCHREIBBAR:TRUE")
 		}
-		for _, e := range k.Events {
-			fold(&b, "BEGIN:VEVENT")
-			fold(&b, "UID:"+EscapeText(e.UID))
-			fold(&b, "DTSTAMP:"+utc(now))
-			if uids[e.UID] > 1 {
-				fold(&b, "RECURRENCE-ID"+when(e.Start, e.AllDay))
-			}
-			fold(&b, "DTSTART"+when(e.Start, e.AllDay))
-			fold(&b, "DTEND"+when(e.End, e.AllDay))
-			fold(&b, "SUMMARY:"+EscapeText(e.Summary))
-			if e.Location != "" {
-				fold(&b, "LOCATION:"+EscapeText(e.Location))
-			}
-			if e.Description != "" {
-				fold(&b, "DESCRIPTION:"+EscapeText(e.Description))
-			}
-			fold(&b, "END:VEVENT")
+		feedEvents(&b, k.Events, now)
+		for _, o := range k.Objects {
+			tagged(&b, o, "VEVENT")
 		}
-		for _, t := range k.Todos {
-			fold(&b, "BEGIN:VEVENT")
-			fold(&b, "UID:"+EscapeText(t.UID))
-			fold(&b, "DTSTAMP:"+utc(now))
-			switch {
-			case t.DueAllDay:
-				fold(&b, "DTSTART"+when(t.Due, true))
-				fold(&b, "DTEND"+when(t.Due.AddDate(0, 0, 1), true))
-			case t.RRule != "" && zoned(loc):
-				fold(&b, "DTSTART;TZID="+loc.String()+":"+t.Due.In(loc).Format("20060102T150405"))
-				fold(&b, "DTEND;TZID="+loc.String()+":"+t.Due.In(loc).Format("20060102T150405"))
-			default:
-				fold(&b, "DTSTART"+when(t.Due, false))
-				fold(&b, "DTEND"+when(t.Due, false))
-			}
-			if t.RRule != "" {
-				fold(&b, "RRULE:"+t.RRule)
-			}
-			fold(&b, "SUMMARY:"+EscapeText(t.Summary))
-			if !t.DueAllDay {
-				for _, l := range []string{"BEGIN:VALARM", "ACTION:DISPLAY", "DESCRIPTION:" + EscapeText(t.Summary), "TRIGGER:PT0S", "END:VALARM"} {
-					fold(&b, l)
-				}
-			}
-			fold(&b, "END:VEVENT")
-		}
+		feedTodos(&b, k.Todos, now, loc)
 		fold(&b, "END:VCALENDAR")
 	}
 	return b.String()
+}
+
+// feedEvents writes expanded appointments; a series' instances share
+// their UID, so each carries a RECURRENCE-ID, its start.
+func feedEvents(b *strings.Builder, evs []Event, now time.Time) {
+	uids := map[string]int{}
+	for _, e := range evs {
+		uids[e.UID]++
+	}
+	for _, e := range evs {
+		fold(b, "BEGIN:VEVENT")
+		fold(b, "UID:"+EscapeText(e.UID))
+		fold(b, "DTSTAMP:"+utc(now))
+		if uids[e.UID] > 1 {
+			fold(b, "RECURRENCE-ID"+when(e.Start, e.AllDay))
+		}
+		fold(b, "DTSTART"+when(e.Start, e.AllDay))
+		fold(b, "DTEND"+when(e.End, e.AllDay))
+		fold(b, "SUMMARY:"+EscapeText(e.Summary))
+		if e.Location != "" {
+			fold(b, "LOCATION:"+EscapeText(e.Location))
+		}
+		if e.Description != "" {
+			fold(b, "DESCRIPTION:"+EscapeText(e.Description))
+		}
+		fold(b, "END:VEVENT")
+	}
+}
+
+// feedTodos writes the reminders as appointments that ring.
+func feedTodos(b *strings.Builder, todos []Todo, now time.Time, loc *time.Location) {
+	for _, t := range todos {
+		fold(b, "BEGIN:VEVENT")
+		fold(b, "UID:"+EscapeText(t.UID))
+		fold(b, "DTSTAMP:"+utc(now))
+		switch {
+		case t.DueAllDay:
+			fold(b, "DTSTART"+when(t.Due, true))
+			fold(b, "DTEND"+when(t.Due.AddDate(0, 0, 1), true))
+		case t.RRule != "" && zoned(loc):
+			fold(b, "DTSTART;TZID="+loc.String()+":"+t.Due.In(loc).Format("20060102T150405"))
+			fold(b, "DTEND;TZID="+loc.String()+":"+t.Due.In(loc).Format("20060102T150405"))
+		default:
+			fold(b, "DTSTART"+when(t.Due, false))
+			fold(b, "DTEND"+when(t.Due, false))
+		}
+		if t.RRule != "" {
+			fold(b, "RRULE:"+t.RRule)
+		}
+		fold(b, "SUMMARY:"+EscapeText(t.Summary))
+		if !t.DueAllDay {
+			for _, l := range []string{"BEGIN:VALARM", "ACTION:DISPLAY", "DESCRIPTION:" + EscapeText(t.Summary), "TRIGGER:PT0S", "END:VALARM"} {
+				fold(b, l)
+			}
+		}
+		fold(b, "END:VEVENT")
+	}
+}
+
+// tagged writes an object's comps as stored, each with X-HOMES-ETAG, the
+// version a phone writes back over.
+func tagged(b *strings.Builder, o Stored, comp string) {
+	blocks(unfold(o.Data), comp, func(ls []string, block bool) {
+		for i, l := range ls {
+			if block && i == len(ls)-1 {
+				fold(b, "X-HOMES-ETAG:"+EscapeText(o.ETag))
+			}
+			if block {
+				fold(b, l)
+			}
+		}
+	})
 }
 
 // when is a DTSTART's or DTEND's parameters and value: a day as DATE, a
@@ -182,18 +234,24 @@ func zoned(loc *time.Location) bool {
 
 // FamilyCards is every card of the address books in Homes' account's home
 // (and the configured one), each as its text in Radicale; partial says a
-// cap cut the read short.
-func (c *Client) FamilyCards(ctx context.Context) (cards []string, partial bool, err error) {
+// cap cut the read short. tags, for a phone that writes back, gives each
+// card that can be written back its X-HOMES-ETAG.
+func (c *Client) FamilyCards(ctx context.Context, tags bool) (cards []string, partial bool, err error) {
 	all, partial, err := c.Cards(ctx)
 	if err != nil {
 		return nil, false, err
 	}
 	for _, cd := range all {
-		if cd.data != "" {
+		switch {
+		case cd.data == "":
+			cards = append(cards, cd.Contact.VCF(c.now())) // one of a file of several cards
+		case tags && cd.etag != "":
+			var b strings.Builder
+			tagged(&b, Stored{ETag: cd.etag, Data: cd.data}, "VCARD")
+			cards = append(cards, b.String())
+		default:
 			cards = append(cards, cd.data)
-			continue
 		}
-		cards = append(cards, cd.Contact.VCF(c.now())) // one of a file of several cards
 	}
 	return cards, partial, nil
 }

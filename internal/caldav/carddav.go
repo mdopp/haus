@@ -220,16 +220,6 @@ func (c *Client) AmendCard(ctx context.Context, cd Card, add []string, note stri
 	if err != nil {
 		return err
 	}
-	code, _, err := c.do(ctx, http.MethodPut, u, "", cd.amended(add, note, utc(c.now())),
-		map[string]string{"Content-Type": "text/vcard; charset=utf-8", "If-Match": cd.etag})
-	if err != nil {
-		return err
-	}
-	switch code {
-	case http.StatusOK, http.StatusCreated, http.StatusNoContent:
-		return nil
-	case http.StatusPreconditionFailed:
-		return ErrChanged
-	}
-	return &ErrStatus{"PUT", code}
+	_, err = c.rewrite(ctx, u, "text/vcard", cd.etag, cd.amended(add, note, utc(c.now())))
+	return err
 }

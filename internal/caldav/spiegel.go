@@ -239,21 +239,8 @@ func (c *Client) MakeBook(ctx context.Context, book, name string) error {
 // PutCard writes a card at u: a new one only where none is (If-None-Match),
 // a changed one only over the ETag it read (If-Match), else ErrChanged.
 func (c *Client) PutCard(ctx context.Context, u, etag, data string) error {
-	hdr := map[string]string{"Content-Type": "text/vcard; charset=utf-8", "If-None-Match": "*"}
-	if etag != "" {
-		hdr = map[string]string{"Content-Type": "text/vcard; charset=utf-8", "If-Match": etag}
-	}
-	code, _, err := c.do(ctx, http.MethodPut, u, "", data, hdr)
-	if err != nil {
-		return err
-	}
-	switch code {
-	case http.StatusOK, http.StatusCreated, http.StatusNoContent:
-		return nil
-	case http.StatusPreconditionFailed:
-		return ErrChanged
-	}
-	return &ErrStatus{"PUT", code}
+	_, err := c.rewrite(ctx, u, "text/vcard", etag, data)
+	return err
 }
 
 // DeleteCard removes the card at u, over its ETag when it has one; one

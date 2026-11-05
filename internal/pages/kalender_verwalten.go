@@ -40,19 +40,20 @@ const (
 // what the page says after a change: a fixed sentence per outcome, so the
 // address never lands in a URL
 var kalenderSaid = map[string]string{
-	"verbunden":      "Verbunden. Die Termine erscheinen in den nächsten 15 Minuten.",
-	"abstand":        "Gespeichert. Der Kalender wird ab jetzt so oft abgeglichen.",
-	"getrennt":       "Getrennt. Beim nächsten Abgleich verschwindet die Kopie.",
-	"angelegt":       "Der Kalender ist angelegt.",
-	"geloescht":      "Der Kalender ist gelöscht.",
-	"zurueck":        "Der Kalender ist wieder da, mit allen Terminen.",
-	"gespeichert":    "Gespeichert.",
-	"keine-adresse":  "Das ist keine Kalender-Adresse. Sie beginnt mit https:// oder webcal://.",
-	"keine-google":   "Das ist nicht Googles „Geheime Adresse im iCal-Format“. Sie beginnt mit https://calendar.google.com/ und endet auf .ics.",
-	"kein-name":      "Bitte einen Namen eintragen.",
-	"gibt-es-schon":  "Einen Kalender mit diesem Namen gibt es schon.",
-	"nicht-moeglich": "Das ging gerade nicht. Später noch einmal versuchen; geht es dann wieder nicht, Bescheid sagen, wer die Box betreut.",
-	"kein-laib":      saysNoLaibCal,
+	"verbunden":       "Verbunden. Die Termine erscheinen in den nächsten 15 Minuten.",
+	"abstand":         "Gespeichert. Der Kalender wird ab jetzt so oft abgeglichen.",
+	"getrennt":        "Getrennt. Beim nächsten Abgleich verschwindet die Kopie.",
+	"angelegt":        "Der Kalender ist angelegt.",
+	"geloescht":       "Der Kalender ist gelöscht.",
+	"zurueck":         "Der Kalender ist wieder da, mit allen Terminen.",
+	"eintrag-zurueck": "Er ist wieder da, auch auf den Handys beim nächsten Abgleich.",
+	"gespeichert":     "Gespeichert.",
+	"keine-adresse":   "Das ist keine Kalender-Adresse. Sie beginnt mit https:// oder webcal://.",
+	"keine-google":    "Das ist nicht Googles „Geheime Adresse im iCal-Format“. Sie beginnt mit https://calendar.google.com/ und endet auf .ics.",
+	"kein-name":       "Bitte einen Namen eintragen.",
+	"gibt-es-schon":   "Einen Kalender mit diesem Namen gibt es schon.",
+	"nicht-moeglich":  "Das ging gerade nicht. Später noch einmal versuchen; geht es dann wieder nicht, Bescheid sagen, wer die Box betreut.",
+	"kein-laib":       saysNoLaibCal,
 }
 
 // everyChoices is "Wie oft abgleichen?" (laib#619, haus#96): laib's
@@ -574,6 +575,8 @@ func KalenderAendern(cfg StartConfig) http.HandlerFunc {
 			}
 			log.Printf("homes: kalender: %s löscht %s", me, path)
 			http.Redirect(w, r, kalenderVerwalten+"?gesagt=geloescht&korb="+url.QueryEscape(korb), http.StatusSeeOther)
+		case "eintrag":
+			eintragZurueck(w, r, cfg, me, path)
 		case "zurueckholen":
 			if err := kalenderZurueck(r.Context(), cfg, path, r.PostForm.Get("id")); err != nil {
 				log.Printf("homes: kalender: %s holt %s zurück: %v", me, path, err)
@@ -629,8 +632,52 @@ func kalenderZurueck(ctx context.Context, cfg StartConfig, path, id string) erro
 	return nil
 }
 
+// eintragZurueck puts back an appointment or a card a phone deleted from
+// the Homes account (owner 2026-11-05), where it was.
+func eintragZurueck(w http.ResponseWriter, r *http.Request, cfg StartConfig, me, path string) {
+	err := papierkorb.ErrWeg
+	var e papierkorb.Eintrag
+	if cfg.Papierkorb != nil {
+		if e, err = cfg.Papierkorb.Holen("termin", r.PostForm.Get("id")); err != nil {
+			e, err = cfg.Papierkorb.Holen("kontakt", r.PostForm.Get("id"))
+		}
+	}
+	var d caldav.Stored
+	if err == nil && (json.Unmarshal(e.Daten, &d) != nil || d.Collection != path) {
+		err = papierkorb.ErrWeg
+	}
+	if err == nil {
+		err = cfg.Calendar.RestoreShared(r.Context(), d)
+	}
+	if err != nil {
+		log.Printf("homes: kalender: %s holt einen Eintrag in %s zurück: %v", me, path, err)
+		http.Error(w, familySentence("eintrag zurück", err, "Das ließ sich gerade nicht zurückholen. Versuch es gleich noch einmal; es bleibt im Papierkorb."), http.StatusConflict)
+		return
+	}
+	cfg.Papierkorb.Raus(e.ID)
+	said(w, r, "eintrag-zurueck")
+}
+
+// eintragKorb is what the phones deleted from the household's calendars
+// and address book, each with Rückgängig: everyone's to take back.
+func eintragKorb(cfg StartConfig, loc *time.Location) string {
+	var b strings.Builder
+	for _, e := range cfg.Papierkorb.Liste("") {
+		var d caldav.Stored
+		if (e.Art != "termin" && e.Art != "kontakt") || json.Unmarshal(e.Daten, &d) != nil {
+			continue
+		}
+		was := map[bool]string{true: "Termin", false: "Kontakt"}[e.Art == "termin"]
+		b.WriteString(`<li><span>„` + html.EscapeString(e.Name) + `“ <small class=k>` + was + ` · am Handy gelöscht von ` + html.EscapeString(e.Wer) +
+			` · bis ` + e.Bis().In(loc).Format("02.01.") + `</small></span>` +
+			changeForm(d.Collection, e.Name, `<input type=hidden name=id value=`+e.ID+`><button name=tu value=eintrag data-laeuft="Holt zurück …">Rückgängig</button>`) + `</li>`)
+	}
+	return b.String()
+}
+
 // kalenderKorb is the calendars this person may take back (the family's
-// and their own), each with Rückgängig; only = one entry, after its delete.
+// and their own), each with Rückgängig, and what the phones deleted
+// (eintragKorb); only = one calendar's entry, after its delete.
 func kalenderKorb(cfg StartConfig, me, only string) string {
 	if cfg.Papierkorb == nil || cfg.Calendar == nil {
 		return ""
@@ -649,6 +696,9 @@ func kalenderKorb(cfg StartConfig, me, only string) string {
 		b.WriteString(`<li><span>„` + html.EscapeString(d.Name) + `“ <small class=k>` + html.EscapeString(count(len(d.Abzug.Objekte), "Termin", "Termine")) +
 			` · bis ` + e.Bis().In(loc).Format("02.01.") + `</small></span>` +
 			changeForm(d.Path, d.Name, `<input type=hidden name=id value=`+e.ID+`><button name=tu value=zurueckholen data-laeuft="Holt zurück …">Rückgängig</button>`) + `</li>`)
+	}
+	if only == "" {
+		b.WriteString(eintragKorb(cfg, loc))
 	}
 	if b.Len() == 0 {
 		return ""
