@@ -429,14 +429,14 @@ func Tools(cfg Config) []mcpserver.Tool {
 			},
 			mcpserver.Tool{
 				Name: "kontakt_ergaenzen",
-				Description: "Trägt eine Firma aus einem Dokument ins Adressbuch der Familie ein (haus#163), mit Ansprechperson, Telefon, E-Mail, IBAN und Anschrift: legt sie an (Kategorie Firma) oder füllt nur leere Werte nach; " +
+				Description: "Trägt eine Firma aus einem Dokument ins Adressbuch der Familie ein (haus#163), mit Ansprechperson, Telefon, E-Mail, IBAN (mit Bank und Kontoinhaber) und Anschrift: legt sie an (Kategorie Firma) oder füllt nur leere Werte nach; " +
 					"gefunden wird sie über den Namen (ORG/FN), sonst die E-Mail, sonst die IBAN. Ein Wert, der da ist, wird nie geändert; eine andere IBAN wird nie geschrieben, " +
 					"sondern als abweichend gemeldet. Kontakte ohne Kategorie Firma ergänzt es nicht. Die Antwort: eine Zeile auf Deutsch, dann eine Zeile JSON " +
 					"mit status und felder (angelegt, ergaenzt, vorhanden, abweichend, abgelehnt).",
 				Schema: obj(map[string]any{"firma": str("Der Name der Firma, wie er im Dokument steht"),
 					"ansprechpartner": str("optional: die Ansprechperson"), "telefon": str("optional: Telefonnummer"),
 					"email": str("optional: E-Mail-Adresse"), "iban": str("optional: IBAN, mit oder ohne Leerzeichen"),
-					"quelle": str("optional: der Link zum Dokument in Paperless"),
+					"bank": str("optional: der Name der Bank zur IBAN, wie er im Dokument steht"), "kontoinhaber": str("optional: der Kontoinhaber zur IBAN, wie er im Dokument steht"),
 					"anschrift": map[string]any{"type": "object", "description": "optional: die Postanschrift der Firma",
 						"properties": map[string]any{"strasse": str("Straße und Hausnummer"), "plz": str("Postleitzahl; in Deutschland fünf Ziffern"),
 							"ort": str("Ort"), "land": str("optional: Land, z. B. DE (ohne Angabe DE)")},

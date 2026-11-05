@@ -978,17 +978,23 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     `kontakt_anlegen(name, telefon?, email?, geburtstag?)` (a vCard 4.0
     with a random `urn:uuid` UID; `geburtstag` `JJJJ-MM-TT` or `--MM-TT`),
     `kontakt_ergaenzen(firma, ansprechpartner?, telefon?, email?, iban?,
-    quelle?, anschrift?)` (`anschrift` an object `{strasse, plz, ort,
+    bank?, kontoinhaber?, anschrift?)` (`anschrift` an object `{strasse, plz, ort,
     land?}`, `land` default `DE`) (haus#163, for laib's paperless helper: a firm from a
     document). It finds the card by ORG or FN equal to `firma` (case and
     spaces ignored), else the same email, else the same IBAN (`X-IBAN` or
     one in the note); several at one step narrow to the `CATEGORIES:Firma`
     card, else nothing is written (`mehrdeutig`). None: a new card with
     ORG = FN = firma, `CATEGORIES:Firma`, TEL, EMAIL, `ADR;TYPE=WORK`, `X-IBAN` and one NOTE
-    (`Ansprechpartner: …`, `IBAN: …` in groups of four, `Quelle: <link>`).
-    One: only what is missing is added — a second TEL or EMAIL, an empty
-    contact person, IBAN or address (only when the card has no ADR), the
-    source line; a value there is never changed (another address is
+    (`Ansprechpartner: …`, then the account as a block: `Bank: …`,
+    `Kontoinhaber: …`, `IBAN: …` in groups of four). `bank` and
+    `kontoinhaber` are the document's words and go only with a valid IBAN
+    (else `abgelehnt`); the bank is not looked up from the IBAN. No link to
+    the document is written (a `quelle` an older caller sends is ignored):
+    the contact page's „Dokumente“ link finds them (#281, owner
+    2026-11-05). One: only what is missing is added — a second TEL or
+    EMAIL, an empty contact person, IBAN or address (only when the card has
+    no ADR), the bank and account holder of the IBAN it has (above its
+    `IBAN:` line); a value there is never changed (another address is
     `vorhanden`, the stored one in `gruende`), a different IBAN is never written (`abweichend`, the caller
     marks the document `prüfen`), and a card without `CATEGORIES:Firma`
     (one the family made) gets nothing (`abgelehnt`). The IBAN must pass
@@ -1004,7 +1010,13 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     Bote writes with one account over every address book it can read, and a
     changed card on someone's phone cannot be taken back the way a new one
     can be deleted; `kontakt_ergaenzen` only adds, and only to the firm
-    cards Homes made.
+    cards Homes made. Once, at start, Homes takes the `Quelle: <link to a
+    Paperless document>` note lines it used to write out of those firm
+    cards, every other line kept; each changed card is copied as it was to
+    `HOMES_DATA/kontakte-quelle/<uid>.vcf` first (to put back: write it to
+    its place in Radicale, or import it on a phone), and
+    `HOMES_DATA/kontakte-quelle/fertig` marks it done; the log says how
+    many cards changed.
     Reads cover every address book of the account; writes go to
     `HOMES_RADICALE_ADDRESSBOOK` when set, else the address book named
     `Haushalt`, made on the first write at `/<user>/haushalt-kontakte/`.
