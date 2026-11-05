@@ -29,7 +29,7 @@ import (
 // shows up as one (owner, 2026-11-04); the Box card names only the events
 // it has words for, so a page counted here is not shown until it has them.
 var pagePaths = map[string]string{"/start": "start", "/raeume": "raeume", "/energie": "energie", "/medien": "medien",
-	"/kalender": "kalender", "/notizen": "notizen", "/sprechen": "sprechen", "/box": "box", "/box/geraete": "geraete",
+	"/kalender": "kalender", KontaktePath: "kontakte", "/notizen": "notizen", "/sprechen": "sprechen", "/box": "box", "/box/geraete": "geraete",
 	"/pair-device": "koppeln", cards.SwitchPath: "schalten", "/mehr": "mehr",
 	EinkaufPath: "einkauf", EinkaufRezeptePath: "rezepte", MusikPath: "musik", PodcastsPath: "podcasts", GesehenPath: "gesehen",
 	DiscogsPath: "discogs", PlattePath: "platte", DokumentePath: "dokumente", ScannenPath: "scannen", TrennblattPath: "trennblatt",

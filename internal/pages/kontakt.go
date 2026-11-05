@@ -32,7 +32,7 @@ func Kontakt(cfg StartConfig) http.HandlerFunc {
 		}
 		if err != nil {
 			log.Printf("homes: kontakt page: %q: %v", uid, err)
-			missing{http.StatusOK, saysNoContacts, "Kontakt", "/start", "Start"}.write(w, r, cfg)
+			missing{http.StatusOK, saysNoContacts, "Kontakt", KontaktePath, "Kontakte"}.write(w, r, cfg)
 			return
 		}
 		for _, ct := range all {
@@ -74,6 +74,6 @@ func Kontakt(cfg StartConfig) http.HandlerFunc {
 			writePage(w, http.StatusOK, b)
 			return
 		}
-		missing{http.StatusNotFound, "Diesen Kontakt gibt es nicht.", "Kontakt", "/start", "Start"}.write(w, r, cfg)
+		missing{http.StatusNotFound, "Diesen Kontakt gibt es nicht.", "Kontakt", KontaktePath, "Kontakte"}.write(w, r, cfg)
 	}
 }

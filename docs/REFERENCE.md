@@ -174,7 +174,7 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   to the person's *Deine Geräte* or takes it off (`favoriten.json`, their
   own list only, at most 50, the file replaced whole, a file that does not
   read never written over); same guards as `/schalten`, then 303 back.
-- `GET /raeume`, `/kalender`, `/notizen` — the family's other pages
+- `GET /raeume`, `/kalender`, `/kontakte`, `/notizen` — the family's other pages
   (haus#12), from the same cards, in the family's frame. A page whose
   backend is not set has no tab and, reached anyway, says in one sentence
   what is missing (an admin also reads what to set up), never a silent
@@ -236,7 +236,18 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     `abo-*`, read only) are in it, and so are the Bote's *Termine*; a
     calendar *nur für mich* (`<person>/privat-*`) only on that person's
     page. A row names its calendar unless it is the Haushalt, in the colour
-    the person chose.
+    the person chose. Under the title one quiet line says where to edit
+    (owner 2026-11-05, „Web zeigt, Handy bearbeitet“): on the phone, through
+    the Homes account (`/napi/gemeinsam`), or through the Bote.
+  - *Kontakte* (`/kontakte`, a Haushalt pill of the kontakte module): the
+    household's address book, the same cards as `GET /napi/gemeinsam/kontakte`,
+    by name (accents as their letter), one card, or a card per first letter
+    from 16 contacts on. Each row leads to the contact's page and carries
+    its first number (`tel:`), else its first e-mail (`mailto:`), as a tap
+    of its own. The search (`?q=`, and live while typing) finds name,
+    number and e-mail, compared as `namen.Plain`. The same quiet line as
+    Kalender says where to edit; Radicale not answering is *Die Kontakte
+    lassen sich gerade nicht lesen.*, once. It changes nothing.
   - *Deine Kalender* (`/kalender/verwalten`, haus#66), linked from
     Kalender: every calendar with where it comes from (*aus Google, nur
     lesen · verbunden seit … · zuletzt abgeglichen vor 5 min*, laib's

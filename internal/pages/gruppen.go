@@ -42,6 +42,7 @@ func Gruppen(cfg StartConfig) map[string][]modul.Route {
 	gs.add("kalender", "/kalender/hinzufuegen", KalenderHinzufuegen(cfg)) // Google, ein Abo, ein neuer Kalender
 	gs.add("kalender", "/kalender/aendern", KalenderAendern(cfg))         // one calendar's buttons
 	gs.add("kalender", cards.ReminderPages, Erinnerung(cfg))
+	gs.add("kontakte", KontaktePath, Kontakte(cfg)) // the address book, by name (owner 2026-11-05)
 	gs.add("kontakte", cards.ContactPages, Kontakt(cfg))
 	if cfg.Einkauf != nil || cfg.Wuensche != nil { // haus#118; with einkauf off, the music wish list only (ADR 0001 H4)
 		name := "einkauf"

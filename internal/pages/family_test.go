@@ -389,7 +389,7 @@ func TestFamilyPagesDoNotWaitForAHangingBackend(t *testing.T) {
 			t.Fatalf("%s: %d after %v", p.path, code, took)
 		}
 		mustContain(t, body, p.want)
-		mustNotContain(t, body, "id=karte-heute>", "Termin", "Erinnerungen")
+		mustNotContain(t, body, "id=karte-heute>", "keine Termine", "Keine Termine", "Erinnerungen")
 		// haus#12, haus#33: each page says it, once, in a plain line
 		if n := strings.Count(body, "Der Kalender antwortet gerade nicht."); n != 1 {
 			t.Fatalf("%s: the calendar said %d times:\n%s", p.path, n, body)
@@ -445,7 +445,7 @@ func TestItemPagesSayPlainlyWhatDoesNotAnswer(t *testing.T) {
 		{Ding, StartConfig{HA: hcDown}, "/raeume/light.flur", "Licht und Geräte antworten gerade nicht.", "href=/raeume", []string{"Flurlicht", "Flur<", host(hcDown.URL)}},
 		{Ding, StartConfig{HA: hcUnread}, "/raeume/light.flur", "Die Räume werden gerade gelesen — gleich nochmal versuchen.", "href=/raeume", []string{"Flurlicht", "Ohne Raum", host(hcUnread.URL)}},
 		{Erinnerung, StartConfig{Calendar: cal}, "/kalender/erinnerung/a", "Der Kalender antwortet gerade nicht.", "href=/kalender", []string{host(cal.URL)}},
-		{Kontakt, StartConfig{Contacts: contacts}, "/kontakte/a", "Die Kontakte lassen sich gerade nicht lesen.", "href=/start", []string{host(contacts.URL)}},
+		{Kontakt, StartConfig{Contacts: contacts}, "/kontakte/a", "Die Kontakte lassen sich gerade nicht lesen.", "href=/kontakte", []string{host(contacts.URL)}},
 		{Notizen, StartConfig{Notes: nd}, "/notizen/einkaufsliste.md", "Die Notizen lassen sich gerade nicht lesen.", "href=/notizen", []string{gone}},
 	} {
 		code, body, h := familyPage(t, c.page, c.cfg, "GET", c.path, "family")
