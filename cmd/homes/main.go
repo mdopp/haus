@@ -88,7 +88,7 @@ type site struct {
 	musik                     string            // haus#107: the music inbox's folder (musicInbox); "", no Musik page
 	boteSignal                string            // haus#175: the house's Signal number (HOMES_BOTE_SIGNAL), sprechen's setup; "", none
 	domain                    string            // the box's domain, HOMES_PUBLIC_URL's after homes.: the services' addresses
-	dienste                   map[string]bool   // the services Laib runs, asked at start: the link modules; nil, Laib did not say
+	dienste                   map[string]bool   // the services Laib runs (dienstePflegen): the link modules; nil, Laib has not said yet
 }
 
 // routes is Homes' whole surface: /napi for the app, /mcp/haushalt for the
@@ -442,7 +442,8 @@ func main() {
 		gesundheit: gesundheit, haPublic: haPublic, inverted: pages.InvertedFromList(os.Getenv("HOMES_COVER_INVERTED")),
 		radicale: radicalePublic, views: ansicht.Open(dataDir, os.Getenv("HOMES_RADICALE_USER")), dataDir: dataDir,
 		docsMail: docsMail, paperlessPublic: paperlessPublic, paperlessLAN: paperlessLAN, musik: musicInbox(), boteSignal: strings.TrimSpace(os.Getenv("HOMES_BOTE_SIGNAL")),
-		domain: einrichten.Domain(os.Getenv("HOMES_PUBLIC_URL")), dienste: einrichten.Dienste(ctx, ops, 5*time.Second)}
+		domain: einrichten.Domain(os.Getenv("HOMES_PUBLIC_URL"))}
+	start := st                     // what the list is built from again once Laib says what runs (dienstePflegen)
 	st.napi.Module = logModule(&st) // HOMES_MODULE_AUS takes what it switches off out of st
 	st.napi.Einrichtung = einrichtung(st, devices.Gekoppelt(store), jellyfin.KeyFromEnv())
 	// the counter stops only once the server has: a page is counted after
@@ -457,6 +458,7 @@ func main() {
 	}
 	startLeaf(ctx, st)
 	go schliesseWuensche(ctx, ops, st.napi.Module, time.Minute) // a wish for what is on now is done (ADR 0001 §10)
+	go dienstePflegen(ctx, start, st.napi.Module, 30*time.Second, time.Hour)
 	mux := routes(st)
 	addr := env("HOMES_LISTEN", "127.0.0.1:8650")
 	log.Printf("homes %s: listening on %s as %s, laib %s, home assistant %v, haushalt %d tools, memory library %v (tidy-up %v), uploads %q, the Bote %v, counting %v (voice %v), pages only behind the proxy secret", Version, addr, assistent.Name(), ops.URL, cfg.HA != nil, len(haushalt.Tools(hh)), hh.Library != nil, hh.Judge != nil, cfg.UploadDir, b != nil, counter != nil, voice != nil)

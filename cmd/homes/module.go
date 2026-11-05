@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"maps"
 	"os"
 	"slices"
 	"strings"
@@ -54,7 +55,7 @@ func katalog(s site) []modul.Modul {
 		dokApp.Teilen = []string{"dokument"}
 	}
 	link := func(name, backend, dienst string, e *modul.Einrichtung) modul.Modul { // a service Homes only leads to
-		return bau(modul.Modul{Name: name, Backend: backend, Einrichtung: e}, s.dienste[backend] && e != nil, einrichten.Grund(s.dienste, dienst))
+		return bau(modul.Modul{Name: name, Backend: backend, Einrichtung: e}, s.dienste[backend] && e != nil, fmt.Sprintf(texte.T(texte.GrundDienst), dienst))
 	}
 	ms := []modul.Modul{
 		bau(modul.Modul{Name: "geraete", Backend: "home-assistant",
@@ -117,12 +118,6 @@ func katalog(s site) []modul.Modul {
 		bau(modul.Modul{Name: "nutzung", Backend: "usage-metrics",
 			Env: []string{"HOMES_USAGE_URL", "HOMES_USAGE_TOKEN"}},
 			s.usage != nil, "Auf dieser Box läuft kein usage-metrics."),
-		// the box's apps Homes only leads to, on with their service (owner 2026-11-04: their setup is theirs)
-		link("fotos", "immich", "Immich", einrichten.App("Immich", "app.alextran.immich", einrichten.Web("photos", s.domain), "https://immich.app/docs/features/mobile-app", "schritt.fotos", "schritt.fotos-sichern")),
-		link("passwoerter", "vaultwarden", "Vaultwarden", einrichten.App("Bitwarden", "com.x8bit.bitwarden", einrichten.Web("vault", s.domain),
-			"https://bitwarden.com/help/getting-started-mobile/", "schritt.tresor", "schritt.tresor-passwort")),
-		link("filme", "media", "Jellyfin", einrichten.App("Jellyfin", "org.jellyfin.mobile", einrichten.Web("media", s.domain), "https://jellyfin.org/docs/general/clients/", "schritt.anmelden")),
-		link("hoerbuecher", "audiobookshelf", "Audiobookshelf", einrichten.App("Audiobookshelf", "com.audiobookshelf.app", einrichten.Web("hoerbuecher", s.domain), "https://www.audiobookshelf.org/guides/", "schritt.anmelden")),
 	}
 	// what the box decides of the entries: Dokumente only with a way into the
 	// archive (haus#68); Musik with the inbox; Platte erfassen (with Discogs)
@@ -137,7 +132,16 @@ func katalog(s site) []modul.Modul {
 		}
 		return e.Pfad != pages.PlattePath || hh.Wuensche.Regale != nil
 	})
-	return ms
+	if s.dienste == nil { // Laib has not said yet what runs: unknown is not missing, so they wait outside the list (dienstePflegen)
+		return ms
+	}
+	// the box's apps Homes only leads to, on with their service (owner 2026-11-04: their setup is theirs)
+	return append(ms,
+		link("fotos", "immich", "Immich", einrichten.App("Immich", "app.alextran.immich", einrichten.Web("photos", s.domain), "https://immich.app/docs/features/mobile-app", "schritt.fotos", "schritt.fotos-sichern")),
+		link("passwoerter", "vaultwarden", "Vaultwarden", einrichten.App("Bitwarden", "com.x8bit.bitwarden", einrichten.Web("vault", s.domain),
+			"https://bitwarden.com/help/getting-started-mobile/", "schritt.tresor", "schritt.tresor-passwort")),
+		link("filme", "media", "Jellyfin", einrichten.App("Jellyfin", "org.jellyfin.mobile", einrichten.Web("media", s.domain), "https://jellyfin.org/docs/general/clients/", "schritt.anmelden")),
+		link("hoerbuecher", "audiobookshelf", "Audiobookshelf", einrichten.App("Audiobookshelf", "com.audiobookshelf.app", einrichten.Web("hoerbuecher", s.domain), "https://www.audiobookshelf.org/guides/", "schritt.anmelden")))
 }
 
 // nurWo keeps of a module's entries those the box has.
@@ -156,6 +160,36 @@ func logModule(s *site) *modul.Liste {
 	}
 	log.Printf("homes: %s", l)
 	return l
+}
+
+// dienstePflegen keeps the link modules with the services Laib runs. At
+// start Laib may not answer: whoever restarts Homes holds Laib's lock until
+// Homes is healthy, so the first ask can time out. Until Laib answers it is
+// asked again after erst, doubling to ten times that; then every spaeter,
+// so a service added or removed later shows without a restart. An answer
+// that changes the services builds the list anew from start (the site before
+// HOMES_MODULE_AUS took its part out), in liste's place for every holder,
+// and ticks off the wishes it fulfils.
+func dienstePflegen(ctx context.Context, start site, liste *modul.Liste, erst, spaeter time.Duration) {
+	for wait := time.Duration(0); ; {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(wait):
+		}
+		d := einrichten.Dienste(ctx, start.ops, 5*time.Second)
+		if d == nil {
+			wait = min(max(2*wait, erst), 10*erst)
+			continue
+		}
+		if start.dienste == nil || !maps.Equal(d, start.dienste) {
+			start.dienste = d
+			s := start // ausschalten takes what it switches off out of its own copy
+			liste.Setzen(logModule(&s))
+			go schliesseWuensche(ctx, s.ops, liste, time.Minute)
+		}
+		wait = spaeter
+	}
 }
 
 // schliesseWuensche ticks off, once Laib answers, the open wish of each
@@ -256,7 +290,7 @@ func ausschalten(s *site, ms []modul.Modul, liste string) []modul.Modul {
 		name = strings.TrimSpace(name)
 		i := slices.IndexFunc(ms, func(m modul.Modul) bool { return m.Name == name })
 		switch {
-		case name == "":
+		case name == "" || i < 0 && s.dienste == nil: // a link module waits for Laib's answer (dienstePflegen)
 		case i < 0:
 			log.Printf("homes: HOMES_MODULE_AUS: no module %q, ignored", name)
 		case schaltbar[name] == nil:
@@ -301,7 +335,7 @@ func einrichtung(s site, gekoppelt func(string) bool, jf *jellyfin.Client) *einr
 		q.HomesApp = &modul.Einrichtung{Web: s.publicURL, App: "Homes", Paket: app.Paket, Store: app.Quelle + "/releases/latest/download/app-release.apk",
 			Anleitung: app.Quelle + "#readme", Schritte: []string{"schritt.homes", "schritt.homes-iphone"}}
 	}
-	if jf != nil && s.napi.Module.An("filme") {
+	if jf != nil { // a task is only ever asked of a module that is on
 		q.Erkennen = map[string]func(context.Context, string) (bool, error){"filme": jf.HatGeraet}
 	}
 	if s.hh.Einkauf != nil { // the app's launcher shortcuts: the shopping list, the timeline, the camera into Paperless

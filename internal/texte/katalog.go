@@ -74,8 +74,7 @@ const (
 	Schritte      ID = "willkommen.schritte"
 	AllesFertig   ID = "willkommen.alles"
 	ZurStartseite ID = "willkommen.weiter"
-	GrundDienst   ID = "grund.dienst"        // a link module's service is not on the box: „%s“ is its name
-	GrundUnklar   ID = "grund.dienst-unklar" // … or Laib did not say at start
+	GrundDienst   ID = "grund.dienst" // a link module's service is not on the box: „%s“ is its name
 	// Musik, managing the music (owner 2026-11-04: „Musik verwalten“, not what is playing)
 	MusikDazu             ID = "musik.dazu"              // the section how music gets in
 	MusikHandy            ID = "musik.handy"             // from the phone: Teilen → Homes
@@ -189,7 +188,6 @@ var de = map[ID]string{
 	AllesFertig:         "Alles eingerichtet.",
 	ZurStartseite:       "Weiter zur Startseite",
 	GrundDienst:         "Auf dieser Box läuft %s nicht.",
-	GrundUnklar:         "Ob auf dieser Box %s läuft, ließ sich beim Start nicht lesen.",
 
 	"schritt.anmelden":        "Trag als Server-Adresse {adresse} ein und melde dich mit deinem Benutzernamen und Passwort an.",
 	"schritt.fotos":           "Trag als Server-Adresse {adresse} ein, tippe auf „Mit Familienkonto anmelden“ und melde dich an.",
