@@ -48,14 +48,14 @@ func TestDokumenteShowsTheWaysIn(t *testing.T) {
 			t.Errorf("the page lacks %q", want)
 		}
 	}
-	// the Mehr audit (owner 2026-11-04): filing first and big, the mail one quiet line, then Paperless
+	// owner 2026-11-04 (no link to Paperless on the web): the archive leads, its way in big with
+	// the LAN-only line, then filing, the mail one quiet line
+	mustContain(t, home, `<a class=vorne href="https://paperless.box.test/documents?sort=added&amp;reverse=1">In Paperless öffnen</a><p class=zustand role=status><span class="punkt "></span>Nur zu Hause im WLAN.</p>`)
+	before(t, home, "In Paperless öffnen", "Foto machen oder Datei ablegen")
 	before(t, home, "Foto machen oder Datei ablegen", "Oder per Mail an")
-	before(t, home, "Oder per Mail an", "In Paperless öffnen")
-	// from outside the house: Paperless is LAN-only, so a word instead of a dead link; filing still works
+	// from outside the house: the way in stays, the line says it opens only at home; filing still works
 	away := getDokumente(cfg, "/dokumente", map[string]string{"X-Forwarded-For": "203.0.113.7"}).Body.String()
-	if strings.Contains(away, "paperless.box.test") || !strings.Contains(away, "nur zu Hause im WLAN") || !strings.Contains(away, "Foto machen oder Datei ablegen") {
-		t.Errorf("away from home:\n%s", away)
-	}
+	mustContain(t, away, ">In Paperless öffnen</a>", `<span class="punkt gelb"></span>Paperless öffnet sich nur zu Hause im WLAN; gerade bist du unterwegs.`, "Foto machen oder Datei ablegen")
 	// Paperless reachable from anywhere: the link, no hint
 	cfg.PaperlessLANOnly = false
 	if open := getDokumente(cfg, "/dokumente", map[string]string{"X-Forwarded-For": "203.0.113.7"}).Body.String(); !strings.Contains(open, "In Paperless öffnen") || strings.Contains(open, "WLAN") {
@@ -79,8 +79,8 @@ func TestDokumenteShowsTheWaysIn(t *testing.T) {
 	if strings.Count(home[strings.Index(home, "Zuletzt abgelegt"):], "<li>") != 5 {
 		t.Errorf("not five:\n%s", home)
 	}
+	before(t, home, "In Paperless öffnen", "Oder per Mail an")
 	before(t, home, "Oder per Mail an", "Zuletzt abgelegt")
-	before(t, home, "Zuletzt abgelegt", "In Paperless öffnen")
 	away = getDokumente(cfg, "/dokumente", map[string]string{"X-Forwarded-For": "203.0.113.7"}).Body.String()
 	mustContain(t, away, "Rechnung Oktober")
 	mustNotContain(t, away, `href="/dokumente/1"`)
@@ -220,7 +220,7 @@ func TestDokumenteFiledLinksToWhatWasFiled(t *testing.T) {
 	}
 	// away from home, Paperless LAN-only: said, no link that cannot open
 	away := getDokumente(cfg, "/dokumente?abgelegt=1&datei=0a1b2c3d", map[string]string{"X-Forwarded-For": "203.0.113.7"}).Body.String()
-	if !strings.Contains(away, "Liegt in Paperless") || strings.Contains(away, "/dokumente/abgelegt/") || strings.Contains(away, "paperless.box.test") {
+	if !strings.Contains(away, "Liegt in Paperless") || strings.Contains(away, "/dokumente/abgelegt/") || strings.Count(away, "paperless.box.test") != 1 { // the way in at the top only
 		t.Errorf("away:\n%s", away)
 	}
 	// no Paperless address: filed is said, no link at all
