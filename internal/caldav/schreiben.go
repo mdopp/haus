@@ -3,8 +3,10 @@ package caldav
 import (
 	"context"
 	"errors"
+	"maps"
 	"net/url"
 	"path"
+	"slices"
 	"strings"
 	"time"
 )
@@ -15,7 +17,8 @@ import (
 // saw (If-Match) or, new, only where none is (If-None-Match). The phone
 // sends what it shows (phoneProps); everything else of the stored object
 // stays as it was: another app's attendees, Homes' own X-HAUS-*, a
-// series' changed instances, a card's photo and IBANs.
+// series' changed instances, a card's IBANs, and its photo unless the
+// phone sends one (sentOnly).
 
 // Stored is one shared object as Radicale has it; Data "" is none (yet)
 // at that place. It is what the Papierkorb keeps of a deleted one.
@@ -41,6 +44,12 @@ var phoneProps = map[string]map[string]bool{
 	"VEVENT": set("SUMMARY LOCATION DESCRIPTION DTSTART DTEND DURATION RRULE EXDATE VALARM DTSTAMP LAST-MODIFIED"),
 	"VCARD":  set("FN N TEL EMAIL ADR ORG TITLE BDAY NOTE URL REV"),
 }
+
+// sentOnly is what the phone writes only when it sends it: a card's
+// picture the person set there replaces the stored one, and a phone that
+// sends none (homes-android does not yet) leaves it as it was. The face
+// Homes adds to a card (pages.KontaktKarte) is taken out before this.
+var sentOnly = map[string]map[string]bool{"VCARD": set("PHOTO")}
 
 func set(names string) map[string]bool {
 	m := map[string]bool{}
@@ -116,11 +125,16 @@ func (c *Client) WriteShared(ctx context.Context, at Stored, uid, sent, etag str
 	if !ok {
 		return Stored{}, ErrNotOne
 	}
+	replace := phoneProps[at.comp]
+	if slices.ContainsFunc(own, func(l string) bool { p, ok := parseLine(l); return ok && sentOnly[at.comp][propName(p.Name)] }) {
+		replace = maps.Clone(replace)
+		maps.Copy(replace, sentOnly[at.comp])
+	}
 	u, err := c.resolve(at.Collection + url.PathEscape(at.Name))
 	if err != nil {
 		return Stored{}, err
 	}
-	at.Data = patch(at.Data, at.comp, uid, own, phoneProps[at.comp])
+	at.Data = patch(at.Data, at.comp, uid, own, replace)
 	at.ETag, err = c.rewrite(ctx, u, ctype, etag, at.Data)
 	return at, err
 }
@@ -130,7 +144,9 @@ func (c *Client) WriteShared(ctx context.Context, at Stored, uid, sent, etag str
 func phoneSent(sent, comp, uid string, now time.Time) (own []string, ok bool) {
 	blocks(unfold(sent), comp, func(ls []string, block bool) {
 		if u, override := ownUID(ls); block && !ok && u == uid && !override {
-			own, ok = phoneLines(ls[1:max(1, len(ls)-1)], phoneProps[comp]), true
+			keep := maps.Clone(phoneProps[comp])
+			maps.Copy(keep, sentOnly[comp])
+			own, ok = phoneLines(ls[1:max(1, len(ls)-1)], keep), true
 		}
 	})
 	if comp == "VCARD" {

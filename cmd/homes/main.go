@@ -31,6 +31,7 @@ import (
 	"github.com/mdopp/homes/internal/einrichten"
 	"github.com/mdopp/homes/internal/favoriten"
 	"github.com/mdopp/homes/internal/gesehen"
+	"github.com/mdopp/homes/internal/gesichter"
 	"github.com/mdopp/homes/internal/ha"
 	"github.com/mdopp/homes/internal/haushalt"
 	"github.com/mdopp/homes/internal/jellyfin"
@@ -90,6 +91,7 @@ type site struct {
 	domain                    string                       // the box's domain, HOMES_PUBLIC_URL's after homes.: the services' addresses
 	dienste                   map[string]bool              // the services Laib runs (dienstePflegen): the link modules; nil, Laib has not said yet
 	archive                   map[string]napi.ArchivIntern // each person's message archive (HOMES_ARCHIV_INTERN): a contact's Nachrichten
+	gesichter                 *gesichter.Gesichter         // Immich for the contacts (HOMES_IMMICH_*): Fotos, faces, suggestions; nil, none
 }
 
 // routes is Homes' whole surface: /napi for the app, /mcp/haushalt for the
@@ -98,7 +100,7 @@ func routes(s site) http.Handler {
 	mux := http.NewServeMux()
 	s.napi.Usage, s.napi.MusicInbox = s.usage, s.musik // the app's songs and ZIPs go where the Musik page looks (haus#107)
 	// a contact's links in the phones' cards, the same as on its page (owner 2026-11-05)
-	karte := pages.StartConfig{PublicURL: s.publicURL, PaperlessPublicURL: s.paperlessPublic}
+	karte := pages.StartConfig{PublicURL: s.publicURL, PaperlessPublicURL: s.paperlessPublic, Gesichter: s.gesichter, Module: s.napi.Module}
 	karte.Archive, karte.ArchivURL = archivOf(s)
 	s.napi.Haushalt.Karte = pages.KontaktKarte(karte)
 	mux.Handle("/napi/", napi.Handler(s.napi))
@@ -122,7 +124,7 @@ func familyOf(s site) pages.StartConfig {
 		Samba: s.samba, SambaHost: s.sambaHost, Usage: s.usage, PublicURL: s.publicURL, Welcome: s.welcome, STT: s.stt,
 		HAPublicURL: s.haPublic, Inverted: s.inverted, RadicalePublicURL: s.radicale, Views: s.views, GesundheitURL: s.gesundheit,
 		DocumentsMail: s.docsMail, PaperlessPublicURL: s.paperlessPublic, PaperlessLANOnly: s.paperlessLAN, Sicherung: s.napi.Sicherung,
-		Reitti: s.napi.Reitti, Module: s.napi.Module, Einrichtung: s.napi.Einrichtung, PhoneCountry: s.hh.PhoneCountry}
+		Reitti: s.napi.Reitti, Module: s.napi.Module, Einrichtung: s.napi.Einrichtung, PhoneCountry: s.hh.PhoneCountry, Gesichter: s.gesichter}
 	family.Archive, family.ArchivURL = archivOf(s)
 	// the lists, the music wish list and the shelf, before any page takes its copy of family
 	family.Einkauf, family.Wuensche = s.hh.Einkauf, s.hh.Wuensche
@@ -464,7 +466,7 @@ func main() {
 		gesundheit: gesundheit, haPublic: haPublic, inverted: pages.InvertedFromList(os.Getenv("HOMES_COVER_INVERTED")),
 		radicale: radicalePublic, views: ansicht.Open(dataDir, os.Getenv("HOMES_RADICALE_USER")), dataDir: dataDir,
 		docsMail: docsMail, paperlessPublic: paperlessPublic, paperlessLAN: paperlessLAN, musik: musicInbox(), boteSignal: strings.TrimSpace(os.Getenv("HOMES_BOTE_SIGNAL")),
-		domain: einrichten.Domain(os.Getenv("HOMES_PUBLIC_URL")), archive: archive}
+		domain: einrichten.Domain(os.Getenv("HOMES_PUBLIC_URL")), archive: archive, gesichter: gesichter.FromEnv(dataDir)}
 	start := st                     // what the list is built from again once Laib says what runs (dienstePflegen)
 	st.napi.Module = logModule(&st) // HOMES_MODULE_AUS takes what it switches off out of st
 	st.napi.Einrichtung = einrichtung(st, devices.Gekoppelt(store), jellyfin.KeyFromEnv())
@@ -482,6 +484,7 @@ func main() {
 	startLeaf(ctx, st)
 	go schliesseWuensche(ctx, ops, st.napi.Module, time.Minute) // a wish for what is on now is done (ADR 0001 §10)
 	go dienstePflegen(ctx, start, st.napi.Module, 30*time.Second, time.Hour)
+	go st.gesichter.Pflegen(ctx, time.Hour) // Immich's people hourly, a face only when new, changed or a week old
 	mux := routes(st)
 	addr := env("HOMES_LISTEN", "127.0.0.1:8650")
 	log.Printf("homes %s: listening on %s as %s, laib %s, home assistant %v, haushalt %d tools, memory library %v (tidy-up %v), uploads %q, the Bote %v, counting %v (voice %v), pages only behind the proxy secret", Version, addr, assistent.Name(), ops.URL, cfg.HA != nil, len(haushalt.Tools(hh)), hh.Library != nil, hh.Judge != nil, cfg.UploadDir, b != nil, counter != nil, voice != nil)

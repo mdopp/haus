@@ -24,9 +24,9 @@ set -e
 cd "$(dirname "$0")/.."
 bad=0
 p() { for x in "$@"; do printf 'internal/%s ' "$x"; done; }
-connectors=$(p abs bote caldav discogs ha jellyfin judge laib musicbrainz paperless qmd reitti samba werkstatt)
+connectors=$(p abs bote caldav discogs ha immich jellyfin judge laib musicbrainz paperless qmd reitti samba werkstatt)
 shared=$(p abruf app assistent cards code128 jsonfile markdown mcpserver modul namen texte)
-household=$(p ansicht devices dokumente einkauf einrichten energie favoriten gesehen haushalt library merken musik notes papierkorb podcasts schalter takeout usage)
+household=$(p ansicht devices dokumente einkauf einrichten energie favoriten gesehen gesichter haushalt library merken musik notes papierkorb podcasts schalter takeout usage)
 
 budget() { # budget <name> <cap> <dir…>
   name=$1 cap=$2; shift 2
@@ -41,7 +41,10 @@ budget() { # budget <name> <cap> <dir…>
 # /nachrichten to Paperless and the viewer's archive, the contact page's buttons, the phone book's URLs
 # 2026-11-05, owner 2026-11-05: So hängt alles zusammen (15,626 -> 15,740): the family's page under
 # Mehr, the web of what links their data and the „Das geht“ moments, each shown while its modules are on
-budget pages 15741 internal/pages     # the family's pages, one per file: 14,684
+# 2026-11-05, AWAITING THE OWNER'S YES (do not merge before): Immich for the contacts (15,740 -> 15,949): the
+# „Fotos“ link and the face in the phones' cards (kontakt_sprung.go), the suggestions on Kontakte with anlegen
+# and ausblenden (kontakte_immich.go), Fotos in „So hängt alles zusammen“
+budget pages 15950 internal/pages     # the family's pages, one per file: 14,684
 # 2026-11-05, owner 2026-11-05: writable Homes-Konto (5,033 -> 5,121): PUT and DELETE of one shared
 # appointment or card for the phones, the Papierkorb on delete, the feed for a phone that writes back
 budget napi 5121 internal/napi        # the app's widgets' and share sheet's API: 4,793
@@ -63,10 +66,16 @@ budget cmd 1448 cmd/homes             # homes' wiring: 1,018 with the demo then
 # 2026-11-05, owner 2026-11-05: writable Homes-Konto (13,171 -> 13,467): the logic of that napi raise
 # lives in caldav (schreiben.go: find by UID, write over If-Match keeping what the phone does not show,
 # delete, put back; the feed of whole series with their ETags), so this part of the budget moved with it
-budget connectors 13467 $connectors   # one client per service, with its fake: 11,327, 12,543 with abs and musicbrainz
+# 2026-11-05, AWAITING THE OWNER'S YES (do not merge before): Immich for the contacts (13,466 -> 13,688):
+# internal/immich, the people and their faces with the owner's key, and its fake (immichfake); caldav takes a
+# picture the phone sends (sentOnly)
+budget connectors 13689 $connectors   # one client per service, with its fake: 11,327, 12,543 with abs and musicbrainz
 # 2026-11-04, internal/jsonfile (47 lines, 50 of cap) from household's cap to shared's: it
 # replaces nine copies of a save, 62 of their lines in household
-budget household 9584 $household      # the household's own logic: 10,638, 9,176 without them and the fetcher
+# 2026-11-05, AWAITING THE OWNER'S YES (do not merge before): Immich for the contacts (9,583 -> 9,874):
+# internal/gesichter, a contact matched to its Immich person, the faces fetched in the background, made
+# 96 px and kept in HOMES_DATA, the suggestions and who was hidden from them
+budget household 9875 $household      # the household's own logic: 10,638, 9,176 without them and the fetcher
 # 2026-11-04, homes ADR 0001 step H1 (owner: „ganz durchziehen“): internal/modul, what an area
 # says about itself and the list Homes builds from them, 1,472 with it; plus 5 %
 # 2026-11-04, step H8 (§10): the traces and wishes in internal/modul, and internal/texte, the one

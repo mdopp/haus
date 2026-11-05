@@ -21,6 +21,7 @@ HOMES_STT_PROVIDER=stt.faster_whisper HOMES_STT_LANGUAGE=de \
 HOMES_SAMBA_DIR=/samba-accounts HOMES_SAMBA_HOST=<the box's LAN address> \
 HOMES_ARCHIV_DIR=/archiv-eingang \
 HOMES_REITTI_URL=http://host.containers.internal:<Reitti's host port> HOMES_REITTI_PUBLIC_URL=https://reitti.<domain> \
+HOMES_IMMICH_URL=http://host.containers.internal:2283 HOMES_IMMICH_KEY=<an API key of the owner's Immich account, person.read> HOMES_IMMICH_PUBLIC_URL=https://photos.<domain> \
 
 HOMES_USAGE_URL=http://host.containers.internal:8094 HOMES_USAGE_TOKEN=<usage-metrics' USAGE_METRICS_TOKEN> ./homes
 ```

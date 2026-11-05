@@ -41,6 +41,7 @@ import (
 	"github.com/mdopp/homes/internal/einrichten"
 	"github.com/mdopp/homes/internal/favoriten"
 	"github.com/mdopp/homes/internal/gesehen"
+	"github.com/mdopp/homes/internal/gesichter"
 	"github.com/mdopp/homes/internal/ha"
 	"github.com/mdopp/homes/internal/ha/hafake"
 	"github.com/mdopp/homes/internal/jellyfin"
@@ -217,7 +218,11 @@ func main() {
 	mux.HandleFunc(pages.SpurenPath, pages.Mehr(mehr))
 	mux.HandleFunc(pages.AnfordernPath, pages.Anfordern(mehr))
 	mux.HandleFunc(pages.ModulPages, pages.ModulSeite(mehr))
-	mux.HandleFunc(pages.ZusammenPath, pages.Zusammen(mehr))
+	// „So hängt alles zusammen“ on a box with all its threads (owner 2026-11-05: „auch im Bild,
+	// genau wie der Standort“): Standortverlauf on, and Immich for the contacts (no key: Fotos searches)
+	zusammen := mehr
+	zusammen.Module, zusammen.Gesichter = demoModule(false, "standort"), &gesichter.Gesichter{Web: "https://photos.example", Dir: dir}
+	mux.HandleFunc(pages.ZusammenPath, pages.Zusammen(zusammen))
 	// Musik (owner 2026-11-04: „nur Dateien darstellen“): a file being sorted in, one done, one beets
 	// kept back; /demo/musik?leer=1 empties the inbox and beets' status, ?discogs=0 is Anna without Discogs
 	musikCfg := mehr
@@ -353,9 +358,12 @@ type laibFake struct {
 // entries in the family's selection as the catalog gives them on a box
 // with a music inbox (Musik, not Platte erfassen or Discogs on their own);
 // no Reitti, and Netzlaufwerk switched off; Dokumente on its own page only,
-// which has a way into the archive.
-func demoModule(docs bool) *modul.Liste {
+// which has a way into the archive. The modules named in an are on all the same.
+func demoModule(docs bool, an ...string) *modul.Liste {
 	m := func(name, backend, warum, grund string) modul.Modul {
+		if slices.Contains(an, name) {
+			warum, grund = "", ""
+		}
 		nav := slices.DeleteFunc(pages.Nav(name), func(e modul.Eintrag) bool {
 			return e.Pfad == pages.PlattePath || e.Pfad == pages.DiscogsPath || (e.Pfad == pages.DokumentePath && !docs)
 		})

@@ -23,7 +23,8 @@ func z(key string) string { return texte.T(texte.ID("zusammen." + key)) }
 
 // knoten is one node of the web: its words, where it sits, and the module
 // it needs ("" always). The inner ones hang on the contact; the outer ones
-// sit on the orbit around it.
+// sit on the orbit around it. Fotos hangs on it too (owner 2026-11-05: a
+// contact's „Fotos“, its face from Immich), at the orbit's foot.
 var knoten = []struct {
 	key, modul string
 	x, y       int
@@ -31,7 +32,7 @@ var knoten = []struct {
 }{
 	{"termine", "kalender", 180, 80, false}, {"bank", "dokumente", 276, 140, false}, {"telefonbuch", "konto", 236, 245, false},
 	{"nachrichten", "sicherung", 124, 245, false}, {"dokumente", "dokumente", 88, 140, false},
-	{"zeitleiste", "standort", 302, 58, true}, {"musik", "musik", 302, 292, true}, {"fotos", "fotos", 58, 292, true}, {"geraete", "geraete", 58, 58, true},
+	{"zeitleiste", "standort", 302, 58, true}, {"musik", "musik", 302, 292, true}, {"fotos", "fotos", 180, 316, false}, {"geraete", "geraete", 58, 58, true},
 }
 
 // momente are the „Das geht“ moments: the modules each needs, and where its tap leads.
@@ -39,6 +40,7 @@ var momente = []struct {
 	key, href string
 	braucht   []string
 }{{"rechnung", KontaktePath, []string{"dokumente", "kontakte", "konto"}}, {"tipp", KontaktePath, []string{"dokumente", "kontakte"}},
+	{"gesichter", KontaktePath, []string{"fotos", "kontakte"}},
 	{"termin", "/kalender", []string{"kalender", "konto"}}, {"zeitachse", StandortPath, []string{"standort"}}, {"waschmaschine", "/raeume", []string{"geraete", "sprechen"}}}
 
 const zusammenStyle = `<style>.netz{display:block;width:100%;height:auto;margin:8px 0 4px;font-family:inherit}.netz .bahn{fill:none;stroke:var(--edge);stroke-dasharray:3 5}
@@ -61,7 +63,7 @@ func Zusammen(cfg StartConfig) http.HandlerFunc {
 		b.WriteString(zusammenStyle + "<h1>" + html.EscapeString(z("titel")) + "</h1><p class=k>" + html.EscapeString(z("kurz")) + "</p>" + netz(cfg))
 		c := cards.Card{Title: z("geht")}
 		for _, m := range momente {
-			if alleAn(cfg, m.braucht) {
+			if alleAn(cfg, m.braucht) && (m.key != "gesichter" || cfg.fotosAn()) { // a contact's „Fotos“ needs Immich's address
 				c.AddLink(z(m.key), z(m.key+".so"), m.href)
 			}
 		}
