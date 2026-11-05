@@ -805,7 +805,7 @@ for (const scheme of ['dark', 'light']) {
       const wide = await page.evaluate(() => document.documentElement.scrollWidth);
       expect(wide).toBeLessThanOrEqual(411);
       const geht = page.locator('#karte-das-geht li a');
-      expect(await geht.count()).toBeGreaterThan(0);
+      await expect(geht).not.toHaveCount(0);
       for (const href of await geht.evaluateAll((as) => as.map((a) => a.getAttribute('href')))) {
         expect(href).toMatch(/^\/(kontakte|kalender|standort|raeume|mehr#spuren)$/);
       }
