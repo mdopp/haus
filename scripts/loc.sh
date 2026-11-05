@@ -38,7 +38,9 @@ budget() { # budget <name> <cap> <dir…>
 }
 # area       cap    dirs              reason (2026-11-03: the size that day, plus 5 %)
 budget pages 15419 internal/pages     # the family's pages, one per file: 14,684
-budget napi 5033 internal/napi        # the app's widgets' and share sheet's API: 4,793
+# 2026-11-05, owner 2026-11-05: writable Homes-Konto (5,033 -> 5,121): PUT and DELETE of one shared
+# appointment or card for the phones, the Papierkorb on delete, the feed for a phone that writes back
+budget napi 5121 internal/napi        # the app's widgets' and share sheet's API: 4,793
 # 2026-11-04, homes ADR 0001 step H1 (owner: „ganz durchziehen“): the module catalog,
 # cmd/homes/module.go, 1,150 with it; plus 5 %. H3–H6 move the routes out of main.go into it
 # 2026-11-04, step H8 (§10, owner: „Keine Funktion soll versteckt werden“): the routes of the traces
@@ -54,7 +56,10 @@ budget cmd 1448 cmd/homes             # homes' wiring: 1,018 with the demo then
 # musicbrainz (1,227 lines, 1,289 of cap) from household to connectors once merken's fetcher
 # was internal/abruf (235 lines of merken, 247 of cap, to shared) and jellyfin.Plain
 # internal/namen (11 lines, 12 of cap, to shared)
-budget connectors 13171 $connectors   # one client per service, with its fake: 11,327, 12,543 with abs and musicbrainz
+# 2026-11-05, owner 2026-11-05: writable Homes-Konto (13,171 -> 13,467): the logic of that napi raise
+# lives in caldav (schreiben.go: find by UID, write over If-Match keeping what the phone does not show,
+# delete, put back; the feed of whole series with their ETags), so this part of the budget moved with it
+budget connectors 13467 $connectors   # one client per service, with its fake: 11,327, 12,543 with abs and musicbrainz
 # 2026-11-04, internal/jsonfile (47 lines, 50 of cap) from household's cap to shared's: it
 # replaces nine copies of a save, 62 of their lines in household
 budget household 9584 $household      # the household's own logic: 10,638, 9,176 without them and the fetcher

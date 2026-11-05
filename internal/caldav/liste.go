@@ -314,18 +314,8 @@ func (c *Client) UpdateItem(ctx context.Context, it Item) error {
 	if err != nil {
 		return err
 	}
-	code, _, err := c.do(ctx, http.MethodPut, u, "", patchTodo(it.data, it.UID, set, itemProps),
-		map[string]string{"Content-Type": "text/calendar; charset=utf-8", "If-Match": it.etag})
-	if err != nil {
-		return err
-	}
-	switch code {
-	case http.StatusOK, http.StatusCreated, http.StatusNoContent:
-		return nil
-	case http.StatusPreconditionFailed:
-		return ErrChanged
-	}
-	return &ErrStatus{"PUT", code}
+	_, err = c.rewrite(ctx, u, "text/calendar", it.etag, patch(it.data, "VTODO", it.UID, set, itemProps))
+	return err
 }
 
 // DeleteItem removes the line, only as it was read; one gone already is

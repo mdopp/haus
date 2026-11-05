@@ -788,6 +788,48 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   never empties the mirror), an upload of that person already running, or
   the book changed under Homes (If-Match), 415 not `text/vcard`, 502 when
   Radicale refuses, 503 without Radicale (`HOMES_RADICALE_*`).
+- The Homes account on the phones (haus#218; module `konto`, parts
+  `kontakte` and `kalender`): the household's shared address books and
+  calendars — what is in Homes' own Radicale account's home (the Haushalt
+  calendar and address book, `familie-*`, the family's `abo-*`), never a
+  person's own — as `GET /napi/gemeinsam/kontakte` (`text/vcard`, every
+  card) and `GET /napi/gemeinsam/kalender` (`text/calendar`, one VCALENDAR
+  per calendar named by `X-WR-CALNAME`, `X-HAUS-KALENDER` (its id, the last
+  part of its path) and `X-HAUS-ART`, a month back and a year ahead, series
+  expanded, and last `erinnerungen`, the open reminders as entries that
+  ring), each with an ETag of its body (`If-None-Match` → 304). Writable
+  since the owner's call of 2026-11-05: with `?schreibbar=1` the calendars
+  come as stored instead — a series whole (RRULE, EXDATE, its changed
+  instances with RECURRENCE-ID), the alarms with it — each VEVENT with
+  `X-HOMES-ETAG` (its object's ETag) and each calendar the phone may write
+  with `X-HOMES-SCHREIBBAR:TRUE` (not a mirror, `abo-*`, nor
+  `erinnerungen`); and each card that can be written back carries
+  `X-HOMES-ETAG` (a card sharing its file with others has none: read only).
+  `PUT|DELETE /napi/gemeinsam/kalender/{kalender}/{uid}` (`text/calendar`,
+  a VCALENDAR with the VEVENT of that UID) and `PUT|DELETE
+  /napi/gemeinsam/kontakte/{uid}` (`text/vcard` 3.0, the VCARD of that UID)
+  write one, found by its UID (in the calendar `{kalender}`; in any shared
+  address book, a new card into the Haushalt's). PUT with `If-None-Match:
+  *` makes it (201), with `If-Match: <its X-HOMES-ETAG>` changes it (200):
+  `{uid, kalender, etag}` and the `ETag` header, the version the phone
+  keeps for its next write. Of what the phone sends Homes takes only what
+  a phone shows — an appointment's SUMMARY, LOCATION, DESCRIPTION,
+  DTSTART, DTEND, DURATION, RRULE, EXDATE and VALARMs; a card's FN, N,
+  TEL, EMAIL, ADR, ORG, TITLE, BDAY, NOTE, URL — in place of the stored
+  ones; everything else stored stays (attendees, Homes' `X-HAUS-*`, a
+  series' changed instances, a card's photo and IBANs), and Homes writes
+  DTSTAMP and LAST-MODIFIED (REV) itself. DELETE with `If-Match` puts it
+  into the Papierkorb (30 days; *Rückgängig* under „Gelöscht, noch 30 Tage
+  zurückzuholen“ on *Deine Kalender*, for everyone) and removes it (204).
+  Another version than the phone's — changed in Homes or on another phone,
+  or gone — is 412 with the one Homes has as the body and its `ETag` (an
+  empty body: it is gone): the phone drops its own and takes that. Refusals
+  `{fehler}`: 428 without exactly one of `If-Match` and `If-None-Match: *`
+  (a DELETE: without `If-Match`), 403 a calendar the phone does not write,
+  400 a body without that UID's VEVENT or VCARD (or a card that shares its
+  file), 502 when Radicale refuses, 503 without Radicale or (DELETE) without
+  the Papierkorb. Every write changes Radicale's ctag, so the other phones
+  get the `gemeinsam` frame within `SharedEvery`.
 - The phone's positions, passed on to Reitti (owner 2026-11-02; optional
   in the app, its own switch and background-location permission): the app
   records where its person was and sends the points in batches to `POST

@@ -346,3 +346,31 @@ func TestKalenderRueckgaengigAltesKonto(t *testing.T) {
 		t.Fatalf("not made again under homes: %v", fake.Calendars())
 	}
 }
+
+// Owner 2026-11-05: what a phone deleted from the Homes account waits in
+// the Papierkorb with the calendars; „Rückgängig“ puts it back where it was,
+// for whoever of the family takes it back.
+func TestEintragVomHandyRueckgaengig(t *testing.T) {
+	fake, cfg, _ := kalenderBox(t)
+	now := time.Date(2026, 11, 5, 9, 0, 0, 0, time.UTC)
+	cfg.Papierkorb = &papierkorb.Korb{Dir: t.TempDir(), Now: func() time.Time { return now }}
+	ics := event("abend", "20261110T170000Z", "20261110T180000Z", "Elternabend")
+	e, err := cfg.Papierkorb.Rein("termin", "Elternabend", "anna", caldav.Stored{Collection: "/homes/haushalt/", Name: "abend.ics", Data: ics})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, body, _ := familyPage(t, KalenderVerwalten, cfg, "GET", kalenderVerwalten, "family")
+	mustContain(t, body, "Gelöscht, noch 30 Tage zurückzuholen", "„Elternabend“ <small class=k>Termin · am Handy gelöscht von anna · bis 05.12.",
+		`value="/homes/haushalt/"`, `value=eintrag data-laeuft="Holt zurück …">Rückgängig</button>`)
+	wrong := url.Values{"kalender": {"/homes/familie-urlaub/"}, "tu": {"eintrag"}, "id": {e.ID}}
+	if rec := post(t, KalenderAendern(cfg), kalenderChange, wrong, "ben", nil); rec.Code != http.StatusConflict {
+		t.Fatalf("into another calendar → %d", rec.Code)
+	}
+	right := url.Values{"kalender": {"/homes/haushalt/"}, "tu": {"eintrag"}, "id": {e.ID}}
+	if rec := post(t, KalenderAendern(cfg), kalenderChange, right, "ben", nil); rec.Header().Get("Location") != kalenderVerwalten+"?gesagt=eintrag-zurueck" {
+		t.Fatalf("eintrag → %d %v %s", rec.Code, rec.Header(), rec.Body)
+	}
+	if fake.Objects()["/homes/haushalt/abend.ics"] != ics || len(cfg.Papierkorb.Liste("")) != 0 {
+		t.Fatalf("not back: %v", fake.Objects())
+	}
+}

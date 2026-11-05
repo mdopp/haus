@@ -352,6 +352,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.store(r.URL.Path, string(body))
+		w.Header().Set("ETag", s.etag(r.URL.Path)) // as Radicale does
 		w.WriteHeader(http.StatusCreated)
 	case "MKCALENDAR":
 		if s.MkcalendarStatus != 0 {

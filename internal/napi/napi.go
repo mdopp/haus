@@ -30,6 +30,7 @@ import (
 	"github.com/mdopp/homes/internal/laib"
 	"github.com/mdopp/homes/internal/modul"
 	"github.com/mdopp/homes/internal/musik"
+	"github.com/mdopp/homes/internal/papierkorb"
 	"github.com/mdopp/homes/internal/reitti"
 	"github.com/mdopp/homes/internal/schalter"
 	"github.com/mdopp/homes/internal/usage"
@@ -76,6 +77,9 @@ type Config struct {
 	// own field so the account stays with the calendar off (ADR 0001 H5);
 	// nil = /napi/gemeinsam answers 503 in words
 	Konto *caldav.Client
+	// Papierkorb: where a phone's delete in the Homes account goes, for
+	// 30 days (haus#174); nil = such a delete answers 503 in words
+	Papierkorb *papierkorb.Korb
 	// SharedEvery: how often the live stream looks whether the household's
 	// shared contacts and calendars changed (haus#223); 0 = 30 s
 	SharedEvery time.Duration
@@ -321,7 +325,7 @@ func Gruppen(c Config) map[string][]modul.Route {
 	// the phone's contacts, mirrored into the person's Handy-Kontakte (laib ADR 0029)
 	gs.add("kontakte", "POST /napi/kontakte", (&kontakte{dav: c.Haushalt.Contacts, whoami: c.Whoami, busy: map[string]bool{}}).post)
 	// the household's shared contacts and calendars for the phone's Homes account (haus#218)
-	(&gemeinsam{dav: c.Konto, whoami: c.Whoami, loc: c.Haushalt.Loc, now: c.Now}).routes(gs)
+	(&gemeinsam{dav: c.Konto, korb: c.Papierkorb, whoami: c.Whoami, loc: c.Haushalt.Loc, now: c.Now}).routes(gs)
 	// the phone's positions, passed on to the person's Reitti (owner 2026-11-02)
 	(&standort{r: c.Reitti, whoami: c.Whoami}).routes(gs)
 	return gs
