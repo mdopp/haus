@@ -8,6 +8,7 @@
 package haushalt
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -59,9 +60,23 @@ type Config struct {
 	// contact or a document to its page on Homes; "": no links.
 	PublicURL string
 	Version   string
+	Karte     Karte // the cards between Radicale and the phones' Homes account (napi)
 }
 
-const defaultCountry = "49"
+// Karte is a vCard on its way to the phones (uid "": Homes adds the
+// contact's links) or back from one for uid (they come out again); nil
+// leaves it as it is. pages.KontaktKarte is the one.
+type Karte func(card, uid string) string
+
+// Von is card as k makes it.
+func (k Karte) Von(card, uid string) string {
+	if k == nil {
+		return card
+	}
+	return k(card, uid)
+}
+
+const DefaultCountry = "49" // the calling code without HOMES_PHONE_COUNTRY
 
 // defaultCollection is the notes' collection in qmd's index.yml (laib#195).
 const defaultCollection = "notizen"
@@ -83,7 +98,7 @@ func httpURL(u string) bool {
 // refuses to start; a missing backend only leaves its tools out. Homes' own
 // address is the setup link's too, so a malformed one only drops the links.
 func FromEnv() (Config, error) {
-	cfg := Config{Token: os.Getenv("HOMES_HAUSHALT_TOKEN"), Loc: time.Local, PhoneCountry: defaultCountry}
+	cfg := Config{Token: os.Getenv("HOMES_HAUSHALT_TOKEN"), Loc: time.Local, PhoneCountry: DefaultCountry}
 	if pub := strings.TrimRight(os.Getenv("HOMES_PUBLIC_URL"), "/"); pub != "" {
 		if httpURL(pub) {
 			cfg.PublicURL = pub
@@ -387,10 +402,7 @@ func Tools(cfg Config) []mcpserver.Tool {
 				},
 			})
 	}
-	cc := cfg.PhoneCountry
-	if cc == "" {
-		cc = defaultCountry
-	}
+	cc := cmp.Or(cfg.PhoneCountry, DefaultCountry)
 	pub := strings.TrimRight(cfg.PublicURL, "/")
 	if c := cfg.Contacts; c != nil {
 		from := len(out)
@@ -859,10 +871,10 @@ func contactLine(ct caldav.Contact) string {
 	return line
 }
 
-// international is a number as country code and national number, digits
+// International is a number as country code and national number, digits
 // only, however it is written: +49 (0)170 …, 0049 170 …, 0170 … (the
 // house's country cc) all give 49170….
-func international(s, cc string) string {
+func International(s, cc string) string {
 	d := digits(s)
 	if strings.HasPrefix(strings.TrimSpace(s), "+") || strings.HasPrefix(d, "00") {
 		d = strings.TrimPrefix(d, "00")
@@ -895,10 +907,10 @@ func matches(ct caldav.Contact, q, cc string) bool {
 		return false
 	}
 	if strings.HasPrefix(q, "+") || strings.HasPrefix(digits(q), "00") {
-		want = international(q, cc)
+		want = International(q, cc)
 	}
 	for _, p := range ct.Phones {
-		if strings.Contains(international(p, cc), want) {
+		if strings.Contains(International(p, cc), want) {
 			return true
 		}
 	}

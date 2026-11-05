@@ -918,7 +918,7 @@ func shownStacks(r *http.Request, cfg StartConfig, all []laib.Stack) []shownStac
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), backendWait)
 	defer cancel()
-	field, err := cfg.Docs.FieldID(ctx, "Stapel")
+	field, err := cfg.Docs.ID(ctx, "custom_fields", "Stapel")
 	if err != nil {
 		log.Printf("homes: dokumente page: Paperless' field Stapel: %v", err)
 		return out

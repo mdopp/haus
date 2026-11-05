@@ -13,7 +13,7 @@
 33 internal/ha/ws.go: ha.(*Client).registries
 32 internal/ha/ws.go: ha.(*wsConn).read
 46 internal/haushalt/haushalt.go: haushalt.FromEnv
-39 internal/haushalt/haushalt.go: haushalt.Tools
+38 internal/haushalt/haushalt.go: haushalt.Tools
 33 internal/haushalt/haushalt.go: haushalt.notizenFinden
 34 internal/haushalt/haushalt.go: haushalt.vertraegeFinden
 36 internal/haushalt/kontakt_ergaenzen.go: haushalt.ergaenzenOne
@@ -47,7 +47,7 @@
 56 internal/pages/kalender.go: pages.Kalender
 48 internal/pages/kalender_verwalten.go: pages.KalenderAendern
 37 internal/pages/kalender_verwalten.go: pages.KalenderHinzufuegen
-48 internal/pages/kontakt.go: pages.Kontakt
+45 internal/pages/kontakt.go: pages.Kontakt
 32 internal/pages/medien.go: pages.Medien
 41 internal/pages/netzlaufwerk.go: pages.Netzlaufwerk
 75 internal/pages/notizen.go: pages.Notizen

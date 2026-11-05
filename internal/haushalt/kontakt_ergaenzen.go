@@ -382,7 +382,7 @@ func ergaenzenOne(ctx context.Context, c *caldav.Client, cc string, v ergaenzenA
 	if v.telefon != "" {
 		have := false
 		for _, p := range cd.Phones {
-			have = have || international(p, cc) == international(v.telefon, cc)
+			have = have || International(p, cc) == International(v.telefon, cc)
 		}
 		switch {
 		case have:

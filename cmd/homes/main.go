@@ -83,12 +83,13 @@ type site struct {
 	// haus#68: the Dokumente page's mail address, Paperless's public address and whether it is LAN-only
 	docsMail, paperlessPublic string
 	paperlessLAN              bool
-	podcasts                  *podcasts.Service // haus#123: the family's podcasts in Audiobookshelf; nil, no page
-	gesehen                   *gesehen.Service  // haus#152: what each person watched and heard; nil, no page
-	musik                     string            // haus#107: the music inbox's folder (musicInbox); "", no Musik page
-	boteSignal                string            // haus#175: the house's Signal number (HOMES_BOTE_SIGNAL), sprechen's setup; "", none
-	domain                    string            // the box's domain, HOMES_PUBLIC_URL's after homes.: the services' addresses
-	dienste                   map[string]bool   // the services Laib runs (dienstePflegen): the link modules; nil, Laib has not said yet
+	podcasts                  *podcasts.Service            // haus#123: the family's podcasts in Audiobookshelf; nil, no page
+	gesehen                   *gesehen.Service             // haus#152: what each person watched and heard; nil, no page
+	musik                     string                       // haus#107: the music inbox's folder (musicInbox); "", no Musik page
+	boteSignal                string                       // haus#175: the house's Signal number (HOMES_BOTE_SIGNAL), sprechen's setup; "", none
+	domain                    string                       // the box's domain, HOMES_PUBLIC_URL's after homes.: the services' addresses
+	dienste                   map[string]bool              // the services Laib runs (dienstePflegen): the link modules; nil, Laib has not said yet
+	archive                   map[string]napi.ArchivIntern // each person's message archive (HOMES_ARCHIV_INTERN): a contact's Nachrichten
 }
 
 // routes is Homes' whole surface: /napi for the app, /mcp/haushalt for the
@@ -96,6 +97,10 @@ type site struct {
 func routes(s site) http.Handler {
 	mux := http.NewServeMux()
 	s.napi.Usage, s.napi.MusicInbox = s.usage, s.musik // the app's songs and ZIPs go where the Musik page looks (haus#107)
+	// a contact's links in the phones' cards, the same as on its page (owner 2026-11-05)
+	karte := pages.StartConfig{PublicURL: s.publicURL, PaperlessPublicURL: s.paperlessPublic}
+	karte.Archive, karte.ArchivURL = archivOf(s)
+	s.napi.Haushalt.Karte = pages.KontaktKarte(karte)
 	mux.Handle("/napi/", napi.Handler(s.napi))
 	// the Bote's bearer, not the proxy secret: the Bote calls the host port from its pod
 	// (laib ADR 0012 §4; the template publishes 8650 lan:false, the firewall keeps
@@ -117,7 +122,8 @@ func familyOf(s site) pages.StartConfig {
 		Samba: s.samba, SambaHost: s.sambaHost, Usage: s.usage, PublicURL: s.publicURL, Welcome: s.welcome, STT: s.stt,
 		HAPublicURL: s.haPublic, Inverted: s.inverted, RadicalePublicURL: s.radicale, Views: s.views, GesundheitURL: s.gesundheit,
 		DocumentsMail: s.docsMail, PaperlessPublicURL: s.paperlessPublic, PaperlessLANOnly: s.paperlessLAN, Sicherung: s.napi.Sicherung,
-		Reitti: s.napi.Reitti, Module: s.napi.Module, Einrichtung: s.napi.Einrichtung}
+		Reitti: s.napi.Reitti, Module: s.napi.Module, Einrichtung: s.napi.Einrichtung, PhoneCountry: s.hh.PhoneCountry}
+	family.Archive, family.ArchivURL = archivOf(s)
 	// the lists, the music wish list and the shelf, before any page takes its copy of family
 	family.Einkauf, family.Wuensche = s.hh.Einkauf, s.hh.Wuensche
 	if s.hh.Wuensche != nil {
@@ -135,6 +141,19 @@ func familyOf(s site) pages.StartConfig {
 		family.Ablage = napi.NewUploads(s.napi.UploadDir)
 	}
 	return family
+}
+
+// archivOf is who has a message archive and where it opens: archiv.<domain>,
+// one name for every person's (laib's archiv template); none with sicherung off.
+func archivOf(s site) (map[string]bool, string) {
+	if s.napi.Sicherung == nil || len(s.archive) == 0 {
+		return nil, ""
+	}
+	wer := map[string]bool{}
+	for person := range s.archive {
+		wer[person] = true
+	}
+	return wer, einrichten.Web("archiv", s.domain)
 }
 
 func familyMux(s site) *http.ServeMux {
@@ -393,11 +412,13 @@ func main() {
 	}
 	// haus#207, laib ADR 0029: the message archives' inbox, one folder per
 	// person, where the app's phone backups land; unset, /napi/sicherung is 503
+	var archive map[string]napi.ArchivIntern
 	if dir := os.Getenv("HOMES_ARCHIV_DIR"); dir != "" {
 		cfg.Sicherung = napi.NewSicherung(dir, dataDir)
 		// a new phone's restore (haus#209): each person's archive for the WhatsApp media,
 		// HOMES_ARCHIV_INTERN and HOMES_ARCHIV_SECRET_<PERSON>; without them the media answer 503
-		cfg.Sicherung.SetArchive(napi.ArchivInternFromEnv(os.Getenv))
+		archive = napi.ArchivInternFromEnv(os.Getenv)
+		cfg.Sicherung.SetArchive(archive)
 		if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
 			log.Printf("homes: HOMES_ARCHIV_DIR %s is not a folder (yet): backups answer 503 until it is", dir)
 		}
@@ -442,7 +463,7 @@ func main() {
 		gesundheit: gesundheit, haPublic: haPublic, inverted: pages.InvertedFromList(os.Getenv("HOMES_COVER_INVERTED")),
 		radicale: radicalePublic, views: ansicht.Open(dataDir, os.Getenv("HOMES_RADICALE_USER")), dataDir: dataDir,
 		docsMail: docsMail, paperlessPublic: paperlessPublic, paperlessLAN: paperlessLAN, musik: musicInbox(), boteSignal: strings.TrimSpace(os.Getenv("HOMES_BOTE_SIGNAL")),
-		domain: einrichten.Domain(os.Getenv("HOMES_PUBLIC_URL"))}
+		domain: einrichten.Domain(os.Getenv("HOMES_PUBLIC_URL")), archive: archive}
 	start := st                     // what the list is built from again once Laib says what runs (dienstePflegen)
 	st.napi.Module = logModule(&st) // HOMES_MODULE_AUS takes what it switches off out of st
 	st.napi.Einrichtung = einrichtung(st, devices.Gekoppelt(store), jellyfin.KeyFromEnv())

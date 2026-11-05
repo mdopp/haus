@@ -1,6 +1,7 @@
 package pages
 
 import (
+	"cmp"
 	"context"
 	"html"
 	"log"
@@ -14,7 +15,8 @@ import (
 
 // Kontakt is one contact's own page (haus#28), the page a contacts widget
 // row opens: the name, the numbers and addresses to tap, the birthday, the
-// postal addresses. Radicale not answering is one plain line (haus#33).
+// postal addresses, and its two fixed links (kontakt_sprung.go). Radicale
+// not answering is one plain line (haus#33).
 func Kontakt(cfg StartConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !showOnly(w, r, "Der Kontakt") {
@@ -24,7 +26,7 @@ func Kontakt(cfg StartConfig) http.HandlerFunc {
 			notSetContacts.write(w, r, cfg, "Kontakte")
 			return
 		}
-		uid := strings.TrimPrefix(r.URL.Path, cards.ContactPages)
+		uid, was := kontaktSprungPfad(strings.TrimPrefix(r.URL.Path, cards.ContactPages))
 		var all []caldav.Contact
 		var err error
 		if uid != "" {
@@ -39,12 +41,10 @@ func Kontakt(cfg StartConfig) http.HandlerFunc {
 			if uid == "" || ct.UID != uid {
 				continue
 			}
-			name := trimRunes(oneLine(ct.Name), 120)
-			if name == "" {
-				name = trimRunes(oneLine(ct.Org), 120)
-			}
-			if name == "" {
-				name = "(ohne Namen)"
+			name := cmp.Or(trimRunes(oneLine(ct.Name), 120), trimRunes(oneLine(ct.Org), 120), "(ohne Namen)")
+			if was != "" {
+				kontaktSprung(w, r, cfg, ct, name, was)
+				return
 			}
 			b := familyHead(r, cfg, name, "")
 			b.WriteString("<h1>" + html.EscapeString(name) + "</h1>")
@@ -70,7 +70,7 @@ func Kontakt(cfg StartConfig) http.HandlerFunc {
 					c.Add(a, "Adresse")
 				}
 			}
-			b.WriteString(c.HTML())
+			b.WriteString(c.HTML() + kontaktSpruenge(cfg, ct.UID))
 			writePage(w, http.StatusOK, b)
 			return
 		}

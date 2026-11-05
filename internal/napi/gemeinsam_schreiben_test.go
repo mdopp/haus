@@ -118,3 +118,37 @@ func TestGemeinsamSchreibbarFeed(t *testing.T) {
 		t.Fatalf("the phones that only read get what they got:\n%s", old)
 	}
 }
+
+// Owner 2026-11-05: a contact's links (pages.KontaktKarte) go into every
+// card the phones get, and the card a phone sends back passes the same
+// Karte with its UID first, so what it adds never reaches Radicale.
+func TestGemeinsamKarte(t *testing.T) {
+	fake, _ := gemeinsamFake(t)
+	berlin, _ := time.LoadLocation("Europe/Berlin")
+	dav := &caldav.Client{URL: fake.URL, User: "homes", Password: "pw", Loc: berlin, Now: func() time.Time { return gemeinsamNow }}
+	var gesehen []string
+	karte := func(card, uid string) string {
+		gesehen = append(gesehen, uid)
+		if uid == "" {
+			return strings.Replace(card, "END:VCARD", "URL:https://homes.test/kontakte/oma/dokumente\r\nEND:VCARD", 1)
+		}
+		return strings.Replace(card, "URL:https://homes.test/kontakte/oma/dokumente\r\n", "", 1)
+	}
+	h := Handler(Config{Validate: StaticValidator([]string{"anna1"}), Haushalt: haushalt.Config{Loc: berlin, Karte: karte}, Konto: dav,
+		Whoami: func(string) (string, bool) { return "anna", true }, Now: func() time.Time { return gemeinsamNow }})
+	rec := getGemeinsam(t, h, "/napi/gemeinsam/kontakte?schreibbar=1", "anna1", "")
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "URL:https://homes.test/kontakte/oma/dokumente\r\nEND:VCARD") {
+		t.Fatalf("served: %d %s", rec.Code, rec.Body)
+	}
+	etag := strings.TrimSpace(strings.SplitN(strings.SplitN(rec.Body.String(), "X-HOMES-ETAG:", 2)[1], "\r\n", 2)[0])
+	sent := strings.Replace(rec.Body.String(), "FN:Oma Erna", "FN:Oma Erna Berg", 1)
+	if rec := send(t, h, "PUT", "/napi/gemeinsam/kontakte/oma", sent, "If-Match", etag); rec.Code != http.StatusOK {
+		t.Fatalf("written: %d %s", rec.Code, rec.Body)
+	}
+	if stored := fake.Objects()["/homes/haushalt-kontakte/oma.vcf"]; !strings.Contains(stored, "FN:Oma Erna Berg") || strings.Contains(stored, "/kontakte/oma/dokumente") {
+		t.Fatalf("stored:\n%s", stored)
+	}
+	if strings.Join(gesehen, ",") != ",oma" {
+		t.Fatalf("Karte saw %q", gesehen)
+	}
+}

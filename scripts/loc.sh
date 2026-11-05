@@ -37,7 +37,9 @@ budget() { # budget <name> <cap> <dir…>
   [ "$((prod * 100))" -lt "$((cap * 98))" ] || [ "$prod" -ge "$cap" ] || echo "warning: $name at $prod of $cap lines, 98 % or more"
 }
 # area       cap    dirs              reason (2026-11-03: the size that day, plus 5 %)
-budget pages 15419 internal/pages     # the family's pages, one per file: 14,684
+# 2026-11-05, owner 2026-11-05: contact jump links (15,415 -> 15,626): /kontakte/<uid>/dokumente and
+# /nachrichten to Paperless and the viewer's archive, the contact page's buttons, the phone book's URLs
+budget pages 15627 internal/pages     # the family's pages, one per file: 14,684
 # 2026-11-05, owner 2026-11-05: writable Homes-Konto (5,033 -> 5,121): PUT and DELETE of one shared
 # appointment or card for the phones, the Papierkorb on delete, the feed for a phone that writes back
 budget napi 5121 internal/napi        # the app's widgets' and share sheet's API: 4,793
