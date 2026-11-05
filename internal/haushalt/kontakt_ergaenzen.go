@@ -8,6 +8,7 @@ import (
 	"math/big"
 	"net/mail"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -31,9 +32,12 @@ const (
 )
 
 // ergaenzenFields is the answer's field order.
-var ergaenzenFields = []string{"firma", "ansprechpartner", "telefon", "email", "iban", "anschrift"}
+var ergaenzenFields = []string{"firma", "ansprechpartner", "telefon", "email", "iban", "bank", "kontoinhaber", "anschrift"}
 
-var fieldLabel = map[string]string{"firma": "Firma", "ansprechpartner": "Ansprechpartner", "telefon": "Telefon", "email": "E-Mail", "iban": "IBAN", "anschrift": "Anschrift"}
+var fieldLabel = map[string]string{"firma": "Firma", "ansprechpartner": "Ansprechpartner", "telefon": "Telefon", "email": "E-Mail", "iban": "IBAN",
+	"bank": "Bank", "kontoinhaber": "Kontoinhaber", "anschrift": "Anschrift"}
+
+const notOurs = "kein Firmenkontakt von Homes (ohne Kategorie Firma): Homes ergänzt ihn nicht"
 
 // ibanLen is the length of the IBANs of the countries the family will meet
 // most; another country's must be 15 to 34 characters.
@@ -116,10 +120,11 @@ func (e *ergaenzung) set(field, status, grund string) {
 }
 
 // ergaenzenArgs are the values checked: each one valid, else refused for
-// itself with its reason.
+// itself with its reason; the bank and holder go with a valid IBAN. A
+// „quelle“ is not read: the card's „Dokumente“ link is (#281, owner 2026-11-05).
 type ergaenzenArgs struct {
-	firma, ansprechpartner, telefon, email, iban, quelle string
-	anschrift                                            *caldav.Address
+	firma, ansprechpartner, telefon, email, iban, bank, kontoinhaber string
+	anschrift                                                        *caldav.Address
 }
 
 var plzDE = regexp.MustCompile(`^[0-9]{5}$`)
@@ -168,18 +173,14 @@ func readAnschrift(raw any) (*caldav.Address, string) {
 
 func readErgaenzen(a map[string]any, e *ergaenzung) (ergaenzenArgs, error) {
 	v := ergaenzenArgs{firma: oneLine(mcpserver.Str(a, "firma")), ansprechpartner: oneLine(mcpserver.Str(a, "ansprechpartner")),
-		quelle: strings.TrimSpace(mcpserver.Str(a, "quelle"))}
+		bank: oneLine(mcpserver.Str(a, "bank")), kontoinhaber: oneLine(mcpserver.Str(a, "kontoinhaber"))}
 	if v.firma == "" {
 		return v, errors.New("firma fehlt")
 	}
-	if err := tooLong("firma", v.firma, MaxField); err != nil {
-		return v, err
-	}
-	if err := tooLong("ansprechpartner", v.ansprechpartner, MaxField); err != nil {
-		return v, err
-	}
-	if v.quelle != "" && (!httpURL(v.quelle) || len(v.quelle) > 500 || strings.ContainsAny(v.quelle, " \t\r\n")) {
-		return v, fmt.Errorf("quelle: %q ist kein Link (http/https)", cut(oneLine(v.quelle), 100))
+	for _, f := range [][2]string{{"firma", v.firma}, {"ansprechpartner", v.ansprechpartner}, {"bank", v.bank}, {"kontoinhaber", v.kontoinhaber}} {
+		if err := tooLong(f[0], f[1], MaxField); err != nil {
+			return v, err
+		}
 	}
 	if p := strings.TrimSpace(mcpserver.Str(a, "telefon")); p != "" {
 		if !phoneRE.MatchString(p) || len(digits(p)) < 3 {
@@ -208,6 +209,10 @@ func readErgaenzen(a map[string]any, e *ergaenzung) (ergaenzenArgs, error) {
 		} else {
 			e.set("iban", stAbgelehnt, fmt.Sprintf("„%s“ ist keine gültige IBAN (Prüfziffer oder Länge falsch)", cut(oneLine(i), 50)))
 		}
+	}
+	if v.iban == "" {
+		kontoLines("", v, false, "", "gehört zu einer IBAN; ohne gültige IBAN nicht übernommen", e)
+		v.bank, v.kontoinhaber = "", ""
 	}
 	return v, nil
 }
@@ -308,19 +313,67 @@ func ergaenzenOnce(ctx context.Context, c *caldav.Client, cc string, a map[strin
 
 // given says whether the field came with a valid value.
 func given(v ergaenzenArgs, f string) bool {
-	switch f {
-	case "ansprechpartner":
-		return v.ansprechpartner != ""
-	case "telefon":
-		return v.telefon != ""
-	case "email":
-		return v.email != ""
-	case "iban":
-		return v.iban != ""
-	case "anschrift":
-		return v.anschrift != nil
+	have, ok := map[string]bool{"ansprechpartner": v.ansprechpartner != "", "telefon": v.telefon != "", "email": v.email != "",
+		"iban": v.iban != "", "bank": v.bank != "", "kontoinhaber": v.kontoinhaber != "", "anschrift": v.anschrift != nil}[f]
+	return have || !ok
+}
+
+// kontoLines are the note's lines of the account that go above its IBAN
+// line (owner 2026-11-05): Bank, then Kontoinhaber, those given that the
+// note lacks, each said in e (st on a card it may fill); with refused set,
+// none, each given one refused for that reason.
+func kontoLines(note string, v ergaenzenArgs, firm bool, st, refused string, e *ergaenzung) []string {
+	var out []string
+	for _, f := range [][2]string{{"bank", v.bank}, {"kontoinhaber", v.kontoinhaber}} {
+		if refused != "" && f[1] != "" {
+			e.set(f[0], stAbgelehnt, refused)
+		} else if l := noteValue(note, f[0], f[1], firm, st, e); l != "" {
+			out = append(out, l)
+		}
 	}
-	return true
+	return out
+}
+
+// fill says field f in e and whether it is written (as st): the card
+// has it, or another value (other) that stays; Homes adds only to its
+// own firm cards.
+func fill(e *ergaenzung, f string, have bool, other string, firm bool, st string) bool {
+	switch {
+	case have:
+		e.set(f, stVorhanden, "")
+	case other != "":
+		e.set(f, stVorhanden, "eingetragen ist „"+other+"“; bleibt")
+	case !firm:
+		e.set(f, stAbgelehnt, notOurs)
+	default:
+		e.set(f, st, "")
+		return true
+	}
+	return false
+}
+
+// noteValue is a field kept as a note line („Label: value“): its new
+// line when it is written (fill), else "".
+func noteValue(note, f, want string, firm bool, st string, e *ergaenzung) string {
+	have, ok := noteLine(note, fieldLabel[f])
+	if want == "" || !fill(e, f, ok && strings.EqualFold(have, want), map[bool]string{true: cut(have, MaxField)}[ok], firm, st) {
+		return ""
+	}
+	return fieldLabel[f] + ": " + want
+}
+
+// aboveIBAN is note with lines put just above its IBAN line, at its end
+// when it has none.
+func aboveIBAN(note string, lines []string) string {
+	all := strings.Split(note, "\n")
+	if note == "" {
+		all = nil
+	}
+	at := slices.IndexFunc(all, func(l string) bool { return strings.HasPrefix(strings.TrimSpace(l), "IBAN:") })
+	if at < 0 {
+		at = len(all)
+	}
+	return strings.Join(slices.Insert(all, at, lines...), "\n")
 }
 
 func ergaenzenNew(ctx context.Context, c *caldav.Client, v ergaenzenArgs, e ergaenzung) (string, error) {
@@ -341,15 +394,12 @@ func ergaenzenNew(ctx context.Context, c *caldav.Client, v ergaenzenArgs, e erga
 	}
 	if v.iban != "" {
 		ct.IBANs = []string{v.iban}
-		note = append(note, "IBAN: "+groupIBAN(v.iban))
+		note = append(append(note, kontoLines("", v, true, stAngelegt, "", &e)...), "IBAN: "+groupIBAN(v.iban))
 		e.set("iban", stAngelegt, "")
 	}
 	if v.anschrift != nil {
 		ct.WorkAddress = v.anschrift
 		e.set("anschrift", stAngelegt, "")
-	}
-	if v.quelle != "" {
-		note = append(note, "Quelle: "+v.quelle)
 	}
 	ct.Note = strings.Join(note, "\n")
 	col, err := c.PutContact(ctx, ct)
@@ -361,103 +411,53 @@ func ergaenzenNew(ctx context.Context, c *caldav.Client, v ergaenzenArgs, e erga
 }
 
 func ergaenzenOne(ctx context.Context, c *caldav.Client, cc string, v ergaenzenArgs, cd caldav.Card, e ergaenzung) (string, error) {
-	firm := cd.IsFirm()
-	const notOurs = "kein Firmenkontakt von Homes (ohne Kategorie Firma): Homes ergänzt ihn nicht"
+	firm, before := cd.IsFirm(), cd.Note
 	var add, note []string
 	e.set("firma", stVorhanden, "")
-	if v.ansprechpartner != "" {
-		have, ok := noteLine(cd.Note, "Ansprechpartner")
-		switch {
-		case ok && strings.EqualFold(have, v.ansprechpartner):
-			e.set("ansprechpartner", stVorhanden, "")
-		case ok:
-			e.set("ansprechpartner", stVorhanden, "eingetragen ist „"+cut(have, MaxField)+"“; bleibt")
-		case !firm:
-			e.set("ansprechpartner", stAbgelehnt, notOurs)
-		default:
-			note = append(note, "Ansprechpartner: "+v.ansprechpartner)
-			e.set("ansprechpartner", stErgaenzt, "")
-		}
+	if l := noteValue(cd.Note, "ansprechpartner", v.ansprechpartner, firm, stErgaenzt, &e); l != "" {
+		note = append(note, l)
 	}
-	if v.telefon != "" {
-		have := false
-		for _, p := range cd.Phones {
-			have = have || International(p, cc) == International(v.telefon, cc)
-		}
-		switch {
-		case have:
-			e.set("telefon", stVorhanden, "")
-		case !firm:
-			e.set("telefon", stAbgelehnt, notOurs)
-		default:
-			add = append(add, "TEL:"+caldav.EscapeText(v.telefon))
-			e.set("telefon", stErgaenzt, "")
-		}
+	samePhone := func(p string) bool { return International(p, cc) == International(v.telefon, cc) }
+	if v.telefon != "" && fill(&e, "telefon", slices.ContainsFunc(cd.Phones, samePhone), "", firm, stErgaenzt) {
+		add = append(add, "TEL:"+caldav.EscapeText(v.telefon))
 	}
-	if v.email != "" {
-		have := false
-		for _, m := range cd.Emails {
-			have = have || strings.EqualFold(strings.TrimSpace(m), v.email)
-		}
-		switch {
-		case have:
-			e.set("email", stVorhanden, "")
-		case !firm:
-			e.set("email", stAbgelehnt, notOurs)
-		default:
-			add = append(add, "EMAIL:"+caldav.EscapeText(v.email))
-			e.set("email", stErgaenzt, "")
-		}
+	sameMail := func(m string) bool { return strings.EqualFold(strings.TrimSpace(m), v.email) }
+	if v.email != "" && fill(&e, "email", slices.ContainsFunc(cd.Emails, sameMail), "", firm, stErgaenzt) {
+		add = append(add, "EMAIL:"+caldav.EscapeText(v.email))
 	}
 	if v.iban != "" {
 		known := cardIBANs(cd.Contact)
-		has := false
-		for _, i := range known {
-			has = has || i == v.iban
-		}
 		switch {
-		case has:
+		case slices.Contains(known, v.iban): // the account's bank and holder still fill in, above its line
 			e.set("iban", stVorhanden, "")
+			cd.Note = aboveIBAN(cd.Note, kontoLines(cd.Note, v, firm, stErgaenzt, "", &e))
 		case len(known) > 0:
 			shown := make([]string, len(known))
 			for i, k := range known {
 				shown[i] = groupIBAN(k)
 			}
 			e.set("iban", stAbweichend, "im Adressbuch steht "+strings.Join(shown, ", ")+", im Dokument "+groupIBAN(v.iban)+"; nicht übernommen")
+			kontoLines("", v, false, "", "gehört zur abweichenden IBAN; nicht übernommen", &e)
 		case !firm:
 			e.set("iban", stAbgelehnt, notOurs)
+			kontoLines(cd.Note, v, false, "", "", &e)
 		default:
 			add = append(add, "X-IBAN:"+v.iban)
-			note = append(note, "IBAN: "+groupIBAN(v.iban))
+			note = append(append(note, kontoLines(cd.Note, v, firm, stErgaenzt, "", &e)...), "IBAN: "+groupIBAN(v.iban))
 			e.set("iban", stErgaenzt, "")
 		}
 	}
-	if v.anschrift != nil {
-		want := v.anschrift.String()
-		same := false
-		for _, have := range cd.Addresses {
-			same = same || strings.EqualFold(oneLine(have), want)
-		}
-		switch {
-		case same:
-			e.set("anschrift", stVorhanden, "")
-		case len(cd.Addresses) > 0:
-			e.set("anschrift", stVorhanden, "eingetragen ist „"+listAll(cd.Addresses, MaxField, "; ")+"“; bleibt")
-		case !firm:
-			e.set("anschrift", stAbgelehnt, notOurs)
-		default:
-			add = append(add, v.anschrift.Line())
-			e.set("anschrift", stErgaenzt, "")
+	if a := v.anschrift; a != nil {
+		same := slices.ContainsFunc(cd.Addresses, func(h string) bool { return strings.EqualFold(oneLine(h), a.String()) })
+		if fill(&e, "anschrift", same, map[bool]string{true: listAll(cd.Addresses, MaxField, "; ")}[len(cd.Addresses) > 0], firm, stErgaenzt) {
+			add = append(add, a.Line())
 		}
 	}
 	e.Kontakt = cd.UID
 	name := cut(orDash(cd.Name), MaxField)
-	if len(add) == 0 && len(note) == 0 {
+	if len(add) == 0 && len(note) == 0 && cd.Note == before {
 		e.Status = "unveraendert"
 		return answer("Kontakt „"+name+"“ ist schon im Adressbuch; nichts geändert"+said(e)+".", e), nil
-	}
-	if v.quelle != "" && !strings.Contains(cd.Note, v.quelle) {
-		note = append(note, "Quelle: "+v.quelle)
 	}
 	if err := c.AmendCard(ctx, cd, add, strings.Join(note, "\n")); err != nil {
 		return "", err

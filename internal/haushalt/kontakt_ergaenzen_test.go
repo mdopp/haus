@@ -64,25 +64,33 @@ func felder(t *testing.T, e ergaenzt, want map[string]string) {
 }
 
 // No card matches: one is made, a firm's (ORG, FN, CATEGORIES Firma), with
-// everything given; the IBAN without spaces as X-IBAN and grouped in the note.
+// everything given; the IBAN without spaces as X-IBAN, and in the note the
+// account as a block: Bank, Kontoinhaber, the IBAN grouped. The document's
+// link (quelle, an older caller's) is not written: the card's „Dokumente“
+// link is where its documents are (owner 2026-11-05).
 func TestKontaktErgaenzenCreates(t *testing.T) {
 	s := newSetup(t, want{contacts: true})
 	line, e := ergaenzen(t, s, map[string]any{"firma": "Beispiel Stadtwerke GmbH", "ansprechpartner": "Frau Erika Muster",
-		"telefon": "+49 30 1234567", "email": "service@stadtwerke.example", "iban": "de89370400440532013000", "quelle": quelle7})
+		"telefon": "+49 30 1234567", "email": "service@stadtwerke.example", "iban": "de89370400440532013000", "quelle": quelle7,
+		"bank": " Beispielbank  eG ", "kontoinhaber": "Beispiel Stadtwerke GmbH"})
 	if e.Status != "angelegt" || !strings.HasPrefix(e.Kontakt, "urn:uuid:") || !strings.Contains(line, "Beispiel Stadtwerke GmbH") || !strings.Contains(line, "angelegt") {
 		t.Fatalf("%q %+v", line, e)
 	}
-	felder(t, e, map[string]string{"firma": "angelegt", "ansprechpartner": "angelegt", "telefon": "angelegt", "email": "angelegt", "iban": "angelegt"})
+	felder(t, e, map[string]string{"firma": "angelegt", "ansprechpartner": "angelegt", "telefon": "angelegt", "email": "angelegt", "iban": "angelegt",
+		"bank": "angelegt", "kontoinhaber": "angelegt"})
 	p, vcf := onlyCard(t, s)
 	if !strings.HasPrefix(p, "/bote/kontakte/") {
 		t.Fatalf("stray card %s", p)
 	}
 	for _, want := range []string{"FN:Beispiel Stadtwerke GmbH\r\n", "ORG:Beispiel Stadtwerke GmbH\r\n", "CATEGORIES:Firma\r\n", "TEL:+49 30 1234567\r\n",
 		"EMAIL:service@stadtwerke.example\r\n", "X-IBAN:DE89370400440532013000\r\n", "UID:" + e.Kontakt + "\r\n",
-		"Ansprechpartner: Frau Erika Muster", "IBAN: " + ibanDE, "Quelle: " + quelle7} {
+		"NOTE:Ansprechpartner: Frau Erika Muster\\nBank: Beispielbank eG\\nKontoinhaber: Beispiel Stadtwerke GmbH\\nIBAN: " + ibanDE + "\r\n"} {
 		if !strings.Contains(strings.ReplaceAll(vcf, "\r\n ", ""), want) {
 			t.Fatalf("card lacks %q:\n%s", want, vcf)
 		}
+	}
+	if strings.Contains(vcf, "Quelle") || strings.Contains(vcf, "paperless") {
+		t.Fatalf("the document's link was written:\n%s", vcf)
 	}
 	// only the firm: nothing else is reported or written
 	s2 := newSetup(t, want{contacts: true})
@@ -111,12 +119,12 @@ func TestKontaktErgaenzenFills(t *testing.T) {
 	_, vcf := onlyCard(t, s)
 	vcf = strings.ReplaceAll(vcf, "\r\n ", "")
 	for _, want := range []string{"TEL:030 1234567\r\n", "TEL:+49 30 7654321\r\n", "EMAIL:rechnung@stadtwerke.example\r\n", "X-IBAN:DE89370400440532013000\r\n",
-		"Ansprechpartner: Herr Max Beispiel", "Quelle: " + quelle7} {
+		"Ansprechpartner: Herr Max Beispiel"} {
 		if !strings.Contains(vcf, want) {
 			t.Fatalf("card lacks %q:\n%s", want, vcf)
 		}
 	}
-	if strings.Contains(vcf, "GB82") || strings.Contains(vcf, "WEST") {
+	if strings.Contains(vcf, "GB82") || strings.Contains(vcf, "WEST") || strings.Contains(vcf, "Quelle") {
 		t.Fatalf("the different IBAN was written:\n%s", vcf)
 	}
 	// the same again: all there, nothing written
@@ -186,10 +194,62 @@ func TestKontaktErgaenzenRefusesBadValues(t *testing.T) {
 		t.Fatalf("a refused value was written:\n%s", vcf)
 	}
 	for _, bad := range []map[string]any{{}, {"firma": "  "}, {"firma": strings.Repeat("x", MaxField+1)},
-		{"firma": "X", "quelle": "javascript:alert(1)"}, {"firma": "X", "ansprechpartner": strings.Repeat("y", MaxField+1)}} {
+		{"firma": "X", "ansprechpartner": strings.Repeat("y", MaxField+1)}, {"firma": "X", "iban": ibanDE, "bank": strings.Repeat("b", MaxField+1)},
+		{"firma": "X", "iban": ibanDE, "kontoinhaber": strings.Repeat("k", MaxField+1)}} {
 		if text, isErr := call(t, s.h, "kontakt_ergaenzen", bad); !isErr {
 			t.Fatalf("%v: want a tool error, got %q", bad, text)
 		}
+	}
+}
+
+// The bank and the account holder belong to the IBAN (owner 2026-11-05):
+// without a valid one, or with one the card does not have (abweichend),
+// they are refused; with the card's own IBAN they fill in above its line,
+// a value there stays; a family card gets none.
+func TestKontaktErgaenzenKonto(t *testing.T) {
+	s := newSetup(t, want{contacts: true})
+	_, e := ergaenzen(t, s, map[string]any{"firma": "Beispiel Bau GmbH", "bank": "Beispielbank", "kontoinhaber": "Bau GmbH", "iban": "DE00 0000"})
+	felder(t, e, map[string]string{"firma": "angelegt", "iban": "abgelehnt", "bank": "abgelehnt", "kontoinhaber": "abgelehnt"})
+	if !strings.Contains(e.Gruende["bank"], "IBAN") {
+		t.Fatalf("reason: %v", e.Gruende)
+	}
+	if _, vcf := onlyCard(t, s); strings.Contains(vcf, "Beispielbank") || strings.Contains(vcf, "NOTE") {
+		t.Fatalf("a bank without an IBAN was written:\n%s", vcf)
+	}
+
+	// a firm card with the IBAN and the family's own lines around it
+	s = newSetup(t, want{contacts: true})
+	s.fake.Put("/bote/kontakte/bau.vcf", "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:bau\r\nFN:Beispiel Bau GmbH\r\nORG:Beispiel Bau GmbH\r\nCATEGORIES:Firma\r\n"+
+		"X-IBAN:DE89370400440532013000\r\nNOTE:Ansprechpartner: Frau Muster\\nIBAN: "+ibanDE+"\\nKundennummer 4711\r\nEND:VCARD\r\n")
+	_, e = ergaenzen(t, s, map[string]any{"firma": "Beispiel Bau GmbH", "iban": ibanDE, "bank": "Beispielbank", "kontoinhaber": "Beispiel Bau GmbH"})
+	if e.Status != "ergaenzt" {
+		t.Fatalf("%+v", e)
+	}
+	felder(t, e, map[string]string{"firma": "vorhanden", "iban": "vorhanden", "bank": "ergaenzt", "kontoinhaber": "ergaenzt"})
+	_, vcf := onlyCard(t, s)
+	if want := "NOTE:Ansprechpartner: Frau Muster\\nBank: Beispielbank\\nKontoinhaber: Beispiel Bau GmbH\\nIBAN: " + ibanDE + "\\nKundennummer 4711\r\n"; !strings.Contains(strings.ReplaceAll(vcf, "\r\n ", ""), want) {
+		t.Fatalf("card lacks %q:\n%s", want, vcf)
+	}
+	// another bank named later: the one there stays, nothing written
+	_, e = ergaenzen(t, s, map[string]any{"firma": "Beispiel Bau GmbH", "iban": ibanDE, "bank": "Andere Bank"})
+	if e.Status != "unveraendert" || e.Felder["bank"] != "vorhanden" || !strings.Contains(e.Gruende["bank"], "Beispielbank") {
+		t.Fatalf("%+v", e)
+	}
+	// a different IBAN: neither it nor its bank
+	_, e = ergaenzen(t, s, map[string]any{"firma": "Beispiel Bau GmbH", "iban": ibanGB, "bank": "West Bank", "kontoinhaber": "Wer anders"})
+	felder(t, e, map[string]string{"firma": "vorhanden", "iban": "abweichend", "bank": "abgelehnt", "kontoinhaber": "abgelehnt"})
+	if _, after := onlyCard(t, s); after != vcf {
+		t.Fatalf("written:\n%s", after)
+	}
+
+	// a family card: nothing
+	s = newSetup(t, want{contacts: true})
+	card := "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:paul\r\nFN:Paul Plan\r\nORG:Plan Bau\r\nX-IBAN:DE89370400440532013000\r\nEND:VCARD\r\n"
+	s.fake.Put("/bote/kontakte/paul.vcf", card)
+	_, e = ergaenzen(t, s, map[string]any{"firma": "Plan Bau", "iban": ibanDE, "bank": "Beispielbank"})
+	felder(t, e, map[string]string{"firma": "vorhanden", "iban": "vorhanden", "bank": "abgelehnt"})
+	if _, got := onlyCard(t, s); got != card {
+		t.Fatalf("a family card was written:\n%s", got)
 	}
 }
 

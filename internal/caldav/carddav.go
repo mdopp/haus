@@ -52,7 +52,6 @@ func (c *countingReader) Read(p []byte) (int, error) {
 // big address book is never held whole; fn returning false stops early.
 // partial says the answer was cut at maxCardBytes, or by the timeout
 // after at least one card (a slow Radicale with many photos).
-
 func (c *Client) cards(ctx context.Context, col Collection, fn func(Card) bool) (partial bool, err error) {
 	resp, err := c.send(ctx, "REPORT", col.URL, "1", addressbookQuery, nil)
 	if err != nil {
@@ -121,12 +120,13 @@ func (c *Client) Contacts(ctx context.Context) (out []Contact, partial bool, err
 	return out, partial, err
 }
 
-// Card is a contact with where it is, its ETag and its text, so it can be
-// written back (AmendCard).
+// Card is a contact with its place, ETag and text, to be written back (AmendCard).
 type Card struct {
 	Contact
 	href, etag, data string
 }
+
+func (cd Card) Text() string { return cd.data } // the card as Radicale holds it: a copy before a write
 
 // Cards is Contacts with each card's place, for a write back.
 func (c *Client) Cards(ctx context.Context) (out []Card, partial bool, err error) {

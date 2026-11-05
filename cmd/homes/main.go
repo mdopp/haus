@@ -477,6 +477,7 @@ func main() {
 	if hh.Calendar != nil { // the collections there from the start (owner 2026-10-24), of the modules on
 		go ensureHaushalt(ctx, hh.Calendar, st.napi.Module)
 	}
+	go quellenWegStart(ctx, st.hh.Contacts, dataDir) // once: the „Quelle:“ lines out of the firm cards (owner 2026-11-05)
 	startLeaf(ctx, st)
 	go schliesseWuensche(ctx, ops, st.napi.Module, time.Minute) // a wish for what is on now is done (ADR 0001 §10)
 	go dienstePflegen(ctx, start, st.napi.Module, 30*time.Second, time.Hour)
