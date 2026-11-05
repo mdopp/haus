@@ -217,6 +217,7 @@ func main() {
 	mux.HandleFunc(pages.SpurenPath, pages.Mehr(mehr))
 	mux.HandleFunc(pages.AnfordernPath, pages.Anfordern(mehr))
 	mux.HandleFunc(pages.ModulPages, pages.ModulSeite(mehr))
+	mux.HandleFunc(pages.ZusammenPath, pages.Zusammen(mehr))
 	// Musik (owner 2026-11-04: „nur Dateien darstellen“): a file being sorted in, one done, one beets
 	// kept back; /demo/musik?leer=1 empties the inbox and beets' status, ?discogs=0 is Anna without Discogs
 	musikCfg := mehr

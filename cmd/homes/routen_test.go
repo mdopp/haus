@@ -165,7 +165,7 @@ var seitenProben = []string{
 	"/kontakte/x1", "/notizen", "/notizen/x1.md", "/dokumente", "/dokumente/x1", "/scannen", "/scannen/trennblatt",
 	"/einkauf", "/einkauf/rezepte", "/musik", "/musik/bild", "/discogs", "/discogs/zurueck", "/platte",
 	"/platte/bild", "/podcasts", "/gesehen", "/daten-sichern", "/nachrichten-sichern", "/standort", "/netzlaufwerk",
-	"/sprechen", "/sprechen/hoeren", "/gibtsnicht", "/kalender/gibtsnicht",
+	"/sprechen", "/sprechen/hoeren", "/zusammen", "/gibtsnicht", "/kalender/gibtsnicht",
 }
 
 // TestThePageRoutesAreAsTheyWere locks which pattern answers each page

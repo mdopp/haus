@@ -184,6 +184,7 @@ func familyMux(s site) *http.ServeMux {
 	pagesMux.HandleFunc(pages.SpurenPath, pages.Mehr(family))       // its traces of what the box lacks (ADR 0001 §10)
 	pagesMux.HandleFunc(pages.AnfordernPath, pages.Anfordern(family))
 	pagesMux.HandleFunc(pages.ModulPages, pages.ModulSeite(family))               // a module, admins: where a wish leads
+	pagesMux.HandleFunc(pages.ZusammenPath, pages.Zusammen(family))               // „So hängt alles zusammen“, under Mehr
 	pagesMux.HandleFunc("/aufgaben", pages.DeineAufgaben(family))                 // haus#188: Deine Aufgaben // the bar's fourth entry, with Abmelden (haus#67)
 	pagesMux.HandleFunc("/willkommen", pages.Willkommen(family))                  // hello and the next steps (haus#56)
 	pagesMux.HandleFunc(pages.EinrichtenPages, pages.Einrichten(family))          // a module's setup, ticked by hand (owner 2026-11-04)
