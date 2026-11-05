@@ -688,7 +688,7 @@ test('Kontakte lists the address book, the search filters while typing, a row op
   await expect(page.getByText('Neue Kontakte und Änderungen machst du auf dem Handy')).toBeVisible();
   await expect(page.locator('a.ruf', { hasText: '0711 556677' })).toHaveAttribute('href', 'tel:0711556677');
   await page.screenshot({ path: info.outputPath('kontakte-411.png'), fullPage: true });
-  const suche = page.getByRole('searchbox', { name: 'Name, Nummer oder E-Mail' });
+  const suche = page.getByRole('searchbox', { name: 'Name, Nummer, E-Mail' });
   await suche.fill('müller');
   await expect(page.locator('.kontakte li:visible')).toHaveCount(1);
   await suche.fill('0711 9');

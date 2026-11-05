@@ -214,7 +214,7 @@ var de = map[ID]string{
 	"musik.discogs-bringt":    "dann erfasst du Platten mit einem Foto in deine Sammlung.",
 	"kalender.bearbeiten":     "Neue Termine und Änderungen machst du auf dem Handy im Homes-Kalender oder über den Boten.",
 	"kontakte.bearbeiten":     "Neue Kontakte und Änderungen machst du auf dem Handy im Homes-Adressbuch oder über den Boten.",
-	"kontakte.suchen":         "Name, Nummer oder E-Mail",
+	"kontakte.suchen":         "Name, Nummer, E-Mail",
 	"kontakte.leer":           "Im Adressbuch steht noch niemand.",
 	"kontakte.keiner":         "Kein Kontakt passt zu „%s“.",
 	"kontakte.adressbuch":     "Adressbuch",
