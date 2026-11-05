@@ -58,7 +58,7 @@ func writeMusik(w http.ResponseWriter, r *http.Request, cfg StartConfig, said, u
 		}
 		b.WriteString("</div>")
 	}
-	b.WriteString(musikDazu(cfg, beetsLesen(ctx, cfg)) + musikPlatten(ctx, r, cfg))
+	b.WriteString(musikDazu(r, cfg, beetsLesen(ctx, cfg)) + musikPlatten(ctx, r, cfg))
 	writePage(w, http.StatusOK, b)
 }
 
@@ -71,6 +71,11 @@ type beetsStand struct {
 		Eingang string    `json:"eingang"`
 		Titel   int       `json:"titel"`
 		Alben   int       `json:"alben"`
+		Von     string    `json:"von"`    // the uploader Homes named in its sidecar; "" without one
+		Ordner  string    `json:"ordner"` // _nicht-importiert/<run> where what was kept back went
+		Nicht   []struct {
+			Datei string `json:"datei"` // relative to Ordner
+		} `json:"nicht_importiert"`
 	} `json:"letzte"`
 	wartet []os.FileInfo // the uploads at the inbox's top or in .in-arbeit/, not taken yet
 	kept   []liegen      // what beets kept back
@@ -87,7 +92,17 @@ func beetsLesen(ctx context.Context, cfg StartConfig) beetsStand {
 			json.Unmarshal(own, &st)
 		}
 	}
-	st.wartet, st.kept = musikWartet(cfg.MusicInbox), zurueck(cfg.MusicInbox)
+	st.wartet, st.kept = musikWartet(cfg.MusicInbox), zurueck(cfg.MusicInbox, cfg.Loc)
+	von := map[string]string{} // <run>/<upload> → who uploaded it, as beets' status names them
+	for _, u := range st.Letzte {
+		for _, n := range u.Nicht {
+			top, _, _ := strings.Cut(n.Datei, "/")
+			von[u.Ordner+"/"+top] = u.Von
+		}
+	}
+	for i, k := range st.kept {
+		st.kept[i].von = von[keptBack+"/"+k.run+"/"+k.name]
+	}
 	return st
 }
 
@@ -108,7 +123,7 @@ func musikWartet(inbox string) (out []os.FileInfo) {
 // from a computer at home; under it one list of the files: being sorted in (the page looks
 // again every ten seconds meanwhile, and says when it takes long), not sorted in with beets'
 // reason and „Noch einmal einsortieren“ and „Löschen“ on its row, and the last week's done.
-func musikDazu(cfg StartConfig, st beetsStand) string {
+func musikDazu(r *http.Request, cfg StartConfig, st beetsStand) string {
 	var b strings.Builder
 	b.WriteString(`<section class="karte musik-dazu" aria-labelledby=m-h><h2 id=m-h>` + html.EscapeString(texte.T(texte.MusikDazu)) +
 		`</h2><div class=wie><p>` + html.EscapeString(texte.T(texte.MusikHandy)) + `</p>`)
@@ -127,11 +142,20 @@ func musikDazu(cfg StartConfig, st beetsStand) string {
 		}
 		row("gelb", fi.Name(), state, "")
 	}
-	for _, k := range st.kept {
+	for _, k := range st.kept { // owner 2026-11-05: when, from whom, why, and the way out on its row
 		hidden := `<input type=hidden name=lauf value="` + html.EscapeString(k.run) + `"><input type=hidden name=name value="` + html.EscapeString(k.name) + `">`
-		row("rot", k.name, strings.TrimSuffix(texte.T(texte.MusikNicht)+": "+k.grund, ": "), `<div class=musik-tun><form method=post action=`+MusikPath+
-			`><input type=hidden name=tun value=nochmal>`+hidden+`<button data-laeuft="Legt zurück …">Noch einmal einsortieren</button></form><form method=post action=`+MusikPath+
-			` data-frage="„`+html.EscapeString(k.name)+`“ endgültig löschen?"><input type=hidden name=tun value=loeschen>`+hidden+`<button class=weg data-laeuft="Löscht …">Löschen</button></form></div>`)
+		state := texte.T(texte.MusikNicht)
+		if !k.zeit.IsZero() {
+			state += " · " + whenWords(k.zeit, now, loc)
+		}
+		if k.von != "" && k.von != musik.Uploader(r.Header.Get("Remote-User")) {
+			state += " · von " + k.von
+		}
+		tun := `<div class=musik-tun><form method=post action=` + MusikPath + `><input type=hidden name=tun value=nochmal>` + hidden + `<button data-laeuft="Legt zurück …">Noch einmal einsortieren</button></form>`
+		if darfLoeschen(r, k) {
+			tun += `<form method=post action=` + MusikPath + ` data-frage="„` + html.EscapeString(k.name) + `“ endgültig löschen?"><input type=hidden name=tun value=loeschen>` + hidden + `<button class=weg data-laeuft="Löscht …">Löschen</button></form>`
+		}
+		row("rot", k.name, strings.TrimSuffix(state+": "+k.grund, ": "), tun+`</div>`)
 	}
 	for i, u := range st.Letzte {
 		if i == 5 || now.Sub(u.At) > 7*24*time.Hour {
@@ -183,31 +207,8 @@ func musikNochmal(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
 		http.Error(w, "Diese Datei liegt nicht mehr unter „Nicht übernommen“.", http.StatusConflict)
 		return
 	}
-	if tun == "loeschen" { // the owner, 2026-10-26: what can be put back can be deleted
-		var undo string
-		if cfg.Papierkorb != nil { // haus#174: into the inbox's hidden Papierkorb for 30 days; the importer never touches a dot folder
-			e, err := cfg.Papierkorb.Rein("musik", name, r.Header.Get("Remote-User"), musikImKorb{Lauf: run, Name: name})
-			if err == nil {
-				root.MkdirAll(musikKorb+"/"+e.ID, 0o700)
-				err = root.Rename(from, musikKorb+"/"+e.ID+"/"+name)
-				if err != nil {
-					cfg.Papierkorb.Raus(e.ID)
-				}
-			}
-			if err != nil {
-				log.Printf("homes: musik: deleting %s: %v", from, err)
-				http.Error(w, "Die Datei ließ sich gerade nicht löschen; sie bleibt. Versuch es gleich noch einmal.", http.StatusInternalServerError)
-				return
-			}
-			undo = e.ID
-		} else if err := root.RemoveAll(from); err != nil {
-			log.Printf("homes: musik: deleting %s: %v", from, err)
-			http.Error(w, "Die Datei ließ sich nicht löschen.", http.StatusInternalServerError)
-			return
-		}
-		tidyRun(root, run)
-		log.Printf("homes: musik: %s deleted %s", r.Header.Get("Remote-User"), from)
-		writeMusik(w, r, cfg, "„"+name+"“ ist gelöscht.", undo)
+	if tun == "loeschen" {
+		musikLoeschen(w, r, cfg, root, run, name)
 		return
 	}
 	to := name
@@ -238,6 +239,40 @@ func musikNochmal(w http.ResponseWriter, r *http.Request, cfg StartConfig) {
 	writeMusik(w, r, cfg, "„"+name+"“ liegt wieder im Musik-Eingang. Die Box sortiert es in etwa einer Minute ein.", "")
 }
 
+// musikLoeschen deletes the kept-back upload <run>/<name>, that one only (the owner,
+// 2026-10-26: what can be put back can be deleted), for who uploaded it or an admin (owner
+// 2026-11-05): into the inbox's hidden Papierkorb for 30 days (haus#174; the importer never
+// touches a dot folder), its run gone once only GRUND.txt is left.
+func musikLoeschen(w http.ResponseWriter, r *http.Request, cfg StartConfig, root *os.Root, run, name string) {
+	from, undo := keptBack+"/"+run+"/"+name, ""
+	if !darfLoeschen(r, liegtZurueck(r, cfg, run, name)) {
+		http.Error(w, "Löschen kann das nur, wer es hochgeladen hat, oder ein Admin.", http.StatusForbidden)
+		return
+	}
+	if cfg.Papierkorb != nil {
+		e, err := cfg.Papierkorb.Rein("musik", name, r.Header.Get("Remote-User"), musikImKorb{Lauf: run, Name: name})
+		if err == nil {
+			root.MkdirAll(musikKorb+"/"+e.ID, 0o700)
+			if err = root.Rename(from, musikKorb+"/"+e.ID+"/"+name); err != nil {
+				cfg.Papierkorb.Raus(e.ID)
+			}
+		}
+		if err != nil {
+			log.Printf("homes: musik: deleting %s: %v", from, err)
+			http.Error(w, "Die Datei ließ sich gerade nicht löschen; sie bleibt. Versuch es gleich noch einmal.", http.StatusInternalServerError)
+			return
+		}
+		undo = e.ID
+	} else if err := root.RemoveAll(from); err != nil {
+		log.Printf("homes: musik: deleting %s: %v", from, err)
+		http.Error(w, "Die Datei ließ sich nicht löschen.", http.StatusInternalServerError)
+		return
+	}
+	tidyRun(root, run)
+	log.Printf("homes: musik: %s deleted %s", r.Header.Get("Remote-User"), from)
+	writeMusik(w, r, cfg, "„"+name+"“ ist gelöscht.", undo)
+}
+
 // plainName is one path part, no folder, nothing hidden or leaving.
 func plainName(s string) bool {
 	return s != "" && s != "." && s != ".." && !strings.ContainsAny(s, "/\\\x00") && !strings.HasPrefix(s, ".") && len(s) <= 255
@@ -250,11 +285,34 @@ const keptBack = "_nicht-importiert"
 // liegen is one upload beets kept back: where, its name, why.
 type liegen struct {
 	run, name, grund string
+	zeit             time.Time // when beets put it there, from the run's name; zero when it names none
+	von              string    // who uploaded it, when beets' status still says; "" when not known
 }
 
-// zurueck are the uploads beets kept back, the newest run first, at most
-// 20, each with the reason GRUND.txt names.
-func zurueck(inbox string) []liegen {
+// liegtZurueck is the kept-back upload <run>/<name> as the page shows it, its uploader known
+// where beets' status still says.
+func liegtZurueck(r *http.Request, cfg StartConfig, run, name string) liegen {
+	ctx, cancel := context.WithTimeout(r.Context(), backendWait)
+	defer cancel()
+	for _, k := range beetsLesen(ctx, cfg).kept {
+		if k.run == run && k.name == name {
+			return k
+		}
+	}
+	return liegen{run: run, name: name}
+}
+
+// darfLoeschen: what was kept back is deleted by who uploaded it or an admin (owner
+// 2026-11-05); when no one knows who uploaded it, by anyone who sees the page.
+func darfLoeschen(r *http.Request, k liegen) bool {
+	return k.von == "" || k.von == musik.Uploader(r.Header.Get("Remote-User")) || isAdmin(r)
+}
+
+// zurueck are the uploads beets kept back, the newest run first, at most 20, each with when
+// (the run's name, the box's time) and the reason GRUND.txt names, in a family's words: a
+// folder's files by their own reasons, many with the same one counted („keine Musikdatei
+// (1.204 Dateien)“ for a Takeout shared by mistake).
+func zurueck(inbox string, loc *time.Location) []liegen {
 	root, err := os.OpenRoot(inbox)
 	if err != nil {
 		return nil
@@ -264,42 +322,52 @@ func zurueck(inbox string) []liegen {
 	if err != nil {
 		return nil
 	}
+	if loc == nil {
+		loc = time.Local
+	}
 	sort.Slice(runs, func(i, j int) bool { return runs[i].Name() > runs[j].Name() })
 	var out []liegen
 	for _, run := range runs {
 		if !run.IsDir() || strings.HasPrefix(run.Name(), ".") {
 			continue
 		}
-		reasons := map[string]string{}
+		reasons := map[string][]string{} // an upload's own reason, or its files' „<file>: <reason>“
 		if b, err := fs.ReadFile(root.FS(), keptBack+"/"+run.Name()+"/GRUND.txt"); err == nil {
 			for _, l := range strings.Split(string(b), "\n") {
-				n, g, ok := strings.Cut(l, ": ")
-				if !ok {
-					continue
+				if n, g, ok := strings.Cut(l, ": "); ok {
+					top, rest, sub := strings.Cut(strings.TrimSpace(n), "/")
+					reasons[top] = append(reasons[top], map[bool]string{true: rest + ": "}[sub]+strings.TrimSpace(g))
 				}
-				n, g = strings.TrimSpace(n), strings.TrimSpace(g)
-				if top, rest, sub := strings.Cut(n, "/"); sub { // a file inside an upload's folder: the folder's reason names it
-					g = rest + ": " + g
-					if reasons[top] != "" {
-						g = reasons[top] + "; " + g
-					}
-					n = top
-				}
-				reasons[n] = g
 			}
 		}
+		zeit, _ := time.ParseInLocation("2006-01-02_15-04-05", run.Name(), loc)
 		items, _ := fs.ReadDir(root.FS(), keptBack+"/"+run.Name())
 		for _, it := range items {
 			if it.Name() == "GRUND.txt" || strings.HasPrefix(it.Name(), ".") {
 				continue
 			}
-			out = append(out, liegen{run: run.Name(), name: it.Name(), grund: reasons[it.Name()]})
+			out = append(out, liegen{run: run.Name(), name: it.Name(), grund: grundSatz(reasons[it.Name()]), zeit: zeit})
 			if len(out) == 20 {
 				return out
 			}
 		}
 	}
 	return out
+}
+
+// grundSatz is an upload's reasons as one line: up to three as they are, more with one
+// reason as that reason and how many files it was, else the first three and how many more.
+func grundSatz(gs []string) string {
+	if len(gs) <= 3 {
+		return strings.Join(gs, "; ")
+	}
+	_, first, _ := strings.Cut(gs[0], ": ")
+	for _, g := range gs {
+		if _, r, _ := strings.Cut(g, ": "); r != first {
+			return strings.Join(gs[:3], "; ") + " und " + texte.Tausender(int64(len(gs)-3)) + " weitere"
+		}
+	}
+	return first + " (" + texte.Anzahl(len(gs), "Datei", "Dateien") + ")"
 }
 
 // tidyRun removes a run of kept-back uploads left with only its GRUND.txt.

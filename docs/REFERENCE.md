@@ -1225,10 +1225,16 @@ app's or Jellyfin's). One h1, then:
   a row each: „wird einsortiert …“ for what is at the inbox's top or in its
   `.in-arbeit/` (the page refreshes itself every 10 s meanwhile, and says
   after ten minutes that it takes longer and a message follows); „nicht
-  einsortiert: <reason>“ for what beets kept back (`_nicht-importiert/<run>/`,
-  `GRUND.txt`), with „Noch einmal einsortieren“ (back into the inbox, the
-  person's sidecar beside it) and „Löschen“ (asked; 30 days in the inbox's
-  hidden `.papierkorb`, Rückgängig right after) on its row; „fertig: 2 Alben,
+  übernommen · <when> · von <who>: <reason>“ for what beets kept back
+  (`_nicht-importiert/<run>/`; when from the run's name, who from beets'
+  status `letzte[].von` where it still says, the reason from `GRUND.txt` —
+  a folder's many files with one reason as that reason and their count,
+  „keine Musikdatei (1.204 Dateien)“), with „Noch einmal einsortieren“
+  (back into the inbox, the person's sidecar beside it) and „Löschen“
+  (asked; that one upload only, 30 days in the inbox's hidden
+  `.papierkorb`, Rückgängig right after) on its row. Löschen is for who
+  uploaded it or an admin (owner 2026-11-05; 403 otherwise), for anyone
+  where no one knows who; „fertig: 2 Alben,
   24 Titel in der Musik“ for the last week's uploads from beets' own status
   in laib (`letzte`, at most five).
 - **Platten**, by whether one's Discogs is connected: connected, „Platte
