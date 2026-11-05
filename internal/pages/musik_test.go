@@ -64,7 +64,7 @@ func TestMusikVerwalten(t *testing.T) {
 	}
 	mustContain(t, body, "Auf dem Handy: Lieder", `auf dem <a href=/netzlaufwerk>Netzlaufwerk</a> legen.`,
 		`<li><span class="punkt gelb"></span><div><span class=name>Sommer.zip</span><span class=k>wird einsortiert …</span></div></li>`,
-		`<li><span class="punkt rot"></span><div><span class=name>kassette.rar</span><span class=k>nicht einsortiert: RAR kann die Box nicht auspacken</span><div class=musik-tun>`,
+		`<li><span class="punkt rot"></span><div><span class=name>kassette.rar</span><span class=k>nicht übernommen · heute, 17:20: RAR kann die Box nicht auspacken</span><div class=musik-tun>`,
 		`<button data-laeuft="Legt zurück …">Noch einmal einsortieren</button>`, `<button class=weg data-laeuft="Löscht …">Löschen</button>`,
 		`<li><span class="punkt "></span><div><span class=name>Album.zip</span><span class=k>fertig: 2 Alben, 24 Titel in der Musik · heute, 15:00</span></div></li>`,
 		`<span hidden data-auffrischen=10></span>`)
@@ -108,7 +108,7 @@ func TestMusikNochmal(t *testing.T) {
 	os.WriteFile(filepath.Join(run, "GRUND.txt"), []byte("Musik-Eingang, 2026-10-24\nDiese Dateien …\n\nKREIS.zip: unsicherer Pfad in der ZIP-Datei (absolut): /\n"), 0o644)
 	cfg := StartConfig{MusicInbox: inbox}
 	_, body, _ := familyPage(t, Musik, cfg, "GET", MusikPath, "family")
-	mustContain(t, body, "<span class=name>KREIS.zip</span><span class=k>nicht einsortiert: unsicherer Pfad in der ZIP-Datei (absolut): /</span>",
+	mustContain(t, body, "<span class=name>KREIS.zip</span><span class=k>nicht übernommen · 24. Oktober 2026, 18:11: unsicherer Pfad in der ZIP-Datei (absolut): /</span>",
 		`<input type=hidden name=lauf value="2026-10-24_18-11-01"><input type=hidden name=name value="KREIS.zip"><button data-laeuft="Legt zurück …">Noch einmal einsortieren</button>`)
 
 	h := Musik(cfg)
@@ -123,7 +123,7 @@ func TestMusikNochmal(t *testing.T) {
 	}
 	rec := post(t, h, MusikPath, url.Values{"tun": {"nochmal"}, "lauf": {"2026-10-24_18-11-01"}, "name": {"KREIS.zip"}}, "anna", nil)
 	mustContain(t, rec.Body.String(), "„KREIS.zip“ liegt wieder im Musik-Eingang.", `<span class=name>KREIS.zip</span><span class=k>wird einsortiert …</span>`, "<span hidden data-auffrischen")
-	mustNotContain(t, rec.Body.String(), "nicht einsortiert")
+	mustNotContain(t, rec.Body.String(), "nicht übernommen")
 	if b, _ := os.ReadFile(filepath.Join(inbox, "KREIS.zip")); string(b) != "PK.." {
 		t.Errorf("not in the inbox: %q", b)
 	}
@@ -174,7 +174,7 @@ func TestMusikReasonOfAFolder(t *testing.T) {
 	os.WriteFile(filepath.Join(run, "KREIS", "folder.jpg"), []byte("x"), 0o644)
 	os.WriteFile(filepath.Join(run, "GRUND.txt"), []byte("Musik-Eingang\n\nKREIS/folder.jpg: keine Musikdatei\nKREIS/info.nfo: keine Musikdatei\n"), 0o644)
 	_, body, _ := familyPage(t, Musik, StartConfig{MusicInbox: inbox}, "GET", MusikPath, "family")
-	mustContain(t, body, "<span class=name>KREIS</span><span class=k>nicht einsortiert: folder.jpg: keine Musikdatei; info.nfo: keine Musikdatei</span>")
+	mustContain(t, body, "<span class=name>KREIS</span><span class=k>nicht übernommen · 26. Oktober 2026, 17:45: folder.jpg: keine Musikdatei; info.nfo: keine Musikdatei</span>")
 }
 
 // haus#174: a deleted kept-back upload waits 30 days in the inbox's hidden
@@ -216,5 +216,57 @@ func TestMusikLoeschenRueckgaengig(t *testing.T) {
 	familyPage(t, Musik, cfg, "GET", MusikPath, "family") // a look at the page lets go of what is older than 30 days
 	if ds, _ := os.ReadDir(filepath.Join(inbox, ".papierkorb")); len(ds) != 0 {
 		t.Errorf("old files stay: %v", ds)
+	}
+}
+
+// owner 2026-11-05 (a Google Takeout shared to the music by mistake, which no one could see or
+// remove): what beets kept back says when and why in a family's words, a whole folder's many
+// files as one reason; Löschen is for who uploaded it, or an admin — anyone, where no one knows.
+func TestMusikNichtUebernommenLoeschen(t *testing.T) {
+	inbox := t.TempDir()
+	run := filepath.Join(inbox, "_nicht-importiert", "2026-11-04_21-30-00")
+	os.MkdirAll(filepath.Join(run, "takeout-20261104"), 0o755)
+	os.WriteFile(filepath.Join(run, "takeout-20261104", "a.json"), []byte("{}"), 0o644)
+	os.WriteFile(filepath.Join(run, "lied.wav"), []byte("x"), 0o644)
+	grund := "Musik-Eingang, 2026-11-04 21:30\n\n"
+	for i := range 1204 {
+		grund += fmt.Sprintf("takeout-20261104/Takeout/Datei %d.json: keine Musikdatei\n", i)
+	}
+	os.WriteFile(filepath.Join(run, "GRUND.txt"), []byte(grund+"lied.wav: beschädigt\n"), 0o644)
+	own := `{"letzte":[{"at":"2026-11-04T21:30:00Z","eingang":"takeout-20261104.zip","von":"ben","ordner":"_nicht-importiert/2026-11-04_21-30-00",
+		"nicht_importiert":[{"datei":"takeout-20261104/Takeout/Datei 0.json","grund":"keine Musikdatei"}]}]}`
+	now := time.Date(2026, 11, 4, 22, 0, 0, 0, time.UTC)
+	cfg := StartConfig{MusicInbox: inbox, Laib: beetsLaib(t, own), Loc: time.UTC, Now: func() time.Time { return now }}
+	_, body, _ := familyPage(t, Musik, cfg, "GET", MusikPath, "family") // anna, who did not upload it
+	mustContain(t, body, "<span class=name>takeout-20261104</span><span class=k>nicht übernommen · heute, 21:30 · von ben: keine Musikdatei (1.204 Dateien)</span>",
+		"<span class=name>lied.wav</span><span class=k>nicht übernommen · heute, 21:30: beschädigt</span>")
+	if n := strings.Count(body, `name=tun value=loeschen`); n != 1 { // lied.wav: no one knows who, so anyone
+		t.Errorf("%d Löschen for anna", n)
+	}
+	h := Musik(cfg)
+	form := url.Values{"tun": {"loeschen"}, "lauf": {"2026-11-04_21-30-00"}, "name": {"takeout-20261104"}}
+	if rec := post(t, h, MusikPath, form, "anna", nil); rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), "wer es hochgeladen hat") {
+		t.Fatalf("anna → %d %s", rec.Code, rec.Body)
+	}
+	if _, err := os.Stat(filepath.Join(run, "takeout-20261104")); err != nil {
+		t.Fatal("deleted for someone else")
+	}
+	_, body, _ = familyPageAs(t, Musik, cfg, "GET", MusikPath, "ben", "family")
+	if n := strings.Count(body, `name=tun value=loeschen`); n != 2 || strings.Contains(body, "von ben") {
+		t.Errorf("ben sees %d Löschen", n)
+	}
+	if rec := post(t, h, MusikPath, form, "ben", nil); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "„takeout-20261104“ ist gelöscht.") {
+		t.Fatalf("ben → %d", rec.Code)
+	}
+	for _, p := range []string{filepath.Join(run, "takeout-20261104"), filepath.Join(run, "lied.wav"), inbox} {
+		if _, err := os.Stat(p); (err == nil) != (p != filepath.Join(run, "takeout-20261104")) {
+			t.Errorf("%s: %v", p, err) // only the one upload goes; its run's other upload and the inbox stay
+		}
+	}
+	// an admin may delete what someone else uploaded
+	os.MkdirAll(filepath.Join(run, "takeout-20261104"), 0o755)
+	req := url.Values{"tun": {"loeschen"}, "lauf": {"2026-11-04_21-30-00"}, "name": {"takeout-20261104"}}
+	if rec := post(t, h, MusikPath, req, "anna", map[string]string{"Remote-Groups": "admins"}); rec.Code != http.StatusOK {
+		t.Errorf("admin → %d %s", rec.Code, rec.Body)
 	}
 }

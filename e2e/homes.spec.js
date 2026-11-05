@@ -474,7 +474,7 @@ test('Musik is how music gets in, its files, and the records by Discogs', async 
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Musik');
   await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Hinzufügen', 'Platten']);
   const rows = page.locator('.musik-liste li');
-  await expect(rows).toHaveText([/Sommerplatte.zip\s*wird einsortiert/, /kassette-1994.rar\s*nicht einsortiert: RAR/, /Erfundenes Album.zip\s*fertig: 2 Alben, 24 Titel/]);
+  await expect(rows).toHaveText([/Sommerplatte.zip\s*wird einsortiert/, /kassette-1994.rar\s*nicht übernommen · .*: RAR/, /Erfundenes Album.zip\s*fertig: 2 Alben, 24 Titel/]);
   await expect(rows.nth(1).getByRole('button')).toHaveText(['Noch einmal einsortieren', 'Löschen']);
   await expect(page.locator('.musik-platten')).toContainText('Platte erfassen');
   await expect(page.locator('p.ruhig').last()).toContainText('Discogs: verbunden mit');

@@ -198,7 +198,7 @@ var de = map[ID]string{
 	"musik.wird-einsortiert":  "wird einsortiert …",
 	"musik.dauert":            "Das dauert länger als sonst; sobald es fertig ist, bekommst du eine Nachricht.",
 	"musik.fertig":            "fertig: %s in der Musik",
-	"musik.nicht":             "nicht einsortiert",
+	"musik.nicht":             "nicht übernommen",
 	"musik.platten":           "Platten",
 	"musik.platte-erfassen":   "Platte erfassen",
 	"musik.wunschliste":       "Wunschliste",

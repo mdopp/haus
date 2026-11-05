@@ -69,7 +69,7 @@ func mehrStand(r *http.Request, cfg StartConfig, pfad string) string {
 	case MusikPath: // the inbox, read here; beets' own word is Laib's, which Mehr does not wait for
 		if cfg.MusicInbox == "" {
 			return ""
-		} else if n := len(zurueck(cfg.MusicInbox)); n > 0 {
+		} else if n := len(zurueck(cfg.MusicInbox, cfg.Loc)); n > 0 {
 			return texte.Anzahl(n, "Datei", "Dateien") + " " + texte.T(texte.MusikNicht)
 		} else if n := len(musikWartet(cfg.MusicInbox)); n > 0 {
 			return texte.Anzahl(n, "Datei", "Dateien") + map[bool]string{true: " wird", false: " werden"}[n == 1] + " einsortiert"
