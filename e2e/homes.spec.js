@@ -804,7 +804,7 @@ for (const scheme of ['dark', 'light']) {
       await expect(page.getByRole('img', { name: /Haushalts-Kontakt/ })).toBeVisible();
       const wide = await page.evaluate(() => document.documentElement.scrollWidth);
       expect(wide).toBeLessThanOrEqual(411);
-      const geht = page.locator('#karte-das-geht li a');
+      const geht = page.locator('section[aria-labelledby=karte-das-geht] li a');
       await expect(geht).not.toHaveCount(0);
       for (const href of await geht.evaluateAll((as) => as.map((a) => a.getAttribute('href')))) {
         expect(href).toMatch(/^\/(kontakte|kalender|standort|raeume|mehr#spuren)$/);
