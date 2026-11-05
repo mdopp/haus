@@ -103,6 +103,7 @@ browser against fakes (`go run ./cmd/homesdemo` shows them locally).
 
 - [`AGENTS.md`](AGENTS.md): the rules, code gates, tests and release, for
   people and coding agents alike.
+- [`docs/DOMAIN.md`](docs/DOMAIN.md): the household's terms, who owns what, and the chains of events.
 - [`docs/REFERENCE.md`](docs/REFERENCE.md): every page and `/napi` path
   in detail.
 - [`docs/RUN.md`](docs/RUN.md): running Homes by hand, every variable.
