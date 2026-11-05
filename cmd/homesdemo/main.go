@@ -364,7 +364,7 @@ func demoModule(docs bool) *modul.Liste {
 		return modul.Modul{Name: name, Titel: texte.Titel(name), Backend: backend, Warum: warum, Grund: grund, Nav: nav, Einrichtung: e}
 	}
 	l, err := modul.Bauen([]modul.Modul{m("geraete", "home-assistant", "", ""), m("energie", "home-assistant", "", ""),
-		m("kalender", "radicale", "", ""), m("einkauf", "radicale", "", ""), m("notizen", "file-share", "", ""),
+		m("kalender", "radicale", "", ""), m("kontakte", "radicale", "", ""), m("einkauf", "radicale", "", ""), m("notizen", "file-share", "", ""),
 		m("musik", "beets", "", ""), m("gesehen", "media", "", ""), m("dokumente", "paperless", "", ""),
 		m("standort", "reitti", modul.Fehlt, "Auf dieser Box läuft kein Reitti."),
 		m("podcasts", "audiobookshelf", "", ""), m("netzlaufwerk", "file-share", modul.Aus, "Auf dieser Box ausgeschaltet."),

@@ -45,6 +45,7 @@ var navVon = map[string][]modul.Eintrag{
 	"geraete":      {{Titel: "Geräte", Pfad: "/raeume", Icon: iconGeraete, Ort: modul.Leiste, Rang: 20}},
 	"energie":      {{Titel: "Energie", Pfad: "/energie", Icon: iconEnergie, Ort: modul.Leiste, Rang: 40}},
 	"kalender":     {{Titel: "Kalender", Pfad: "/kalender", Ort: modul.Haushalt, Rang: 10}},
+	"kontakte":     {{Titel: "Kontakte", Pfad: KontaktePath, Ort: modul.Haushalt, Rang: 15}},
 	"einkauf":      {{Titel: "Einkauf", Pfad: EinkaufPath, Ort: modul.Haushalt, Rang: 20}},
 	"notizen":      {{Titel: "Notizen", Pfad: "/notizen", Ort: modul.Haushalt, Rang: 30}},
 	"dokumente":    {{Titel: "Dokumente", Pfad: DokumentePath, Icon: iconDokumente, Ort: modul.Mehr, Rang: 10}},

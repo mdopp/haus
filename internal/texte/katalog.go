@@ -90,6 +90,13 @@ const (
 	MusikDiscogsVerbunden ID = "musik.discogs-verbunden" // „%s“ the Discogs account
 	MusikDiscogsVerbinden ID = "musik.discogs-verbinden" // not connected yet: the quiet way to connect
 	MusikDiscogsBringt    ID = "musik.discogs-bringt"    // what connecting brings
+	// „Web zeigt, Handy bearbeitet“ (owner 2026-11-05): the calendar and the contacts say where to edit, alike
+	KalenderBearbeiten ID = "kalender.bearbeiten"
+	KontakteBearbeiten ID = "kontakte.bearbeiten"
+	KontakteSuchen     ID = "kontakte.suchen"     // the search field: name, number, e-mail
+	KontakteLeer       ID = "kontakte.leer"       // the address book has no card
+	KontakteKeiner     ID = "kontakte.keiner"     // „%s“: no card matches the search
+	KontakteAdressbuch ID = "kontakte.adressbuch" // the card's title while the list is not grouped by letter
 )
 
 var de = map[ID]string{
@@ -205,4 +212,10 @@ var de = map[ID]string{
 	"musik.discogs-verbunden": "Discogs: verbunden mit „%s“",
 	"musik.discogs-verbinden": "Mit Discogs verbinden",
 	"musik.discogs-bringt":    "dann erfasst du Platten mit einem Foto in deine Sammlung.",
+	"kalender.bearbeiten":     "Neue Termine und Änderungen machst du auf dem Handy im Homes-Kalender oder über den Boten.",
+	"kontakte.bearbeiten":     "Neue Kontakte und Änderungen machst du auf dem Handy im Homes-Adressbuch oder über den Boten.",
+	"kontakte.suchen":         "Name, Nummer, E-Mail",
+	"kontakte.leer":           "Im Adressbuch steht noch niemand.",
+	"kontakte.keiner":         "Kein Kontakt passt zu „%s“.",
+	"kontakte.adressbuch":     "Adressbuch",
 }

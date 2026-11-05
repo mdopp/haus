@@ -636,7 +636,7 @@ test('Standortverlauf, connected, leads with the timeline and ends with a quiet 
 // Felder geprüft?"): with every fold open, the page is no wider than the
 // screen, a field to type in has room, a button is big enough for a
 // finger, and no text runs out of its box.
-const PAGES = ['/start', '/raeume', '/raeume/light.kueche', '/medien', '/energie', '/energie?zeitraum=jahr', '/kalender', '/kalender/verwalten',
+const PAGES = ['/start', '/raeume', '/raeume/light.kueche', '/medien', '/energie', '/energie?zeitraum=jahr', '/kalender', '/kalender/verwalten', '/kontakte', '/kontakte/h3',
   '/notizen', '/notizen?tag=kochen', '/notizen/einkaufsliste.md', '/notizen/markdown.md', '/notizen/einkaufsliste.md?bearbeiten=1', '/mehr', '/musik', '/platte', '/discogs', '/aktivierungswort', '/aufgaben', '/dokumente', '/willkommen', '/einrichten/fotos', '/box/geraete', '/pair-device', '/podcasts', '/gesehen', '/standort',
   '/daten-sichern', '/netzlaufwerk', '/box', '/box/aufgaben', '/box/dienste', '/box/operator', '/box/personen', '/box/module', '/adresse',
   '/einkauf', '/einkauf?liste=liste-baumarkt', '/einkauf?liste=liste-musik', '/einkauf/rezepte', '/einkauf/rezepte?n=rezepte%2Flasagne.md', '/notizen/rezepte/lasagne.md'];
@@ -678,9 +678,36 @@ for (const path of PAGES) {
   });
 }
 
+// owner 2026-11-05 („Web zeigt, Handy bearbeitet“): the household's address book, by name;
+// typing filters at once, the number is a tap of its own, the row opens the contact
+test('Kontakte lists the address book, the search filters while typing, a row opens the contact', async ({ page }, info) => {
+  await page.setViewportSize({ width: 411, height: 900 });
+  await page.goto('/kontakte');
+  const rows = page.locator('.kontakte li');
+  await expect(rows).toHaveCount(9);
+  await expect(page.getByText('Neue Kontakte und Änderungen machst du auf dem Handy')).toBeVisible();
+  await expect(page.locator('a.ruf', { hasText: '0711 556677' })).toHaveAttribute('href', 'tel:0711556677');
+  await page.screenshot({ path: info.outputPath('kontakte-411.png'), fullPage: true });
+  const suche = page.getByRole('searchbox', { name: 'Name, Nummer, E-Mail' });
+  await suche.fill('müller');
+  await expect(page.locator('.kontakte li:visible')).toHaveCount(1);
+  await suche.fill('0711 9');
+  await expect(page.locator('.kontakte li:visible')).toHaveText(/Kita Sonnenschein/);
+  await suche.fill('niemand');
+  await expect(page.locator('.kontakte li:visible')).toHaveCount(0);
+  await expect(page.getByText('Kein Kontakt passt zu „niemand“.')).toBeVisible();
+  await suche.fill('');
+  await expect(rows).toHaveCount(9);
+  await page.getByRole('link', { name: 'Oma Hilde' }).click();
+  await expect(page).toHaveURL(/\/kontakte\/h6$/);
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Oma Hilde');
+  await page.goto('/kalender');
+  await expect(page.getByText('Neue Termine und Änderungen machst du auf dem Handy')).toBeVisible();
+});
+
 // Pictures of the main pages as a phone shows them, for a look at the
 // run (the CI keeps them).
-for (const path of ['/start', '/raeume', '/medien', '/energie', '/notizen', '/mehr', '/musik', '/kalender/verwalten']) {
+for (const path of ['/start', '/raeume', '/medien', '/energie', '/notizen', '/mehr', '/musik', '/kalender/verwalten', '/kontakte']) {
   test(`picture of ${path}`, async ({ page }, info) => {
     await page.goto(path);
     await page.screenshot({ path: info.outputPath(path.slice(1) + '.png'), fullPage: true });

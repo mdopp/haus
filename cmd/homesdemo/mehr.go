@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/mdopp/homes/internal/caldav/davfake"
+	"github.com/mdopp/homes/internal/cards"
 	"github.com/mdopp/homes/internal/napi"
 	"github.com/mdopp/homes/internal/pages"
 	"github.com/mdopp/homes/internal/samba"
@@ -56,6 +57,23 @@ func mehrSeiten(mux *http.ServeMux, cfg pages.StartConfig, dav *davfake.Server, 
 	cfg.Samba, cfg.SambaHost = &samba.Dir{Path: sambaDir}, "box.local"
 	cfg.Sicherung, cfg.Contacts, cfg.LaibURL = napi.NewSicherung(archiv, dir), cfg.Calendar, "https://laib.example"
 	mux.HandleFunc(pages.DatenPath, pages.Nachrichten(cfg))
+	// the household's address book, nine cards as on the box (owner 2026-11-05): the list and each contact's page
+	dav.AddAddressBook("/homes/haushalt-kontakte/", "Haushalt")
+	for i, k := range [][3]string{{"Anna Beispiel", "+49 151 23456789", "anna@example.org"}, {"Ben Beispiel", "+49 160 9876543", ""},
+		{"Clara Beispiel", "", "clara@example.org"}, {"Ärztehaus am Markt", "0711 123450", "praxis@example.org"},
+		{"Bäckerei Müller", "0711 556677", ""}, {"Kita Sonnenschein", "0711 909090", "kita@example.org"},
+		{"Oma Hilde", "0711 445566", ""}, {"Zahnarzt Dr. Berg", "0711 778899", ""}, {"Hausverwaltung Schmidt", "", "info@hv-schmidt.example"}} {
+		card := "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:h" + strconv.Itoa(i) + "\r\nFN:" + k[0] + "\r\n"
+		if k[1] != "" {
+			card += "TEL;TYPE=CELL:" + k[1] + "\r\n"
+		}
+		if k[2] != "" {
+			card += "EMAIL:" + k[2] + "\r\n"
+		}
+		dav.Put("/homes/haushalt-kontakte/h"+strconv.Itoa(i)+".vcf", card+"END:VCARD\r\n")
+	}
+	mux.HandleFunc(pages.KontaktePath, pages.Kontakte(cfg))
+	mux.HandleFunc(cards.ContactPages, pages.Kontakt(cfg))
 	mux.HandleFunc("/netzlaufwerk", pages.Netzlaufwerk(cfg))
 	boxCfg := pages.BoxConfig{Laib: cfg.Laib, LaibURL: cfg.LaibURL, Family: cfg}
 	mux.HandleFunc("/box", pages.BoxPage(boxCfg))
