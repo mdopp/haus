@@ -1,6 +1,7 @@
 package napi
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -116,9 +117,7 @@ func card(s ha.State) map[string]any {
 		return nil
 	}
 	name, _ := s.Attributes["friendly_name"].(string)
-	if name == "" {
-		name = s.EntityID
-	}
+	name = cmp.Or(name, s.EntityID)
 	c := map[string]any{"entity_id": s.EntityID, "name": name, "domain": domain, "state": s.State, "page": cards.ThingPage(s.EntityID)}
 	if v := s.Attributes["device_class"]; v != nil {
 		c["device_class"] = v
@@ -168,10 +167,7 @@ func (h *homeAPI) history(w http.ResponseWriter, r *http.Request) {
 		refuse(w, http.StatusBadRequest, "invalid entity_id")
 		return
 	}
-	rng := r.URL.Query().Get("range")
-	if rng == "" {
-		rng = "24h"
-	}
+	rng := cmp.Or(r.URL.Query().Get("range"), "24h")
 	span, ok := historyRanges[rng]
 	if !ok {
 		refuse(w, http.StatusBadRequest, "invalid range")
@@ -185,10 +181,7 @@ func (h *homeAPI) history(w http.ResponseWriter, r *http.Request) {
 	}
 	out := []map[string]any{}
 	for _, p := range pts {
-		t := p.LastChanged
-		if t == "" {
-			t = p.LastUpdated
-		}
+		t := cmp.Or(p.LastChanged, p.LastUpdated)
 		if t != "" {
 			out = append(out, map[string]any{"t": t, "state": p.State})
 		}

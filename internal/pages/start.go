@@ -108,6 +108,12 @@ type StartConfig struct {
 	MusicInbox         string           // laib's music inbox, which beets sorts in (haus#107); "": no Musik page
 	PaperlessPublicURL string
 	PaperlessLANOnly   bool
+	// a contact's link to the viewer's message archive (owner 2026-11-05): the
+	// persons who have one (HOMES_ARCHIV_INTERN), where it opens (archiv.<domain>,
+	// the house's network only) and the house's calling code for its search
+	Archive      map[string]bool
+	ArchivURL    string
+	PhoneCountry string
 }
 
 // backendWait is how long a page waits for any one backend: a slow one

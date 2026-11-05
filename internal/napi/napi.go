@@ -325,7 +325,7 @@ func Gruppen(c Config) map[string][]modul.Route {
 	// the phone's contacts, mirrored into the person's Handy-Kontakte (laib ADR 0029)
 	gs.add("kontakte", "POST /napi/kontakte", (&kontakte{dav: c.Haushalt.Contacts, whoami: c.Whoami, busy: map[string]bool{}}).post)
 	// the household's shared contacts and calendars for the phone's Homes account (haus#218)
-	(&gemeinsam{dav: c.Konto, korb: c.Papierkorb, whoami: c.Whoami, loc: c.Haushalt.Loc, now: c.Now}).routes(gs)
+	(&gemeinsam{dav: c.Konto, korb: c.Papierkorb, whoami: c.Whoami, hh: c.Haushalt, now: c.Now}).routes(gs)
 	// the phone's positions, passed on to the person's Reitti (owner 2026-11-02)
 	(&standort{r: c.Reitti, whoami: c.Whoami}).routes(gs)
 	return gs

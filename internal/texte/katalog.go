@@ -96,6 +96,14 @@ const (
 	KontakteLeer       ID = "kontakte.leer"       // the address book has no card
 	KontakteKeiner     ID = "kontakte.keiner"     // „%s“: no card matches the search
 	KontakteAdressbuch ID = "kontakte.adressbuch" // the card's title while the list is not grouped by letter
+	// a contact's two fixed links (owner 2026-11-05): the page's buttons, the phone book's labels, what a link says instead
+	KontaktDokumente       ID = "kontakt.dokumente"        // the button to Paperless
+	KontaktNachrichten     ID = "kontakt.nachrichten"      // the button to the viewer's archive
+	KontaktDokumenteKurz   ID = "kontakt.dokumente-kurz"   // the web address's label in the phone book
+	KontaktNachrichtenKurz ID = "kontakt.nachrichten-kurz" // the same
+	KontaktKeinPaperless   ID = "kontakt.kein-paperless"   // the box has no Paperless (any more)
+	KontaktKeinArchiv      ID = "kontakt.kein-archiv"      // the viewer has no message archive
+	KontaktArchivDaheim    ID = "kontakt.archiv-daheim"    // the archive opens at home only, and the viewer is away
 )
 
 var de = map[ID]string{
@@ -189,31 +197,38 @@ var de = map[ID]string{
 	ZurStartseite:       "Weiter zur Startseite",
 	GrundDienst:         "Auf dieser Box läuft %s nicht.",
 
-	"schritt.anmelden":        "Trag als Server-Adresse {adresse} ein und melde dich mit deinem Benutzernamen und Passwort an.",
-	"schritt.fotos":           "Trag als Server-Adresse {adresse} ein, tippe auf „Mit Familienkonto anmelden“ und melde dich an.",
-	"schritt.fotos-sichern":   "Schalte unter „Sicherung“ ein, dass neue Fotos von selbst auf die Box kommen.",
-	"schritt.tresor":          "Wähle „Selbst gehostet“, trag {adresse} ein und melde dich mit „Single Sign-On“ und deinem Familienkonto an.",
-	"schritt.tresor-passwort": "Beim ersten Mal legst du ein Master-Passwort fest. Das kennst nur du, niemand kann es zurücksetzen: Schreib es auf.",
-	"schritt.signal":          "Tippe unten auf „Öffnen“ und schreib „Hallo“. {name} antwortet, sobald ein Admin dich einmal freigegeben hat.",
-	"schritt.homes":           "Öffne die App, trag {adresse} ein und melde dich an. Die App richtet sich dann selbst ein.",
-	"schritt.homes-iphone":    "iPhone: Öffne {adresse} in Safari, tippe auf „Teilen“ und dann auf „Zum Home-Bildschirm“.",
-	"musik.dazu":              "Hinzufügen",
-	"musik.handy":             "Auf dem Handy: Lieder oder ein ganzes Album als ZIP teilen und Homes wählen. Die Box sortiert sie selbst ein.",
-	"musik.computer":          "Am Computer, zu Hause: in den Ordner „musik-eingang“ auf dem Netzlaufwerk legen.",
-	"musik.wird-einsortiert":  "wird einsortiert …",
-	"musik.dauert":            "Das dauert länger als sonst; sobald es fertig ist, bekommst du eine Nachricht.",
-	"musik.fertig":            "fertig: %s in der Musik",
-	"musik.nicht":             "nicht übernommen",
-	"musik.platten":           "Platten",
-	"musik.platte-erfassen":   "Platte erfassen",
-	"musik.wunschliste":       "Wunschliste",
-	"musik.discogs-verbunden": "Discogs: verbunden mit „%s“",
-	"musik.discogs-verbinden": "Mit Discogs verbinden",
-	"musik.discogs-bringt":    "dann erfasst du Platten mit einem Foto in deine Sammlung.",
-	"kalender.bearbeiten":     "Neue Termine und Änderungen machst du auf dem Handy im Homes-Kalender oder über den Boten.",
-	"kontakte.bearbeiten":     "Neue Kontakte und Änderungen machst du auf dem Handy im Homes-Adressbuch oder über den Boten.",
-	"kontakte.suchen":         "Name, Nummer, E-Mail",
-	"kontakte.leer":           "Im Adressbuch steht noch niemand.",
-	"kontakte.keiner":         "Kein Kontakt passt zu „%s“.",
-	"kontakte.adressbuch":     "Adressbuch",
+	"schritt.anmelden":         "Trag als Server-Adresse {adresse} ein und melde dich mit deinem Benutzernamen und Passwort an.",
+	"schritt.fotos":            "Trag als Server-Adresse {adresse} ein, tippe auf „Mit Familienkonto anmelden“ und melde dich an.",
+	"schritt.fotos-sichern":    "Schalte unter „Sicherung“ ein, dass neue Fotos von selbst auf die Box kommen.",
+	"schritt.tresor":           "Wähle „Selbst gehostet“, trag {adresse} ein und melde dich mit „Single Sign-On“ und deinem Familienkonto an.",
+	"schritt.tresor-passwort":  "Beim ersten Mal legst du ein Master-Passwort fest. Das kennst nur du, niemand kann es zurücksetzen: Schreib es auf.",
+	"schritt.signal":           "Tippe unten auf „Öffnen“ und schreib „Hallo“. {name} antwortet, sobald ein Admin dich einmal freigegeben hat.",
+	"schritt.homes":            "Öffne die App, trag {adresse} ein und melde dich an. Die App richtet sich dann selbst ein.",
+	"schritt.homes-iphone":     "iPhone: Öffne {adresse} in Safari, tippe auf „Teilen“ und dann auf „Zum Home-Bildschirm“.",
+	"musik.dazu":               "Hinzufügen",
+	"musik.handy":              "Auf dem Handy: Lieder oder ein ganzes Album als ZIP teilen und Homes wählen. Die Box sortiert sie selbst ein.",
+	"musik.computer":           "Am Computer, zu Hause: in den Ordner „musik-eingang“ auf dem Netzlaufwerk legen.",
+	"musik.wird-einsortiert":   "wird einsortiert …",
+	"musik.dauert":             "Das dauert länger als sonst; sobald es fertig ist, bekommst du eine Nachricht.",
+	"musik.fertig":             "fertig: %s in der Musik",
+	"musik.nicht":              "nicht übernommen",
+	"musik.platten":            "Platten",
+	"musik.platte-erfassen":    "Platte erfassen",
+	"musik.wunschliste":        "Wunschliste",
+	"musik.discogs-verbunden":  "Discogs: verbunden mit „%s“",
+	"musik.discogs-verbinden":  "Mit Discogs verbinden",
+	"musik.discogs-bringt":     "dann erfasst du Platten mit einem Foto in deine Sammlung.",
+	"kalender.bearbeiten":      "Neue Termine und Änderungen machst du auf dem Handy im Homes-Kalender oder über den Boten.",
+	"kontakte.bearbeiten":      "Neue Kontakte und Änderungen machst du auf dem Handy im Homes-Adressbuch oder über den Boten.",
+	"kontakte.suchen":          "Name, Nummer, E-Mail",
+	"kontakte.leer":            "Im Adressbuch steht noch niemand.",
+	"kontakte.keiner":          "Kein Kontakt passt zu „%s“.",
+	"kontakte.adressbuch":      "Adressbuch",
+	"kontakt.dokumente":        "Dokumente in Paperless",
+	"kontakt.nachrichten":      "Nachrichten im Archiv",
+	"kontakt.dokumente-kurz":   "Dokumente",
+	"kontakt.nachrichten-kurz": "Nachrichten",
+	"kontakt.kein-paperless":   "Auf dieser Box gibt es kein Paperless.",
+	"kontakt.kein-archiv":      "Für dich gibt es auf dieser Box noch kein Archiv für Nachrichten.",
+	"kontakt.archiv-daheim":    "Dein Archiv öffnet sich nur zu Hause im WLAN; gerade bist du unterwegs.",
 }

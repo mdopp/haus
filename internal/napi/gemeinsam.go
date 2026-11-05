@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/mdopp/homes/internal/caldav"
+	"github.com/mdopp/homes/internal/haushalt"
 	"github.com/mdopp/homes/internal/papierkorb"
 )
 
@@ -46,7 +47,7 @@ type gemeinsam struct {
 	dav    *caldav.Client // Homes' own Radicale account; nil: 503
 	korb   *papierkorb.Korb
 	whoami func(string) (string, bool)
-	loc    *time.Location
+	hh     haushalt.Config // the house's time zone, and what Homes adds to a card (Karte)
 	now    func() time.Time
 }
 
@@ -96,7 +97,7 @@ func (g *gemeinsam) kontakte(w http.ResponseWriter, r *http.Request, _ string) {
 	}
 	var b strings.Builder
 	for _, c := range cards {
-		b.WriteString(c)
+		b.WriteString(g.hh.Karte.Von(c, "")) // the contact's links, before its end
 		if !strings.HasSuffix(c, "\n") {
 			b.WriteString("\r\n")
 		}
@@ -116,7 +117,7 @@ func (g *gemeinsam) kalender(w http.ResponseWriter, r *http.Request, _ string) {
 	}
 	// DTSTAMP is the stream's own time; the day keeps the ETag still within it
 	day := now.UTC().Truncate(24 * time.Hour)
-	g.write(w, r, "text/calendar; charset=utf-8", caldav.FeedICS(cals, day, g.loc))
+	g.write(w, r, "text/calendar; charset=utf-8", caldav.FeedICS(cals, day, g.hh.Loc))
 }
 
 // PUT|DELETE /napi/gemeinsam/kalender/{kalender}/{uid} (text/calendar)
@@ -146,7 +147,7 @@ func (g *gemeinsam) eintrag(w http.ResponseWriter, r *http.Request, person strin
 		err = g.loeschen(r, at, art, person, etag)
 	} else if err == nil {
 		body, rerr := io.ReadAll(http.MaxBytesReader(w, r.Body, 4<<20))
-		if at, err = g.dav.WriteShared(r.Context(), at, uid, string(body), etag); rerr != nil {
+		if at, err = g.dav.WriteShared(r.Context(), at, uid, g.hh.Karte.Von(string(body), uid), etag); rerr != nil {
 			err = caldav.ErrNotOne
 		}
 	}

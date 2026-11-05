@@ -410,7 +410,19 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     tracker, a hidden entity are a 404),
     `/kalender/erinnerung/<uid>` (a reminder: open and due, done, or
     cancelled), `/kontakte/<uid>` (a contact: numbers and email addresses to
-    tap, the birthday, the postal addresses), `/dokumente/<id>` (a 302 to the document's page in
+    tap, the birthday, the postal addresses, and its two fixed links as
+    quiet buttons, each only where its backend is on the box: owner
+    2026-11-05), `/kontakte/<uid>/dokumente` (a 302 to Paperless's document
+    list of that contact: `/documents?correspondent__id__in=<id>` when a
+    correspondent has its name or organisation, asked with
+    `HOMES_PAPERLESS_TOKEN`; else `/documents?query=<name>`; away from home
+    with `HOMES_PAPERLESS_LAN_ONLY`, the Dokumente page's line instead),
+    `/kontakte/<uid>/nachrichten` (a 302 to the viewer's own message
+    archive, `https://archiv.<domain>/?workspace=everything&mode=full_text&explore={"schemaVersion":2,"query":…}`,
+    msgvault's search for the contact's numbers as `+<country>…` and its
+    e-mails, quoted, as alternatives ` | `, at most 8, else its name; a
+    viewer without an archive in `HOMES_ARCHIV_INTERN`, or away from home,
+    gets one plain line), `/dokumente/<id>` (a 302 to the document's page in
     Paperless, `HOMES_PAPERLESS_PUBLIC_URL`; without it a 404), and a note's
     `/notizen/<file>`.
     Something not there is a 404 that says so, with the way back. A
@@ -818,6 +830,12 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   with `X-HOMES-SCHREIBBAR:TRUE` (not a mirror, `abo-*`, nor
   `erinnerungen`); and each card that can be written back carries
   `X-HOMES-ETAG` (a card sharing its file with others has none: read only).
+  Each card with a UID carries the contact's links (owner 2026-11-05), made
+  when served and never stored: `homes-dokumente.URL;TYPE=homes:<HOMES_PUBLIC_URL>/kontakte/<uid>/dokumente`
+  with `homes-dokumente.X-ABLabel:Dokumente`, the same for `nachrichten`,
+  each only where its backend is on the box; a card a phone sends back
+  loses every URL that is one of its UID's links (on any host), and keeps
+  the person's own.
   `PUT|DELETE /napi/gemeinsam/kalender/{kalender}/{uid}` (`text/calendar`,
   a VCALENDAR with the VEVENT of that UID) and `PUT|DELETE
   /napi/gemeinsam/kontakte/{uid}` (`text/vcard` 3.0, the VCARD of that UID)

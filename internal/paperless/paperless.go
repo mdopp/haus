@@ -383,10 +383,10 @@ func (c *Client) Have(ctx context.Context, names []string) (map[string]bool, err
 	return out, nil
 }
 
-// FieldID is the id of the custom field with this name (case does not
-// matter); 0 when Paperless has none.
-func (c *Client) FieldID(ctx context.Context, name string) (int, error) {
-	fields, err := c.all(ctx, "/api/custom_fields/")
+// ID is the id of the kind's ("custom_fields", "correspondents") one with
+// this name (case does not matter); 0 when Paperless has none.
+func (c *Client) ID(ctx context.Context, kind, name string) (int, error) {
+	fields, err := c.all(ctx, "/api/"+kind+"/")
 	if err != nil {
 		return 0, err
 	}
