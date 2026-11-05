@@ -16,11 +16,12 @@ here.
 | Term | What it is | In code / API | Owner |
 |---|---|---|---|
 | **Haushalt** | What the family shares, as against a person's own. | Homes' own Radicale account (`HOMES_RADICALE_USER`): the calendar „Haushalt“, the address book `haushalt-kontakte`, `familie-*` | Radicale |
-| **Haushalts-Kontakt** | A card in the household's shared address books, on every phone. The app calls them „Kontakte des Hauses“. | vCard in Homes' Radicale home; `/napi/gemeinsam/kontakte`; module `kontakte` | Radicale |
+| **Haushalts-Kontakte** | The household's shared address books, on every phone; one card is a Haushalts-Kontakt. | vCard in Homes' Radicale home; `/napi/gemeinsam/kontakte`; module `kontakte` | Radicale |
+| **Haushalts-Kalender** | The household's shared calendars (Termine and Erinnerungen), on every phone. | VCALENDAR collections in Homes' Radicale home; `/napi/gemeinsam/kalender`; module `kalender` | Radicale |
 | **Firma** (Kontakt) | A Haushalts-Kontakt Homes made for a sender of documents. Only these cards are completed from documents. | `CATEGORIES:Firma`; Bote tool `kontakt_ergaenzen` | Radicale |
 | **Handy-Kontakte** | A person's own phone contacts, mirrored for their Archiv. Never shared, never sent to another phone. | address book `/<person>/handy-kontakte/`; `POST /napi/kontakte` | the phone (Radicale holds the mirror) |
 | **Homes-Konto** | The Android account „Homes“: it carries the Haushalts-Kontakte, Termine and Erinnerungen into the phone's dialer, messengers and calendar. | app `konto/` (two sync adapters); module `konto`; `/napi/gemeinsam/…` | Homes app (the data: Radicale) |
-| **Termin** | An appointment in a shared calendar. | VEVENT; Bote tool `termin_anlegen` | Radicale |
+| **Termin** | An appointment in a Haushalts-Kalender. | VEVENT; Bote tool `termin_anlegen` | Radicale |
 | **Erinnerung** | Something due, which rings on the phones. Read-only on the phone. | VTODO with an alarm; `erinnerung_anlegen` | Radicale |
 | **Einkaufsliste** | The shared shopping list: it adds up amounts and takes ingredients from recipes. | Radicale list „Einkauf“ (`internal/einkauf`); module `einkauf` | Radicale |
 | **Notiz** | A note, a plain Markdown file. | `HOMES_NOTES_DIR`; module `notizen` | file-share folder |
@@ -42,8 +43,8 @@ here.
 | **Koppeln** | Pairing a phone with Homes, which gives it a device token. | `homes_device_` tokens (old: `haus_device_`) | Homes |
 | **Modul** | An area of Homes (Kalender, Dokumente, Standortverlauf, …), on or off depending on what the box runs. | `internal/modul`; `cmd/homes/module.go`; `GET /napi/kann`; `HOMES_MODULE_AUS` | Homes (from Laib's wiring) |
 | **Spur** | The quiet line a missing Modul leaves under „Gibt es hier noch nicht“. | `spur_id`, `spur` in `/napi/kann`; `/mehr/spuren` | Homes |
-| **Wunsch** | A request for a missing Modul („Hier anfordern“). Not the same as the Musik-Wunschliste, which is a Radicale list. | `laib_wish`; `wunsch.stand` in `/napi/kann` | Laib |
-| **Aufgabe** (Box-Aufgabe) | A task for the box's admins in Laib. A Wunsch becomes one. | `laib_aufgabe` | Laib |
+| **Anfrage** | A request for a missing Modul („Hier anfordern“). | `laib_wish` (Laib's verb keeps its name); `wunsch.stand` in `/napi/kann` | Laib |
+| **Aufgabe** (Box-Aufgabe) | A task for the box's admins in Laib. An Anfrage becomes one. | `laib_aufgabe` | Laib |
 | **Vorschlag**, **Freigabe** | A change to the box that waits in Laib's Inbox for the owner's yes. | `laib propose`; Laib's Inbox | Laib |
 
 ## 2. Context map: who owns what
@@ -75,7 +76,7 @@ flowchart LR
   bote -- "Haushalts-Werkzeuge" --> homes
   homes -- "Musikdateien" --> beets
   beets -- "Nachricht" --> bote
-  homes -- "Status, Wunsch, Aufgabe" --> laib
+  homes -- "Status, Anfrage, Aufgabe" --> laib
   laib -. "installiert, verdrahtet" .-> homes
 ```
 
@@ -85,7 +86,7 @@ else reads it, writes it through its owner, or only links to it.
 
 | System | Owns (source of truth) | What the others do with it |
 |---|---|---|
-| **Radicale** | Termine, Erinnerungen, Haushalts-Kontakte, Handy-Kontakte, the lists (Einkauf, Musik-Wunschliste) | Homes reads and writes them over CalDAV/CardDAV and serves them to the phones. It decorates a card with its links but keeps no copy. The Archiv reads its person's Handy-Kontakte. |
+| **Radicale** | the Haushalts-Kalender (Termine, Erinnerungen), the Haushalts-Kontakte, Handy-Kontakte, the lists (Einkauf, Musik-Wunschliste) | Homes reads and writes them over CalDAV/CardDAV and serves them to the phones. It decorates a card with its links but keeps no copy. The Archiv reads its person's Handy-Kontakte. |
 | **Paperless** | Dokumente, Korrespondenten, tags, custom fields | dokumente files Stapel and fills only empty fields. Homes searches Paperless, drops uploads into its consume folder, and links into it. |
 | **dokumente** (`mdopp/dokumente`) | the Stapel's state, and its record of what it read and reminded (`laib-vertraege.json`) | It is Paperless' reader. It completes contacts only through Homes' `kontakt_ergaenzen`. |
 | **Archiv** (msgvault, Laib template `archiv`) | a person's messages and mail, and the vault's key | Homes only drops the phone's backups into its inbox and links to its search. It cannot read the archive. |
@@ -93,7 +94,7 @@ else reads it, writes it through its owner, or only links to it.
 | **Home Assistant** | devices, their states, automations | Homes shows and switches them. Automations speak to people through the Bote. |
 | **Bote** | the chat channel to each person (`people` in box.yml) | Home Assistant, beets and Laib send it Mitteilungen. It calls Homes' household tools. |
 | **beets** | the music library, and its verdict on each upload | Homes shows the Musik-Eingang's rows and moves a deleted upload into its Papierkorb. |
-| **Laib** | what the box runs, its wiring and values (`MODULE_AUS`), Wünsche, Box-Aufgaben, the Inbox | Homes asks Laib and files Wünsche. It never decides (haus#1). |
+| **Laib** | what the box runs, its wiring and values (`MODULE_AUS`), Anfragen, Box-Aufgaben, the Inbox | Homes asks Laib and files Anfragen. It never decides (haus#1). |
 | **Homes** | the module list, the Papierkorb, the paired devices, the backup ledger, the contact links (made when served) | the pages and `/napi` |
 | **Homes app** | the phone's copy in the Homes-Konto, the Hochladen queue, positions not yet sent | It sends only through Homes' `/napi`. |
 
@@ -238,13 +239,13 @@ flowchart TD
   e1(["Dienste gemeldet / verdrahtet<br/>Laib"]) --> e2{"Modul an?<br/>Homes"}
   e2 -- "ja" --> e3(["Eintrag sichtbar<br/>Seite, App, /napi/kann"])
   e2 -- "nein" --> e4(["Spur unter „Gibt es hier noch nicht“<br/>Homes, App"])
-  e4 --> e5(["„Hier anfordern“ gedrückt<br/>Wunsch angelegt"])
-  e5 --> e6(["Box-Aufgabe „Wunsch aus Homes: …“<br/>Laib"])
+  e4 --> e5(["„Hier anfordern“ gedrückt<br/>Anfrage angelegt"])
+  e5 --> e6(["Box-Aufgabe angelegt<br/>Laib"])
   e6 --> e7(["Vorschlag in der Inbox<br/>Spur: wartet auf Freigabe"])
   e7 -- "abgelehnt" --> e8(["Spur: abgelehnt"])
   e7 -- "freigegeben" --> e9(["Spur: wird eingerichtet"])
   e9 --> e1
-  e3 --> e10(["Aufgabe abgehakt, Wunsch umgesetzt<br/>Homes → Laib"])
+  e3 --> e10(["Aufgabe abgehakt, Anfrage umgesetzt<br/>Homes → Laib"])
 ```
 
 - **On or off:** a Modul is on when Laib's `homes` template gave Homes
@@ -254,11 +255,11 @@ flowchart TD
   Homes runs. The owner can switch any Modul off with `MODULE_AUS`; the
   Box page proposes that change, and the owner approves it in the Inbox.
 - **Nothing is hidden:** a Modul that is off leaves a grey Spur on the web
-  and in the app. Its words follow the Wunsch: „auf dieser Box nicht
+  and in the app. Its words follow the Anfrage: „auf dieser Box nicht
   eingerichtet“ or „ausgeschaltet“, then „angefordert“, „wartet auf
   Freigabe“, „abgelehnt“ and „wird eingerichtet“.
 - **Closed by Homes:** once Homes finds the Modul on, it ticks the
-  Box-Aufgabe off itself, and the Wunsch becomes `umgesetzt`. Homes
+  Box-Aufgabe off itself, and the Anfrage becomes `umgesetzt`. Homes
   holds no verdict at any step (ADR 0001 §10).
 
 ## Keeping this current

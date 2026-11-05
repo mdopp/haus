@@ -166,7 +166,7 @@ func TestHierAnfordernRefuses(t *testing.T) {
 	}
 	f.Kaputt = false
 	f.Ohne = true
-	if rec := as(fresh(), "POST", "/mehr/anfordern", "anna", "family", url.Values{"modul": {"standort"}}); rec.Code != 503 || !strings.Contains(rec.Body.String(), "keine Wünsche") {
+	if rec := as(fresh(), "POST", "/mehr/anfordern", "anna", "family", url.Values{"modul": {"standort"}}); rec.Code != 503 || !strings.Contains(rec.Body.String(), "keine Anfragen") {
 		t.Errorf("an older Laib → %d %s", rec.Code, rec.Body)
 	}
 	if frag := as(fresh(), "GET", "/mehr/spuren", "anna", "family", nil).Body.String(); strings.Contains(frag, "Hier anfordern") || !strings.Contains(frag, "nicht eingerichtet") {

@@ -194,7 +194,7 @@ func Handler(cfg Config) http.Handler {
 		Name:    "haushalt",
 		Version: cfg.Version,
 		Instructions: "Der Haushalt: Kalender, Erinnerungen, Notizen, Kontakte und Dokumente der Familie. Was du hier anlegst, " +
-			"sieht die Familie in ihren eigenen Apps (Kalender und Adressbuch auf dem Telefon, Notizen im Dateiordner, " +
+			"sieht die Familie in ihren eigenen Apps (Haushalts-Kalender und Haushalts-Kontakte auf dem Telefon, Notizen im Dateiordner, " +
 			"Dokumente in Paperless, die du nur liest); Homes merkt sich nichts selbst. Zeiten sind Ortszeit (" + cfg.Loc.String() + "), " +
 			"Datum JJJJ-MM-TT, Uhrzeit JJJJ-MM-TTTHH:MM.",
 		Token: cfg.Token,
@@ -252,26 +252,26 @@ func Tools(cfg Config) []mcpserver.Tool {
 		out = append(out,
 			mcpserver.Tool{
 				Name:        "termine",
-				Description: "Termine aus dem Familienkalender in einem Zeitraum. Ohne bis: nur der Tag von von.",
+				Description: "Termine aus dem Haushalts-Kalender in einem Zeitraum. Ohne bis: nur der Tag von von.",
 				Schema:      obj(map[string]any{"von": str("Beginn des Zeitraums: " + whenHelp), "bis": str("Ende des Zeitraums (ausschließlich): " + whenHelp)}, "von"),
 				Call:        func(ctx context.Context, a map[string]any) (string, error) { return termine(ctx, c, loc, a) },
 			},
 			mcpserver.Tool{
 				Name:        "termin_anlegen",
-				Description: "Legt einen Termin im Familienkalender an. Ohne ende: eine Stunde, bei einem Datum ohne Uhrzeit der ganze Tag.",
+				Description: "Legt einen Termin im Haushalts-Kalender an. Ohne ende: eine Stunde, bei einem Datum ohne Uhrzeit der ganze Tag.",
 				Schema: obj(map[string]any{"titel": str("Worum es geht"), "beginn": str(whenHelp), "ende": str("optional: " + whenHelp),
 					"ort": str("optional: wo")}, "titel", "beginn"),
 				Call: func(ctx context.Context, a map[string]any) (string, error) { return terminAnlegen(ctx, c, loc, a) },
 			},
 			mcpserver.Tool{
 				Name:        "erinnerungen",
-				Description: "Offene Erinnerungen (Aufgaben) aus dem Familienkalender, die nächste zuerst.",
+				Description: "Offene Erinnerungen (Aufgaben) aus dem Haushalts-Kalender, die nächste zuerst.",
 				Schema:      obj(map[string]any{}),
 				Call:        func(ctx context.Context, a map[string]any) (string, error) { return erinnerungen(ctx, c, loc) },
 			},
 			mcpserver.Tool{
 				Name:        "erinnerung_anlegen",
-				Description: "Legt eine Erinnerung an: eine Aufgabe im Familienkalender, die das Telefon zum Zeitpunkt meldet.",
+				Description: "Legt eine Erinnerung an: eine Aufgabe im Haushalts-Kalender, die das Telefon zum Zeitpunkt meldet.",
 				Schema:      obj(map[string]any{"text": str("Woran erinnert werden soll"), "wann": str(whenHelp + "; ein Datum ohne Uhrzeit meint 9:00")}, "text", "wann"),
 				Call:        func(ctx context.Context, a map[string]any) (string, error) { return erinnerungAnlegen(ctx, c, loc, a) },
 			},
@@ -409,27 +409,27 @@ func Tools(cfg Config) []mcpserver.Tool {
 		out = append(out,
 			mcpserver.Tool{
 				Name:        "kontakte_suchen",
-				Description: "Sucht im Adressbuch der Familie nach Name, Telefonnummer oder E-Mail und zeigt Telefon, E-Mail und Geburtstag.",
+				Description: "Sucht in den Haushalts-Kontakten nach Name, Telefonnummer oder E-Mail und zeigt Telefon, E-Mail und Geburtstag.",
 				Schema:      obj(map[string]any{"text": str("Name, Teil einer Nummer oder E-Mail-Adresse")}, "text"),
 				Call:        func(ctx context.Context, a map[string]any) (string, error) { return kontakteSuchen(ctx, c, cc, a) },
 			},
 			mcpserver.Tool{
 				Name: "kontakt_lesen",
-				Description: "Zeigt einen Kontakt aus dem Adressbuch der Familie ganz: alle Nummern und E-Mail-Adressen, Geburtstag, Anschrift " +
+				Description: "Zeigt einen Haushalts-Kontakt ganz: alle Nummern und E-Mail-Adressen, Geburtstag, Anschrift " +
 					"und einen Link zu seiner Seite. Passen mehrere, nennt die Antwort sie mit ihrer Kennung; dann mit dem ganzen Namen oder der Kennung noch einmal fragen.",
 				Schema: obj(map[string]any{"kontakt": str("Name (ganz oder ein Teil), Nummer, E-Mail-Adresse oder die Kennung des Kontakts")}, "kontakt"),
 				Call:   func(ctx context.Context, a map[string]any) (string, error) { return kontaktLesen(ctx, c, cc, pub, a) },
 			},
 			mcpserver.Tool{
 				Name:        "kontakt_anlegen",
-				Description: "Legt einen Kontakt im Adressbuch der Familie an, das die Telefone synchronisieren; ändert nie einen bestehenden.",
+				Description: "Legt einen Haushalts-Kontakt an, den die Telefone synchronisieren; ändert nie einen bestehenden.",
 				Schema: obj(map[string]any{"name": str("Der ganze Name, wie er im Adressbuch stehen soll"), "telefon": str("optional: Telefonnummer, z. B. +49 170 1234567"),
 					"email": str("optional: E-Mail-Adresse"), "geburtstag": str("optional: JJJJ-MM-TT, oder --MM-TT ohne Jahr")}, "name"),
 				Call: func(ctx context.Context, a map[string]any) (string, error) { return kontaktAnlegen(ctx, c, a) },
 			},
 			mcpserver.Tool{
 				Name: "kontakt_ergaenzen",
-				Description: "Trägt eine Firma aus einem Dokument ins Adressbuch der Familie ein (haus#163), mit Ansprechperson, Telefon, E-Mail, IBAN (mit Bank und Kontoinhaber) und Anschrift: legt sie an (Kategorie Firma) oder füllt nur leere Werte nach; " +
+				Description: "Trägt eine Firma aus einem Dokument in die Haushalts-Kontakte ein (haus#163), mit Ansprechperson, Telefon, E-Mail, IBAN (mit Bank und Kontoinhaber) und Anschrift: legt sie an (Kategorie Firma) oder füllt nur leere Werte nach; " +
 					"gefunden wird sie über den Namen (ORG/FN), sonst die E-Mail, sonst die IBAN. Ein Wert, der da ist, wird nie geändert; eine andere IBAN wird nie geschrieben, " +
 					"sondern als abweichend gemeldet. Kontakte ohne Kategorie Firma ergänzt es nicht. Die Antwort: eine Zeile auf Deutsch, dann eine Zeile JSON " +
 					"mit status und felder (angelegt, ergaenzt, vorhanden, abweichend, abgelehnt).",

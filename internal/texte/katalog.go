@@ -28,7 +28,7 @@ const (
 	ModulDienst         ID = "modul.dienst"           // the row naming its backend
 	ModulStand          ID = "modul.stand"            // the row saying on or off
 	ModulWunsch         ID = "modul.wunsch"           // the row with its wish
-	WunschVon           ID = "wunsch.von"             // „%s, gewünscht von %s seit %s“
+	WunschVon           ID = "wunsch.von"             // „%s, angefragt von %s seit %s“
 	AusVorschlagen      ID = "schalten.aus"           // the admin's button: switch it off
 	AnVorschlagen       ID = "schalten.an"            // the admin's button: switch it on again
 	Vorschlagend        ID = "schalten.laeuft"        // the pressed button
@@ -139,20 +139,20 @@ var de = map[ID]string{
 	Anfordern:           "Hier anfordern",
 	Anfordernd:          "Wird angefordert …",
 	SpurenTitel:         "Gibt es hier noch nicht",
-	SpurenHinweis:       "Das kann Homes, auf dieser Box aber noch nicht. Wünsch es dir, dann sieht es der Admin.",
-	SpurenStandNicht:    "Ob sich schon jemand etwas davon gewünscht hat, lässt sich gerade nicht lesen.",
-	AnfordernNicht:      "Der Wunsch ließ sich gerade nicht aufschreiben. Versuch es später noch einmal.",
-	AnfordernStumm:      "Die Box hat nicht rechtzeitig geantwortet. Schau gleich nach, ob der Wunsch angekommen ist, bevor du es noch einmal versuchst.",
+	SpurenHinweis:       "Das kann Homes, auf dieser Box aber noch nicht. Fordere es an, dann sieht es der Admin.",
+	SpurenStandNicht:    "Ob es schon jemand angefordert hat, lässt sich gerade nicht lesen.",
+	AnfordernNicht:      "Die Anfrage ließ sich gerade nicht aufschreiben. Versuch es später noch einmal.",
+	AnfordernStumm:      "Die Box hat nicht rechtzeitig geantwortet. Schau gleich nach, ob die Anfrage angekommen ist, bevor du es noch einmal versuchst.",
 	AnfordernGibtsNicht: "Das gibt es hier schon, oder es gibt es gar nicht.",
-	AnfordernKeinLaib:   "Diese Box nimmt noch keine Wünsche an.",
+	AnfordernKeinLaib:   "Diese Box nimmt noch keine Anfragen an.",
 	GrundAus:            "Auf dieser Box ausgeschaltet.",
 	GrundBraucht:        "Ausgeschaltet, weil es „%s“ braucht, und das ist hier ausgeschaltet.",
 	ModulSeiteTitel:     "Was Homes kann",
 	ModulAn:             "an",
 	ModulDienst:         "Dienst",
 	ModulStand:          "Stand",
-	ModulWunsch:         "Wunsch",
-	WunschVon:           "%s, gewünscht von %s seit %s",
+	ModulWunsch:         "Anfrage",
+	WunschVon:           "%s, angefragt von %s seit %s",
 	AusVorschlagen:      "Ausschalten vorschlagen",
 	AnVorschlagen:       "Wieder einschalten vorschlagen",
 	Vorschlagend:        "Wird vorgeschlagen …",
@@ -218,8 +218,8 @@ var de = map[ID]string{
 	"musik.discogs-verbunden":  "Discogs: verbunden mit „%s“",
 	"musik.discogs-verbinden":  "Mit Discogs verbinden",
 	"musik.discogs-bringt":     "dann erfasst du Platten mit einem Foto in deine Sammlung.",
-	"kalender.bearbeiten":      "Neue Termine und Änderungen machst du auf dem Handy im Homes-Kalender oder über den Boten.",
-	"kontakte.bearbeiten":      "Neue Kontakte und Änderungen machst du auf dem Handy im Homes-Adressbuch oder über den Boten.",
+	"kalender.bearbeiten":      "Neue Termine und Änderungen machst du auf dem Handy im Haushalts-Kalender oder über den Boten.",
+	"kontakte.bearbeiten":      "Neue Kontakte und Änderungen machst du auf dem Handy in den Haushalts-Kontakten oder über den Boten.",
 	"kontakte.suchen":          "Name, Nummer, E-Mail",
 	"kontakte.leer":            "Im Adressbuch steht noch niemand.",
 	"kontakte.keiner":          "Kein Kontakt passt zu „%s“.",

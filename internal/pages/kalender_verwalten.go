@@ -200,7 +200,7 @@ func KalenderVerwalten(cfg StartConfig) http.HandlerFunc {
 		radicale := App{"Radicale", cfg.RadicalePublicURL}
 		b.WriteString(radicale.Weiter("/.web/", "alle Kalender und Adressbücher, Anmeldung wie bei Homes"))
 		if radicale.Set() {
-			b.WriteString("<details class=adresse><summary>Adressbuch fürs Telefon</summary>" + copyField(radicale.href("/"+cfg.Calendar.User+"/haushalt-kontakte/")) + "<p class=k>" + saysBookHow + "</p></details>")
+			b.WriteString("<details class=adresse><summary>Haushalts-Kontakte fürs Telefon</summary>" + copyField(radicale.href("/"+cfg.Calendar.User+"/haushalt-kontakte/")) + "<p class=k>" + saysBookHow + "</p></details>")
 		}
 		b.WriteString(kalenderKorb(cfg, me, ""))
 		b.WriteString(addCard(cfg.Laib != nil && !errors.Is(aboErr, laib.ErrNoTool)))

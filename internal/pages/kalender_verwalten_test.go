@@ -106,7 +106,7 @@ func TestDeineKalenderListsWhereEachComesFrom(t *testing.T) {
 		"Familie", "aus Google, nur lesen · verbunden seit Mo 12.10. · abgeglichen alle 15 Minuten · zuletzt abgeglichen vor 5 min",
 		"Müllabfuhr", "abonniert, nur lesen", "seit 3 h nicht abgeglichen",
 		`value="https://caldav.box.test/anna/google-familie/"`, "DAVx⁵", "Anmeldung wie bei Homes",
-		`href="https://caldav.box.test/.web/"`, "In Radicale öffnen", "Adressbuch fürs Telefon", `value="https://caldav.box.test/homes/haushalt-kontakte/"`,
+		`href="https://caldav.box.test/.web/"`, "In Radicale öffnen", "Haushalts-Kontakte fürs Telefon", `value="https://caldav.box.test/homes/haushalt-kontakte/"`,
 		"Google-Kalender verbinden", "Geheime Adresse im iCal-Format", "Kalender integrieren",
 		"Öffentlichen Kalender abonnieren", "Feiertage", "Schulferien", "Niedersachsen", "Neuen Kalender anlegen", "nur für mich",
 		"Trennen…")
