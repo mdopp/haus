@@ -1,7 +1,8 @@
 // Package modul is what one area of Homes says about itself (ADR 0001):
 // what it is called, what it talks to, what it serves and what it offers
-// the app. Homes builds one Liste from them at start; it never changes
-// while Homes runs. Standard library only (scripts/loc.sh: shared).
+// the app. Homes builds one Liste from them at start and puts a new one in
+// its place when what the box runs changes (Setzen). Standard library only
+// (scripts/loc.sh: shared).
 package modul
 
 import (
@@ -9,6 +10,7 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"sync/atomic"
 )
 
 // Ort is where a module's entry sits in the family's selection.
@@ -112,8 +114,20 @@ type Einrichtung struct {
 // An: is the module on?
 func (m Modul) An() bool { return m.Warum == "" }
 
-// Liste is the box's modules in catalog order, on and off.
-type Liste struct{ alle []Modul }
+// Liste is the box's modules in catalog order, on and off. Every holder
+// of one Liste (the pages, /napi, the setup tasks) sees a Setzen at once.
+type Liste struct{ p atomic.Pointer[[]Modul] }
+
+// alle is the modules now; nil for an empty Liste.
+func (l *Liste) alle() []Modul {
+	if a := l.p.Load(); a != nil {
+		return *a
+	}
+	return nil
+}
+
+// Setzen puts n's modules in l's place, for every holder of l.
+func (l *Liste) Setzen(n *Liste) { l.p.Store(n.p.Load()) }
 
 // Bauen checks the catalog and makes the Liste: every name once, a name
 // in lower case, every off module with its reason, and every module it
@@ -133,7 +147,8 @@ func Bauen(ms []Modul) (*Liste, error) {
 		}
 		seen[m.Name] = true
 	}
-	l := &Liste{alle: slices.Clone(ms)}
+	l, alle := &Liste{}, slices.Clone(ms)
+	l.p.Store(&alle)
 	for _, m := range ms {
 		for _, b := range m.Braucht {
 			if !seen[b] {
@@ -149,15 +164,16 @@ func Bauen(ms []Modul) (*Liste, error) {
 
 // An: is the module of that name on? An unknown name is off.
 func (l *Liste) An(name string) bool {
-	i := slices.IndexFunc(l.alle, func(m Modul) bool { return m.Name == name })
-	return i >= 0 && l.alle[i].An()
+	alle := l.alle()
+	i := slices.IndexFunc(alle, func(m Modul) bool { return m.Name == name })
+	return i >= 0 && alle[i].An()
 }
 
 // String is the start's log line: "Module an: geraete (home-assistant), …;
 // aus: standort (fehlt: Auf dieser Box läuft kein Reitti.), …".
 func (l *Liste) String() string {
 	var an, aus []string
-	for _, m := range l.alle {
+	for _, m := range l.alle() {
 		if m.An() {
 			an = append(an, strings.TrimSuffix(m.Name+" ("+m.Backend+")", " ()"))
 		} else {
@@ -178,7 +194,7 @@ func (l *Liste) Eintraege(r *http.Request, o Ort, kern ...Eintrag) []Eintrag {
 		}
 	}
 	if l != nil {
-		for _, m := range l.alle {
+		for _, m := range l.alle() {
 			for _, e := range m.Nav {
 				if m.An() && e.Ort == o {
 					es = append(es, e)
@@ -192,25 +208,26 @@ func (l *Liste) Eintraege(r *http.Request, o Ort, kern ...Eintrag) []Eintrag {
 }
 
 // Module are the box's modules in catalog order, on and off.
-func (l *Liste) Module() []Modul { return slices.Clone(l.alle) }
+func (l *Liste) Module() []Modul { return slices.Clone(l.alle()) }
 
 // Eins is the module of that name.
 func (l *Liste) Eins(name string) (Modul, bool) {
 	if l == nil { // a box without a module list
 		return Modul{}, false
 	}
-	i := slices.IndexFunc(l.alle, func(m Modul) bool { return m.Name == name })
+	alle := l.alle()
+	i := slices.IndexFunc(alle, func(m Modul) bool { return m.Name == name })
 	if i < 0 {
 		return Modul{}, false
 	}
-	return l.alle[i], true
+	return alle[i], true
 }
 
 // Frage is what Laib's wish stand is asked (laib#1038): every module with
 // its backend, "geraete=home-assistant … werkstatt=".
 func (l *Liste) Frage() string {
 	var b strings.Builder
-	for i, m := range l.alle {
+	for i, m := range l.alle() {
 		if i > 0 {
 			b.WriteByte(' ')
 		}
@@ -293,7 +310,7 @@ type KannEins struct {
 // Kann is the list as the app reads it, with the wishes Laib knows.
 func (l *Liste) Kann(w Wuensche) Kann {
 	k := Kann{Version: 1, Module: []KannEins{}, App: Angebot{}.plus(Angebot{})}
-	for _, m := range l.alle {
+	for _, m := range l.alle() {
 		e := KannEins{Name: m.Name, Titel: m.Titel, An: m.An(), Backend: m.Backend, Standard: m.Standard,
 			Warum: m.Warum, Grund: m.Grund, Bietet: Angebot{}.plus(m.App), Admins: m.Admins, SpurID: m.Spur(w.von(m.Name)), Anfordern: m.Anfordern(w)}
 		if !m.An() {

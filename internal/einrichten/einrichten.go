@@ -283,32 +283,21 @@ func Domain(publicURL string) string {
 	return dom
 }
 
-// Grund is why a service Homes only leads to is off: not on the box, or
-// Laib did not say at start (dienste nil).
-func Grund(dienste map[string]bool, dienst string) string {
-	if dienste == nil {
-		return fmt.Sprintf(texte.T(texte.GrundUnklar), dienst)
-	}
-	return fmt.Sprintf(texte.T(texte.GrundDienst), dienst)
-}
-
-// Dienste are the services Laib runs, asked once at start, three times at
-// most: the link modules are on with theirs; nil when Laib did not say.
+// Dienste are the services Laib runs, asked once within wait: the link
+// modules are on with theirs; nil when Laib did not answer.
 func Dienste(ctx context.Context, l *laib.Client, wait time.Duration) map[string]bool {
-	for try := 0; try < 3 && ctx.Err() == nil; try++ {
-		c, cancel := context.WithTimeout(ctx, wait)
-		_, rows, err := l.Status(c)
-		cancel()
-		if err == nil {
-			out := map[string]bool{}
-			for _, r := range rows {
-				out[r.Name] = true
-			}
-			return out
-		}
+	c, cancel := context.WithTimeout(ctx, wait)
+	defer cancel()
+	_, rows, err := l.Status(c)
+	if err != nil {
 		log.Printf("homes: the services Laib runs, for the link modules: %v", err)
+		return nil
 	}
-	return nil
+	out := map[string]bool{}
+	for _, r := range rows {
+		out[r.Name] = true
+	}
+	return out
 }
 
 // App is a module's own phone app from Google Play (owner 2026-11-04): the

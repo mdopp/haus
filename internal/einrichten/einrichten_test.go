@@ -170,8 +170,8 @@ func TestDomainAndAddresses(t *testing.T) {
 	}
 }
 
-// Dienste: the services Laib runs, asked at start; Laib down, nil (the
-// link modules then say they could not tell), after three tries.
+// Dienste: the services Laib runs, asked once; Laib down, nil (cmd/homes'
+// dienstePflegen asks again; until then the link modules are not listed).
 func TestDienste(t *testing.T) {
 	asked := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

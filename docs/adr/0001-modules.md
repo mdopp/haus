@@ -646,10 +646,16 @@ place; the setup belongs with each function, and as a task per app.
 - **Modules Homes only leads to.** The box's apps Homes has no page for
   are modules too, so their setup has a home and an off one leaves its
   trace (§10): `fotos` (immich), `passwoerter` (vaultwarden), `filme`
-  (media), `hoerbuecher` (audiobookshelf). They are on while Laib runs their service, read once at start
-  from `laib status` (Homes has no wiring of them; ADR §5's "derived from
-  what the box runs"). Laib silent at start: off, saying it could not
-  tell. `HOMES_MODULE_AUS` switches them off like any other.
+  (media), `hoerbuecher` (audiobookshelf). They are on while Laib runs their service, read from `laib
+  status` (Homes has no wiring of them; ADR §5's "derived from what the
+  box runs"). Asked at start and, until Laib answers, again after 30 s,
+  doubling to 5 min (whoever restarts Homes holds Laib's lock until Homes
+  is healthy, so the first ask can time out); then hourly. An answer that
+  changes them builds the list anew in the one `modul.Liste` every page,
+  `/napi` and the setup tasks hold (`Liste.Setzen`). Until Laib's first
+  answer they are not in the list at all: unknown is not missing, so no
+  trace offers „Hier anfordern“ for them. `HOMES_MODULE_AUS` switches
+  them off like any other.
 - **One task per person** for each module that is on and has an app, and
   for the Homes app (`internal/einrichten`); done when Homes can tell (a
   paired phone; the phone's installed apps, `POST

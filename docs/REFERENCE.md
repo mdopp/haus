@@ -125,8 +125,10 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   (`internal/einrichten`), „<Titel> auf dem Handy einrichten“, and so is
   the Homes app; a module that is off has none. Today: Sprechen
   (Signal, with `HOMES_BOTE_SIGNAL`), and four modules Homes only leads
-  to, on while Laib runs their service (asked once at start: `laib
-  status`): `fotos` (immich, the Immich app), `passwoerter` (vaultwarden,
+  to, on while Laib runs their service (`laib status`, asked at start,
+  again every 30 s doubling to 5 min until Laib answers, then hourly;
+  until the first answer they are not listed at all, never „Hier
+  anfordern“): `fotos` (immich, the Immich app), `passwoerter` (vaultwarden,
   Bitwarden), `filme` (media, Jellyfin), `hoerbuecher` (audiobookshelf,
   the Audiobookshelf app, „Hörbücher und Podcasts“; owner 2026-11-04 — on
   without Homes' ABS token too, and the only task for that app: Podcasts

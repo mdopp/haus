@@ -1,15 +1,22 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"io/fs"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/mdopp/homes/internal/einrichten"
+	"github.com/mdopp/homes/internal/laib"
 	"github.com/mdopp/homes/internal/modul"
 	"github.com/mdopp/homes/internal/podcasts"
 	"github.com/mdopp/homes/internal/texte"
@@ -84,18 +91,22 @@ func TestTheCatalogBuilds(t *testing.T) {
 		t.Errorf("a box with nothing: %s", empty)
 	}
 	names := map[string]bool{}
-	for _, m := range katalog(site{}) {
+	for _, m := range katalog(site{dienste: map[string]bool{}}) {
 		names[m.Name] = true
 	}
 	if len(names) != 22 {
 		t.Errorf("the catalog has %d modules, ADR 0001 §7 lists 22", len(names))
+	}
+	if n := len(katalog(site{})); n != 18 { // Laib silent: the four link modules wait (dienstePflegen)
+		t.Errorf("Laib silent, %d modules", n)
 	}
 }
 
 // owner 2026-11-04: each module's setup is whole (every step it names is
 // in German, an app has its package, guide and address), and a service
 // Homes only leads to is on with it: fotos and filme here, passwoerter
-// not; Laib silent at start, they say they could not tell.
+// not; while Laib has not said what runs, they are not in the list at all
+// (unknown is not missing: no „Hier anfordern“).
 func TestTheSetupsAreWhole(t *testing.T) {
 	s, _, _ := fullSite(t)
 	s.radicale, s.boteSignal, s.publicURL = "https://caldav.example", "+491701234567", "https://homes.example"
@@ -137,8 +148,10 @@ func TestTheSetupsAreWhole(t *testing.T) {
 	}
 	s.dienste = nil
 	l, _ = modul.Bauen(katalog(s))
-	if m, _ := l.Eins("fotos"); m.An() || !strings.Contains(m.Grund, "ließ sich beim Start nicht lesen") {
-		t.Errorf("Laib silent: %+v", m)
+	for _, name := range []string{"fotos", "passwoerter", "filme", "hoerbuecher"} {
+		if m, ok := l.Eins(name); ok {
+			t.Errorf("Laib silent: %+v", m)
+		}
 	}
 }
 
@@ -182,4 +195,69 @@ func TestHoerbuecherIsSetUpOnce(t *testing.T) {
 	if l, _ := modul.Bauen(katalog(s)); l.An("hoerbuecher") {
 		t.Error("on without Audiobookshelf")
 	}
+}
+
+// 2026-11-05 on the box: whoever restarts Homes holds Laib's lock until
+// Homes is healthy, so Laib's status times out at start and Fotos,
+// Passwörter, Filme und Musik, Hörbücher und Podcasts stayed under „Gibt
+// es hier noch nicht“ until the next restart. Laib answers here only from
+// the third ask: until then no link module is in the list (none offered
+// as „Hier anfordern“), then they follow what runs, in the one list the
+// pages, /napi and the setup tasks hold, and again when a service goes.
+func TestLinkModulesFollowLaibOnceItAnswers(t *testing.T) {
+	var mu sync.Mutex
+	asked, services := 0, `[{"name":"immich"},{"name":"media"}]`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Params struct{ Name string } `json:"params"`
+		}
+		json.NewDecoder(r.Body).Decode(&req)
+		mu.Lock()
+		defer mu.Unlock()
+		if req.Params.Name != "laib_status" {
+			http.Error(w, "nur status", http.StatusNotFound)
+			return
+		}
+		if asked++; asked < 3 {
+			http.Error(w, "busy", http.StatusServiceUnavailable)
+			return
+		}
+		text := `{"ready":{"state":"bereit"},"services":` + services + `}`
+		json.NewEncoder(w).Encode(map[string]any{"result": map[string]any{"content": []map[string]string{{"text": text}}}})
+	}))
+	defer srv.Close()
+	s, _, _ := fullSite(t)
+	s.dataDir, s.domain, s.dienste, s.ops = t.TempDir(), "example", nil, &laib.Client{URL: srv.URL, Token: "t"}
+	start := s
+	s.napi.Module = logModule(&s)
+	q := einrichtung(s, nil, nil)
+	kann := s.napi.Module.Kann(modul.Wuensche{Geht: true})
+	if slices.ContainsFunc(kann.Module, func(e modul.KannEins) bool { return e.Name == "fotos" || e.Anfordern && e.Backend == "immich" }) {
+		t.Fatalf("Laib silent, fotos is listed: %+v", kann.Module)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go dienstePflegen(ctx, start, s.napi.Module, 5*time.Millisecond, 40*time.Millisecond)
+	warte := func(what string, ok func() bool) {
+		t.Helper()
+		for end := time.Now().Add(5 * time.Second); !ok(); time.Sleep(5 * time.Millisecond) {
+			if time.Now().After(end) {
+				t.Fatalf("%s: %s", what, s.napi.Module)
+			}
+		}
+	}
+	warte("Laib answered", func() bool { return s.napi.Module.An("fotos") && s.napi.Module.An("filme") })
+	if m, ok := s.napi.Module.Eins("passwoerter"); !ok || m.An() || m.Grund != "Auf dieser Box läuft Vaultwarden nicht." {
+		t.Errorf("passwoerter: %+v", m)
+	}
+	if _, ok := q.Eine("anna", "fotos"); !ok {
+		t.Error("the setup tasks did not follow the list")
+	}
+	mu.Lock()
+	if asked < 3 {
+		t.Errorf("on after %d asks", asked)
+	}
+	services = `[{"name":"immich"}]`
+	mu.Unlock()
+	warte("media gone", func() bool { return !s.napi.Module.An("filme") && s.napi.Module.An("fotos") })
 }
