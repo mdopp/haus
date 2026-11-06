@@ -278,8 +278,9 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     (`getAllForUser` joins the faces); naming a face with that name in
     Immich offers the merge, and the faces come to it. The household's
     „Fotos“ uses the same mapping. The key needs `person.read`,
-    `person.create`, `person.update`, `person.merge` and `user.read`;
-    `person.statistics` adds the photo counts. Immich's named
+    `person.create`, `person.update`, `person.merge` and `user.read`, and
+    `asset.upload`, `face.read` and `asset.delete` for the contacts'
+    pictures (*Ist das …?*); `person.statistics` adds the photo counts. Immich's named
     people's faces are asked hourly too, a face once and again when Immich
     changed it or after 7 days.
   - *One name, one person* (owner 2026-11-06, the same hourly run, before
@@ -309,6 +310,29 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     `immich-gesichter.json`, `nein`: the pair never comes back) and
     *Überspringen* (last). Only a pair on offer is merged; a pair gone,
     Immich not answering or a missing `person.merge` is said on the page.
+  - *Ist das …?* (owner 2026-11-06: a contact's picture is a suggestion,
+    never an answer; on the same page, before the pairs): the hourly run
+    uploads, at most 10 a run, the picture (vCard PHOTO, a JPEG) of each of
+    the key owner's own Handy-Kontakte whose person has no face, archived
+    (`POST /api/assets`, `visibility=archive`: out of the timeline, its
+    face still found; *hidden* skips the face detection, *locked* needs
+    the PIN), the same bytes once (Immich's *duplicate* is someone's photo
+    and never touched). The next runs read its faces (`GET
+    /api/faces?id=`): Immich gives the face of an archived photo to a
+    person close enough on its own, never starts one for it. That person
+    is the question, beside the picture: *Ja, das ist …* (POST
+    `kontakt`, `b`, `antwort=ja`: the contact's person is merged into it,
+    `POST /api/people/merge`, that person first; the contact's line
+    follows), *Nein* (Homes' upload is deleted, `DELETE /api/assets` with
+    `force`, as Immich has no way to take one face from a person; that
+    person is never asked again for the contact) and *Kein Foto von …*
+    (deleted; that picture is never uploaded again). Without a question
+    Homes deletes its upload when Immich found no face in a day (a
+    drawing), more than one (a group), or put it in a hidden or a refused
+    person, and when the contact's person got a face meanwhile, the
+    contact or its picture went; a face without a person waits. Kept in
+    `immich-gesichter.json`, `kontaktbilder`. Nothing is merged or named
+    without the Ja.
   - *Deine Kalender* (`/kalender/verwalten`, haus#66), linked from
     Kalender: every calendar with where it comes from (*aus Google, nur
     lesen · verbunden seit … · zuletzt abgeglichen vor 5 min*, laib's

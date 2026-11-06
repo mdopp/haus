@@ -12,8 +12,12 @@ import (
 	"github.com/mdopp/homes/internal/namen"
 )
 
-// kontakt is one contact as Immich gets it.
-type kontakt struct{ key, name, geburtstag string }
+// kontakt is one contact as Immich gets it; foto its picture, a JPEG (the
+// owner's own Handy-Kontakte only).
+type kontakt struct {
+	key, name, geburtstag string
+	foto                  []byte
+}
 
 // kontakte are the Haushalts-Kontakte and the key owner's own
 // Handy-Kontakte (once Merke knows the owner's login), firms aside; ok:
@@ -26,7 +30,7 @@ func (g *Gesichter) kontakte(ctx context.Context) (out []kontakt, ok bool, err e
 	add := func(prefix string, cts []caldav.Contact) {
 		for _, ct := range cts {
 			if name := strings.Join(strings.Fields(ct.Name), " "); name != "" && ct.UID != "" && !ct.IsFirm() {
-				out = append(out, kontakt{prefix + ct.UID, name, geburtstag(ct.Birthday, g.now().Format("2006-01-02"))})
+				out = append(out, kontakt{prefix + ct.UID, name, geburtstag(ct.Birthday, g.now().Format("2006-01-02")), nil})
 			}
 		}
 	}
@@ -38,7 +42,11 @@ func (g *Gesichter) kontakte(ctx context.Context) (out []kontakt, ok bool, err e
 		}
 		for _, cd := range cards {
 			if root, err := caldav.Parse(cd.Data); err == nil {
+				n, fotos := len(out), bilder(root)
 				add("privat/", caldav.Contacts(root))
+				for i := n; i < len(out); i++ {
+					out[i].foto = fotos[strings.TrimPrefix(out[i].key, "privat/")]
+				}
 			}
 		}
 	}

@@ -4,10 +4,14 @@
 // favourites first, then by closeness, then the named by photos), GET
 // /api/people/<id>/thumbnail, which it counts, …/statistics, POST
 // /api/people, PUT /api/people/<id>, POST /api/people/merge, GET
-// /api/search/person (faceless and hidden ones too) and GET /api/users/me.
+// /api/search/person (faceless and hidden ones too), GET /api/users/me,
+// and the photos Homes uploads: POST /api/assets (multipart, a duplicate
+// for bytes it has), GET /api/faces?id= (the faces Erkennen gives the
+// photo) and DELETE /api/assets.
 package immichfake
 
 import (
+	"bytes"
 	"cmp"
 	"encoding/json"
 	"fmt"
@@ -45,6 +49,27 @@ type Server struct {
 	people []*person
 	writes int
 	merges [][]string
+	// Erkennen are the faces Immich finds in an uploaded photo: each the
+	// id of the person it gives the face, "" none; nil finds no face.
+	Erkennen func(name string, jpeg []byte) []string
+	assets   []*asset
+	hoch     int // uploads taken
+}
+
+// asset is a photo Homes uploaded.
+type asset struct {
+	ID, Name, Visibility string
+	jpeg                 []byte
+}
+
+// Fotos are the uploaded photos still there, as "name|visibility".
+func (s *Server) Fotos() (out []string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, a := range s.assets {
+		out = append(out, a.Name+"|"+a.Visibility)
+	}
+	return out
 }
 
 // Lage sets id's photos, its face's place (the closest by distance) and
@@ -152,7 +177,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	case r.URL.Path == "/api/api-keys/me":
 		rechte := []string{"all"}
 		if len(s.Ohne) > 0 {
-			rechte = slices.DeleteFunc([]string{"person.read", "person.create", "person.update", "person.merge", "person.statistics", "user.read"}, func(r string) bool { return slices.Contains(s.Ohne, r) })
+			rechte = slices.DeleteFunc([]string{"person.read", "person.create", "person.update", "person.merge", "person.statistics", "user.read", "asset.upload", "face.read", "asset.delete"}, func(r string) bool { return slices.Contains(s.Ohne, r) })
 		}
 		json.NewEncoder(w).Encode(map[string]any{"id": "k1", "name": "Homes", "permissions": rechte})
 	case r.URL.Path == "/api/users/me":
@@ -195,6 +220,21 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 	case r.URL.Path == "/api/people":
 		s.list(w, r)
+	case r.URL.Path == "/api/assets" && r.Method == http.MethodPost:
+		if s.darf(w, "asset.upload") {
+			s.upload(w, r)
+		}
+	case r.URL.Path == "/api/assets" && r.Method == http.MethodDelete:
+		if s.darf(w, "asset.delete") {
+			var body struct{ IDs []string }
+			json.NewDecoder(r.Body).Decode(&body)
+			s.assets = slices.DeleteFunc(s.assets, func(a *asset) bool { return slices.Contains(body.IDs, a.ID) })
+			w.WriteHeader(http.StatusNoContent)
+		}
+	case r.URL.Path == "/api/faces" && r.Method == http.MethodGet:
+		if s.darf(w, "face.read") {
+			s.faces(w, r.URL.Query().Get("id"))
+		}
 	default:
 		http.NotFound(w, r)
 	}
@@ -259,6 +299,49 @@ func (s *Server) merge(w http.ResponseWriter, r *http.Request) {
 		}
 		s.people = slices.DeleteFunc(s.people, func(q *person) bool { return q == p })
 		out = append(out, map[string]any{"id": id, "success": true})
+	}
+	json.NewEncoder(w).Encode(out)
+}
+
+// upload takes a photo as Immich's POST /api/assets: 201 created, or 200
+// duplicate with the id it has for those bytes.
+func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
+	f, _, err := r.FormFile("assetData")
+	if err != nil || r.FormValue("fileCreatedAt") == "" {
+		http.Error(w, `{"message":"assetData and fileCreatedAt are required"}`, http.StatusBadRequest)
+		return
+	}
+	var b bytes.Buffer
+	b.ReadFrom(f)
+	for _, a := range s.assets {
+		if bytes.Equal(a.jpeg, b.Bytes()) {
+			json.NewEncoder(w).Encode(map[string]string{"id": a.ID, "status": "duplicate"})
+			return
+		}
+	}
+	s.hoch++
+	a := &asset{ID: fmt.Sprint("a-", s.hoch), Name: r.FormValue("filename"), Visibility: cmp.Or(r.FormValue("visibility"), "timeline"), jpeg: b.Bytes()}
+	s.assets, s.writes = append(s.assets, a), s.writes+1
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(map[string]string{"id": a.ID, "status": "created"})
+}
+
+// faces are the faces Erkennen finds in the photo, each with its person.
+func (s *Server) faces(w http.ResponseWriter, id string) {
+	i := slices.IndexFunc(s.assets, func(a *asset) bool { return a.ID == id })
+	if i < 0 {
+		http.Error(w, `{"message":"Not found or no asset.read access"}`, http.StatusBadRequest)
+		return
+	}
+	out := []map[string]any{}
+	if s.Erkennen != nil {
+		for n, pid := range s.Erkennen(s.assets[i].Name, s.assets[i].jpeg) {
+			var p any
+			if q := s.find(pid); q != nil {
+				p = q
+			}
+			out = append(out, map[string]any{"id": fmt.Sprint(id, "-f", n), "person": p})
+		}
 	}
 	json.NewEncoder(w).Encode(out)
 }

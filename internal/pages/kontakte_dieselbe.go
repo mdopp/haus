@@ -40,7 +40,7 @@ const dieselbeStyle = `<style>.paar{margin:18px 0 0;padding:14px;border-radius:1
 
 // dieselbeLink is the quiet line to the page, while it has pairs.
 func dieselbeLink(cfg StartConfig) string {
-	n := len(cfg.Gesichter.Paare())
+	n := len(cfg.Gesichter.Paare()) + len(cfg.Gesichter.Fragen())
 	if n == 0 {
 		return ""
 	}
@@ -48,7 +48,8 @@ func dieselbeLink(cfg StartConfig) string {
 		html.EscapeString(fmt.Sprintf(texte.T(texte.DieselbeKurz), texte.Anzahl(n, "Vorschlag", "Vorschläge"))) + `</p>`
 }
 
-// Dieselbe is the page, and its answers (POST a, b, antwort ja|nein|spaeter).
+// Dieselbe is the page, and its answers (POST a, b, antwort ja|nein|spaeter;
+// about a contact's picture kontakt, b, antwort ja|nein|keinfoto).
 func Dieselbe(cfg StartConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost && !showOnly(w, r, texte.T(texte.Dieselbe)) {
@@ -65,12 +66,20 @@ func Dieselbe(cfg StartConfig) http.HandlerFunc {
 				return
 			}
 			r.ParseForm()
-			antwort := r.PostForm.Get("antwort")
-			if !slices.Contains([]string{"ja", "nein", "spaeter"}, antwort) {
+			antwort, kontakt := r.PostForm.Get("antwort"), r.PostForm.Get("kontakt")
+			erlaubt := []string{"ja", "nein", "spaeter"}
+			if kontakt != "" {
+				erlaubt[2] = "keinfoto"
+			}
+			if !slices.Contains(erlaubt, antwort) {
 				http.Error(w, "Ja, Nein oder Überspringen? Die Antwort fehlt.", http.StatusBadRequest)
 				return
 			}
-			said, problem = dieselbeAntworten(r.Context(), cfg, r.PostForm.Get("a"), r.PostForm.Get("b"), antwort)
+			if kontakt != "" {
+				said, problem = istAntworten(r.Context(), cfg, kontakt, r.PostForm.Get("b"), antwort)
+			} else {
+				said, problem = dieselbeAntworten(r.Context(), cfg, r.PostForm.Get("a"), r.PostForm.Get("b"), antwort)
+			}
 		}
 		seite, _ := strconv.Atoi(r.FormValue("seite"))
 		writePage(w, http.StatusOK, dieselbeSeite(r, cfg, seite, said, problem))
@@ -114,6 +123,7 @@ func dieselbeSeite(r *http.Request, cfg StartConfig, seite int, said, problem st
 	paare := cfg.Gesichter.Paare()
 	seiten := max(1, (len(paare)+dieselbeJeSeite-1)/dieselbeJeSeite)
 	seite = min(max(seite, 1), seiten)
+	b.WriteString(istFragen(cfg, seite))
 	if len(paare) == 0 {
 		b.WriteString("<p class=k>" + t(texte.DieselbeLeer) + "</p>")
 	}
