@@ -50,7 +50,7 @@ budget() { # budget <name> <cap> <dir…>
 # while typing, the Bereich tiles, type and person chips, Versicherungen and Garantie läuft noch, the rows
 # 2026-11-06, owner approved 2026-11-06: Dieselbe Person: „Dieselbe Person?“ (16,341 -> 16,497):
 # /kontakte/dieselbe (kontakte_dieselbe.go): pairs of faces, ten a page, Ja/Nein/Überspringen, the outcome on the page, the quiet links
-# 2026-11-06, owner asked for it 2026-11-06, the raise WAITS for the owner's yes: „Ist das …?“ (16,497 -> 16,555):
+# 2026-11-06, owner approved 2026-11-06: Kontaktfotos: „Ist das …?“ (16,497 -> 16,555):
 # a contact's picture beside the person Immich gave its face, Ja/Nein/Kein Foto (kontakte_ist.go), on „Dieselbe Person?“
 budget pages 16556 internal/pages     # the family's pages, one per file: 14,684
 # 2026-11-05, owner 2026-11-05: writable Homes-Konto (5,033 -> 5,121): PUT and DELETE of one shared
@@ -89,7 +89,7 @@ budget cmd 1448 cmd/homes             # homes' wiring: 1,018 with the demo then
 # person out of its list as Immich does, with the key's permissions (99 -> 206)
 # 2026-11-06, owner approved 2026-11-06: Dieselbe Person: Immich merges (14,288 -> 14,434):
 # immich.Zusammenfuehren (POST /api/people/merge), Naechste (closestPersonId), Fotos (statistics), Rechte (api-keys/me), and immichfake's
-# 2026-11-06, owner asked for it 2026-11-06, the raise WAITS for the owner's yes: contacts' pictures (14,434 -> 14,575):
+# 2026-11-06, owner approved 2026-11-06: Kontaktfotos: contacts' pictures (14,434 -> 14,575):
 # immich.Hochladen (archived), Funde (GET /api/faces), Entfernen (DELETE /api/assets), multipart and 204; immichfake's
 budget connectors 14576 $connectors   # one client per service, with its fake: 11,327, 12,543 with abs and musicbrainz
 # 2026-11-04, internal/jsonfile (47 lines, 50 of cap) from household's cap to shared's: it
@@ -104,7 +104,7 @@ budget connectors 14576 $connectors   # one client per service, with its fake: 1
 # 2026-11-06, owner approved 2026-11-06: Dieselbe Person: one name one person, „Dieselbe Person?“
 # (10,025 -> 10,510): gesichter/dieselbe.go merges the persons of one name hourly and follows the mapping, asks Immich for the closest
 # faces in the background, ranks the pairs, keeps „Nein“; gesichter.go keeps the key's permissions for the missing-permission line
-# 2026-11-06, owner asked for it 2026-11-06, the raise WAITS for the owner's yes: „Ist das …?“ (10,510 -> 10,872):
+# 2026-11-06, owner approved 2026-11-06: Kontaktfotos: „Ist das …?“ (10,510 -> 10,872):
 # gesichter/kontaktbilder.go uploads the owner's contacts' pictures, follows what Immich made of each, asks, merges only on Ja
 budget household 10873 $household      # the household's own logic: 10,638, 9,176 without them and the fetcher
 # 2026-11-04, homes ADR 0001 step H1 (owner: „ganz durchziehen“): internal/modul, what an area
