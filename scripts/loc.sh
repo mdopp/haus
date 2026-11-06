@@ -44,7 +44,7 @@ budget() { # budget <name> <cap> <dir…>
 # 2026-11-05, owner 2026-11-05 yes: Immich for the contacts (15,740 -> 15,949): the
 # „Fotos“ link and the face in the phones' cards (kontakt_sprung.go), the suggestions on Kontakte with anlegen
 # and ausblenden (kontakte_immich.go), Fotos in „So hängt alles zusammen“
-# 2026-11-06, ASKED, not yet approved by the owner: Box → Auslastung (15,949 -> 16,090): the tab, its bars,
+# 2026-11-06, owner approved 2026-11-06: Box → Auslastung (15,949 -> 16,090): the tab, its bars,
 # rings and temperatures, its values fetched again in place every 5 s (box_auslastung.go, laib#1076)
 budget pages 16091 internal/pages     # the family's pages, one per file: 14,684
 # 2026-11-05, owner 2026-11-05: writable Homes-Konto (5,033 -> 5,121): PUT and DELETE of one shared
@@ -71,7 +71,7 @@ budget cmd 1448 cmd/homes             # homes' wiring: 1,018 with the demo then
 # 2026-11-05, owner 2026-11-05 yes: Immich for the contacts (13,466 -> 13,688):
 # internal/immich, the people and their faces with the owner's key, and its fake (immichfake); caldav takes a
 # picture the phone sends (sentOnly)
-# 2026-11-06, ASKED, not yet approved by the owner: Box → Auslastung (13,670 -> 13,714): laib.Auslastung,
+# 2026-11-06, owner approved 2026-11-06: Box → Auslastung (13,670 -> 13,714): laib.Auslastung,
 # the shape of laib auslastung's JSON and its call (laib#1076)
 budget connectors 13715 $connectors   # one client per service, with its fake: 11,327, 12,543 with abs and musicbrainz
 # 2026-11-04, internal/jsonfile (47 lines, 50 of cap) from household's cap to shared's: it
