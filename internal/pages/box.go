@@ -33,7 +33,7 @@ func adminHead(r *http.Request, cfg StartConfig, title string) *strings.Builder 
 // adminStyle is the admin cards in the house palette: tables as cards,
 // section labels, the states' colours, Box's sub-links as pills.
 const adminStyle = `<style>.unter{display:flex;gap:6px;margin:18px 0 0}.unter a{flex:1 1 auto;display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:0 10px;border-radius:999px;background:var(--card);color:var(--ink);text-decoration:none;font-size:.85rem}.unter a[aria-current]{color:var(--accent);background:var(--accent-soft);font-weight:600}
-#operator summary{display:flex;align-items:center;min-height:44px;font-weight:600;cursor:pointer}#alle-skills{width:20px;height:20px}#alle-skills+label{display:inline-flex;align-items:center;min-height:44px;margin:0 0 6px 8px}#alle-skills:not(:checked)~ul .gut{display:none}
+#operator summary{display:flex;gap:.3em;align-items:center;min-height:44px;font-weight:600;cursor:pointer}#alle-skills{width:20px;height:20px}#alle-skills+label{display:inline-flex;align-items:center;min-height:44px;margin:0 0 6px 8px}#alle-skills:not(:checked)~ul .gut{display:none}
 h2{font-size:.95rem;font-weight:700;color:var(--muted);margin:26px 2px 8px}
 table{width:100%;border-collapse:separate;border-spacing:0;background:var(--card);border-radius:14px;overflow:hidden}
 td,th{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top;overflow-wrap:break-word}tr:last-child td{border-bottom:0}
