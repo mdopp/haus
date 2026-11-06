@@ -636,7 +636,7 @@ test('Standortverlauf, connected, leads with the timeline and ends with a quiet 
 // Felder geprüft?"): with every fold open, the page is no wider than the
 // screen, a field to type in has room, a button is big enough for a
 // finger, and no text runs out of its box.
-const PAGES = ['/start', '/raeume', '/raeume/light.kueche', '/medien', '/energie', '/energie?zeitraum=jahr', '/kalender', '/kalender/verwalten', '/kontakte', '/kontakte/h3',
+const PAGES = ['/start', '/raeume', '/raeume/light.kueche', '/medien', '/energie', '/energie?zeitraum=jahr', '/kalender', '/kalender/verwalten', '/kontakte', '/kontakte/h3', '/kontakte/privat',
   '/notizen', '/notizen?tag=kochen', '/notizen/einkaufsliste.md', '/notizen/markdown.md', '/notizen/einkaufsliste.md?bearbeiten=1', '/mehr', '/musik', '/platte', '/discogs', '/aktivierungswort', '/aufgaben', '/dokumente', '/dokumente/suche?q=strom', '/dokumente/suche?nur=versicherungen', '/willkommen', '/einrichten/fotos', '/box/geraete', '/pair-device', '/podcasts', '/gesehen', '/standort',
   '/daten-sichern', '/netzlaufwerk', '/box', '/box/aufgaben', '/box/auslastung', '/box/haushalt', '/box/personen', '/box/module', '/adresse',
   '/einkauf', '/einkauf?liste=liste-baumarkt', '/einkauf?liste=liste-musik', '/einkauf/rezepte', '/einkauf/rezepte?n=rezepte%2Flasagne.md', '/notizen/rezepte/lasagne.md'];
@@ -769,6 +769,22 @@ test('Kontakte lists the address book, the search filters while typing, a row op
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Oma Hilde');
   await page.goto('/kalender');
   await expect(page.getByText('Neue Termine und Änderungen machst du auf dem Handy')).toBeVisible();
+});
+
+// owner 2026-11-06: Immich's people are no longer offered as contacts; every contact is a person in
+// Immich, and the key's owner opens each of their own Handy-Kontakte's photos from Meine Kontakte
+test('Meine Kontakte: the own Handy-Kontakte, each to its person in Immich', async ({ page }, info) => {
+  await page.setViewportSize({ width: 411, height: 900 });
+  await page.goto('/kontakte');
+  await expect(page.getByText('In Immich, aber noch kein Haushalts-Kontakt')).toHaveCount(0);
+  await page.getByRole('link', { name: 'Meine Kontakte' }).click();
+  await expect(page).toHaveURL(/\/kontakte\/privat$/);
+  await expect(page.locator('.kontakte li')).toHaveCount(3);
+  await expect(page.getByRole('link', { name: 'Oma Hilde' })).toHaveAttribute('href', '/kontakte/privat/k0/fotos');
+  await page.screenshot({ path: info.outputPath('meine-kontakte-411.png'), fullPage: true });
+  const r = await page.request.get('/kontakte/privat/k0/fotos', { maxRedirects: 0 });
+  expect(r.status()).toBe(302);
+  expect(r.headers()['location']).toBe('https://photos.example/people/p-hilde');
 });
 
 // Pictures of the main pages as a phone shows them, for a look at the

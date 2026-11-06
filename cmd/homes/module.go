@@ -140,7 +140,7 @@ func katalog(s site) []modul.Modul {
 	// the box's apps Homes only leads to, on with their service (owner 2026-11-04: their setup is theirs)
 	return append(ms,
 		link("fotos", "immich", "Immich", einrichten.App("Immich", "app.alextran.immich", einrichten.Web("photos", s.domain), "https://immich.app/docs/features/mobile-app", "schritt.fotos", "schritt.fotos-sichern"),
-			"HOMES_IMMICH_URL", "HOMES_IMMICH_KEY", "HOMES_IMMICH_PUBLIC_URL"), // a contact's Fotos, its face, the suggestions (owner 2026-11-05)
+			"HOMES_IMMICH_URL", "HOMES_IMMICH_KEY", "HOMES_IMMICH_PUBLIC_URL"), // a contact's Fotos, its face (owner 2026-11-05), a person per contact (2026-11-06)
 		link("passwoerter", "vaultwarden", "Vaultwarden", einrichten.App("Bitwarden", "com.x8bit.bitwarden", einrichten.Web("vault", s.domain),
 			"https://bitwarden.com/help/getting-started-mobile/", "schritt.tresor", "schritt.tresor-passwort")),
 		link("filme", "media", "Jellyfin", einrichten.App("Jellyfin", "org.jellyfin.mobile", einrichten.Web("media", s.domain), "https://jellyfin.org/docs/general/clients/", "schritt.anmelden")),

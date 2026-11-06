@@ -1,16 +1,25 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"fmt"
+	"image"
+	"image/color"
+	"image/jpeg"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
 	"time"
 
+	"github.com/mdopp/homes/internal/caldav"
 	"github.com/mdopp/homes/internal/caldav/davfake"
 	"github.com/mdopp/homes/internal/cards"
 	"github.com/mdopp/homes/internal/devices"
+	"github.com/mdopp/homes/internal/gesichter"
+	"github.com/mdopp/homes/internal/immich"
+	"github.com/mdopp/homes/internal/immich/immichfake"
 	"github.com/mdopp/homes/internal/napi"
 	"github.com/mdopp/homes/internal/pages"
 	"github.com/mdopp/homes/internal/samba"
@@ -51,7 +60,7 @@ func mehrSeiten(mux *http.ServeMux, cfg pages.StartConfig, dav *davfake.Server, 
 	os.WriteFile(filepath.Join(ledger, "whatsapp.jsonl"), []byte(whatsapp), 0o600)
 	os.WriteFile(filepath.Join(ledger, "sms.jsonl"), []byte(line("sms-2026.xml.age", 120000, 3*time.Hour)), 0o600)
 	dav.AddAddressBook("/anna/handy-kontakte/", "Handy-Kontakte")
-	for i, n := range []string{"Oma Hilde", "Opa Karl", "Kita Sonnenschein"} {
+	for i, n := range []string{"Oma Hilde\r\nBDAY:1941-03-08", "Opa Karl", "Kita Sonnenschein"} {
 		dav.Put("/anna/handy-kontakte/k"+strconv.Itoa(i)+".vcf", "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:k"+strconv.Itoa(i)+"\r\nFN:"+n+"\r\nEND:VCARD\r\n")
 	}
 
@@ -73,7 +82,10 @@ func mehrSeiten(mux *http.ServeMux, cfg pages.StartConfig, dav *davfake.Server, 
 		}
 		dav.Put("/homes/haushalt-kontakte/h"+strconv.Itoa(i)+".vcf", card+"END:VCARD\r\n")
 	}
+	cfg.Gesichter = demoGesichter(dir, cfg.Contacts) // Anna's key: Meine Kontakte, each a person in Immich (owner 2026-11-06)
 	mux.HandleFunc(pages.KontaktePath, pages.Kontakte(cfg))
+	mux.HandleFunc(pages.MeineKontaktePath, pages.MeineKontakte(cfg))
+	mux.HandleFunc(pages.MeineKontaktePath+"/", pages.MeineKontakte(cfg))
 	mux.HandleFunc(cards.ContactPages, pages.Kontakt(cfg))
 	mux.HandleFunc("/netzlaufwerk", pages.Netzlaufwerk(cfg))
 	boxCfg := pages.BoxConfig{Laib: cfg.Laib, LaibURL: cfg.LaibURL, Family: cfg, Devices: phones}
@@ -115,4 +127,35 @@ var auditLaib = map[string]string{
 	"laib_diag": `[{"severity":"gelb","probe":"bote","detail":"Der Bote antwortet nicht auf die Probe: signal-cli seit 3 h ohne Empfang","say":"Nachrichten über Signal kommen vielleicht nicht an."},` +
 		`{"severity":"gelb","probe":"cert","detail":"kein Zertifikat für die LAN-IP 192.168.1.10","say":"Über die IP-Adresse warnt der Browser."},{"severity":"info","probe":"watchdog","detail":"kein Wächter von außen","aufgabe":2}]`,
 	"laib_zuhause": `{"street":"Musterweg 1","postcode":"12345","city":"Musterstadt","country":"DE","latitude":50.1,"longitude":8.6}`,
+}
+
+// demoGesichter is Immich with Anna's key (anna@example.org): Oma Hilde
+// with her face, and every contact of the household's and Anna's own a
+// person, as the hourly run makes them.
+func demoGesichter(dir string, kontakte *caldav.Client) *gesichter.Gesichter {
+	fake := immichfake.New("demo")
+	fake.Email = "anna@example.org"
+	fake.Person("p-hilde", "Oma Hilde", "1", false, demoGesicht(color.RGBA{214, 140, 90, 255}))
+	g := &gesichter.Gesichter{Immich: &immich.Client{URL: fake.URL, Key: "demo"}, Kontakte: kontakte, Web: "https://photos.example", Dir: filepath.Join(dir, "gesichter")}
+	os.MkdirAll(g.Dir, 0o755)
+	g.Auffrischen(context.Background())
+	g.Merke("anna", "anna@example.org")
+	g.Abgleichen(context.Background())
+	return g
+}
+
+func demoGesicht(c color.RGBA) []byte {
+	img := image.NewRGBA(image.Rect(0, 0, 250, 250))
+	for y := range 250 {
+		for x := range 250 {
+			if dx, dy := x-125, y-125; dx*dx+dy*dy < 100*100 {
+				img.Set(x, y, c)
+			} else {
+				img.Set(x, y, color.RGBA{40, 40, 46, 255})
+			}
+		}
+	}
+	var b bytes.Buffer
+	jpeg.Encode(&b, img, nil)
+	return b.Bytes()
 }

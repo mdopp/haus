@@ -79,13 +79,21 @@ budget cmd 1448 cmd/homes             # homes' wiring: 1,018 with the demo then
 # (suche.go: Bereiche, types, Person; the number fields by custom_field_query, sender, text, merged and kept a
 # minute; Vertraege shares its reading, -64), and paperlessfake's custom_field_query (AND/OR/NOT, icontains, gt,
 # exists), text, a sender's name, document counts and a select's options (+95)
-budget connectors 14099 $connectors   # one client per service, with its fake: 11,327, 12,543 with abs and musicbrainz
+# 2026-11-06, owner's yes PENDING: every contact a person in Immich (14,098 -> 14,288): internal/immich
+# searches people by name (faceless and hidden too), makes one, sets its name and birthday, says whose
+# key it is and which permission it lacks (107 -> 190); immichfake answers all of it, keeping a faceless
+# person out of its list as Immich does, with the key's permissions (99 -> 206)
+budget connectors 14289 $connectors   # one client per service, with its fake: 11,327, 12,543 with abs and musicbrainz
 # 2026-11-04, internal/jsonfile (47 lines, 50 of cap) from household's cap to shared's: it
 # replaces nine copies of a save, 62 of their lines in household
 # 2026-11-05, owner 2026-11-05 yes: Immich for the contacts (9,583 -> 9,874):
 # internal/gesichter, a contact matched to its Immich person, the faces fetched in the background, made
 # 96 px and kept in HOMES_DATA, the suggestions and who was hidden from them
-budget household 9875 $household      # the household's own logic: 10,638, 9,176 without them and the fetcher
+# 2026-11-06, owner's yes PENDING: every contact a person in Immich (9,874 -> 10,025): internal/gesichter
+# matches the Haushalts-Kontakte and the key owner's Handy-Kontakte to Immich's people hourly, makes the
+# missing ones, follows the ones it made, keeps the mapping, learns the owner's login (abgleich.go, 139);
+# the suggestions and their hidden list go (gesichter.go 291 -> 303)
+budget household 10026 $household      # the household's own logic: 10,638, 9,176 without them and the fetcher
 # 2026-11-04, homes ADR 0001 step H1 (owner: „ganz durchziehen“): internal/modul, what an area
 # says about itself and the list Homes builds from them, 1,472 with it; plus 5 %
 # 2026-11-04, step H8 (§10): the traces and wishes in internal/modul, and internal/texte, the one

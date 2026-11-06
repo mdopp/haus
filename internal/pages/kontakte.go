@@ -33,8 +33,8 @@ type kontaktZeile struct{ name, seite, ziel, zielText, suche string }
 // each leading to its page (Kontakt) with its first number or e-mail to
 // tap; a search by name, number and e-mail, live and as ?q=. Where to
 // change them is one quiet line, as on the calendar; Radicale not
-// answering is Kontakt's plain line (haus#33). Under it, Immich's named
-// people without a contact (kontakte_immich.go).
+// answering is Kontakt's plain line (haus#33). For the Immich key's owner,
+// a quiet line to Meine Kontakte (kontakte_privat.go).
 func Kontakte(cfg StartConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !showOnly(w, r, "Die Kontakte") {
@@ -55,12 +55,11 @@ func Kontakte(cfg StartConfig) http.HandlerFunc {
 			writePage(w, http.StatusOK, b)
 			return
 		}
-		b.WriteString(gesagtKontakte(r, all))
 		q := trimRunes(oneLine(r.URL.Query().Get("q")), 80)
 		field := texte.T(texte.KontakteSuchen)
 		b.WriteString(`<form method=get action=` + KontaktePath + ` role=search><input type=search id=kontakte-suche name=q value="` + html.EscapeString(q) +
 			`" placeholder="` + field + `" aria-label="` + field + `" autocomplete=off> <button data-laeuft="Sucht …">Suchen</button></form>`)
-		zeilen, gesucht := kontaktZeilen(all), namen.Plain(q)
+		zeilen, gesucht := kontaktZeilen(all, cards.ContactPage), namen.Plain(q)
 		zeilen = slices.DeleteFunc(zeilen, func(z kontaktZeile) bool { return !strings.Contains(z.suche, gesucht) })
 		keiner := `<p class=k id=kontakte-keiner data-vorlage="` + html.EscapeString(texte.T(texte.KontakteKeiner)) + `"`
 		switch {
@@ -72,18 +71,19 @@ func Kontakte(cfg StartConfig) http.HandlerFunc {
 			b.WriteString(keiner + " hidden></p>")
 			kontakteListe(b, zeilen, len(all) >= kontakteBuchstaben)
 		}
-		b.WriteString(vorschlaegeStyle + vorschlaege(cfg, all) + kontakteScript)
+		b.WriteString(meineKontakteLink(r, cfg) + kontakteScript)
 		writePage(w, http.StatusOK, b)
 	}
 }
 
-// kontaktZeilen are the contacts as rows, by name as the family reads it.
-func kontaktZeilen(all []caldav.Contact) []kontaktZeile {
+// kontaktZeilen are the contacts as rows, by name as the family reads it,
+// each leading to seite(uid).
+func kontaktZeilen(all []caldav.Contact, seite func(string) string) []kontaktZeile {
 	var out []kontaktZeile
 	for _, ct := range all {
 		z := kontaktZeile{name: cmp.Or(trimRunes(oneLine(ct.Name), 120), trimRunes(oneLine(ct.Org), 120), "(ohne Namen)")}
 		if uid := strings.TrimSpace(ct.UID); uid != "" {
-			z.seite = cards.ContactPage(uid) // a card without one has no page of its own
+			z.seite = seite(uid) // a card without one has no page of its own
 		}
 		hay := []string{z.name, ct.Org}
 		for _, p := range ct.Phones {

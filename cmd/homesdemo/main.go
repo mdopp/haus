@@ -280,9 +280,11 @@ func main() {
 	})
 	anna := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		r.Header.Set("Remote-User", "anna")
+		r.Header.Set("Remote-Email", "anna@example.org")
 		r.Header.Set("Remote-Groups", "family,admins")
 		if c, err := r.Cookie("wer"); err == nil && c.Value != "" { // another person, in the family only
 			r.Header.Set("Remote-User", c.Value)
+			r.Header.Set("Remote-Email", c.Value+"@example.org")
 			r.Header.Set("Remote-Groups", "family")
 		}
 		mux.ServeHTTP(w, r)

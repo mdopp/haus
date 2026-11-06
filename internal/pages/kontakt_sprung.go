@@ -102,7 +102,7 @@ func kontaktSprung(w http.ResponseWriter, r *http.Request, cfg StartConfig, ct c
 	case was == sprungFotos && !cfg.fotosAn():
 		say(texte.T(texte.KontaktKeinImmich))
 	case was == sprungFotos:
-		http.Redirect(w, r, cfg.Gesichter.Link(cmp.Or(oneLine(ct.Name), oneLine(ct.Org))), http.StatusFound)
+		http.Redirect(w, r, cfg.Gesichter.Link("haushalt/"+ct.UID, cmp.Or(oneLine(ct.Name), oneLine(ct.Org))), http.StatusFound)
 	case was == sprungDokumente && !cfg.paperless().Set():
 		say(texte.T(texte.KontaktKeinPaperless))
 	case was == sprungDokumente && !cfg.paperlessOpens(r):
