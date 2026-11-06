@@ -779,7 +779,7 @@ test('Meine Kontakte: the own Handy-Kontakte, each to its person in Immich', asy
   await expect(page.getByText('In Immich, aber noch kein Haushalts-Kontakt')).toHaveCount(0);
   await page.getByRole('link', { name: 'Meine Kontakte' }).click();
   await expect(page).toHaveURL(/\/kontakte\/privat$/);
-  await expect(page.locator('.kontakte li')).toHaveCount(3);
+  await expect(page.locator('.kontakte li')).toHaveCount(5);
   await expect(page.getByRole('link', { name: 'Oma Hilde' })).toHaveAttribute('href', '/kontakte/privat/k0/fotos');
   await page.screenshot({ path: info.outputPath('meine-kontakte-411.png'), fullPage: true });
   const r = await page.request.get('/kontakte/privat/k0/fotos', { maxRedirects: 0 });
@@ -794,7 +794,7 @@ test('Dieselbe Person? shows pairs of faces and takes a Nein', async ({ page }, 
   await page.goto('/kontakte/privat');
   await page.getByRole('link', { name: 'Dieselbe Person?' }).click();
   await expect(page).toHaveURL(/\/kontakte\/dieselbe$/);
-  const paare = page.locator('section.paar');
+  const paare = page.locator('section.paar:not(.frage)');
   await expect(paare).toHaveCount(6);
   await expect(paare.first()).toContainText('Oma Hilde');
   await expect(paare.first()).toContainText('ohne Namen');
@@ -804,6 +804,24 @@ test('Dieselbe Person? shows pairs of faces and takes a Nein', async ({ page }, 
   await expect(page.getByText('Gemerkt: Nach diesen beiden fragt Homes nicht wieder.')).toBeVisible();
   await expect(paare).toHaveCount(5);
   await page.screenshot({ path: info.outputPath('dieselbe-nein-411.png'), fullPage: true });
+});
+
+// owner 2026-11-06: a contact's picture is a suggestion, never an answer — „Ist das …?“ shows it
+// beside the person Immich gave its face; Nein takes Homes' upload out at once and the question goes
+test('Ist das …? asks about a contact picture and takes a Nein', async ({ page }, info) => {
+  await page.setViewportSize({ width: 411, height: 900 });
+  await page.goto('/kontakte/dieselbe');
+  const fragen = page.locator('section.frage');
+  await expect(fragen).toHaveCount(2);
+  await expect(fragen.first()).toContainText('Ist das Lena Schmidt?');
+  await expect(fragen.first()).toContainText('Bild im Kontakt');
+  await expect(fragen.first().getByRole('button', { name: 'Ja, das ist Lena Schmidt' })).toBeVisible();
+  await expect(fragen.last()).toContainText('Oma Hilde');
+  await page.screenshot({ path: info.outputPath('ist-das-411.png'), fullPage: true });
+  await fragen.last().getByRole('button', { name: 'Nein' }).click();
+  await expect(page.getByText('Gemerkt: Homes hat das Bild aus Immich genommen und fragt nach dieser Person nicht wieder.')).toBeVisible();
+  await expect(fragen).toHaveCount(1);
+  await page.screenshot({ path: info.outputPath('ist-das-nein-411.png'), fullPage: true });
 });
 
 // Pictures of the main pages as a phone shows them, for a look at the

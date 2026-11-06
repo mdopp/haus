@@ -12,7 +12,10 @@
 //
 // Two persons of the same name are one: the hourly run merges them
 // (Zusammenfuehren); persons Immich holds close are offered to the key's
-// owner as „Dieselbe Person?“ (dieselbe.go). Nothing else is merged.
+// owner as „Dieselbe Person?“ (dieselbe.go). A picture of the owner's own
+// contact whose person has no face goes to Immich, archived, and the
+// person Immich gives its face is asked as „Ist das …?“
+// (kontaktbilder.go). Nothing else is merged, and nothing without a Ja.
 //
 // Immich is asked in the background only (Pflegen), never while a page or
 // the phones' feed waits: every hour, each face once and again only when
@@ -86,6 +89,9 @@ type stand struct {
 	Fotos   map[string]zahl          `json:"fotos,omitempty"`   // photos per person, if the key may count them
 	Nein    map[string]time.Time     `json:"nein,omitempty"`    // pairs the owner said are two, by paarKey
 	Spaeter map[string]time.Time     `json:"spaeter,omitempty"` // pairs skipped: shown last
+	// Kontaktbilder are the owner's contacts' pictures in Immich, by
+	// "privat/<uid>" (kontaktbilder.go)
+	Kontaktbilder map[string]kontaktbild `json:"kontaktbilder,omitempty"`
 }
 
 // zuordnung is a contact's Immich person; Eigen: Homes made it, so Homes
@@ -131,6 +137,7 @@ func (g *Gesichter) laden() {
 	}
 	st := &g.stand
 	st.Zuordnung, st.Naehe, st.Andere, st.Fotos, st.Nein, st.Spaeter = leer(st.Zuordnung), leer(st.Naehe), leer(st.Andere), leer(st.Fotos), leer(st.Nein), leer(st.Spaeter)
+	st.Kontaktbilder = leer(st.Kontaktbilder)
 }
 
 func leer[V any](m map[string]V) map[string]V {
@@ -309,6 +316,9 @@ func (g *Gesichter) Pflegen(ctx context.Context, jede time.Duration, kontakte *c
 		}
 		if err := g.Abgleichen(ctx); err != nil && ctx.Err() == nil {
 			log.Printf("homes: immich: a person per contact: %v", err)
+		}
+		if err := g.Kontaktbilder(ctx); err != nil && ctx.Err() == nil {
+			log.Printf("homes: immich: the contacts' pictures: %v", err)
 		}
 		if err := g.Vorschlagen(ctx); err != nil && ctx.Err() == nil {
 			log.Printf("homes: immich: the closest faces: %v", err)

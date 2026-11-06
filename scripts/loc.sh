@@ -50,7 +50,9 @@ budget() { # budget <name> <cap> <dir…>
 # while typing, the Bereich tiles, type and person chips, Versicherungen and Garantie läuft noch, the rows
 # 2026-11-06, owner approved 2026-11-06: Dieselbe Person: „Dieselbe Person?“ (16,341 -> 16,497):
 # /kontakte/dieselbe (kontakte_dieselbe.go): pairs of faces, ten a page, Ja/Nein/Überspringen, the outcome on the page, the quiet links
-budget pages 16498 internal/pages     # the family's pages, one per file: 14,684
+# 2026-11-06, owner approved 2026-11-06: Kontaktfotos: „Ist das …?“ (16,497 -> 16,555):
+# a contact's picture beside the person Immich gave its face, Ja/Nein/Kein Foto (kontakte_ist.go), on „Dieselbe Person?“
+budget pages 16556 internal/pages     # the family's pages, one per file: 14,684
 # 2026-11-05, owner 2026-11-05: writable Homes-Konto (5,033 -> 5,121): PUT and DELETE of one shared
 # appointment or card for the phones, the Papierkorb on delete, the feed for a phone that writes back
 budget napi 5121 internal/napi        # the app's widgets' and share sheet's API: 4,793
@@ -87,7 +89,9 @@ budget cmd 1448 cmd/homes             # homes' wiring: 1,018 with the demo then
 # person out of its list as Immich does, with the key's permissions (99 -> 206)
 # 2026-11-06, owner approved 2026-11-06: Dieselbe Person: Immich merges (14,288 -> 14,434):
 # immich.Zusammenfuehren (POST /api/people/merge), Naechste (closestPersonId), Fotos (statistics), Rechte (api-keys/me), and immichfake's
-budget connectors 14435 $connectors   # one client per service, with its fake: 11,327, 12,543 with abs and musicbrainz
+# 2026-11-06, owner approved 2026-11-06: Kontaktfotos: contacts' pictures (14,434 -> 14,575):
+# immich.Hochladen (archived), Funde (GET /api/faces), Entfernen (DELETE /api/assets), multipart and 204; immichfake's
+budget connectors 14576 $connectors   # one client per service, with its fake: 11,327, 12,543 with abs and musicbrainz
 # 2026-11-04, internal/jsonfile (47 lines, 50 of cap) from household's cap to shared's: it
 # replaces nine copies of a save, 62 of their lines in household
 # 2026-11-05, owner 2026-11-05 yes: Immich for the contacts (9,583 -> 9,874):
@@ -100,7 +104,9 @@ budget connectors 14435 $connectors   # one client per service, with its fake: 1
 # 2026-11-06, owner approved 2026-11-06: Dieselbe Person: one name one person, „Dieselbe Person?“
 # (10,025 -> 10,510): gesichter/dieselbe.go merges the persons of one name hourly and follows the mapping, asks Immich for the closest
 # faces in the background, ranks the pairs, keeps „Nein“; gesichter.go keeps the key's permissions for the missing-permission line
-budget household 10511 $household      # the household's own logic: 10,638, 9,176 without them and the fetcher
+# 2026-11-06, owner approved 2026-11-06: Kontaktfotos: „Ist das …?“ (10,510 -> 10,872):
+# gesichter/kontaktbilder.go uploads the owner's contacts' pictures, follows what Immich made of each, asks, merges only on Ja
+budget household 10873 $household      # the household's own logic: 10,638, 9,176 without them and the fetcher
 # 2026-11-04, homes ADR 0001 step H1 (owner: „ganz durchziehen“): internal/modul, what an area
 # says about itself and the list Homes builds from them, 1,472 with it; plus 5 %
 # 2026-11-04, step H8 (§10): the traces and wishes in internal/modul, and internal/texte, the one

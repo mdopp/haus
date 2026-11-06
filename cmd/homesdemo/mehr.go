@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
 	"image"
 	"image/color"
@@ -62,6 +63,10 @@ func mehrSeiten(mux *http.ServeMux, cfg pages.StartConfig, dav *davfake.Server, 
 	dav.AddAddressBook("/anna/handy-kontakte/", "Handy-Kontakte")
 	for i, n := range []string{"Oma Hilde\r\nBDAY:1941-03-08", "Opa Karl", "Kita Sonnenschein"} {
 		dav.Put("/anna/handy-kontakte/k"+strconv.Itoa(i)+".vcf", "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:k"+strconv.Itoa(i)+"\r\nFN:"+n+"\r\nEND:VCARD\r\n")
+	}
+	for i, k := range demoKontaktbilder { // with a picture: „Ist das …?“
+		dav.Put("/anna/handy-kontakte/b"+strconv.Itoa(i)+".vcf", "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:b"+strconv.Itoa(i)+"\r\nFN:"+k.name+
+			"\r\nPHOTO;ENCODING=b;TYPE=JPEG:"+base64.StdEncoding.EncodeToString(demoGesicht(k.farbe))+"\r\nEND:VCARD\r\n")
 	}
 
 	cfg.Samba, cfg.SambaHost = &samba.Dir{Path: sambaDir}, "box.local"
@@ -130,10 +135,17 @@ var auditLaib = map[string]string{
 	"laib_zuhause": `{"street":"Musterweg 1","postcode":"12345","city":"Musterstadt","country":"DE","latitude":50.1,"longitude":8.6}`,
 }
 
+// demoKontaktbilder are two of Anna's own contacts with a picture, and
+// the person Immich gives its face: „Ist das …?“.
+var demoKontaktbilder = []struct {
+	name, person string
+	farbe        color.RGBA
+}{{"Lena Schmidt", "u2", color.RGBA{206, 128, 104, 255}}, {"Tante Ruth", "p-hilde", color.RGBA{220, 150, 96, 255}}}
+
 // demoGesichter is Immich with Anna's key (anna@example.org): Oma Hilde
 // and Opa Karl with their faces, unnamed faces near them („Dieselbe
 // Person?“), and every contact of the household's and Anna's own a
-// person, as the hourly run makes them.
+// person, as the hourly run makes them, two contacts' pictures asked about.
 func demoGesichter(dir string, kontakte *caldav.Client) *gesichter.Gesichter {
 	fake := immichfake.New("demo")
 	fake.Email = "anna@example.org"
@@ -155,6 +167,16 @@ func demoGesichter(dir string, kontakte *caldav.Client) *gesichter.Gesichter {
 	g.Auffrischen(context.Background())
 	g.Merke("anna", "anna@example.org")
 	g.Abgleichen(context.Background())
+	fake.Erkennen = func(_ string, jpeg []byte) []string {
+		for _, k := range demoKontaktbilder {
+			if bytes.Equal(jpeg, demoGesicht(k.farbe)) {
+				return []string{k.person}
+			}
+		}
+		return nil
+	}
+	g.Kontaktbilder(context.Background())
+	g.Kontaktbilder(context.Background())
 	g.Vorschlagen(context.Background())
 	return g
 }

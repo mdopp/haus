@@ -3,10 +3,11 @@
 // recognition knows by name, each one's face, and a person per contact
 // (owner 2026-11-06). Immich keeps people per user, so Homes works with an
 // API key of the owner's account (HOMES_IMMICH_KEY: person.read,
-// person.create, person.update, person.merge, user.read; person.statistics
+// person.create, person.update, person.merge, user.read; asset.upload,
+// face.read and asset.delete for the contacts' pictures; person.statistics
 // if it may count photos). The API as Immich 3.3.5 serves it
 // (server/src/controllers/person.controller.ts, search.controller.ts,
-// user.controller.ts).
+// user.controller.ts, asset-media.controller.ts, face.controller.ts).
 package immich
 
 import (
@@ -15,6 +16,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"os"
@@ -134,7 +136,59 @@ func (c *Client) Gesicht(ctx context.Context, id string) ([]byte, error) {
 
 // Braucht are the permissions Homes needs of the key; person.statistics
 // only counts the photos.
-var Braucht = []string{"person.read", "person.create", "person.update", "person.merge", "user.read"}
+var Braucht = append([]string{"person.read", "person.create", "person.update", "person.merge", "user.read"}, BildRechte...)
+
+// BildRechte are those the contacts' pictures need (Hochladen, Funde,
+// Entfernen).
+var BildRechte = []string{"asset.upload", "face.read", "asset.delete"}
+
+// Hochladen puts a contact's picture into Immich as an archived photo
+// (POST /api/assets, visibility archive; asset.upload): out of the
+// timeline, its face found and recognised all the same. „hidden“ is
+// skipped by the face detection, „locked“ needs the PIN a key has not
+// (person.service.ts handleDetectFaces, access.repository.ts). doppelt:
+// Immich had these bytes already, id is that photo, not Homes'.
+func (c *Client) Hochladen(ctx context.Context, name string, jpeg []byte, wann time.Time) (id string, doppelt bool, err error) {
+	var body bytes.Buffer
+	mw := multipart.NewWriter(&body)
+	t := wann.UTC().Format(time.RFC3339)
+	for _, f := range [][2]string{{"fileCreatedAt", t}, {"fileModifiedAt", t}, {"filename", name}, {"visibility", "archive"}} {
+		mw.WriteField(f[0], f[1])
+	}
+	if fw, err := mw.CreateFormFile("assetData", name); err == nil {
+		fw.Write(jpeg)
+	}
+	mw.Close()
+	b, err := c.sendAls(ctx, http.MethodPost, "/api/assets", body.Bytes(), mw.FormDataContentType())
+	var answer struct{ ID, Status string }
+	if err == nil {
+		err = json.Unmarshal(b, &answer)
+	}
+	return answer.ID, answer.Status == "duplicate", err
+}
+
+// Fund is a face Immich found in a photo; Person nil while it has none.
+type Fund struct {
+	ID     string  `json:"id"`
+	Person *Person `json:"person"`
+}
+
+// Funde are the faces Immich found in the photo asset (GET
+// /api/faces?id=; face.read): none before its face detection ran, or in a
+// picture without a face.
+func (c *Client) Funde(ctx context.Context, asset string) ([]Fund, error) {
+	var out []Fund
+	err := c.getJSON(ctx, "/api/faces?"+url.Values{"id": {asset}}.Encode(), &out)
+	return out, err
+}
+
+// Entfernen deletes Homes' own photos for good, their faces with them
+// (DELETE /api/assets, force: not into the trash; asset.delete).
+func (c *Client) Entfernen(ctx context.Context, ids ...string) error {
+	b, _ := json.Marshal(map[string]any{"ids": ids, "force": true})
+	_, err := c.send(ctx, http.MethodDelete, "/api/assets", b)
+	return err
+}
 
 // Rechte are the key's permissions, "all" for every one (GET
 // /api/api-keys/me, which any key may ask).
@@ -192,7 +246,7 @@ type FehltRecht struct{ Recht string }
 
 func (e FehltRecht) Error() string { return "immich: the key lacks " + e.Recht }
 
-// Antwort is Immich answering other than 200 or 201.
+// Antwort is Immich answering other than 200, 201 or 204.
 type Antwort struct {
 	Pfad string
 	Code int
@@ -216,6 +270,10 @@ func (c *Client) get(ctx context.Context, path string) ([]byte, error) {
 }
 
 func (c *Client) send(ctx context.Context, method, path string, body []byte) ([]byte, error) {
+	return c.sendAls(ctx, method, path, body, "application/json")
+}
+
+func (c *Client) sendAls(ctx context.Context, method, path string, body []byte, typ string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, method, strings.TrimRight(c.URL, "/")+path, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
@@ -223,7 +281,7 @@ func (c *Client) send(ctx context.Context, method, path string, body []byte) ([]
 	req.Header.Set("x-api-key", c.Key)
 	req.Header.Set("Accept", "application/json, image/jpeg")
 	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Content-Type", typ)
 	}
 	hc := c.HTTP
 	if hc == nil {
@@ -241,7 +299,7 @@ func (c *Client) send(ctx context.Context, method, path string, body []byte) ([]
 			return nil, FehltRecht{recht}
 		}
 	}
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusNoContent {
 		return nil, Antwort{strings.SplitN(path, "?", 2)[0], resp.StatusCode}
 	}
 	return io.ReadAll(io.LimitReader(resp.Body, maxAntwort))

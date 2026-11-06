@@ -40,7 +40,7 @@ const dieselbeStyle = `<style>.paar{margin:18px 0 0;padding:14px;border-radius:1
 
 // dieselbeLink is the quiet line to the page, while it has pairs.
 func dieselbeLink(cfg StartConfig) string {
-	n := len(cfg.Gesichter.Paare())
+	n := len(cfg.Gesichter.Paare()) + len(cfg.Gesichter.Fragen())
 	if n == 0 {
 		return ""
 	}
@@ -48,7 +48,8 @@ func dieselbeLink(cfg StartConfig) string {
 		html.EscapeString(fmt.Sprintf(texte.T(texte.DieselbeKurz), texte.Anzahl(n, "Vorschlag", "Vorschläge"))) + `</p>`
 }
 
-// Dieselbe is the page, and its answers (POST a, b, antwort ja|nein|spaeter).
+// Dieselbe is the page, and its answers (POST a, b, antwort ja|nein|spaeter;
+// about a contact's picture kontakt, b, antwort ja|nein|keinfoto).
 func Dieselbe(cfg StartConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost && !showOnly(w, r, texte.T(texte.Dieselbe)) {
@@ -65,26 +66,40 @@ func Dieselbe(cfg StartConfig) http.HandlerFunc {
 				return
 			}
 			r.ParseForm()
-			antwort := r.PostForm.Get("antwort")
-			if !slices.Contains([]string{"ja", "nein", "spaeter"}, antwort) {
+			antwort, kontakt := r.PostForm.Get("antwort"), r.PostForm.Get("kontakt")
+			erlaubt := []string{"ja", "nein", "spaeter"}
+			if kontakt != "" {
+				erlaubt[2] = "keinfoto"
+			}
+			if !slices.Contains(erlaubt, antwort) {
 				http.Error(w, "Ja, Nein oder Überspringen? Die Antwort fehlt.", http.StatusBadRequest)
 				return
 			}
-			said, problem = dieselbeAntworten(r.Context(), cfg, r.PostForm.Get("a"), r.PostForm.Get("b"), antwort)
+			a, b := r.PostForm.Get("a"), r.PostForm.Get("b")
+			antworten, gesagt := func(ctx context.Context) (string, error) { return cfg.Gesichter.Antworten(ctx, a, b, antwort) }, dieselbeGesagt
+			if kontakt != "" {
+				antworten, gesagt = func(ctx context.Context) (string, error) { return cfg.Gesichter.Bestaetigen(ctx, kontakt, b, antwort) }, istGesagt
+			}
+			said, problem = dieselbeAntworten(r.Context(), antwort, antworten, gesagt)
 		}
 		seite, _ := strconv.Atoi(r.FormValue("seite"))
 		writePage(w, http.StatusOK, dieselbeSeite(r, cfg, seite, said, problem))
 	}
 }
 
-// dieselbeAntworten passes the answer on and says how it ended.
-func dieselbeAntworten(ctx context.Context, cfg StartConfig, a, b, antwort string) (said, problem string) {
+// dieselbeGesagt are a pair's answers as the page says them.
+var dieselbeGesagt = map[string]texte.ID{"nein": texte.DieselbeGemerkt, "spaeter": texte.DieselbeHinten, "stumm": texte.DieselbeStumm}
+
+// dieselbeAntworten passes the answer on (antworten, to Immich within
+// dieselbeWait) and says how it ended: a merge by the name kept, the
+// others and Immich not answering ("stumm") as gesagt has them.
+func dieselbeAntworten(ctx context.Context, antwort string, antworten func(context.Context) (string, error), gesagt map[string]texte.ID) (said, problem string) {
 	ctx, cancel := context.WithTimeout(ctx, dieselbeWait)
 	defer cancel()
-	name, err := cfg.Gesichter.Antworten(ctx, a, b, antwort)
+	name, err := antworten(ctx)
 	var fehlt immich.FehltRecht
 	switch {
-	case errors.Is(err, gesichter.ErrKeinPaar):
+	case errors.Is(err, gesichter.ErrKeinPaar), errors.Is(err, gesichter.ErrKeineFrage):
 		return "", texte.T(texte.DieselbeWeg)
 	case errors.As(err, &fehlt):
 		return "", "" // the page's line says which permission
@@ -92,14 +107,12 @@ func dieselbeAntworten(ctx context.Context, cfg StartConfig, a, b, antwort strin
 		return "", texte.T(texte.DieselbeNichtGemacht)
 	case err != nil:
 		log.Printf("homes: dieselbe person: %v", err)
-		return "", texte.T(texte.DieselbeStumm)
+		return "", texte.T(gesagt["stumm"])
 	case antwort == "ja":
 		log.Printf("homes: dieselbe person: merged into %q", name)
 		return fmt.Sprintf(texte.T(texte.DieselbeZusammen), name), ""
-	case antwort == "nein":
-		return texte.T(texte.DieselbeGemerkt), ""
 	}
-	return texte.T(texte.DieselbeHinten), ""
+	return texte.T(gesagt[antwort]), ""
 }
 
 // dieselbeSeite is the page: its line, the outcome, the pairs of seite.
@@ -114,6 +127,7 @@ func dieselbeSeite(r *http.Request, cfg StartConfig, seite int, said, problem st
 	paare := cfg.Gesichter.Paare()
 	seiten := max(1, (len(paare)+dieselbeJeSeite-1)/dieselbeJeSeite)
 	seite = min(max(seite, 1), seiten)
+	b.WriteString(istFragen(cfg, seite))
 	if len(paare) == 0 {
 		b.WriteString("<p class=k>" + t(texte.DieselbeLeer) + "</p>")
 	}
