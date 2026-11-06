@@ -113,7 +113,27 @@ const (
 	MeineKontakteHinweis ID = "meine-kontakte.hinweis" // the page's quiet line
 	MeineKontakteLeer    ID = "meine-kontakte.leer"    // the phone sent none yet
 	MeineKontakteWeg     ID = "meine-kontakte.weg"     // a uid not in the book
-	MeineKontakteRecht   ID = "meine-kontakte.recht"   // the key lacks „%s“
+	MeineKontakteRecht   ID = "meine-kontakte.recht"   // the key lacks „%s“ (one or a list)
+	Dieselbe             ID = "dieselbe"               // the page „Dieselbe Person?“ and its link
+	DieselbeKurz         ID = "dieselbe.kurz"          // the link's words after it: „%s“ is how many
+	DieselbeHinweis      ID = "dieselbe.hinweis"       // the page's quiet line
+	DieselbeLeer         ID = "dieselbe.leer"          // no pair to ask about
+	DieselbeOhneName     ID = "dieselbe.ohne-name"     // a face without a name
+	DieselbeJa           ID = "dieselbe.ja"            // the buttons, and each pressed
+	DieselbeJaLaeuft     ID = "dieselbe.ja.laeuft"
+	DieselbeNein         ID = "dieselbe.nein"
+	DieselbeNeinLaeuft   ID = "dieselbe.nein.laeuft"
+	DieselbeSpaeter      ID = "dieselbe.spaeter"
+	DieselbeSpaeterLauft ID = "dieselbe.spaeter.laeuft"
+	DieselbeZusammen     ID = "dieselbe.zusammen" // merged: „%s“ is the name kept
+	DieselbeGemerkt      ID = "dieselbe.gemerkt"  // „Nein“ kept
+	DieselbeHinten       ID = "dieselbe.hinten"   // skipped
+	DieselbeWeg          ID = "dieselbe.weg"      // the pair is no longer offered
+	DieselbeNichtGemacht ID = "dieselbe.nicht"    // Immich merged neither: one is gone
+	DieselbeStumm        ID = "dieselbe.stumm"    // Immich did not answer
+	DieselbeSeiten       ID = "dieselbe.seiten"   // „Seite %d von %d“
+	DieselbeWeiter       ID = "dieselbe.weiter"   // the next ten
+	DieselbeZurueck      ID = "dieselbe.zurueck"  // the ten before
 )
 
 var de = map[ID]string{
@@ -246,10 +266,30 @@ var de = map[ID]string{
 	"kontakt.kein-immich":      "Auf dieser Box gibt es kein Immich.",
 	"meine-kontakte":           "Meine Kontakte",
 	"meine-kontakte.kurz":      "deine eigenen Handy-Kontakte, jeweils mit seinen Fotos in Immich.",
-	"meine-kontakte.hinweis":   "Deine eigenen Handy-Kontakte; nur du siehst sie. Ein Tipp auf einen Namen öffnet seine Fotos in Immich. Jeder Kontakt hat dort eine Person mit seinem Namen: Gibst du in Immich einem Gesicht diesen Namen, schlägt Immich vor, beide zusammenzuführen.",
+	"meine-kontakte.hinweis":   "Deine eigenen Handy-Kontakte; nur du siehst sie. Ein Tipp auf einen Namen öffnet seine Fotos in Immich. Jeder Kontakt hat dort eine Person mit seinem Namen: Gibst du in Immich einem Gesicht diesen Namen, führt Homes beide innerhalb einer Stunde zusammen.",
 	"meine-kontakte.leer":      "Dein Handy hat noch keine Kontakte geschickt. In der Homes-App: Kontakte übertragen.",
 	"meine-kontakte.weg":       "Diesen Kontakt gibt es in deinen Handy-Kontakten nicht mehr.",
-	"meine-kontakte.recht":     "Dem Immich-Schlüssel von Homes fehlt die Berechtigung %s, darum bekommen neue Kontakte gerade keine Person in Immich. In Immich: oben rechts dein Bild → Kontoeinstellungen → API-Schlüssel, beim Schlüssel „Homes“ auf Bearbeiten tippen und sie ankreuzen.",
+	"meine-kontakte.recht":     "Dem Immich-Schlüssel von Homes fehlt diese Berechtigung: %s. Ohne sie bekommen neue Kontakte keine Person in Immich, oder doppelte Personen bleiben getrennt. In Immich: oben rechts dein Bild → Kontoeinstellungen → API-Schlüssel, beim Schlüssel „Homes“ auf Bearbeiten tippen und sie ankreuzen.",
+	"dieselbe":                 "Dieselbe Person?",
+	"dieselbe.kurz":            "%s, welche Gesichter in Immich zu einer Person gehören könnten.",
+	"dieselbe.hinweis":         "Immich hält diese Gesichter für ähnlich. Sagst du Ja, führt Homes beide in Immich zu einer Person zusammen. Ein Nein merkt sich Homes, dann fragt es nicht wieder. Nur du siehst diese Seite.",
+	"dieselbe.leer":            "Gerade gibt es nichts zu fragen. Homes schaut jede Stunde in Immich nach ähnlichen Gesichtern.",
+	"dieselbe.ohne-name":       "ohne Namen",
+	"dieselbe.ja":              "Ja, dieselbe Person",
+	"dieselbe.ja.laeuft":       "Führt zusammen …",
+	"dieselbe.nein":            "Nein",
+	"dieselbe.nein.laeuft":     "Merkt es sich …",
+	"dieselbe.spaeter":         "Überspringen",
+	"dieselbe.spaeter.laeuft":  "Schiebt nach hinten …",
+	"dieselbe.zusammen":        "Zusammengeführt: Die Fotos gehören jetzt zu %s.",
+	"dieselbe.gemerkt":         "Gemerkt: Nach diesen beiden fragt Homes nicht wieder.",
+	"dieselbe.hinten":          "Übersprungen: Dieser Vorschlag kommt am Ende wieder.",
+	"dieselbe.weg":             "Diesen Vorschlag gibt es nicht mehr. Hier sind die aktuellen.",
+	"dieselbe.nicht":           "Immich hat die beiden nicht zusammengeführt, weil es eine davon nicht mehr gibt. Nichts wurde geändert.",
+	"dieselbe.stumm":           "Immich hat gerade nicht geantwortet, nichts wurde zusammengeführt. Versuch es gleich noch einmal.",
+	"dieselbe.seiten":          "Seite %d von %d",
+	"dieselbe.weiter":          "Weitere",
+	"dieselbe.zurueck":         "Zurück",
 
 	// „So hängt alles zusammen“ (owner 2026-11-05): the page, its web's nodes ("knoten.<…>", a word and a line under it), its moments ("<…>" and "<…>.so")
 	"zusammen.titel":                    "So hängt alles zusammen",

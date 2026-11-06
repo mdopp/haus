@@ -261,7 +261,8 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     unknown uid is 404. Only the key's owner sees it: the login Homes saw on
     a page with `Remote-Email` equal to the e-mail of the key's Immich
     account (`GET /api/users/me`); anyone else gets 303 to `/kontakte`. When
-    the last run lacked a permission, one line says which to tick in Immich.
+    the key lacks a permission (as `GET /api/api-keys/me` lists them, or as
+    a call was refused), one line says which to tick in Immich.
   - *Every contact a person in Immich* (owner 2026-11-06, background, hourly,
     at most 200 calls a run, the rest in the next): each Haushalts-Kontakt
     and each of the key owner's Handy-Kontakte (firm cards aside) gets the
@@ -270,16 +271,44 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     faceless and hidden ones) is taken as it is; else Homes makes one
     (`POST /api/people` with the name and the birthday when it is a whole
     date). A person Homes made follows its contact's name and birthday
-    (`PUT /api/people/{id}`). Homes never deletes, hides, merges or renames
-    any other person; a contact gone loses only its line in the mapping
+    (`PUT /api/people/{id}`). Homes never deletes, hides or renames any
+    other person, and merges only as below; a contact gone loses only its line in the mapping
     (`HOMES_DATA/immich-gesichter.json`, `zuordnung`, by `haushalt/<uid>` or
     `privat/<uid>`). A person without a face is not in Immich's grid
     (`getAllForUser` joins the faces); naming a face with that name in
     Immich offers the merge, and the faces come to it. The household's
     „Fotos“ uses the same mapping. The key needs `person.read`,
-    `person.create`, `person.update` and `user.read`. Immich's named
+    `person.create`, `person.update`, `person.merge` and `user.read`;
+    `person.statistics` adds the photo counts. Immich's named
     people's faces are asked hourly too, a face once and again when Immich
     changed it or after 7 days.
+  - *One name, one person* (owner 2026-11-06, the same hourly run, before
+    the contacts are matched): the key owner's named, unhidden persons of
+    one name (`namen.Plain`; the list, plus a faceless one Homes made and
+    `GET /api/search/person` confirms) are merged into the one with the
+    most photos (`GET /api/people/{id}/statistics`; without
+    `person.statistics` Immich's own order, which puts the named by faces),
+    on a tie the one a contact has (`POST /api/people/merge`, `ids` with
+    that one first: its name and birthday stay). Different names, unnamed
+    and hidden persons never; at most 50 a run, one German line in the
+    log. The contacts' lines follow the merge. Without `person.merge` the
+    step is skipped and the missing-permission line names it.
+  - *Dieselbe Person?* (`/kontakte/dieselbe`, the key's owner only, as
+    Meine Kontakte; a quiet line on Kontakte and Meine Kontakte while
+    there are pairs): pairs of persons whose faces Immich holds close, ten
+    a page (`?seite=`). The hourly run asks, for at most 40 named persons
+    not asked for a day, `GET /api/people?closestPersonId=<id>` (Immich
+    gives an order, no distance, and puts favourites first: they are read
+    past and never offered) and keeps the 3 closest, their small faces and
+    photo counts; the page never asks Immich. The likeliest first: the
+    closest, more so when each is among the other's closest, an unnamed
+    face before a named person; skipped ones last. Each pair shows both
+    faces, the names or *ohne Namen*, the photo counts, and *Ja, dieselbe
+    Person* (POST: merged into the named one, two named into the one with
+    more photos; the contacts' lines follow), *Nein* (kept in
+    `immich-gesichter.json`, `nein`: the pair never comes back) and
+    *Überspringen* (last). Only a pair on offer is merged; a pair gone,
+    Immich not answering or a missing `person.merge` is said on the page.
   - *Deine Kalender* (`/kalender/verwalten`, haus#66), linked from
     Kalender: every calendar with where it comes from (*aus Google, nur
     lesen · verbunden seit … · zuletzt abgeglichen vor 5 min*, laib's

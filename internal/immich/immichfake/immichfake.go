@@ -1,14 +1,17 @@
 // Package immichfake is a fake Immich people API for tests: "x-api-key"
 // with its permissions, GET /api/people (withHidden, page, size,
-// hasNextPage; as Immich, only people with a face), GET
-// /api/people/<id>/thumbnail, which it counts, POST /api/people, PUT
-// /api/people/<id>, GET /api/search/person (faceless and hidden ones too)
-// and GET /api/users/me.
+// hasNextPage, closestPersonId; as Immich, only people with a face, the
+// favourites first, then by closeness, then the named by photos), GET
+// /api/people/<id>/thumbnail, which it counts, …/statistics, POST
+// /api/people, PUT /api/people/<id>, POST /api/people/merge, GET
+// /api/search/person (faceless and hidden ones too) and GET /api/users/me.
 package immichfake
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -23,9 +26,12 @@ type person struct {
 	Birth     string `json:"birthDate,omitempty"`
 	Hidden    bool   `json:"isHidden"`
 	Updated   string `json:"updatedAt"`
+	Favorit   bool   `json:"isFavorite"`
 	gesicht   []byte
 	abgerufen int
-	ohneFoto  bool // made by POST: no face yet
+	ohneFoto  bool       // made by POST: no face yet
+	fotos     int        // photos it is in
+	lage      [2]float64 // where its face is: closeness is the distance
 }
 
 // Server is the fake.
@@ -38,6 +44,24 @@ type Server struct {
 	mu     sync.Mutex
 	people []*person
 	writes int
+	merges [][]string
+}
+
+// Lage sets id's photos, its face's place (the closest by distance) and
+// whether it is a favourite.
+func (s *Server) Lage(id string, fotos int, x, y float64, favorit bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if p := s.find(id); p != nil {
+		p.fotos, p.lage, p.Favorit = fotos, [2]float64{x, y}, favorit
+	}
+}
+
+// Merges are the merges taken, each its ids in order.
+func (s *Server) Merges() [][]string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.merges)
 }
 
 // New is a fake taking key, with every permission.
@@ -125,6 +149,12 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	defer s.mu.Unlock()
 	id, isPerson := strings.CutPrefix(r.URL.Path, "/api/people/")
 	switch {
+	case r.URL.Path == "/api/api-keys/me":
+		rechte := []string{"all"}
+		if len(s.Ohne) > 0 {
+			rechte = slices.DeleteFunc([]string{"person.read", "person.create", "person.update", "person.merge", "person.statistics", "user.read"}, func(r string) bool { return slices.Contains(s.Ohne, r) })
+		}
+		json.NewEncoder(w).Encode(map[string]any{"id": "k1", "name": "Homes", "permissions": rechte})
 	case r.URL.Path == "/api/users/me":
 		if s.darf(w, "user.read") {
 			json.NewEncoder(w).Encode(map[string]any{"id": "u1", "email": s.Email})
@@ -144,6 +174,16 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, `{"message":"Not found or no person.update access"}`, http.StatusBadRequest)
 		} else if s.darf(w, "person.update") {
 			s.write(w, r, p, http.StatusOK)
+		}
+	case r.URL.Path == "/api/people/merge" && r.Method == http.MethodPost:
+		if s.darf(w, "person.merge") {
+			s.merge(w, r)
+		}
+	case strings.HasSuffix(id, "/statistics"):
+		if p := s.find(strings.TrimSuffix(id, "/statistics")); p == nil {
+			http.Error(w, `{"message":"Not found"}`, http.StatusBadRequest)
+		} else if s.darf(w, "person.statistics") {
+			json.NewEncoder(w).Encode(map[string]int{"assets": p.fotos})
 		}
 	case strings.HasSuffix(id, "/thumbnail"):
 		if p := s.find(strings.TrimSuffix(id, "/thumbnail")); p != nil && p.gesicht != nil {
@@ -190,6 +230,39 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(out)
 }
 
+// merge is Immich's mergePeople: the first stays, takes the others'
+// photos, and their name and birthday where it has none; they go.
+func (s *Server) merge(w http.ResponseWriter, r *http.Request) {
+	var body struct{ IDs []string }
+	json.NewDecoder(r.Body).Decode(&body)
+	if len(body.IDs) < 2 || s.find(body.IDs[0]) == nil {
+		http.Error(w, `{"message":"At least two people are required for merging"}`, http.StatusBadRequest)
+		return
+	}
+	s.merges = append(s.merges, body.IDs)
+	ziel, out := s.find(body.IDs[0]), []map[string]any{{"id": body.IDs[0], "success": true}}
+	for _, id := range body.IDs[1:] {
+		p := s.find(id)
+		if p == nil {
+			out = append(out, map[string]any{"id": id, "success": false, "error": "not_found"})
+			continue
+		}
+		if ziel.Name == "" {
+			ziel.Name = p.Name
+		}
+		if ziel.Birth == "" {
+			ziel.Birth = p.Birth
+		}
+		ziel.fotos += p.fotos
+		if ziel.ohneFoto && !p.ohneFoto {
+			ziel.gesicht, ziel.ohneFoto, ziel.lage = p.gesicht, false, p.lage
+		}
+		s.people = slices.DeleteFunc(s.people, func(q *person) bool { return q == p })
+		out = append(out, map[string]any{"id": id, "success": true})
+	}
+	json.NewEncoder(w).Encode(out)
+}
+
 func (s *Server) list(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	page, _ := strconv.Atoi(q.Get("page"))
@@ -201,6 +274,21 @@ func (s *Server) list(w http.ResponseWriter, r *http.Request) {
 			shown = append(shown, p)
 		}
 	}
+	nah := func(p *person) float64 { return 0 }
+	if c := s.find(q.Get("closestPersonId")); c != nil {
+		nah = func(p *person) float64 { return math.Hypot(p.lage[0]-c.lage[0], p.lage[1]-c.lage[1]) }
+	}
+	slices.SortStableFunc(shown, func(a, b *person) int {
+		return cmp.Or(-cmp.Compare(btoi(a.Favorit), btoi(b.Favorit)), cmp.Compare(nah(a), nah(b)),
+			cmp.Compare(btoi(a.Name == ""), btoi(b.Name == "")), -cmp.Compare(a.fotos, b.fotos))
+	})
 	from, to := min((page-1)*size, len(shown)), min(page*size, len(shown))
 	json.NewEncoder(w).Encode(map[string]any{"total": len(shown), "hidden": 0, "people": shown[from:to], "hasNextPage": to < len(shown)})
+}
+
+func btoi(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }

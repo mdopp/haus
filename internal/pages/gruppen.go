@@ -46,6 +46,7 @@ func Gruppen(cfg StartConfig) map[string][]modul.Route {
 	gs.add("kontakte", cards.ContactPages, Kontakt(cfg))
 	gs.add("kontakte", MeineKontaktePath, MeineKontakte(cfg))     // the Immich key owner's own, each to its photos (owner 2026-11-06)
 	gs.add("kontakte", MeineKontaktePath+"/", MeineKontakte(cfg)) // …/<uid>/fotos
+	gs.add("kontakte", DieselbePath, Dieselbe(cfg))               // „Dieselbe Person?“: faces Immich holds close, for the key's owner
 	if cfg.Einkauf != nil || cfg.Wuensche != nil {                // haus#118; with einkauf off, the music wish list only (ADR 0001 H4)
 		name := "einkauf"
 		if cfg.Einkauf == nil {
