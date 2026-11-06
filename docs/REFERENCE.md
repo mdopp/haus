@@ -465,10 +465,17 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   Werkstatt's tickets when set. *Dienste* (`/box/dienste`) lists only
   what is not green, red first, by Laib's names (haus#156), or *Alle
   Dienste laufen.*, and links *Alle Dienste auf der Laib-Seite*
-  (`<laib>/`). It comes at once
+  (`<laib>/`). *Auslastung* (`/box/auslastung`, laib#1076, owner
+  2026-11-06) shows `laib auslastung`: a bar per disk (system, data,
+  boot; yellow above 85 %, red from 95 %), rings for the processor, the
+  memory and the GPU, who holds the GPU by the lease, the temperatures
+  and what Laib could not measure; only its part (`auslastung`) is
+  fetched again, every 5 s while the tab is visible, never the page; a
+  failed fetch keeps the values and says they are old. A Laib without
+  the verb, or a homes hand without the grant, is said plainly. It comes at once
   (haus#81): the frame and each part's place with „lädt …“; its script
   fetches every part at the same time from `GET /box/teil?was=<part>`
-  (`stand`, `inbox`, `einladen`, `bericht`, `aufgaben`, `genutzt`, `werkstatt`: JSON,
+  (`stand`, `inbox`, `einladen`, `bericht`, `aufgaben`, `genutzt`, `auslastung`, `werkstatt`: JSON,
   slot id → HTML), each within 10 s, a failed one said in its place.
   `?ganz=1`, where `<noscript>` sends, reads all parts at the same time
   and comes whole. *Person einladen* (`POST /box/einladen`, haus#56) takes

@@ -52,6 +52,7 @@ var boxPages = []boxPage{
 	{"/box", "Übersicht", ""},
 	{AufgabenPath, "Aufgaben", "Box-Aufgaben"},
 	{"/box/dienste", "Dienste", "Dienste"},
+	{auslastungPath, "Auslastung", "Auslastung"}, // owner 2026-11-06: what the box carries now (laib#1076)
 	{"/box/operator", "Operator", "Was der Operator kann"},
 	{"/box/personen", "Personen", "Personen"},
 	{"/box/nutzung", "Nutzung", "Nutzung"},
@@ -157,6 +158,8 @@ func boxSlotsOn(cfg BoxConfig, page string) []boxSlot {
 		return []boxSlot{{"box-aufgaben", "", "aufgaben"}}
 	case "/box/dienste":
 		return []boxSlot{{"box-dienste", "Nicht grün", "stand"}}
+	case auslastungPath:
+		return []boxSlot{{"box-auslastung", "", "auslastung"}}
 	case "/box/personen":
 		return []boxSlot{{"box-einladen", "Person einladen", "einladen"}}
 	case "/box/operator": // owner 2026-10-27: the skills, read only (laib#839)
@@ -254,6 +257,8 @@ func boxPart(ctx context.Context, r *http.Request, cfg BoxConfig, part string, i
 		// (haus#157)
 		reports, err := c.JournalLatest(ctx, 1, "report")
 		return map[string]string{"box-bericht": morningReport(reports, err) + "<p>" + laibLink(cfg, "/journal", "Das Journal auf der Laib-Seite") + "</p>"}
+	case "auslastung":
+		return map[string]string{"box-auslastung": auslastungCard(ctx, c)}
 	case "genutzt":
 		return map[string]string{"box-genutzt": usageCard(ctx, cfg.Family, cfg.Voice)}
 	case "module":
@@ -364,6 +369,9 @@ func writeBoxWith(w http.ResponseWriter, r *http.Request, cfg BoxConfig, code in
 			`fetch('` + BoxPartPath + `?was='+was,{credentials:'same-origin'}).then(function(r){if(!r.ok)throw new Error(r.status);return r.json()})` +
 			`.then(function(j){Object.keys(j).forEach(function(id){var e=document.getElementById(id);if(e){e.innerHTML=j[id];e.setAttribute('aria-busy','false')}})})` +
 			`.catch(function(){document.querySelectorAll('[data-teil="'+was+'"]').forEach(function(e){e.querySelector('p').outerHTML=` + string(failed) + `;e.setAttribute('aria-busy','false')})})})})()</script>`)
+	}
+	if page.path == auslastungPath {
+		b.WriteString(auslastungStyle + auslastungScript)
 	}
 	fmt.Fprintf(b, "<p class=k>Stand %s</p>", time.Now().Format("02.01.2006 15:04"))
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

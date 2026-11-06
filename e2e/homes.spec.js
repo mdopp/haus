@@ -638,7 +638,7 @@ test('Standortverlauf, connected, leads with the timeline and ends with a quiet 
 // finger, and no text runs out of its box.
 const PAGES = ['/start', '/raeume', '/raeume/light.kueche', '/medien', '/energie', '/energie?zeitraum=jahr', '/kalender', '/kalender/verwalten', '/kontakte', '/kontakte/h3',
   '/notizen', '/notizen?tag=kochen', '/notizen/einkaufsliste.md', '/notizen/markdown.md', '/notizen/einkaufsliste.md?bearbeiten=1', '/mehr', '/musik', '/platte', '/discogs', '/aktivierungswort', '/aufgaben', '/dokumente', '/willkommen', '/einrichten/fotos', '/box/geraete', '/pair-device', '/podcasts', '/gesehen', '/standort',
-  '/daten-sichern', '/netzlaufwerk', '/box', '/box/aufgaben', '/box/dienste', '/box/operator', '/box/personen', '/box/module', '/adresse',
+  '/daten-sichern', '/netzlaufwerk', '/box', '/box/aufgaben', '/box/dienste', '/box/auslastung', '/box/operator', '/box/personen', '/box/module', '/adresse',
   '/einkauf', '/einkauf?liste=liste-baumarkt', '/einkauf?liste=liste-musik', '/einkauf/rezepte', '/einkauf/rezepte?n=rezepte%2Flasagne.md', '/notizen/rezepte/lasagne.md'];
 for (const path of PAGES) {
   test(`layout of ${path}`, async ({ page }) => {
@@ -677,6 +677,22 @@ for (const path of PAGES) {
     expect(forms, `${path}: POST forms without an action or a running label`).toEqual([]);
   });
 }
+
+// owner 2026-11-06: Box → Auslastung, the box's values; only they come again,
+// every 5 s while the tab is visible, the page itself is not reloaded
+test('Auslastung shows the box and refreshes its values in place', async ({ page }, info) => {
+  await page.setViewportSize({ width: 411, height: 900 });
+  await page.goto('/box/auslastung');
+  await expect(page.getByText('Gerade frei für den Haushalt, Modell qwen3.6-35b-a3b.')).toBeVisible();
+  await expect(page.locator('.balken.gelb')).toHaveCount(1);
+  await page.evaluate(() => { window.nichtNeu = 1; });
+  await page.waitForResponse((r) => r.url().includes('/box/teil?was=auslastung'), { timeout: 8000 });
+  await page.waitForResponse((r) => r.url().includes('/box/teil?was=auslastung'), { timeout: 8000 });
+  expect(await page.evaluate(() => window.nichtNeu), 'the page was not reloaded').toBe(1);
+  await page.screenshot({ path: info.outputPath('auslastung-411.png'), fullPage: true });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.screenshot({ path: info.outputPath('auslastung-1280.png'), fullPage: true });
+});
 
 // owner 2026-11-05 („Web zeigt, Handy bearbeitet“): the household's address book, by name;
 // typing filters at once, the number is a tap of its own, the row opens the contact
