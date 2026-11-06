@@ -79,7 +79,7 @@ budget cmd 1448 cmd/homes             # homes' wiring: 1,018 with the demo then
 # (suche.go: Bereiche, types, Person; the number fields by custom_field_query, sender, text, merged and kept a
 # minute; Vertraege shares its reading, -64), and paperlessfake's custom_field_query (AND/OR/NOT, icontains, gt,
 # exists), text, a sender's name, document counts and a select's options (+95)
-# 2026-11-06, owner's yes PENDING: every contact a person in Immich (14,098 -> 14,288): internal/immich
+# 2026-11-06, owner approved 2026-11-06: Kontakte → Immich, every contact a person in Immich (14,098 -> 14,288): internal/immich
 # searches people by name (faceless and hidden too), makes one, sets its name and birthday, says whose
 # key it is and which permission it lacks (107 -> 190); immichfake answers all of it, keeping a faceless
 # person out of its list as Immich does, with the key's permissions (99 -> 206)
@@ -89,7 +89,7 @@ budget connectors 14289 $connectors   # one client per service, with its fake: 1
 # 2026-11-05, owner 2026-11-05 yes: Immich for the contacts (9,583 -> 9,874):
 # internal/gesichter, a contact matched to its Immich person, the faces fetched in the background, made
 # 96 px and kept in HOMES_DATA, the suggestions and who was hidden from them
-# 2026-11-06, owner's yes PENDING: every contact a person in Immich (9,874 -> 10,025): internal/gesichter
+# 2026-11-06, owner approved 2026-11-06: Kontakte → Immich, every contact a person in Immich (9,874 -> 10,025): internal/gesichter
 # matches the Haushalts-Kontakte and the key owner's Handy-Kontakte to Immich's people hourly, makes the
 # missing ones, follows the ones it made, keeps the mapping, learns the owner's login (abgleich.go, 139);
 # the suggestions and their hidden list go (gesichter.go 291 -> 303)
