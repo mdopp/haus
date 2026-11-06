@@ -106,5 +106,9 @@ var auditLaib = map[string]string{
 	"laib_journal":        `[{"t":"2026-11-04T06:00:00Z","actor":"operator","verb":"note","reason":"report","result":"ok","detail":"Nachts lief alles. Immich-ML startet nicht; Neustart zweimal versucht, wartet auf dich."}]`,
 	"laib_skill":          `[{"name":"morgenbericht","source":"builtin","description":"Schreibt jeden Morgen, wie die Nacht war","trigger":{"daily":"06:00"},"tools":["laib_status","laib_note"],"modell":"frei","status":"active"}]`,
 	"laib_person_pending": `[{"user":"oma","name":"Oma Hilde","email":"hilde@example.org","invited_at":"2026-11-01T10:00:00Z"}]`,
-	"laib_zuhause":        `{"street":"Musterweg 1","postcode":"12345","city":"Musterstadt","country":"DE","latitude":50.1,"longitude":8.6}`,
+	"laib_auslastung": `{"at":"2026-11-06T11:00:00Z","uptime_s":1058335,"cpu":{"cores":16,"load":[0.52,0.41,0.3],"pct":12.5},"mem":{"total":68719476736,"used":30064771072},"swap":{"total":4294967296,"used":0},` +
+		`"disks":[{"role":"system","path":"/var","size":512000000000,"used":102400000000,"free":409600000000,"pct":20},{"role":"data","path":"/mnt/data/stacks","size":4000000000000,"used":3480000000000,"free":520000000000,"pct":87},{"role":"boot","path":"/boot","size":1023303680,"used":402653184,"free":620650496,"pct":39.3}],` +
+		`"gpu":{"name":"NVIDIA GeForce RTX 3090","pct":34,"memUsed":21474836480,"memTotal":25769803776,"temp":58,"power":142,"powerLimit":350,"holder":"","window":"household","model":"qwen3.6-35b-a3b"},` +
+		`"temps":[{"name":"cpu","c":54},{"name":"nvme0","c":41},{"name":"nvme1","c":39}]}`,
+	"laib_zuhause": `{"street":"Musterweg 1","postcode":"12345","city":"Musterstadt","country":"DE","latitude":50.1,"longitude":8.6}`,
 }

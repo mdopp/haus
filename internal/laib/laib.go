@@ -873,3 +873,47 @@ func (c *Client) aufgabe(ctx context.Context, args map[string]any) (string, erro
 	}
 	return out.Message, nil
 }
+
+// Auslastung is `laib auslastung` (laib#1076): the box's values now, for
+// Box → Auslastung; Laib keeps them a few seconds.
+type Auslastung struct {
+	At     time.Time `json:"at"`
+	Uptime int64     `json:"uptime_s"`
+	CPU    struct {
+		Cores int        `json:"cores"`
+		Load  [3]float64 `json:"load"`
+		Pct   float64    `json:"pct"`
+	} `json:"cpu"`
+	Mem, Swap Belegt
+	Disks     []struct {
+		Role             string `json:"role"` // system, data, boot
+		Path             string `json:"path"`
+		Size, Used, Free uint64
+		Pct              float64 `json:"pct"`
+	} `json:"disks"`
+	GPU *struct {
+		Name                  string
+		Pct                   int
+		MemUsed               uint64 `json:"memUsed"`
+		MemTotal              uint64 `json:"memTotal"`
+		Temp                  int
+		Power                 float64
+		PowerLimit            float64 `json:"powerLimit"`
+		Holder, Window, Model string  // the lease's: "" holder is the household window
+	} `json:"gpu"`
+	Temps []struct {
+		Name string  `json:"name"` // cpu, nvme0, sda
+		C    float64 `json:"c"`
+	} `json:"temps"`
+	Missing []string `json:"missing"`
+}
+
+// Belegt is a total and its used part, in bytes.
+type Belegt struct{ Total, Used uint64 }
+
+// Auslastung asks Laib for the box's values now.
+func (c *Client) Auslastung(ctx context.Context) (Auslastung, error) {
+	var out Auslastung
+	err := c.callJSON(ctx, "auslastung", "", &out)
+	return out, err
+}
