@@ -59,7 +59,6 @@
 31 internal/pages/standort.go: pages.Standort
 33 internal/pages/start.go: pages.Start
 31 internal/pages/start.go: pages.imHaus
-47 internal/paperless/vertraege.go: paperless.(*Client).Vertraege
 34 internal/reitti/lesen.go: reitti.readGPX
 34 internal/reitti/lesen.go: reitti.readSegments
 34 internal/takeout/takeout.go: takeout.contacts

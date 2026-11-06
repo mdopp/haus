@@ -637,7 +637,7 @@ test('Standortverlauf, connected, leads with the timeline and ends with a quiet 
 // screen, a field to type in has room, a button is big enough for a
 // finger, and no text runs out of its box.
 const PAGES = ['/start', '/raeume', '/raeume/light.kueche', '/medien', '/energie', '/energie?zeitraum=jahr', '/kalender', '/kalender/verwalten', '/kontakte', '/kontakte/h3',
-  '/notizen', '/notizen?tag=kochen', '/notizen/einkaufsliste.md', '/notizen/markdown.md', '/notizen/einkaufsliste.md?bearbeiten=1', '/mehr', '/musik', '/platte', '/discogs', '/aktivierungswort', '/aufgaben', '/dokumente', '/willkommen', '/einrichten/fotos', '/box/geraete', '/pair-device', '/podcasts', '/gesehen', '/standort',
+  '/notizen', '/notizen?tag=kochen', '/notizen/einkaufsliste.md', '/notizen/markdown.md', '/notizen/einkaufsliste.md?bearbeiten=1', '/mehr', '/musik', '/platte', '/discogs', '/aktivierungswort', '/aufgaben', '/dokumente', '/dokumente/suche?q=strom', '/dokumente/suche?nur=versicherungen', '/willkommen', '/einrichten/fotos', '/box/geraete', '/pair-device', '/podcasts', '/gesehen', '/standort',
   '/daten-sichern', '/netzlaufwerk', '/box', '/box/aufgaben', '/box/auslastung', '/box/haushalt', '/box/personen', '/box/module', '/adresse',
   '/einkauf', '/einkauf?liste=liste-baumarkt', '/einkauf?liste=liste-musik', '/einkauf/rezepte', '/einkauf/rezepte?n=rezepte%2Flasagne.md', '/notizen/rezepte/lasagne.md'];
 for (const path of PAGES) {
@@ -884,6 +884,54 @@ for (const scheme of ['dark', 'light']) {
         expect(href).toMatch(/^(\/(kontakte|kalender|standort|raeume|mehr#spuren)|https:\/\/photos\.example)$/);
       }
       await page.screenshot({ path: info.outputPath(`zusammen-411-${scheme}.png`), fullPage: true });
+    });
+  });
+}
+
+// owner 2026-11-06 („Dokumente … von der Oberfläche suchbar“): the Dokumente page opens with one
+// search field, the shortcuts, the Bereiche and the types; typing fetches the list into the page
+// (no reload), a number's piece or an IBAN's finds its document, a tile opens its list in Homes.
+for (const scheme of ['dark', 'light']) {
+  test.describe(`dokumente suche ${scheme}`, () => {
+    test.use({ colorScheme: scheme });
+    test(`Dokumente finden at 411 px, ${scheme}`, async ({ page }, info) => {
+      await page.setViewportSize({ width: 411, height: 900 });
+      await page.goto('/dokumente');
+      const finden = page.getByRole('region', { name: 'Finden' });
+      await expect(finden.locator('.bereiche a', { hasText: 'Haus' })).toContainText('3 Dokumente');
+      await expect(finden.getByRole('link', { name: 'Versicherungen' })).toBeVisible();
+      await expect(finden.getByRole('link', { name: /^Rechnung/ })).toBeVisible();
+      await expect(finden.getByRole('link', { name: 'Für Anna' })).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(411);
+      await page.screenshot({ path: info.outputPath(`dokumente-finden-411-${scheme}.png`), fullPage: true });
+      await mark(page);
+      const suche = finden.getByRole('searchbox', { name: 'Name, Nummer, Produkt' });
+      await suche.fill('104711');
+      await expect(page.locator('#dsuche-treffer')).toContainText('Stromrechnung Oktober');
+      await expect(page.locator('#dsuche-treffer')).toContainText('Rechnung SW-2026-104711 · 84,50 €');
+      expect(await stays(page), 'no reload').toBe(true);
+      await page.screenshot({ path: info.outputPath(`dokumente-suche-nummer-411-${scheme}.png`), fullPage: true });
+      await suche.fill('3704 0044');
+      await expect(page.locator('#dsuche-treffer')).toContainText('Abschlag Strom 2027');
+      await suche.fill('kfz123456');
+      await expect(page.locator('#dsuche-treffer')).toContainText('Kfz-Versicherung 2026');
+      await suche.fill('gibtsnicht');
+      await expect(page.locator('#dsuche-treffer')).toContainText('Nichts gefunden für „gibtsnicht“');
+      await suche.fill('');
+      await expect(page.locator('#dsuche-treffer')).toBeEmpty();
+      expect(await stays(page), 'still no reload').toBe(true);
+      await finden.locator('.bereiche a', { hasText: 'Haus' }).click();
+      await expect(page).toHaveURL(/\/dokumente\/suche\?bereich=Haus$/);
+      await expect(page.locator('h1')).toHaveText('Haus');
+      await expect(page.locator('.karte li')).toHaveCount(3);
+      await page.screenshot({ path: info.outputPath(`dokumente-bereich-411-${scheme}.png`), fullPage: true });
+      await page.goto('/dokumente/suche?nur=versicherungen');
+      await expect(page.locator('.karte li', { hasText: 'Vollkasko' })).toContainText('HUK-Coburg · Vers.-Nr. KFZ 123 456 789 · kündbar bis 01.12.2026');
+      await expect(page.locator('.karte li', { hasText: 'Privathaftpflicht' })).toContainText('kündbar bis 15.12.2026');
+      await page.screenshot({ path: info.outputPath(`dokumente-versicherungen-411-${scheme}.png`), fullPage: true });
+      await page.goto('/dokumente/suche?nur=garantie');
+      await expect(page.locator('.karte li')).toHaveText(/Waschmaschine WM 7 Pro.*Garantie bis 03\.06\.2027/);
+      await page.screenshot({ path: info.outputPath(`dokumente-garantie-411-${scheme}.png`), fullPage: true });
     });
   });
 }

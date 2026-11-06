@@ -2,15 +2,20 @@
 // "Authorization: Token …", GET /api/documents/ with query, id__in,
 // page_size, page (and next), fields, original_filename__icontains and
 // ordering (-created, id),
-// custom_field_query (one exact field), GET /api/custom_fields/,
-// GET /api/correspondents/ and GET /api/tags/ with id__in. A query matches title and content, case-insensitively, the way
-// a full-text hit would look.
+// custom_field_query (AND, OR, NOT; exact, icontains, gt, exists), text,
+// correspondent__name__icontains, tags__id__all, document_type__id__in,
+// GET /api/custom_fields/ (a select's options), GET /api/correspondents/,
+// /api/tags/ and /api/document_types/ with id__in (all of them with
+// document_count). A query or text matches title and content,
+// case-insensitively, the way a full-text hit would look.
 package paperlessfake
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -47,6 +52,7 @@ type Server struct {
 	tags           map[int]string
 	types          map[int]string
 	fieldDefs      map[int][2]string // id → name, data_type
+	options        map[int][]string  // a select field's labels; an option's id is "opt-<label>"
 	// ChatAnswer, when set, is what POST /api/documents/chat/ answers
 	// (Paperless 3's document chat); unset: 404, as without the AI.
 	ChatAnswer string
@@ -139,6 +145,16 @@ func (s *Server) Field(id int, name, kind string) {
 	s.fieldDefs[id] = [2]string{name, kind}
 }
 
+// Options gives a select field its options' labels.
+func (s *Server) Options(field int, labels ...string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.options == nil {
+		s.options = map[int][]string{}
+	}
+	s.options[field] = labels
+}
+
 // Seen returns the requests so far.
 func (s *Server) Seen() []*http.Request {
 	s.mu.Lock()
@@ -157,6 +173,89 @@ func found(d Doc, needle string) bool {
 		}
 	}
 	return false
+}
+
+// count is how many documents have the tag or type id.
+func (s *Server) count(path string, id int) int {
+	n := 0
+	for _, d := range s.docs {
+		if path == "/api/tags/" && slices.Contains(d.Tags, id) || path == "/api/document_types/" && d.DocumentType == id {
+			n++
+		}
+	}
+	return n
+}
+
+func hasAll(d Doc, tags map[int]bool) bool {
+	for t := range tags {
+		if !slices.Contains(d.Tags, t) {
+			return false
+		}
+	}
+	return true
+}
+
+// cfqValid says Paperless would take the expression: ["AND"|"OR", [e…]],
+// ["NOT", e], or [field, op, value] with a field it has (by id or name)
+// and an op of exact, icontains, gt, exists.
+func (s *Server) cfqValid(e any) bool {
+	l, _ := e.([]any)
+	switch {
+	case len(l) == 2 && (l[0] == "AND" || l[0] == "OR"):
+		sub, _ := l[1].([]any)
+		for _, x := range sub {
+			if !s.cfqValid(x) {
+				return false
+			}
+		}
+		return len(sub) > 0
+	case len(l) == 2 && l[0] == "NOT":
+		return s.cfqValid(l[1])
+	case len(l) == 3:
+		_, ok := s.fieldDefs[s.fieldOf(l[0])]
+		return ok && slices.Contains([]any{"exact", "icontains", "gt", "exists"}, l[1])
+	}
+	return false
+}
+
+func (s *Server) fieldOf(ref any) int {
+	if id, ok := ref.(float64); ok {
+		return int(id)
+	}
+	for id, f := range s.fieldDefs {
+		if f[0] == ref {
+			return id
+		}
+	}
+	return -1
+}
+
+// cfqMatch evaluates a valid expression on d; a date or a select's option
+// id compares as the text the API holds.
+func (s *Server) cfqMatch(d Doc, e any) bool {
+	l := e.([]any)
+	if len(l) == 2 {
+		if l[0] == "NOT" {
+			return !s.cfqMatch(d, l[1])
+		}
+		for _, x := range l[1].([]any) {
+			if m := s.cfqMatch(d, x); m == (l[0] == "OR") {
+				return m
+			}
+		}
+		return l[0] == "AND"
+	}
+	v, has := d.Fields[s.fieldOf(l[0])]
+	got, want := strings.ToLower(fmt.Sprint(v)), strings.ToLower(fmt.Sprint(l[2]))
+	switch l[1] {
+	case "exists":
+		return has == (l[2] == true)
+	case "icontains":
+		return has && strings.Contains(got, want)
+	case "gt":
+		return has && got > want
+	}
+	return has && v == l[2]
 }
 
 func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
@@ -218,21 +317,15 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 			return m
 		}
 		ofType, withTag := anyOf("document_type__id__in"), anyOf("tags__id__in")
-		// custom_field_query as Paperless's list writes it: ["AND",[[field,"exact",value]]]
-		var cfq []any
+		var cfq any // custom_field_query, as Paperless 3 parses it (cfq)
 		if v := q.Get("custom_field_query"); v != "" {
-			var top []any
-			json.Unmarshal([]byte(v), &top)
-			if len(top) == 2 {
-				if inner, ok := top[1].([]any); ok && len(inner) == 1 {
-					cfq, _ = inner[0].([]any)
-				}
-			}
-			if len(cfq) != 3 || cfq[1] != "exact" {
+			if json.Unmarshal([]byte(v), &cfq) != nil || !s.cfqValid(cfq) {
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
 		}
+		text, sender := strings.ToLower(q.Get("text")), strings.ToLower(q.Get("correspondent__name__icontains"))
+		allTags := anyOf("tags__id__all")
 		var hits []Doc
 		for _, d := range s.docs {
 			if only != nil && !only[d.ID] {
@@ -244,11 +337,9 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 			if ofType != nil && !ofType[d.DocumentType] {
 				continue
 			}
-			if cfq != nil {
-				id, _ := cfq[0].(float64)
-				if v, ok := d.Fields[int(id)]; !ok || v != cfq[2] {
-					continue
-				}
+			if cfq != nil && !s.cfqMatch(d, cfq) || text != "" && !strings.Contains(strings.ToLower(d.Title+" "+d.Content), text) ||
+				sender != "" && !strings.Contains(strings.ToLower(s.correspondents[d.Correspondent]), sender) || !hasAll(d, allTags) {
+				continue
 			}
 			if withTag != nil {
 				hit := false
@@ -336,7 +427,11 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	case "/api/custom_fields/":
 		results := []map[string]any{}
 		for id, f := range s.fieldDefs {
-			results = append(results, map[string]any{"id": id, "name": f[0], "data_type": f[1]})
+			opts := []map[string]any{}
+			for _, l := range s.options[id] {
+				opts = append(opts, map[string]any{"id": "opt-" + l, "label": l})
+			}
+			results = append(results, map[string]any{"id": id, "name": f[0], "data_type": f[1], "extra_data": map[string]any{"select_options": opts}})
 		}
 		json.NewEncoder(w).Encode(map[string]any{"count": len(results), "next": nil, "previous": nil, "results": results})
 	case "/api/correspondents/", "/api/tags/", "/api/document_types/":
@@ -348,9 +443,9 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 			names = s.types
 		}
 		results := []map[string]any{}
-		if q.Get("id__in") == "" { // all of them
+		if q.Get("id__in") == "" { // all of them, with how many documents each has
 			for id, name := range names {
-				results = append(results, map[string]any{"id": id, "name": name})
+				results = append(results, map[string]any{"id": id, "name": name, "document_count": s.count(r.URL.Path, id)})
 			}
 		}
 		for _, x := range strings.Split(q.Get("id__in"), ",") {

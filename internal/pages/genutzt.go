@@ -32,7 +32,7 @@ var pagePaths = map[string]string{"/start": "start", "/raeume": "raeume", "/ener
 	"/kalender": "kalender", KontaktePath: "kontakte", "/notizen": "notizen", "/sprechen": "sprechen", "/box": "box", "/box/geraete": "geraete",
 	"/pair-device": "koppeln", cards.SwitchPath: "schalten", "/mehr": "mehr",
 	EinkaufPath: "einkauf", EinkaufRezeptePath: "rezepte", MusikPath: "musik", PodcastsPath: "podcasts", GesehenPath: "gesehen",
-	DiscogsPath: "discogs", PlattePath: "platte", DokumentePath: "dokumente", ScannenPath: "scannen", TrennblattPath: "trennblatt",
+	DiscogsPath: "discogs", PlattePath: "platte", DokumentePath: "dokumente", DokumenteSuchePath: "dokumente-suche", ScannenPath: "scannen", TrennblattPath: "trennblatt",
 	AktivierungswortPath: "aktivierungswort", DatenPath: "daten", StandortPath: "standort", "/netzlaufwerk": "netzlaufwerk",
 	"/willkommen": "willkommen", "/adresse": "adresse", "/aufgaben": "aufgaben", AufgabenPath: "box-aufgaben",
 	"/box/einladen": "einladen", "/kalender/verwalten": "kalender-verwalten", "/kalender/hinzufuegen": "kalender-hinzufuegen",
