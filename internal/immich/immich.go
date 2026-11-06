@@ -3,9 +3,10 @@
 // recognition knows by name, each one's face, and a person per contact
 // (owner 2026-11-06). Immich keeps people per user, so Homes works with an
 // API key of the owner's account (HOMES_IMMICH_KEY: person.read,
-// person.create, person.update, user.read). The API as Immich 3.3.5
-// serves it (server/src/controllers/person.controller.ts,
-// search.controller.ts, user.controller.ts).
+// person.create, person.update, person.merge, user.read; person.statistics
+// if it may count photos). The API as Immich 3.3.5 serves it
+// (server/src/controllers/person.controller.ts, search.controller.ts,
+// user.controller.ts).
 package immich
 
 import (
@@ -17,6 +18,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"time"
 )
@@ -28,7 +30,9 @@ type Person struct {
 	// Geburtstag is Immich's birthDate, JJJJ-MM-TT; "" none
 	Geburtstag string `json:"birthDate,omitempty"`
 	// Stand is Immich's updatedAt: it changes with the name or the face
-	Stand string `json:"updatedAt,omitempty"`
+	Stand     string `json:"updatedAt,omitempty"`
+	Versteckt bool   `json:"isHidden,omitempty"`
+	Favorit   bool   `json:"isFavorite,omitempty"`
 }
 
 // Client reaches Immich inside the box.
@@ -55,35 +59,89 @@ const maxSeiten = 20
 func (c *Client) People(ctx context.Context) ([]Person, error) {
 	var out []Person
 	for page := 1; page <= maxSeiten; page++ {
-		var answer struct {
-			People []struct {
-				Person
-				Hidden bool `json:"isHidden"`
-			} `json:"people"`
-			Next bool `json:"hasNextPage"`
-		}
-		body, err := c.get(ctx, "/api/people?"+url.Values{"withHidden": {"false"}, "size": {"500"}, "page": {fmt.Sprint(page)}}.Encode())
-		if err == nil {
-			err = json.Unmarshal(body, &answer)
-		}
+		ps, next, err := c.seite(ctx, url.Values{"size": {"500"}, "page": {fmt.Sprint(page)}})
 		if err != nil {
 			return nil, err
 		}
-		for _, p := range answer.People {
-			if strings.TrimSpace(p.Name) != "" && !p.Hidden && p.ID != "" {
-				out = append(out, p.Person)
+		for _, p := range ps {
+			if strings.TrimSpace(p.Name) != "" {
+				out = append(out, p)
 			}
 		}
-		if !answer.Next {
+		if !next {
 			break
 		}
 	}
 	return out, nil
 }
 
+// seite is one page of GET /api/people, hidden ones left out: the
+// favourites first, then (with closestPersonId) by how close the face is,
+// then the named by how many faces (person.repository.ts getAllForUser).
+func (c *Client) seite(ctx context.Context, q url.Values) ([]Person, bool, error) {
+	var answer struct {
+		People []Person `json:"people"`
+		Next   bool     `json:"hasNextPage"`
+	}
+	q.Set("withHidden", "false")
+	err := c.getJSON(ctx, "/api/people?"+q.Encode(), &answer)
+	return slices.DeleteFunc(answer.People, func(p Person) bool { return p.Versteckt || p.ID == "" }), answer.Next, err
+}
+
+// Naechste are the n people whose face is closest to id's, the unnamed
+// too, id itself among them, closest first after the favourites; Immich
+// gives the order, no distance (closestPersonId).
+func (c *Client) Naechste(ctx context.Context, id string, n int) ([]Person, error) {
+	ps, _, err := c.seite(ctx, url.Values{"closestPersonId": {id}, "size": {fmt.Sprint(n)}, "page": {"1"}})
+	return ps, err
+}
+
+// Fotos is how many photos show id (GET /api/people/{id}/statistics,
+// person.statistics).
+func (c *Client) Fotos(ctx context.Context, id string) (int, error) {
+	var answer struct{ Assets int }
+	err := c.getJSON(ctx, "/api/people/"+url.PathEscape(id)+"/statistics", &answer)
+	return answer.Assets, err
+}
+
+// Zusammenfuehren merges quellen into ziel (POST /api/people/merge, ids in
+// order, the first the one that stays: its name and birthday win, a
+// missing one comes from the others; person.merge) and answers the
+// quellen Immich merged.
+func (c *Client) Zusammenfuehren(ctx context.Context, ziel string, quellen []string) ([]string, error) {
+	b, _ := json.Marshal(map[string][]string{"ids": append([]string{ziel}, quellen...)})
+	body, err := c.send(ctx, http.MethodPost, "/api/people/merge", b)
+	var answer []struct {
+		ID      string `json:"id"`
+		Success bool   `json:"success"`
+	}
+	if err == nil {
+		err = json.Unmarshal(body, &answer)
+	}
+	var out []string
+	for _, a := range answer {
+		if a.Success && a.ID != ziel && slices.Contains(quellen, a.ID) {
+			out = append(out, a.ID)
+		}
+	}
+	return out, err
+}
+
 // Gesicht is the person's face as Immich cut it: a JPEG of 250 px.
 func (c *Client) Gesicht(ctx context.Context, id string) ([]byte, error) {
 	return c.get(ctx, "/api/people/"+url.PathEscape(id)+"/thumbnail")
+}
+
+// Braucht are the permissions Homes needs of the key; person.statistics
+// only counts the photos.
+var Braucht = []string{"person.read", "person.create", "person.update", "person.merge", "user.read"}
+
+// Rechte are the key's permissions, "all" for every one (GET
+// /api/api-keys/me, which any key may ask).
+func (c *Client) Rechte(ctx context.Context) ([]string, error) {
+	var answer struct{ Permissions []string }
+	err := c.getJSON(ctx, "/api/api-keys/me", &answer)
+	return answer.Permissions, err
 }
 
 // Wessen is the e-mail of the Immich account the key belongs to.

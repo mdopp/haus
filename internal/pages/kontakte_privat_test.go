@@ -106,5 +106,5 @@ func TestMeineKontakte(t *testing.T) {
 	fake.Ohne = []string{"person.create"}
 	cfg.Contacts.PutContact(t.Context(), caldav.Contact{UID: "neu", Name: "Neu Mann"})
 	cfg.Gesichter.Abgleichen(t.Context())
-	mustContain(t, as(MeineKontakte, cfg, MeineKontaktePath, "anna", "anna@box.test").Body.String(), "fehlt die Berechtigung person.create")
+	mustContain(t, as(MeineKontakte, cfg, MeineKontaktePath, "anna", "anna@box.test").Body.String(), "fehlt diese Berechtigung: person.create")
 }

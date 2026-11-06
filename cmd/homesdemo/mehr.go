@@ -86,6 +86,7 @@ func mehrSeiten(mux *http.ServeMux, cfg pages.StartConfig, dav *davfake.Server, 
 	mux.HandleFunc(pages.KontaktePath, pages.Kontakte(cfg))
 	mux.HandleFunc(pages.MeineKontaktePath, pages.MeineKontakte(cfg))
 	mux.HandleFunc(pages.MeineKontaktePath+"/", pages.MeineKontakte(cfg))
+	mux.HandleFunc(pages.DieselbePath, pages.Dieselbe(cfg))
 	mux.HandleFunc(cards.ContactPages, pages.Kontakt(cfg))
 	mux.HandleFunc("/netzlaufwerk", pages.Netzlaufwerk(cfg))
 	boxCfg := pages.BoxConfig{Laib: cfg.Laib, LaibURL: cfg.LaibURL, Family: cfg, Devices: phones}
@@ -130,17 +131,31 @@ var auditLaib = map[string]string{
 }
 
 // demoGesichter is Immich with Anna's key (anna@example.org): Oma Hilde
-// with her face, and every contact of the household's and Anna's own a
+// and Opa Karl with their faces, unnamed faces near them („Dieselbe
+// Person?“), and every contact of the household's and Anna's own a
 // person, as the hourly run makes them.
 func demoGesichter(dir string, kontakte *caldav.Client) *gesichter.Gesichter {
 	fake := immichfake.New("demo")
 	fake.Email = "anna@example.org"
 	fake.Person("p-hilde", "Oma Hilde", "1", false, demoGesicht(color.RGBA{214, 140, 90, 255}))
+	fake.Lage("p-hilde", 412, 0, 0, false)
+	fake.Person("p-karl", "Opa Karl", "1", false, demoGesicht(color.RGBA{90, 140, 214, 255}))
+	fake.Lage("p-karl", 268, 10, 0, false)
+	for i, u := range []struct {
+		farbe color.RGBA
+		fotos int
+		x     float64
+	}{{color.RGBA{204, 132, 86, 255}, 23, 1}, {color.RGBA{96, 146, 206, 255}, 9, 11}, {color.RGBA{200, 120, 100, 255}, 4, 3}, {color.RGBA{120, 170, 120, 255}, 2, 6}} {
+		id := "u" + strconv.Itoa(i)
+		fake.Person(id, "", "1", false, demoGesicht(u.farbe))
+		fake.Lage(id, u.fotos, u.x, 0, false)
+	}
 	g := &gesichter.Gesichter{Immich: &immich.Client{URL: fake.URL, Key: "demo"}, Kontakte: kontakte, Web: "https://photos.example", Dir: filepath.Join(dir, "gesichter")}
 	os.MkdirAll(g.Dir, 0o755)
 	g.Auffrischen(context.Background())
 	g.Merke("anna", "anna@example.org")
 	g.Abgleichen(context.Background())
+	g.Vorschlagen(context.Background())
 	return g
 }
 

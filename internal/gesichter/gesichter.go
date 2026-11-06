@@ -6,9 +6,13 @@
 // Abgleichen): the Haushalts-Kontakte and the key owner's own
 // Handy-Kontakte. Homes makes one where Immich has none of that name, and
 // keeps the name and birthday of the ones it made; it never deletes,
-// hides, merges or renames another. The owner names a face in Immich,
-// Immich offers the person of that name, the owner merges: the faces come
-// from Immich itself.
+// hides or renames another. The owner names a face in Immich, Immich
+// offers the person of that name, the owner merges: the faces come from
+// Immich itself.
+//
+// Two persons of the same name are one: the hourly run merges them
+// (Zusammenfuehren); persons Immich holds close are offered to the key's
+// owner as „Dieselbe Person?“ (dieselbe.go). Nothing else is merged.
 //
 // Immich is asked in the background only (Pflegen), never while a page or
 // the phones' feed waits: every hour, each face once and again only when
@@ -29,6 +33,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -71,6 +76,16 @@ type stand struct {
 	// Zuordnung is each contact's person, by "haushalt/<uid>" or "privat/<uid>"
 	Zuordnung map[string]zuordnung `json:"zuordnung"`
 	Fehlt     string               `json:"fehlt,omitempty"` // the permission the last run lacked
+	// Rechte are the key's permissions as Immich last said them; nil unknown
+	Rechte     []string `json:"rechte,omitempty"`
+	FehltMerge string   `json:"fehltMerge,omitempty"` // a merge was refused for this permission
+	// Naehe is, by named person, the persons whose face is closest to its
+	Naehe map[string]naehe `json:"naehe,omitempty"`
+	// Andere are those closest persons as Immich said them, unnamed ones too
+	Andere  map[string]immich.Person `json:"andere,omitempty"`
+	Fotos   map[string]zahl          `json:"fotos,omitempty"`   // photos per person, if the key may count them
+	Nein    map[string]time.Time     `json:"nein,omitempty"`    // pairs the owner said are two, by paarKey
+	Spaeter map[string]time.Time     `json:"spaeter,omitempty"` // pairs skipped: shown last
 }
 
 // zuordnung is a contact's Immich person; Eigen: Homes made it, so Homes
@@ -114,9 +129,15 @@ func (g *Gesichter) laden() {
 	if b, err := os.ReadFile(filepath.Join(g.Dir, cacheDatei)); err == nil {
 		json.Unmarshal(b, &g.stand)
 	}
-	if g.stand.Zuordnung == nil {
-		g.stand.Zuordnung = map[string]zuordnung{}
+	st := &g.stand
+	st.Zuordnung, st.Naehe, st.Andere, st.Fotos, st.Nein, st.Spaeter = leer(st.Zuordnung), leer(st.Naehe), leer(st.Andere), leer(st.Fotos), leer(st.Nein), leer(st.Spaeter)
+}
+
+func leer[V any](m map[string]V) map[string]V {
+	if m == nil {
+		return map[string]V{}
 	}
+	return m
 }
 
 // person is the one named person of that name; none for no name, no
@@ -194,12 +215,26 @@ func (g *Gesichter) Merke(login, email string) {
 	}
 }
 
-// Fehlt is the permission the key lacked in the last run; "" none.
+// Fehlt are the permissions the key lacks, as Immich lists them or as a
+// call was refused for them; "" none.
 func (g *Gesichter) Fehlt() string {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.laden()
-	return g.stand.Fehlt
+	var out []string
+	for _, r := range append(slices.Clone(immich.Braucht), g.stand.Fehlt, g.stand.FehltMerge) {
+		if r != "" && (!g.darf(r) || r == g.stand.Fehlt || r == g.stand.FehltMerge) && !slices.Contains(out, r) {
+			out = append(out, r)
+		}
+	}
+	return strings.Join(out, ", ")
+}
+
+// darf: the key has recht, or Immich has not said its permissions.
+// g.mu is held.
+func (g *Gesichter) darf(recht string) bool {
+	st := g.stand
+	return st.Rechte == nil || slices.Contains(st.Rechte, "all") || slices.Contains(st.Rechte, recht)
 }
 
 // Auffrischen asks Immich for its named people, and fetches the face of
@@ -214,10 +249,14 @@ func (g *Gesichter) Auffrischen(ctx context.Context) error {
 		return err
 	}
 	email, err := g.Immich.Wessen(ctx)
+	rechte, rerr := g.Immich.Rechte(ctx)
 	g.mu.Lock()
 	g.laden()
 	if err == nil || errors.As(err, new(immich.FehltRecht)) {
 		g.stand.Email = email
+	}
+	if rerr == nil {
+		g.stand.Rechte = rechte
 	}
 	alt := g.stand.Bilder
 	g.mu.Unlock()
@@ -239,6 +278,11 @@ func (g *Gesichter) Auffrischen(ctx context.Context) error {
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	for id := range g.stand.Andere { // the closest, faces kept for „Dieselbe Person?“
+		if b, da := alt[id]; da && neu[id].JPEG == nil {
+			neu[id] = b
+		}
+	}
 	g.stand.Personen, g.stand.Bilder = people, neu
 	return g.save()
 }
@@ -248,8 +292,9 @@ func (g *Gesichter) save() error {
 	return jsonfile.Save(filepath.Join(g.Dir, cacheDatei), g.stand)
 }
 
-// Pflegen keeps Immich's people fresh and gives each of kontakte's
-// contacts its person: now, then every jede.
+// Pflegen keeps Immich's people fresh, merges those of one name, gives
+// each of kontakte's contacts its person and asks for the closest faces:
+// now, then every jede.
 func (g *Gesichter) Pflegen(ctx context.Context, jede time.Duration, kontakte *caldav.Client) {
 	if g == nil || g.Immich == nil {
 		return
@@ -259,8 +304,14 @@ func (g *Gesichter) Pflegen(ctx context.Context, jede time.Duration, kontakte *c
 		if err := g.Auffrischen(ctx); err != nil && ctx.Err() == nil {
 			log.Printf("homes: immich: people and faces: %v", err)
 		}
+		if err := g.Zusammenfuehren(ctx); err != nil && ctx.Err() == nil {
+			log.Printf("homes: immich: persons of one name: %v", err)
+		}
 		if err := g.Abgleichen(ctx); err != nil && ctx.Err() == nil {
 			log.Printf("homes: immich: a person per contact: %v", err)
+		}
+		if err := g.Vorschlagen(ctx); err != nil && ctx.Err() == nil {
+			log.Printf("homes: immich: the closest faces: %v", err)
 		}
 		select {
 		case <-ctx.Done():

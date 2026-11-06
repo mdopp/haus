@@ -636,7 +636,7 @@ test('Standortverlauf, connected, leads with the timeline and ends with a quiet 
 // Felder geprüft?"): with every fold open, the page is no wider than the
 // screen, a field to type in has room, a button is big enough for a
 // finger, and no text runs out of its box.
-const PAGES = ['/start', '/raeume', '/raeume/light.kueche', '/medien', '/energie', '/energie?zeitraum=jahr', '/kalender', '/kalender/verwalten', '/kontakte', '/kontakte/h3', '/kontakte/privat',
+const PAGES = ['/start', '/raeume', '/raeume/light.kueche', '/medien', '/energie', '/energie?zeitraum=jahr', '/kalender', '/kalender/verwalten', '/kontakte', '/kontakte/h3', '/kontakte/privat', '/kontakte/dieselbe',
   '/notizen', '/notizen?tag=kochen', '/notizen/einkaufsliste.md', '/notizen/markdown.md', '/notizen/einkaufsliste.md?bearbeiten=1', '/mehr', '/musik', '/platte', '/discogs', '/aktivierungswort', '/aufgaben', '/dokumente', '/dokumente/suche?q=strom', '/dokumente/suche?nur=versicherungen', '/willkommen', '/einrichten/fotos', '/box/geraete', '/pair-device', '/podcasts', '/gesehen', '/standort',
   '/daten-sichern', '/netzlaufwerk', '/box', '/box/aufgaben', '/box/auslastung', '/box/haushalt', '/box/personen', '/box/module', '/adresse',
   '/einkauf', '/einkauf?liste=liste-baumarkt', '/einkauf?liste=liste-musik', '/einkauf/rezepte', '/einkauf/rezepte?n=rezepte%2Flasagne.md', '/notizen/rezepte/lasagne.md'];
@@ -785,6 +785,25 @@ test('Meine Kontakte: the own Handy-Kontakte, each to its person in Immich', asy
   const r = await page.request.get('/kontakte/privat/k0/fotos', { maxRedirects: 0 });
   expect(r.status()).toBe(302);
   expect(r.headers()['location']).toBe('https://photos.example/people/p-hilde');
+});
+
+// owner 2026-11-06: „Dieselbe Person?“ — faces Immich holds close, two by two, for the key's owner;
+// Nein is said at once on the button and on the page, and the pair is gone
+test('Dieselbe Person? shows pairs of faces and takes a Nein', async ({ page }, info) => {
+  await page.setViewportSize({ width: 411, height: 900 });
+  await page.goto('/kontakte/privat');
+  await page.getByRole('link', { name: 'Dieselbe Person?' }).click();
+  await expect(page).toHaveURL(/\/kontakte\/dieselbe$/);
+  const paare = page.locator('section.paar');
+  await expect(paare).toHaveCount(6);
+  await expect(paare.first()).toContainText('Oma Hilde');
+  await expect(paare.first()).toContainText('ohne Namen');
+  await expect(paare.first()).toContainText('412 Fotos');
+  await page.screenshot({ path: info.outputPath('dieselbe-411.png'), fullPage: true });
+  await paare.last().getByRole('button', { name: 'Nein' }).click();
+  await expect(page.getByText('Gemerkt: Nach diesen beiden fragt Homes nicht wieder.')).toBeVisible();
+  await expect(paare).toHaveCount(5);
+  await page.screenshot({ path: info.outputPath('dieselbe-nein-411.png'), fullPage: true });
 });
 
 // Pictures of the main pages as a phone shows them, for a look at the

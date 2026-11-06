@@ -28,12 +28,13 @@ func privatEigen(r *http.Request, cfg StartConfig) bool {
 	return cfg.fotosAn() && u != "" && cfg.Gesichter.Wessen() == u
 }
 
-// meineKontakteLink is the quiet line under Kontakte, for the key's owner.
+// meineKontakteLink is the quiet line under Kontakte, for the key's owner,
+// and the one to „Dieselbe Person?“.
 func meineKontakteLink(r *http.Request, cfg StartConfig) string {
 	if !privatEigen(r, cfg) {
 		return ""
 	}
-	return `<p class=k><a href=` + MeineKontaktePath + `>` + html.EscapeString(texte.T(texte.MeineKontakte)) + `</a> · ` + html.EscapeString(texte.T(texte.MeineKontakteKurz)) + `</p>`
+	return `<p class=k><a href=` + MeineKontaktePath + `>` + html.EscapeString(texte.T(texte.MeineKontakte)) + `</a> · ` + html.EscapeString(texte.T(texte.MeineKontakteKurz)) + `</p>` + dieselbeLink(cfg)
 }
 
 // meineKontakte is the viewer's own Handy-Kontakte.
@@ -77,7 +78,7 @@ func MeineKontakte(cfg StartConfig) http.HandlerFunc {
 		}
 		t := func(id texte.ID) string { return html.EscapeString(texte.T(id)) }
 		b := familyHead(r, cfg, texte.T(texte.MeineKontakte), "Kontakte")
-		b.WriteString(kontakteStyle + "<h1>" + t(texte.MeineKontakte) + "</h1><p class=k>" + t(texte.MeineKontakteHinweis) + "</p>")
+		b.WriteString(kontakteStyle + "<h1>" + t(texte.MeineKontakte) + "</h1><p class=k>" + t(texte.MeineKontakteHinweis) + "</p>" + dieselbeLink(cfg))
 		if recht := cfg.Gesichter.Fehlt(); recht != "" {
 			b.WriteString(gesagt("", fmt.Sprintf(texte.T(texte.MeineKontakteRecht), recht)))
 		}
