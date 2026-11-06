@@ -456,27 +456,43 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   `admins` from `/box` and everything under it (Geräte included) to
   `/start` with 303, since Authelia here only restricts per host. That
   says who sees the admin page; it is not a verdict on anything, and
-  `/napi` and `/pair-device` are untouched. The page is the family view of the box and
-  does not repeat Laib's own page (haus#157, owner 2026-10-27): the three
-  guarantees, readiness, the Inbox as a count (*3 Karten warten auf eine
-  Entscheidung.*) with *Entscheiden auf der Laib-Seite* (`<laib>/inbox`,
-  the one approval surface, laib ADR 0012), the newest morning report
-  with a link to Laib's journal (`<laib>/journal`; no journal copy), the
-  Werkstatt's tickets when set. *Dienste* (`/box/dienste`) lists only
-  what is not green, red first, by Laib's names (haus#156), or *Alle
-  Dienste laufen.*, and links *Alle Dienste auf der Laib-Seite*
-  (`<laib>/`). *Auslastung* (`/box/auslastung`, laib#1076, owner
+  `/napi` and `/pair-device` are untouched. It does not repeat Laib's own
+  page (haus#157, owner 2026-10-27) and has four tabs (owner 2026-11-06),
+  which fit a 411 px phone without scrolling sideways:
+  *Übersicht* (`/box`), „Was braucht mich?“: on top only what needs the
+  admin, red before yellow — the services not green by Laib's names
+  (haus#156), the red and yellow findings of `laib diag` (not info, not a
+  service already listed; while the homes hand lacks the verb `diag`, the
+  red lines of `laib status` and a quiet line saying the yellow ones are
+  missing), a lock, drift, the due Box-Aufgaben, and *N Entscheidungen
+  warten* (`<laib>/inbox`, the one approval surface, laib ADR 0012) only
+  when there are any. Nothing of that: one calm line, *Alles in Ordnung.*
+  with the last backup and the last change (Rückgängig on Laib's page);
+  else that line under the list. Then the newest morning report with a
+  link to Laib's journal (`<laib>/journal`; no journal copy), and the
+  Operator folded (`<details id=operator>`): its state, then only the
+  skills whose last run was not good (or that Laib refuses); *Alle Skills
+  zeigen* shows the rest. *Aufgaben* (`/box/aufgaben`): the Box-Aufgaben
+  and the Werkstatt's tickets when set. *Auslastung* (`/box/auslastung`, laib#1076, owner
   2026-11-06) shows `laib auslastung`: a bar per disk (system, data,
   boot; yellow above 85 %, red from 95 %), rings for the processor, the
   memory and the GPU, who holds the GPU by the lease, the temperatures
   and what Laib could not measure; only its part (`auslastung`) is
   fetched again, every 5 s while the tab is visible, never the page; a
   failed fetch keeps the values and says they are old. A Laib without
-  the verb, or a homes hand without the grant, is said plainly. It comes at once
+  the verb, or a homes hand without the grant, is said plainly.
+  *Haushalt* (`/box/haushalt`): one row each with its state — Personen
+  (*1 Einladung offen*), Geräte (*3 Telefone gekoppelt*), Adresse
+  (*Adresse gesetzt*), Module (*21 von 24 Modulen an*), Nutzung (*Homes
+  zählt seit …*, where counted) — each opening its page
+  (`/box/personen`, `/box/geraete`, `/adresse`, `/box/module`,
+  `/box/nutzung`), which keep their content and are not in the tab bar.
+  `/box/dienste` and `/box/operator` redirect (302) to `/box` and
+  `/box#operator`. It comes at once
   (haus#81): the frame and each part's place with „lädt …“; its script
   fetches every part at the same time from `GET /box/teil?was=<part>`
-  (`stand`, `inbox`, `einladen`, `bericht`, `aufgaben`, `genutzt`, `auslastung`, `werkstatt`: JSON,
-  slot id → HTML), each within 10 s, a failed one said in its place.
+  (`stand`, `operator`, `aufgaben`, `werkstatt`, `auslastung`, `haushalt`, `einladen`, `module`, `genutzt`: JSON,
+  `{"box-<part>": HTML}`), each within 10 s, a failed one said in its place.
   `?ganz=1`, where `<noscript>` sends, reads all parts at the same time
   and comes whole. *Person einladen* (`POST /box/einladen`, haus#56) takes
   a Signal number too (haus#87, laib#596), offered only once Laib's

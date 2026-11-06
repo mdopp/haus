@@ -4,17 +4,18 @@
 package pages
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
 	"html"
 	"net/http"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/mdopp/homes/internal/devices"
 	"github.com/mdopp/homes/internal/laib"
 	"github.com/mdopp/homes/internal/usage"
 	"github.com/mdopp/homes/internal/werkstatt"
@@ -31,7 +32,8 @@ func adminHead(r *http.Request, cfg StartConfig, title string) *strings.Builder 
 
 // adminStyle is the admin cards in the house palette: tables as cards,
 // section labels, the states' colours, Box's sub-links as pills.
-const adminStyle = `<style>.unter{display:flex;gap:8px;margin:18px 0 0;overflow-x:auto;padding-bottom:4px}.unter a{flex:none}.unter a{display:inline-flex;align-items:center;min-height:40px;padding:0 16px;border-radius:999px;background:var(--card);color:var(--ink);text-decoration:none;font-size:.85rem}.unter a[aria-current]{color:var(--accent);background:var(--accent-soft);font-weight:600}
+const adminStyle = `<style>.unter{display:flex;gap:6px;margin:18px 0 0}.unter a{flex:1 1 auto;display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:0 10px;border-radius:999px;background:var(--card);color:var(--ink);text-decoration:none;font-size:.85rem}.unter a[aria-current]{color:var(--accent);background:var(--accent-soft);font-weight:600}
+#operator summary{display:flex;gap:.3em;align-items:center;min-height:44px;font-weight:600;cursor:pointer}#alle-skills{width:20px;height:20px}#alle-skills+label{display:inline-flex;align-items:center;min-height:44px;margin:0 0 6px 8px}#alle-skills:not(:checked)~ul .gut{display:none}
 h2{font-size:.95rem;font-weight:700;color:var(--muted);margin:26px 2px 8px}
 table{width:100%;border-collapse:separate;border-spacing:0;background:var(--card);border-radius:14px;overflow:hidden}
 td,th{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top;overflow-wrap:break-word}tr:last-child td{border-bottom:0}
@@ -44,19 +46,20 @@ form{display:inline}input:not([type]),input[type=text],input[type=email]{font:in
 code{overflow-wrap:anywhere;font:.8rem ui-monospace,SFMono-Regular,Menlo,monospace}</style>`
 
 // boxPage is one of Box's pages (owner 2026-10-26: "zu viele vor allem
-// lange Themen vermischt"): where it is, its pill, its heading.
+// lange Themen vermischt"): where it is, its tab, its heading.
 type boxPage struct{ path, name, title string }
 
-// boxPages are Box's pages in the pills' order; Geräte is its own handler.
+// boxPages are Box's four tabs (owner 2026-11-06), then Haushalt's rows
+// that are pages of their own, under the tab Haushalt; Geräte and Adresse
+// are their own handlers.
 var boxPages = []boxPage{
 	{"/box", "Übersicht", ""},
 	{AufgabenPath, "Aufgaben", "Box-Aufgaben"},
-	{"/box/dienste", "Dienste", "Dienste"},
 	{auslastungPath, "Auslastung", "Auslastung"}, // owner 2026-11-06: what the box carries now (laib#1076)
-	{"/box/operator", "Operator", "Was der Operator kann"},
-	{"/box/personen", "Personen", "Personen"},
-	{"/box/nutzung", "Nutzung", "Nutzung"},
-	{moduleBoxPath, "Module", "Was Homes kann"}, // ADR 0001 H7: every module, its backend, its wish, its switch
+	{haushaltPath, "Haushalt", "Haushalt"},
+	{"/box/personen", "Haushalt", "Personen"},
+	{"/box/nutzung", "Haushalt", "Nutzung"},
+	{moduleBoxPath, "Haushalt", "Was Homes kann"}, // ADR 0001 H7: every module, its backend, its wish, its switch
 }
 
 // boxPageOf is the page a path shows; a POST's answer shows the page its
@@ -73,18 +76,11 @@ func boxPageOf(path string, cfg BoxConfig) (boxPage, bool) {
 	return boxPage{}, false
 }
 
-// unterNav is Box's pages, the current one marked; Nutzung only where it
-// is counted, Module only where Homes has its list. It scrolls sideways
-// on a phone.
-func unterNav(current string, cfg StartConfig) string {
-	usage := cfg.Usage != nil
+// unterNav is Box's four tabs, the current one marked; they fit a phone.
+func unterNav(current string) string {
 	var b strings.Builder
 	b.WriteString("<nav class=unter aria-label=Box>")
-	// Adresse is set once, when the box is set up: an admin's page, under Box (owner 2026-10-27)
-	for _, p := range append(append([]boxPage{}, boxPages...), boxPage{"/box/geraete", "Geräte", ""}, boxPage{adressePath, "Adresse", ""}) {
-		if p.name == "Nutzung" && !usage || p.path == moduleBoxPath && cfg.Module == nil {
-			continue
-		}
+	for _, p := range boxPages[:4] {
 		b.WriteString("<a href=" + p.path)
 		if p.name == current {
 			b.WriteString(" aria-current=page")
@@ -102,6 +98,7 @@ type BoxConfig struct {
 	Tickets *werkstatt.Tickets // the Werkstatt card (haus#15); nil, no card
 	Family  StartConfig        // what this box has, and Usage: the "Was wird genutzt" card (haus#50); nil Usage, no card
 	Voice   *usage.Voice       // the voice control's counting, to say when HA refuses it
+	Devices *devices.Store     // the paired phones, Haushalt's row Geräte; nil, no row
 }
 
 // BoxPage is the Box page with all its cards.
@@ -114,6 +111,11 @@ func BoxPage(cfg BoxConfig) http.HandlerFunc {
 		if !adminOnly(w, r) {
 			return
 		}
+		// Dienste and Operator are on the Übersicht since 2026-11-06; a bookmark finds them
+		if to, ok := map[string]string{"/box/dienste": "/box", "/box/operator": "/box#operator"}[r.URL.Path]; ok {
+			http.Redirect(w, r, to, http.StatusFound)
+			return
+		}
 		if r.URL.Path == BoxPartPath {
 			boxPartAnswer(w, r, cfg)
 			return
@@ -122,7 +124,7 @@ func BoxPage(cfg BoxConfig) http.HandlerFunc {
 			missing{http.StatusNotFound, "Diese Seite gibt es nicht.", "Box", "/box", "Box"}.write(w, r, cfg.Family)
 			return
 		}
-		writeBox(w, r, cfg, http.StatusOK, invitation{})
+		writeBox(w, r, cfg, http.StatusOK, invitation{}, nil)
 	}
 }
 
@@ -140,226 +142,127 @@ const (
 	saysPartFailed  = "Konnte nicht geladen werden. Die Seite neu laden; sonst weiß laib diag mehr."
 )
 
-// boxSlot is one place on the Box page: its element, its heading while
-// it loads, and the part that fills it.
-type boxSlot struct{ id, title, part string }
+// boxSlot is one place on a Box page: the part that fills it (its element
+// is box-<part>) and its heading while it loads.
+type boxSlot struct{ part, title string }
 
-// boxSlotsOn are one Box page's places, in its order; a part may fill
-// several (laib's status: the top and Was läuft), each where it is.
+// boxSlotsOn are one Box page's places, in its order.
 func boxSlotsOn(cfg BoxConfig, page string) []boxSlot {
 	switch page {
 	case "/box":
-		slots := []boxSlot{{"box-stand", "", "stand"}, {"box-inbox", "Entscheidungen", "inbox"}, {"box-bericht", "Morgenbericht", "bericht"}}
-		if cfg.Tickets != nil {
-			slots = append(slots, boxSlot{"box-werkstatt", "Werkstatt", "werkstatt"})
-		}
-		return slots
+		return []boxSlot{{"stand", ""}, {"operator", "Operator"}}
 	case AufgabenPath:
-		return []boxSlot{{"box-aufgaben", "", "aufgaben"}}
-	case "/box/dienste":
-		return []boxSlot{{"box-dienste", "Nicht grün", "stand"}}
-	case auslastungPath:
-		return []boxSlot{{"box-auslastung", "", "auslastung"}}
-	case "/box/personen":
-		return []boxSlot{{"box-einladen", "Person einladen", "einladen"}}
-	case "/box/operator": // owner 2026-10-27: the skills, read only (laib#839)
-		return []boxSlot{{"box-operator", "", "operator"}}
-	case moduleBoxPath:
-		return []boxSlot{{"box-module", "", "module"}}
-	case "/box/nutzung":
-		if cfg.Family.Usage != nil {
-			return []boxSlot{{"box-genutzt", "Was wird genutzt", "genutzt"}}
+		if cfg.Tickets != nil { // owner 2026-11-06: the Werkstatt's tickets beside the Box-Aufgaben
+			return []boxSlot{{"aufgaben", ""}, {"werkstatt", "Werkstatt"}}
 		}
+		return []boxSlot{{"aufgaben", ""}}
+	case "/box/personen":
+		return []boxSlot{{"einladen", "Person einladen"}}
+	case "/box/nutzung":
+		return []boxSlot{{"genutzt", "Was wird genutzt"}}
 	}
-	return nil
+	return []boxSlot{{strings.TrimPrefix(page, "/box/"), ""}} // auslastung, haushalt, module
 }
 
-// boxSlots are all Box's places: the parts the script may ask for.
-func boxSlots(cfg BoxConfig) []boxSlot {
-	var all []boxSlot
-	for _, p := range boxPages {
-		all = append(all, boxSlotsOn(cfg, p.path)...)
-	}
-	return all
-}
-
-// boxPart reads one part and renders its places: slot id → HTML. Each
-// part is read on its own, within boxPartWait (haus#81).
-func boxPart(ctx context.Context, r *http.Request, cfg BoxConfig, part string, inv invitation) map[string]string {
+// boxPart reads one part and renders it, within boxPartWait (haus#81).
+func boxPart(ctx context.Context, r *http.Request, cfg BoxConfig, part string, inv invitation) string {
 	ctx, cancel := context.WithTimeout(ctx, boxPartWait)
 	defer cancel()
 	c := cfg.Laib
 	switch part {
 	case "stand":
-		ready, rows, err := c.Status(ctx)
-		if err != nil {
-			return map[string]string{"box-stand": "<h1>Box</h1><p class=rot>" + saysLaibSilent + "</p>" + einzelheiten(err.Error()), "box-dienste": ""}
-		}
-		var b strings.Builder
-		// the three guarantees, for everyone in the family (haus#2)
-		b.WriteString("<h1>Box</h1>" + guarantees(ready, rows, isAdmin(r), cfg.LaibURL))
-		state := fmt.Sprintf("%s · %d Dienste: %d grün, %d gelb, %d rot", ready.State, ready.Services, ready.Green, ready.Yellow, ready.Red)
-		if ready.Drift > 0 { // the running box differs from what Laib rendered
-			state += fmt.Sprintf(" · %d weichen vom Plan ab", ready.Drift)
-		}
-		b.WriteString(zustand(map[bool]string{true: "", false: "gelb"}[ready.State == "bereit" && ready.Red == 0], state))
-		fmt.Fprintf(&b, "<p>Operator: <span class=%s>%s</span></p>", operatorClass(ready.Operator), html.EscapeString(ready.Operator))
-		if ready.Aufgaben > 0 { // the Box-Aufgaben's badge (haus#115)
-			due := ""
-			if ready.AufgabenFaellig > 0 {
-				due = fmt.Sprintf(", <span class=gelb>%d fällig</span>", ready.AufgabenFaellig)
-			}
-			fmt.Fprintf(&b, "<p><a href=%s>%d Box-Aufgaben offen</a>%s</p>", AufgabenPath, ready.Aufgaben, due)
-		}
-		if ready.Lock != "" {
-			fmt.Fprintf(&b, "<p class=gelb>gesperrt: %s</p>", html.EscapeString(ready.Lock))
-		}
-		// what is not green, on the overview and under Dienste; the full
-		// list is Laib's page's (haus#157)
-		notGreen := notGreenList(rows)
-		if notGreen != "" {
-			b.WriteString(notGreen + "<p>" + laibLink(cfg, "/", "Alle Dienste auf der Laib-Seite") + "</p>")
-		}
-		d := "<h2>Nicht grün</h2>" + notGreen
-		if notGreen == "" {
-			d = "<p class=gruen>Alle Dienste laufen.</p>"
-		}
-		d += "<p>" + laibLink(cfg, "/", "Alle Dienste auf der Laib-Seite") + "</p>"
-		return map[string]string{"box-stand": b.String(), "box-dienste": d}
-	case "inbox":
-		// a count and the way to Laib's inbox: the cards and deciding are
-		// Laib's page's (ADR 0012, haus#157)
-		var b strings.Builder
-		b.WriteString("<h2>Entscheidungen</h2>")
-		if ps, err := c.Inbox(ctx); err != nil {
-			b.WriteString("<p class=gelb>Laib antwortet gerade nicht.</p>")
-		} else {
-			switch len(ps) {
-			case 0:
-				b.WriteString("<p class=k>Keine Karte wartet auf eine Entscheidung.</p>")
-			case 1:
-				b.WriteString("<p>1 Karte wartet auf eine Entscheidung.</p>")
-			default:
-				fmt.Fprintf(&b, "<p>%d Karten warten auf eine Entscheidung.</p>", len(ps))
-			}
-		}
-		b.WriteString("<p>" + laibLink(cfg, "/inbox", "Entscheiden auf der Laib-Seite") + "</p>")
-		return map[string]string{"box-inbox": b.String()}
+		return achtung(ctx, r, cfg)
 	case "einladen":
-		return map[string]string{"box-einladen": inviteCard(ctx, c, inv)}
+		return inviteCard(ctx, c, inv)
 	case "aufgaben":
-		return map[string]string{"box-aufgaben": aufgabenCard(ctx, c, time.Now(), "", "")}
+		return aufgabenCard(ctx, c, time.Now(), "", "")
+	case "haushalt":
+		return haushaltCard(ctx, cfg)
 	case "operator":
 		now, loc := cfg.Family.clock()
-		return map[string]string{"box-operator": operatorCard(ctx, c, now, loc)}
-	case "bericht":
-		// the newest morning report only; the journal is Laib's page's
-		// (haus#157)
-		reports, err := c.JournalLatest(ctx, 1, "report")
-		return map[string]string{"box-bericht": morningReport(reports, err) + "<p>" + laibLink(cfg, "/journal", "Das Journal auf der Laib-Seite") + "</p>"}
+		return operatorCard(ctx, c, now, loc)
 	case "auslastung":
-		return map[string]string{"box-auslastung": auslastungCard(ctx, c)}
+		return auslastungCard(ctx, c)
 	case "genutzt":
-		return map[string]string{"box-genutzt": usageCard(ctx, cfg.Family, cfg.Voice)}
+		return usageCard(ctx, cfg.Family, cfg.Voice)
 	case "module":
-		return map[string]string{"box-module": moduleCard(ctx, cfg.Family)}
+		return moduleCard(ctx, cfg.Family)
 	case "werkstatt":
-		if cfg.Tickets != nil {
-			return map[string]string{"box-werkstatt": werkstattCard(ctx, cfg.Tickets)}
-		}
+		return werkstattCard(ctx, cfg.Tickets)
 	}
-	return nil
+	return ""
 }
 
-// boxPartAnswer answers BoxPartPath?was=<part>: that part's places as
-// JSON, {"<slot id>": "<html>", …}; an unknown part is a 404.
+// boxPartAnswer answers BoxPartPath?was=<part>: {"box-<part>": "<html>"};
+// a part on none of the pages is a 404.
 func boxPartAnswer(w http.ResponseWriter, r *http.Request, cfg BoxConfig) {
 	part := r.URL.Query().Get("was")
-	known := false
-	for _, s := range boxSlots(cfg) {
-		known = known || s.part == part
+	for _, p := range boxPages {
+		for _, s := range boxSlotsOn(cfg, p.path) {
+			if s.part == part {
+				body, _ := json.Marshal(map[string]string{"box-" + part: boxPart(r.Context(), r, cfg, part, invitation{})})
+				w.Header().Set("Content-Type", "application/json")
+				w.Header().Set("Cache-Control", "no-store")
+				w.Write(body)
+				return
+			}
+		}
 	}
-	if !known {
-		http.NotFound(w, r)
-		return
-	}
-	body, _ := json.Marshal(boxPart(r.Context(), r, cfg, part, invitation{}))
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "no-store")
-	w.Write(body)
+	http.NotFound(w, r)
 }
 
-// writeBox renders the Box page (haus#81): the frame at once, each part in
+// writeBox renders a Box page (haus#81): the frame at once, each part in
 // its place as it comes — the page's script fetches every part from
 // BoxPartPath at the same time, each on its own. With ?ganz=1, and
 // without script (noscript sends there), all parts are read at the same
 // time and the page comes whole. inv is what the invite card says after a
-// POST to /box/einladen (haus#56): that card is then on the page at once.
-func writeBox(w http.ResponseWriter, r *http.Request, cfg BoxConfig, code int, inv invitation) {
-	writeBoxWith(w, r, cfg, code, inv, nil)
-}
-
-// writeBoxWith is writeBox with places filled already (a POST's outcome in
-// its card, haus#115).
-func writeBoxWith(w http.ResponseWriter, r *http.Request, cfg BoxConfig, code int, inv invitation, pre map[string]string) {
+// POST to /box/einladen (haus#56): that card is then on the page at once;
+// pre are parts filled already (a POST's outcome in its card, haus#115).
+func writeBox(w http.ResponseWriter, r *http.Request, cfg BoxConfig, code int, inv invitation, pre map[string]string) {
 	page, _ := boxPageOf(r.URL.Path, cfg)
 	if page.path == "" {
 		page = boxPages[0]
 	}
 	slots := boxSlotsOn(cfg, page.path)
 	filled := map[string]string{}
-	for id, h := range pre {
-		filled[id] = h
+	for part, h := range pre {
+		filled[part] = h
 	}
 	whole := r.URL.Query().Get("ganz") == "1"
-	if whole || !inv.empty() {
-		var mu sync.Mutex
-		var wg sync.WaitGroup
-		seen := map[string]bool{}
-		for _, s := range slots {
-			if seen[s.part] || !whole && s.part != "einladen" {
-				continue
-			}
-			seen[s.part] = true
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				got := boxPart(r.Context(), r, cfg, s.part, inv)
-				mu.Lock()
-				defer mu.Unlock()
-				for id, h := range got {
-					filled[id] = h
-				}
-			}()
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	for _, s := range slots {
+		if _, done := filled[s.part]; done || !whole && (s.part != "einladen" || inv.empty()) {
+			continue
 		}
-		wg.Wait()
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			got := boxPart(r.Context(), r, cfg, s.part, inv)
+			mu.Lock()
+			defer mu.Unlock()
+			filled[s.part] = got
+		}()
 	}
-	title := "Box"
-	if page.title != "" {
-		title = page.title
-	}
-	b := adminHead(r, cfg.Family, title)
-	b.WriteString(unterNav(page.name, cfg.Family))
+	wg.Wait()
+	b := adminHead(r, cfg.Family, cmp.Or(page.title, "Box"))
+	b.WriteString(unterNav(page.name))
 	if page.title != "" {
 		b.WriteString("<h1>" + html.EscapeString(page.title) + "</h1>")
 	}
 	var parts []string
-	seen := map[string]bool{}
 	for _, s := range slots {
-		h, ok := filled[s.id]
+		h, ok := filled[s.part]
 		if !ok {
-			if s.id == "box-stand" {
+			if s.part == "stand" {
 				h = "<h1>Box</h1>"
 			} else if s.title != "" {
 				h = "<h2>" + html.EscapeString(s.title) + "</h2>"
 			}
 			h += "<p class=k>" + saysPartLoading + "</p>"
-			if !seen[s.part] {
-				seen[s.part] = true
-				parts = append(parts, s.part)
-			}
+			parts = append(parts, s.part)
 		}
-		b.WriteString("<div id=" + s.id + " data-teil=" + s.part + " aria-busy=" + strconv.FormatBool(!ok) + ">" + h + "</div>")
+		b.WriteString("<div id=box-" + s.part + " data-teil=" + s.part + " aria-busy=" + strconv.FormatBool(!ok) + ">" + h + "</div>")
 	}
 	if len(parts) > 0 {
 		p, _ := json.Marshal(parts)
@@ -461,32 +364,6 @@ func werkstattCard(ctx context.Context, t *werkstatt.Tickets) string {
 			html.EscapeString(x.Repo), x.Number, html.EscapeString(x.URL), html.EscapeString(x.Title), who)
 	}
 	b.WriteString("</table>")
-	return b.String()
-}
-
-// notGreenList is the services that are not green as lines, red first,
-// each by Laib's name with its detail; "" when all are green.
-func notGreenList(rows []laib.Service) string {
-	var bad []laib.Service
-	for _, s := range rows {
-		if cls(s.State) != "gruen" {
-			bad = append(bad, s)
-		}
-	}
-	if len(bad) == 0 {
-		return ""
-	}
-	sort.SliceStable(bad, func(i, j int) bool { return cls(bad[i].State) == "rot" && cls(bad[j].State) != "rot" })
-	var b strings.Builder
-	b.WriteString("<ul class=zeilen>")
-	for _, s := range bad {
-		fmt.Fprintf(&b, "<li>%s<span class=was>%s", dot(cls(s.State), s.State), serviceLabel(s))
-		if d := oneLine(s.Detail); d != "" {
-			b.WriteString("<span class=text>" + linkAufgaben(html.EscapeString(trim(d, 160))) + "</span>")
-		}
-		b.WriteString("</span></li>")
-	}
-	b.WriteString("</ul>")
 	return b.String()
 }
 

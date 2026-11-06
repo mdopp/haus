@@ -263,7 +263,7 @@ func TestBoxCardWhatIsUsed(t *testing.T) {
 		"Im Chat", "40 Anfragen", "3 davon nicht beantwortet", "Termine nachgesehen (12)", "Geräte ausgeschaltet (6)", "Gedächtnis (5)",
 		"Per Stimme", "30 hat Home Assistant selbst verstanden", "5 an die KI weitergereicht", "4 hat niemand verstanden",
 		"Was niemand beantworten konnte", "Wann kommt der Müll?", "9×", "im Chat", "Mach die &lt;Musik&gt; lauter", "per Stimme", "30 Tage", "ohne Namen",
-		`aria-current=page>Nutzung</a>`} {
+		`aria-current=page>Haushalt</a>`} {
 		if !strings.Contains(page, want) {
 			t.Errorf("the card lacks %q", want)
 		}

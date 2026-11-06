@@ -185,7 +185,8 @@ func main() {
 	mux.HandleFunc("/dokumente", pages.Dokumente(doku))
 	mux.HandleFunc("/willkommen", pages.Willkommen(cfg))
 	mux.HandleFunc("/sprechen", pages.Sprechen(cfg))
-	if store, err := devices.Open(dir); err == nil { // haus#172: pairing and removing a phone, end to end
+	store, err := devices.Open(dir)
+	if err == nil { // haus#172: pairing and removing a phone, end to end
 		mux.HandleFunc("/box/geraete", pages.Geraete(store, "https://homes.example", cfg))
 		mux.HandleFunc("/pair-device", pages.PairDevice(store, cfg))
 	}
@@ -235,7 +236,7 @@ func main() {
 	demoLaib.wishes.Status("beets", laibfake.DemoBeets(inbox, time.Now(), false))
 	seiten := mehr // Daten sichern, Netzlaufwerk, Box, Adresse (the Mehr audit)
 	seiten.Reitti = standort.Reitti
-	mehrSeiten(mux, seiten, dav, dir)
+	mehrSeiten(mux, seiten, dav, dir, store)
 	mux.HandleFunc("/demo/wunsch", func(w http.ResponseWriter, r *http.Request) { // a wish moved on in Laib: wartet, abgelehnt, …
 		demoLaib.wishes.Setze(r.URL.Query().Get("modul"), r.URL.Query().Get("stand"), "")
 		mehr.Laib.ForgetWuensche()

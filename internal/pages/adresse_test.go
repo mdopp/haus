@@ -90,8 +90,8 @@ func TestAdresseShowsTheAddressAndTheForm(t *testing.T) {
 	if len(l.calls) != 1 || !reflect.DeepEqual(l.calls[0], map[string]any{"action": "show"}) {
 		t.Fatalf("laib got %v", l.calls)
 	}
-	// owner 2026-10-27: Adresse is set once, at setup: under Box, beside its pages
-	mustContain(t, body, `<nav class=unter aria-label=Box>`, "<a href="+adressePath+" aria-current=page>Adresse</a>")
+	// owner 2026-10-27: Adresse is set once, at setup: under Box, a row of Haushalt (owner 2026-11-06)
+	mustContain(t, body, `<nav class=unter aria-label=Box>`, "<a href="+haushaltPath+" aria-current=page>Haushalt</a>")
 
 	// nothing set yet: the form with Deutschland, nothing pretended
 	l.block = map[string]any{}

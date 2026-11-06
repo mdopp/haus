@@ -10,6 +10,7 @@ import (
 
 	"github.com/mdopp/homes/internal/caldav/davfake"
 	"github.com/mdopp/homes/internal/cards"
+	"github.com/mdopp/homes/internal/devices"
 	"github.com/mdopp/homes/internal/napi"
 	"github.com/mdopp/homes/internal/pages"
 	"github.com/mdopp/homes/internal/samba"
@@ -21,7 +22,7 @@ import (
 // demo's Laib (laibFake answers Box's verbs from auditLaib) and Reitti.
 // Anna has backups, a password and contacts; Ben, Clara none (the cookie
 // wer=ben shows another person, in the family only).
-func mehrSeiten(mux *http.ServeMux, cfg pages.StartConfig, dav *davfake.Server, dir string) {
+func mehrSeiten(mux *http.ServeMux, cfg pages.StartConfig, dav *davfake.Server, dir string, phones *devices.Store) {
 	sambaDir := filepath.Join(dir, "samba")
 	os.MkdirAll(sambaDir, 0o755)
 	setSamba := func(gesetzt bool) { // /demo/samba?gesetzt=1: Anna's password is set
@@ -75,7 +76,7 @@ func mehrSeiten(mux *http.ServeMux, cfg pages.StartConfig, dav *davfake.Server, 
 	mux.HandleFunc(pages.KontaktePath, pages.Kontakte(cfg))
 	mux.HandleFunc(cards.ContactPages, pages.Kontakt(cfg))
 	mux.HandleFunc("/netzlaufwerk", pages.Netzlaufwerk(cfg))
-	boxCfg := pages.BoxConfig{Laib: cfg.Laib, LaibURL: cfg.LaibURL, Family: cfg}
+	boxCfg := pages.BoxConfig{Laib: cfg.Laib, LaibURL: cfg.LaibURL, Family: cfg, Devices: phones}
 	mux.HandleFunc("/box", pages.BoxPage(boxCfg))
 	mux.HandleFunc("/box/", pages.BoxPage(boxCfg))
 	mux.HandleFunc("/box/einladen", pages.Einladen(boxCfg))
@@ -97,7 +98,8 @@ func boxAntwort(name string, args map[string]any) (string, bool) {
 // two yellow services, a card waiting, last night's report, one skill, one
 // person invited, the household's address.
 var auditLaib = map[string]string{
-	"laib_status": `{"ready":{"state":"bereit","services":23,"green":20,"yellow":2,"red":1,"operator":"läuft","drift":0,"aufgaben":0},"services":[` +
+	"laib_status": `{"ready":{"state":"bereit","services":23,"green":20,"yellow":2,"red":1,"operator":"läuft","drift":0,"aufgaben":0,` +
+		`"lastBackup":{"at":"2026-11-06T03:12:00Z","repos":2,"ok":true},"lastChange":{"summary":"Gesundheit auf 0.9.1","at":"2026-11-05T18:40:00Z","reversible":true}},"services":[` +
 		`{"name":"paperless","state":"gelb","title":"Paperless","beschreibung":"Dokumente","detail":"Redis antwortet langsam"},` +
 		`{"name":"immich","state":"rot","title":"Immich","beschreibung":"Fotos","detail":"Machine-Learning-Container startet nicht · seit 2 h"},` +
 		`{"name":"media","state":"gelb","title":"Jellyfin","beschreibung":"Filme, Serien, Musik","detail":"Zertifikat läuft in 9 Tagen ab"},` +
@@ -110,5 +112,7 @@ var auditLaib = map[string]string{
 		`"disks":[{"role":"system","path":"/var","size":512000000000,"used":102400000000,"free":409600000000,"pct":20},{"role":"data","path":"/mnt/data/stacks","size":4000000000000,"used":3480000000000,"free":520000000000,"pct":87},{"role":"boot","path":"/boot","size":1023303680,"used":402653184,"free":620650496,"pct":39.3}],` +
 		`"gpu":{"name":"NVIDIA GeForce RTX 3090","pct":34,"memUsed":21474836480,"memTotal":25769803776,"temp":58,"power":142,"powerLimit":350,"holder":"","window":"household","model":"qwen3.6-35b-a3b"},` +
 		`"temps":[{"name":"cpu","c":54},{"name":"nvme0","c":41},{"name":"nvme1","c":39}]}`,
+	"laib_diag": `[{"severity":"gelb","probe":"bote","detail":"Der Bote antwortet nicht auf die Probe: signal-cli seit 3 h ohne Empfang","say":"Nachrichten über Signal kommen vielleicht nicht an."},` +
+		`{"severity":"gelb","probe":"cert","detail":"kein Zertifikat für die LAN-IP 192.168.1.10","say":"Über die IP-Adresse warnt der Browser."},{"severity":"info","probe":"watchdog","detail":"kein Wächter von außen","aufgabe":2}]`,
 	"laib_zuhause": `{"street":"Musterweg 1","postcode":"12345","city":"Musterstadt","country":"DE","latitude":50.1,"longitude":8.6}`,
 }

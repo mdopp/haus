@@ -638,7 +638,7 @@ test('Standortverlauf, connected, leads with the timeline and ends with a quiet 
 // finger, and no text runs out of its box.
 const PAGES = ['/start', '/raeume', '/raeume/light.kueche', '/medien', '/energie', '/energie?zeitraum=jahr', '/kalender', '/kalender/verwalten', '/kontakte', '/kontakte/h3',
   '/notizen', '/notizen?tag=kochen', '/notizen/einkaufsliste.md', '/notizen/markdown.md', '/notizen/einkaufsliste.md?bearbeiten=1', '/mehr', '/musik', '/platte', '/discogs', '/aktivierungswort', '/aufgaben', '/dokumente', '/willkommen', '/einrichten/fotos', '/box/geraete', '/pair-device', '/podcasts', '/gesehen', '/standort',
-  '/daten-sichern', '/netzlaufwerk', '/box', '/box/aufgaben', '/box/dienste', '/box/auslastung', '/box/operator', '/box/personen', '/box/module', '/adresse',
+  '/daten-sichern', '/netzlaufwerk', '/box', '/box/aufgaben', '/box/auslastung', '/box/haushalt', '/box/personen', '/box/module', '/adresse',
   '/einkauf', '/einkauf?liste=liste-baumarkt', '/einkauf?liste=liste-musik', '/einkauf/rezepte', '/einkauf/rezepte?n=rezepte%2Flasagne.md', '/notizen/rezepte/lasagne.md'];
 for (const path of PAGES) {
   test(`layout of ${path}`, async ({ page }) => {
@@ -661,7 +661,7 @@ for (const path of PAGES) {
         if (!seen(el)) continue;
         const r = el.getBoundingClientRect();
         if (r.height < 40) out.push(`"${what(el)}" only ${Math.round(r.height)}px high`);
-        if (r.right > vw + 1 && !el.closest('nav.unter')) out.push(`"${what(el)}" runs off the screen`); // Box's pills scroll sideways
+        if (r.right > vw + 1) out.push(`"${what(el)}" runs off the screen`); // Box's four tabs fit too (owner 2026-11-06)
       }
       for (const el of document.querySelectorAll('p, li, h1, h2, label, td, th, .k')) {
         if (!seen(el)) continue;
@@ -677,6 +677,56 @@ for (const path of PAGES) {
     expect(forms, `${path}: POST forms without an action or a running label`).toEqual([]);
   });
 }
+
+// owner 2026-11-06: Box has four tabs that fit a 411 px phone without scrolling
+// sideways; the Übersicht says only what needs the admin, red before yellow,
+// the Operator folded with only the skills that did not run well; Haushalt
+// is a list of rows with their state, each opening its page.
+test('Box: four tabs fit a phone, the Übersicht says what needs me, Haushalt lists its rows', async ({ page }, info) => {
+  await page.setViewportSize({ width: 411, height: 900 });
+  await page.goto('/box');
+  const tabs = page.locator('nav.unter a');
+  await expect(tabs).toHaveText(['Übersicht', 'Aufgaben', 'Auslastung', 'Haushalt']);
+  const nav = await page.locator('nav.unter').evaluate((n) => ({ sw: n.scrollWidth, cw: n.clientWidth }));
+  expect(nav.sw, 'the tabs do not scroll sideways').toBeLessThanOrEqual(nav.cw);
+  for (const t of await tabs.all()) {
+    const b = await t.boundingBox();
+    expect(b.x + b.width, 'each tab on the screen').toBeLessThanOrEqual(411);
+  }
+  const stand = page.locator('#box-stand');
+  await expect(stand).toContainText('Machine-Learning-Container startet nicht');
+  await expect(stand).toContainText('Nachrichten über Signal kommen vielleicht nicht an.');
+  await expect(stand).toContainText('1 Entscheidung wartet');
+  await expect(stand).not.toContainText('kein Wächter');
+  await expect(stand).not.toContainText('Alles in Ordnung');
+  const text = await stand.innerText();
+  expect(text.indexOf('Immich'), 'red first').toBeLessThan(text.indexOf('Paperless'));
+  const op = page.locator('details#operator');
+  await expect(op.locator('summary')).toContainText('Operator: läuft');
+  expect(await op.evaluate((d) => d.open), 'the Operator is folded').toBe(false);
+  await page.screenshot({ path: info.outputPath('box-uebersicht-411.png'), fullPage: true });
+  await op.locator('summary').click();
+  await expect(op.getByText('Alle Skills liefen zuletzt gut.')).toBeVisible();
+  const skill = op.locator('li', { hasText: 'Schreibt jeden Morgen' });
+  await expect(skill).toBeHidden();
+  await op.getByText('Alle Skills zeigen').click();
+  await expect(skill).toBeVisible();
+  await page.screenshot({ path: info.outputPath('box-operator-411.png'), fullPage: true });
+
+  await tabs.filter({ hasText: 'Haushalt' }).click();
+  await expect(page).toHaveURL(/\/box\/haushalt$/);
+  const rows = page.locator('#box-haushalt li');
+  await expect(rows.filter({ hasText: 'Personen' })).toContainText('1 Einladung offen');
+  await expect(rows.filter({ hasText: 'Geräte' })).toContainText(/Telefone? gekoppelt/);
+  await expect(rows.filter({ hasText: 'Adresse' })).toContainText('Adresse gesetzt');
+  await expect(rows.filter({ hasText: 'Module' })).toContainText('Modulen an');
+  await page.screenshot({ path: info.outputPath('box-haushalt-411.png'), fullPage: true });
+  await rows.filter({ hasText: 'Personen' }).locator('a').click();
+  await expect(page).toHaveURL(/\/box\/personen$/);
+  await expect(page.locator('nav.unter a[aria-current=page]')).toHaveText('Haushalt');
+  await page.goto('/box/operator');
+  await expect(page).toHaveURL(/\/box#operator$/);
+});
 
 // owner 2026-11-06: Box → Auslastung, the box's values; only they come again,
 // every 5 s while the tab is visible, the page itself is not reloaded
