@@ -39,6 +39,9 @@ func leafSite(t *testing.T) site {
 	s.napi.Sicherung = napi.NewSicherung(t.TempDir(), t.TempDir())
 	s.samba = &samba.Dir{Path: t.TempDir()}
 	s.gesundheit = "https://gesundheit.example"
+	if s.dienste != nil {
+		s.dienste["gesundheit"] = true // its module follows the service Laib runs
+	}
 	s.tickets = &werkstatt.Tickets{API: "http://127.0.0.1:1", Repos: []string{"mdopp/homes"}}
 	s.napi.Whoami = func(b string) (string, bool) { return "anna", b == "dev1" }
 	// H4: the lists and the music wish list on the one Radicale, the music

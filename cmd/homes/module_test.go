@@ -261,3 +261,29 @@ func TestLinkModulesFollowLaibOnceItAnswers(t *testing.T) {
 	mu.Unlock()
 	warte("media gone", func() bool { return !s.napi.Module.An("filme") && s.napi.Module.An("fotos") })
 }
+
+// Gesundheit retired (2026-11-06): its module follows the service Laib runs, not only
+// its address; before Laib has answered, the address alone decides.
+func TestGesundheitFollowsItsService(t *testing.T) {
+	s, _, _ := fullSite(t)
+	s.gesundheit = "https://gesundheit.example"
+	an := func() bool {
+		l, err := modul.Bauen(katalog(s))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return l.An("gesundheit")
+	}
+	s.dienste["gesundheit"] = true
+	if !an() {
+		t.Error("off while the service runs")
+	}
+	delete(s.dienste, "gesundheit")
+	if an() {
+		t.Error("on while the service is gone")
+	}
+	s.dienste = nil
+	if !an() {
+		t.Error("off before Laib has said what runs")
+	}
+}

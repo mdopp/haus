@@ -111,8 +111,10 @@ func katalog(s site) []modul.Modul {
 		bau(modul.Modul{Name: "netzlaufwerk", Backend: "file-share",
 			Env: []string{"HOMES_SAMBA_DIR", "HOMES_SAMBA_HOST"}},
 			s.samba != nil, "Auf dieser Box gibt es kein Netzlaufwerk."),
+		// on with its address while Laib runs the service (Gesundheit retired 2026-11-06: its card goes with it);
+		// before Laib has said what runs, the address alone
 		bau(modul.Modul{Name: "gesundheit", Backend: "gesundheit", Env: []string{"HOMES_GESUNDHEIT_URL"}},
-			s.gesundheit != "", "Auf dieser Box läuft Gesundheit nicht."),
+			s.gesundheit != "" && (s.dienste == nil || s.dienste["gesundheit"]), "Auf dieser Box läuft Gesundheit nicht."),
 		bau(modul.Modul{Name: "werkstatt", Env: []string{"HOMES_WERKSTATT_REPOS", "HOMES_GITHUB_API"}},
 			s.tickets != nil, "Für diese Box ist keine Werkstatt eingetragen."),
 		bau(modul.Modul{Name: "nutzung", Backend: "usage-metrics",

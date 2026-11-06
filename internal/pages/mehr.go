@@ -154,10 +154,11 @@ var gesundheitSeiten = []struct{ text, detail, path string }{
 }
 
 // gesundheitKarte is Mehr's card for the Gesundheit program (haus#192,
-// laib#893), only on a box that has it (HOMES_GESUNDHEIT_URL): an internal
-// route, so the links open at home only, as Paperless does.
+// laib#893), only on a box that has it (HOMES_GESUNDHEIT_URL, and its module
+// on: the service runs): an internal route, so the links open at home only,
+// as Paperless does.
 func gesundheitKarte(cfg StartConfig) string {
-	if cfg.GesundheitURL == "" {
+	if cfg.GesundheitURL == "" || !alleAn(cfg, []string{"gesundheit"}) {
 		return ""
 	}
 	c := cards.Card{Title: "Gesundheit", Note: saysGesundheitWer}
