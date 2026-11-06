@@ -54,10 +54,11 @@ func Gruppen(cfg StartConfig) map[string][]modul.Route {
 		gs.add(name, EinkaufRezeptePath, Einkauf(cfg))
 	}
 	gs.add("notizen", "/notizen", Notizen(cfg))
-	gs.add("notizen", cards.NotePages, Notizen(cfg))     // a note's own page
-	gs.add("dokumente", DokumentePath, Dokumente(cfg))   // the ways into the archive (haus#68)
-	gs.add("dokumente", ScannenPath, Scannen(cfg))       // the scan orders to Laib (haus#76, laib#568)
-	gs.add("dokumente", TrennblattPath, Trennblatt(cfg)) // separator sheets to print, PATCH T (haus#161)
+	gs.add("notizen", cards.NotePages, Notizen(cfg))             // a note's own page
+	gs.add("dokumente", DokumentePath, Dokumente(cfg))           // the ways into the archive (haus#68)
+	gs.add("dokumente", DokumenteSuchePath, DokumenteSuche(cfg)) // the household's documents by words, Bereich, type, person (owner 2026-11-06)
+	gs.add("dokumente", ScannenPath, Scannen(cfg))               // the scan orders to Laib (haus#76, laib#568)
+	gs.add("dokumente", TrennblattPath, Trennblatt(cfg))         // separator sheets to print, PATCH T (haus#161)
 	gs.add("dokumente", cards.DocumentPages, Dokument(cfg))
 	musikGruppe(gs, cfg)
 	gs.add("podcasts", PodcastsPath, Podcasts(cfg))            // haus#123; off, its trace (modulAus)

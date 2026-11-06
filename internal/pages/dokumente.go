@@ -1,7 +1,6 @@
 package pages
 
 import (
-	"context"
 	"html"
 	"log"
 	"net"
@@ -202,12 +201,13 @@ func writeDokumente(w http.ResponseWriter, r *http.Request, cfg StartConfig, cod
 	if scan.moving() {
 		b.WriteString(refreshEvery(scan.refresh())) // the scan moves on by itself; the page follows in place
 	}
-	b.WriteString(dokStyle + scanStyle + gekoppeltStyle + "<h1>Dokumente</h1><p class=lead>" + html.EscapeString(saysDocsLead) + "</p>")
+	b.WriteString(dokStyle + dokFindenStyle + scanStyle + gekoppeltStyle + "<h1>Dokumente</h1><p class=lead>" + html.EscapeString(saysDocsLead) + "</p>")
 	if done != "" {
 		b.WriteString("<div class=gut role=status><span class=punkt></span><p>" + html.EscapeString(done) + " " + see + "</p></div>")
 	}
-	b.WriteString(gesagt("", problem))
-	if p := cfg.paperless(); p.Set() { // owner 2026-11-04: the archive itself leads, its way in big; LAN-only, said in one line, away from home too
+	finden, zuletzt := dokFinden(r, cfg)        // one wait for both
+	b.WriteString(gesagt("", problem) + finden) // owner 2026-11-06: the way into one's documents first
+	if p := cfg.paperless(); p.Set() {          // owner 2026-11-04: the archive itself leads, its way in big; LAN-only, said in one line, away from home too
 		b.WriteString(vorne(p.href(newestPath), "In Paperless öffnen"))
 		if cfg.PaperlessLANOnly {
 			b.WriteString(zustand(map[bool]string{false: "gelb"}[atHome(r)], map[bool]string{true: saysOnlyAtHome, false: saysPaperlessLAN}[atHome(r)]))
@@ -228,28 +228,18 @@ func writeDokumente(w http.ResponseWriter, r *http.Request, cfg StartConfig, cod
 		addr := html.EscapeString(cfg.DocumentsMail)
 		b.WriteString(`<p class=k>Oder per Mail an <a href="mailto:` + addr + `">` + addr + `</a>. ` + html.EscapeString(saysMailHow) + `</p>`)
 	}
-	b.WriteString(zuletztAbgelegt(r, cfg) + scanning)
+	b.WriteString(zuletzt.HTML() + scanning)
 	writePage(w, code, b)
 }
 
 // zuletztAbgelegt is the five documents the archive got last, each to its
-// page where Paperless opens; "" without Paperless's API or when it is silent.
-func zuletztAbgelegt(r *http.Request, cfg StartConfig) string {
-	if cfg.Docs == nil {
-		return ""
-	}
-	var docs []paperless.Doc
-	fetch(r, func(ctx context.Context) {
-		var err error
-		if docs, err = cfg.Docs.Recent(ctx, 5); err != nil {
-			log.Printf("homes: dokumente: recent: %v", err)
-		}
-	})
+// page where Paperless opens; no rows when Paperless is silent.
+func zuletztAbgelegt(r *http.Request, cfg StartConfig, docs []paperless.Doc) cards.Card {
 	c, opens := cards.Card{Title: "Zuletzt abgelegt"}, cfg.paperlessOpens(r)
 	now, loc := cfg.clock()
 	for _, d := range docs {
 		detail := strings.Trim(d.Correspondent+" · "+map[bool]string{false: dayWord(d.Created, now, loc)}[d.Created.IsZero()], " ·")
 		c.AddLink(d.Title, detail, map[bool]string{true: cards.DocumentPages + strconv.Itoa(d.ID)}[opens]) // away from a LAN-only Paperless: no link
 	}
-	return c.HTML()
+	return c
 }

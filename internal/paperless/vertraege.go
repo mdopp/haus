@@ -33,9 +33,10 @@ var VertragsArten = []string{"Vertrag", "Versicherungsschein"}
 // Pruefen is the tag laib puts on a contract it is not sure of.
 const Pruefen = "prüfen"
 
-// Vertrag is one contract: its document, its kind, its fields by name,
-// when the notice must be in, and whether laib was unsure.
-type Vertrag struct {
+// Eintrag is one document as Homes lists it: its kind, its fields by
+// name, when the notice must be in, and whether laib was unsure. A
+// Vertrag is one of a contract's kind.
+type Eintrag struct {
 	Doc
 	Art          string
 	Felder       map[string]string
@@ -43,10 +44,20 @@ type Vertrag struct {
 	Unsicher     bool
 }
 
+// Vertrag is one contract.
+type Vertrag = Eintrag
+
 type named struct {
 	ID       int    `json:"id"`
 	Name     string `json:"name"`
 	DataType string `json:"data_type"`
+	Count    int    `json:"document_count"`
+	Extra    struct {
+		Options []struct {
+			ID    string `json:"id"`
+			Label string `json:"label"`
+		} `json:"select_options"`
+	} `json:"extra_data"`
 }
 
 func (c *Client) all(ctx context.Context, path string) ([]named, error) {
@@ -65,100 +76,25 @@ func (c *Client) Vertraege(ctx context.Context, frage string, arten []string, ma
 	if len(arten) == 0 {
 		arten = VertragsArten
 	}
-	want := map[string]bool{}
-	for _, a := range arten {
-		want[strings.ToLower(strings.TrimSpace(a))] = true
-	}
-	types, err := c.all(ctx, "/api/document_types/")
+	o, err := c.ordnung(ctx)
 	if err != nil {
 		return nil, err
 	}
-	tags, err := c.all(ctx, "/api/tags/")
-	if err != nil {
-		return nil, err
-	}
-	fields, err := c.all(ctx, "/api/custom_fields/")
-	if err != nil {
-		return nil, err
-	}
-	typeName, tagName, field := map[int]string{}, map[int]string{}, map[int]named{}
-	var typeIDs []int
-	for _, t := range types {
-		typeName[t.ID] = t.Name
-		if want[strings.ToLower(t.Name)] {
-			typeIDs = append(typeIDs, t.ID)
-		}
-	}
-	for _, t := range tags {
-		tagName[t.ID] = t.Name
-	}
-	for _, f := range fields {
-		field[f.ID] = f
-	}
-	type raw struct {
-		ID            int    `json:"id"`
-		Title         string `json:"title"`
-		Correspondent *int   `json:"correspondent"`
-		DocumentType  *int   `json:"document_type"`
-		Tags          []int  `json:"tags"`
-		Created       string `json:"created"`
-		Custom        []struct {
-			Field int `json:"field"`
-			Value any `json:"value"`
-		} `json:"custom_fields"`
-	}
+	typeIDs := o.ids(o.typ, arten)
 	if len(typeIDs) == 0 {
 		return nil, nil
 	}
-	var page struct {
-		Results []raw `json:"results"`
-	}
-	q := url.Values{"document_type__id__in": {idList(typeIDs)}, "page_size": {"200"},
-		"fields": {"id,title,correspondent,document_type,tags,created,custom_fields"}}
-	if err := c.get(ctx, "/api/documents/", q, &page); err != nil {
+	docs, err := c.eintraege(ctx, o, url.Values{"document_type__id__in": {idList(typeIDs)}}, 200)
+	if err != nil {
 		return nil, err
 	}
-	docs := page.Results
-	corrIDs := map[int]bool{}
-	for _, d := range docs {
-		if d.Correspondent != nil {
-			corrIDs[*d.Correspondent] = true
-		}
-	}
-	corr := c.names(ctx, "/api/correspondents/", corrIDs)
 	words := frageWorte(frage)
 	type scored struct {
 		v     Vertrag
 		score int
 	}
 	var hits []scored
-	for _, d := range docs {
-		v := Vertrag{Doc: Doc{ID: d.ID, Title: d.Title, Link: c.Page(d.ID)}, Felder: map[string]string{}}
-		if d.Correspondent != nil {
-			v.Correspondent = corr[*d.Correspondent]
-		}
-		if d.DocumentType != nil {
-			v.Art = typeName[*d.DocumentType]
-		}
-		for _, t := range d.Tags {
-			v.Tags = append(v.Tags, tagName[t])
-			if strings.EqualFold(tagName[t], Pruefen) {
-				v.Unsicher = true
-			}
-		}
-		if len(d.Created) >= 10 {
-			v.Created, _ = time.Parse("2006-01-02", d.Created[:10])
-		}
-		for _, cf := range d.Custom {
-			f, ok := field[cf.Field]
-			if !ok || cf.Value == nil {
-				continue
-			}
-			if s := feldWert(f.DataType, cf.Value); s != "" {
-				v.Felder[f.Name] = s
-			}
-		}
-		v.KuendigenBis = kuendigenBis(v.Felder["Nächster Kündigungstermin"], v.Felder["Kündigungsfrist"])
+	for _, v := range docs {
 		hay := plainWords(strings.Join(append([]string{v.Title, v.Felder["Anbieter"], v.Correspondent, v.Art}, v.Tags...), " "))
 		score := 0
 		for _, w := range words {

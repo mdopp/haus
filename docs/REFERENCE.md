@@ -357,6 +357,20 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     private) a sentence replaces the dead link. Last, one line on what
     happens: OCR, then found under Notizen and by the Bote. None set: the
     page says so. `/dokumente/` without an id leads here.
+    *Finden* comes first (owner 2026-11-06), with Paperless's API: one
+    search field, the shortcuts *Versicherungen* and *Garantie läuft
+    noch*, a tile per Bereich tag with its count, a chip per document type
+    and per option of the field *Person*, each a list at `/dokumente/suche`
+    (`?q=`, `?bereich=`, `?typ=`, `?person=`, `?nur=versicherungen|garantie`;
+    `&teil=1` is the list alone, which the field fetches while typing).
+    The words are searched three ways at once and merged
+    (`paperless.Finde`): `custom_field_query` with `icontains` on
+    Rechnungs-, Vertrags-, Versicherungs-, Kundennummer, Produkte and
+    Anbieter; every document with one of those numbers compared without
+    spaces and dashes (a typed number with digits); the sender's name; and
+    Paperless 3's `text` search over title and OCR text. A row says date,
+    sender, type and its key field and opens the document in Paperless
+    (`/dokumente/<id>`); answers are kept a minute.
     *Scannen* (haus#76, laib#568) reads Laib's `laib_scan status` (the scan
     service's status file) and says its state in a word: *Bereit*, *Scannt*
     with the page, *Nach Blatt n abgebrochen* with where the rest goes in,

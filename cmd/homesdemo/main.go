@@ -182,7 +182,9 @@ func main() {
 	doku := cfg
 	doku.Ablage, doku.DocumentsMail, doku.Module = napi.NewUploads(upload), "dokumente@example.org", demoModule(true)
 	doku.PaperlessPublicURL, doku.PaperlessLANOnly = "https://paperless.example", true // the archive's way in, at home only
+	doku.Docs = demoPaperless()                                                        // the search, the Bereiche, Zuletzt abgelegt (owner 2026-11-06)
 	mux.HandleFunc("/dokumente", pages.Dokumente(doku))
+	mux.HandleFunc(pages.DokumenteSuchePath, pages.DokumenteSuche(doku))
 	mux.HandleFunc("/willkommen", pages.Willkommen(cfg))
 	mux.HandleFunc("/sprechen", pages.Sprechen(cfg))
 	store, err := devices.Open(dir)

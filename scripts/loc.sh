@@ -46,7 +46,9 @@ budget() { # budget <name> <cap> <dir…>
 # and ausblenden (kontakte_immich.go), Fotos in „So hängt alles zusammen“
 # 2026-11-06, owner approved 2026-11-06: Box → Auslastung (15,949 -> 16,090): the tab, its bars,
 # rings and temperatures, its values fetched again in place every 5 s (box_auslastung.go, laib#1076)
-budget pages 16091 internal/pages     # the family's pages, one per file: 14,684
+# 2026-11-06, owner approved 2026-11-06: Dokumente-Suche (16,089 -> 16,371): Finden on Dokumente and /dokumente/suche (dokumente_suche.go): the search field fetched
+# while typing, the Bereich tiles, type and person chips, Versicherungen and Garantie läuft noch, the rows
+budget pages 16372 internal/pages     # the family's pages, one per file: 14,684
 # 2026-11-05, owner 2026-11-05: writable Homes-Konto (5,033 -> 5,121): PUT and DELETE of one shared
 # appointment or card for the phones, the Papierkorb on delete, the feed for a phone that writes back
 budget napi 5121 internal/napi        # the app's widgets' and share sheet's API: 4,793
@@ -73,7 +75,11 @@ budget cmd 1448 cmd/homes             # homes' wiring: 1,018 with the demo then
 # picture the phone sends (sentOnly)
 # 2026-11-06, owner approved 2026-11-06: Box → Auslastung (13,670 -> 13,714): laib.Auslastung,
 # the shape of laib auslastung's JSON and its call (laib#1076)
-budget connectors 13715 $connectors   # one client per service, with its fake: 11,327, 12,543 with abs and musicbrainz
+# 2026-11-06, owner approved 2026-11-06: Dokumente-Suche (13,714 -> 14,098): paperless.Finde and Ordnung
+# (suche.go: Bereiche, types, Person; the number fields by custom_field_query, sender, text, merged and kept a
+# minute; Vertraege shares its reading, -64), and paperlessfake's custom_field_query (AND/OR/NOT, icontains, gt,
+# exists), text, a sender's name, document counts and a select's options (+95)
+budget connectors 14099 $connectors   # one client per service, with its fake: 11,327, 12,543 with abs and musicbrainz
 # 2026-11-04, internal/jsonfile (47 lines, 50 of cap) from household's cap to shared's: it
 # replaces nine copies of a save, 62 of their lines in household
 # 2026-11-05, owner 2026-11-05 yes: Immich for the contacts (9,583 -> 9,874):
