@@ -1,21 +1,27 @@
-// Package gesichter links the household's contacts with Immich's people
-// (owner 2026-11-05): a contact's „Fotos“ opens the Immich person of its
-// name, a contact without a picture gets that person's face on the phones,
-// and a named person without a contact is offered on the Kontakte page.
+// Package gesichter links the contacts with Immich's people (owner
+// 2026-11-05): a contact's „Fotos“ opens its Immich person, and a contact
+// without a picture gets that person's face on the phones.
+//
+// Every contact has an Immich person of its name (owner 2026-11-06,
+// Abgleichen): the Haushalts-Kontakte and the key owner's own
+// Handy-Kontakte. Homes makes one where Immich has none of that name, and
+// keeps the name and birthday of the ones it made; it never deletes,
+// hides, merges or renames another. The owner names a face in Immich,
+// Immich offers the person of that name, the owner merges: the faces come
+// from Immich itself.
 //
 // Immich is asked in the background only (Pflegen), never while a page or
-// the phones' feed waits: the named people every hour, each face once and
-// again only when Immich changed it or after BildTTL, made small (≤ 96 px)
-// and kept in HOMES_DATA/immich-gesichter.json. Who was hidden from the
-// suggestions is HOMES_DATA/immich-ausgeblendet.json. Without the owner's
-// key there are no faces and no suggestions; the link searches Immich for
-// the name.
+// the phones' feed waits: every hour, each face once and again only when
+// Immich changed it or after BildTTL, made small (≤ 96 px). All of it is
+// kept in HOMES_DATA/immich-gesichter.json. Without the owner's key there
+// are no faces and no persons; the link searches Immich for the name.
 package gesichter
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"image"
 	"image/color"
 	"image/jpeg"
@@ -23,11 +29,11 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/mdopp/homes/internal/caldav"
 	"github.com/mdopp/homes/internal/immich"
 	"github.com/mdopp/homes/internal/jsonfile"
 	"github.com/mdopp/homes/internal/namen"
@@ -35,7 +41,8 @@ import (
 
 const (
 	cacheDatei = "immich-gesichter.json"
-	ausDatei   = "immich-ausgeblendet.json"
+	// maxAufrufe bounds a run's calls to Immich while matching contacts.
+	maxAufrufe = 200
 	// BildTTL is how long a face is kept before it is fetched again.
 	BildTTL = 7 * 24 * time.Hour
 	// Kante is a face's longest side on the phones, in pixels.
@@ -44,21 +51,35 @@ const (
 
 // Gesichter is Immich as the contacts see it.
 type Gesichter struct {
-	Immich *immich.Client // nil: no key, so no faces and no suggestions
-	Web    string         // HOMES_IMMICH_PUBLIC_URL, https://photos.<domain>
-	Dir    string         // HOMES_DATA
-	Now    func() time.Time
+	Immich   *immich.Client // nil: no key, so no faces and no persons
+	Kontakte *caldav.Client // the household's and the owner's own contacts; nil: none
+	Web      string         // HOMES_IMMICH_PUBLIC_URL, https://photos.<domain>
+	Dir      string         // HOMES_DATA
+	Now      func() time.Time
 
-	mu        sync.Mutex
-	geladen   bool
-	stand     stand
-	versteckt map[string]bool
+	mu      sync.Mutex
+	geladen bool
+	stand   stand
 }
 
 // stand is what Homes keeps of Immich.
 type stand struct {
 	Personen []immich.Person `json:"personen"`
 	Bilder   map[string]bild `json:"bilder"` // by person id
+	Email    string          `json:"email"`  // the key's Immich account
+	Login    string          `json:"login"`  // the Homes login seen with that e-mail
+	// Zuordnung is each contact's person, by "haushalt/<uid>" or "privat/<uid>"
+	Zuordnung map[string]zuordnung `json:"zuordnung"`
+	Fehlt     string               `json:"fehlt,omitempty"` // the permission the last run lacked
+}
+
+// zuordnung is a contact's Immich person; Eigen: Homes made it, so Homes
+// keeps its name and birthday.
+type zuordnung struct {
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	Geburtstag string `json:"geburtstag,omitempty"`
+	Eigen      bool   `json:"eigen,omitempty"`
 }
 
 type bild struct {
@@ -93,13 +114,8 @@ func (g *Gesichter) laden() {
 	if b, err := os.ReadFile(filepath.Join(g.Dir, cacheDatei)); err == nil {
 		json.Unmarshal(b, &g.stand)
 	}
-	var ids []string
-	if b, err := os.ReadFile(filepath.Join(g.Dir, ausDatei)); err == nil {
-		json.Unmarshal(b, &ids)
-	}
-	g.versteckt = map[string]bool{}
-	for _, id := range ids {
-		g.versteckt[id] = true
+	if g.stand.Zuordnung == nil {
+		g.stand.Zuordnung = map[string]zuordnung{}
 	}
 }
 
@@ -116,15 +132,19 @@ func (g *Gesichter) person(name string) (immich.Person, bool) {
 	return found, n == 1
 }
 
-// Link is where „Fotos“ opens Immich for name: the person's page, else
-// Immich's search for the name (web/src/lib/route.ts: /people/<id>, and
-// /search?query=<SmartSearchDto as JSON>).
-func (g *Gesichter) Link(name string) string {
+// Link is where „Fotos“ opens Immich for the contact (key as in
+// Zuordnung) of that name: its person's page, else the one person of the
+// name, else Immich's search for the name (web/src/lib/route.ts:
+// /people/<id>, and /search?query=<SmartSearchDto as JSON>).
+func (g *Gesichter) Link(key, name string) string {
 	if g == nil {
 		return ""
 	}
 	g.mu.Lock()
 	p, ok := g.person(name)
+	if z, da := g.stand.Zuordnung[key]; da {
+		p.ID, ok = z.ID, true
+	}
 	g.mu.Unlock()
 	if ok && g.Immich != nil {
 		return g.Web + "/people/" + url.PathEscape(p.ID)
@@ -146,62 +166,40 @@ func (g *Gesichter) Bild(name string) []byte {
 	return nil
 }
 
-// Vorschlaege are the named people with no contact of their name among
-// kontakte, none hidden, by name.
-func (g *Gesichter) Vorschlaege(kontakte []string) []immich.Person {
+// Wessen is the Homes login whose e-mail is the key's Immich account,
+// as last seen (Merke); "" before.
+func (g *Gesichter) Wessen() string {
 	if g == nil || g.Immich == nil {
-		return nil
-	}
-	da := map[string]bool{}
-	for _, k := range kontakte {
-		da[namen.Plain(k)] = true
+		return ""
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.laden()
-	var out []immich.Person
-	for _, p := range g.stand.Personen {
-		if !da[namen.Plain(p.Name)] && !g.versteckt[p.ID] {
-			out = append(out, p)
-		}
-	}
-	slices.SortFunc(out, func(a, b immich.Person) int { return strings.Compare(namen.Plain(a.Name), namen.Plain(b.Name)) })
-	return out
+	return g.stand.Login
 }
 
-// Vorschlag is the suggested person id; false for one Homes does not know.
-func (g *Gesichter) Vorschlag(id string) (immich.Person, bool) {
-	if g == nil {
-		return immich.Person{}, false
+// Merke notes login as the key's owner when email is the key's account
+// (Authelia's Remote-Email of a page request): the background then knows
+// whose Handy-Kontakte to match.
+func (g *Gesichter) Merke(login, email string) {
+	if g == nil || g.Immich == nil || login == "" {
+		return
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.laden()
-	i := slices.IndexFunc(g.stand.Personen, func(p immich.Person) bool { return p.ID == id })
-	if i < 0 {
-		return immich.Person{}, false
+	if g.stand.Email != "" && strings.EqualFold(g.stand.Email, strings.TrimSpace(email)) && g.stand.Login != login {
+		g.stand.Login = login
+		g.save()
 	}
-	return g.stand.Personen[i], true
 }
 
-// Ausblenden hides id from the suggestions for good.
-func (g *Gesichter) Ausblenden(id string) error {
+// Fehlt is the permission the key lacked in the last run; "" none.
+func (g *Gesichter) Fehlt() string {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.laden()
-	if g.versteckt[id] {
-		return nil
-	}
-	ids := []string{id}
-	for v := range g.versteckt {
-		ids = append(ids, v)
-	}
-	slices.Sort(ids)
-	if err := jsonfile.Save(filepath.Join(g.Dir, ausDatei), ids); err != nil {
-		return err
-	}
-	g.versteckt[id] = true
-	return nil
+	return g.stand.Fehlt
 }
 
 // Auffrischen asks Immich for its named people, and fetches the face of
@@ -215,8 +213,12 @@ func (g *Gesichter) Auffrischen(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	email, err := g.Immich.Wessen(ctx)
 	g.mu.Lock()
 	g.laden()
+	if err == nil || errors.As(err, new(immich.FehltRecht)) {
+		g.stand.Email = email
+	}
 	alt := g.stand.Bilder
 	g.mu.Unlock()
 	neu := map[string]bild{}
@@ -237,18 +239,28 @@ func (g *Gesichter) Auffrischen(ctx context.Context) error {
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	g.stand = stand{Personen: people, Bilder: neu}
+	g.stand.Personen, g.stand.Bilder = people, neu
+	return g.save()
+}
+
+// save keeps the stand; g.mu is held.
+func (g *Gesichter) save() error {
 	return jsonfile.Save(filepath.Join(g.Dir, cacheDatei), g.stand)
 }
 
-// Pflegen keeps Immich's people fresh: now, then every jede.
-func (g *Gesichter) Pflegen(ctx context.Context, jede time.Duration) {
+// Pflegen keeps Immich's people fresh and gives each of kontakte's
+// contacts its person: now, then every jede.
+func (g *Gesichter) Pflegen(ctx context.Context, jede time.Duration, kontakte *caldav.Client) {
 	if g == nil || g.Immich == nil {
 		return
 	}
+	g.Kontakte = kontakte
 	for {
 		if err := g.Auffrischen(ctx); err != nil && ctx.Err() == nil {
 			log.Printf("homes: immich: people and faces: %v", err)
+		}
+		if err := g.Abgleichen(ctx); err != nil && ctx.Err() == nil {
+			log.Printf("homes: immich: a person per contact: %v", err)
 		}
 		select {
 		case <-ctx.Done():

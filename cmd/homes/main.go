@@ -91,7 +91,7 @@ type site struct {
 	domain                    string                       // the box's domain, HOMES_PUBLIC_URL's after homes.: the services' addresses
 	dienste                   map[string]bool              // the services Laib runs (dienstePflegen): the link modules; nil, Laib has not said yet
 	archive                   map[string]napi.ArchivIntern // each person's message archive (HOMES_ARCHIV_INTERN): a contact's Nachrichten
-	gesichter                 *gesichter.Gesichter         // Immich for the contacts (HOMES_IMMICH_*): Fotos, faces, suggestions; nil, none
+	gesichter                 *gesichter.Gesichter         // Immich for the contacts (HOMES_IMMICH_*): Fotos, faces, a person per contact; nil, none
 }
 
 // routes is Homes' whole surface: /napi for the app, /mcp/haushalt for the
@@ -484,7 +484,7 @@ func main() {
 	startLeaf(ctx, st)
 	go schliesseWuensche(ctx, ops, st.napi.Module, time.Minute) // a wish for what is on now is done (ADR 0001 §10)
 	go dienstePflegen(ctx, start, st.napi.Module, 30*time.Second, time.Hour)
-	go st.gesichter.Pflegen(ctx, time.Hour) // Immich's people hourly, a face only when new, changed or a week old
+	go st.gesichter.Pflegen(ctx, time.Hour, st.hh.Contacts) // Immich's people hourly, a face only when new, changed or a week old; each contact a person
 	mux := routes(st)
 	addr := env("HOMES_LISTEN", "127.0.0.1:8650")
 	log.Printf("homes %s: listening on %s as %s, laib %s, home assistant %v, haushalt %d tools, memory library %v (tidy-up %v), uploads %q, the Bote %v, counting %v (voice %v), pages only behind the proxy secret", Version, addr, assistent.Name(), ops.URL, cfg.HA != nil, len(haushalt.Tools(hh)), hh.Library != nil, hh.Judge != nil, cfg.UploadDir, b != nil, counter != nil, voice != nil)

@@ -6,8 +6,6 @@ import (
 	"image/color"
 	"image/jpeg"
 	"net/url"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -49,24 +47,24 @@ func TestLink(t *testing.T) {
 	if err := g.Auffrischen(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	if got := g.Link("anna  MÜLLER"); got != "https://photos.box.test/people/p-anna" {
+	if got := g.Link("", "anna  MÜLLER"); got != "https://photos.box.test/people/p-anna" {
 		t.Fatalf("match: %q", got)
 	}
 	search := func(name string) string {
 		return "https://photos.box.test/search?" + url.Values{"query": {`{"query":"` + name + `"}`}}.Encode()
 	}
-	if got := g.Link("Carla"); got != search("Carla") {
+	if got := g.Link("", "Carla"); got != search("Carla") {
 		t.Fatalf("no match: %q", got)
 	}
-	if got := g.Link("Zwilling"); got != search("Zwilling") {
+	if got := g.Link("", "Zwilling"); got != search("Zwilling") {
 		t.Fatalf("two of a name: %q", got)
 	}
 	g.Immich = nil
-	if got := g.Link("Anna Müller"); got != search("Anna Müller") {
+	if got := g.Link("", "Anna Müller"); got != search("Anna Müller") {
 		t.Fatalf("no key: %q", got)
 	}
-	if g.Bild("Anna Müller") != nil || g.Vorschlaege(nil) != nil {
-		t.Fatal("no key: no faces, no suggestions")
+	if g.Bild("Anna Müller") != nil {
+		t.Fatal("no key: no faces")
 	}
 }
 
@@ -107,34 +105,5 @@ func TestBildCachedSmall(t *testing.T) {
 	g.Immich.URL = "http://127.0.0.1:1"
 	if g.Auffrischen(t.Context()) == nil || g.Bild("Ben") == nil {
 		t.Fatal("Immich away")
-	}
-}
-
-// Suggestions: the named people without a contact, hidden ones never
-// again, also for a new Homes.
-func TestVorschlaegeAusblenden(t *testing.T) {
-	g, _ := box(t)
-	g.Auffrischen(t.Context())
-	names := func(ps []immich.Person) (out []string) {
-		for _, p := range ps {
-			out = append(out, p.Name)
-		}
-		return out
-	}
-	if got := names(g.Vorschlaege([]string{"Anna Müller", "Oma"})); len(got) != 3 || got[0] != "Ben" {
-		t.Fatalf("%v", got)
-	}
-	if err := g.Ausblenden("p-ben"); err != nil {
-		t.Fatal(err)
-	}
-	again := &Gesichter{Immich: g.Immich, Dir: g.Dir}
-	if got := names(again.Vorschlaege([]string{"Anna Müller"})); len(got) != 2 || got[0] != "Zwilling" {
-		t.Fatalf("after hiding: %v", got)
-	}
-	if _, err := os.Stat(filepath.Join(g.Dir, ausDatei)); err != nil {
-		t.Fatal(err)
-	}
-	if p, ok := g.Vorschlag("p-ben"); !ok || p.Name != "Ben" {
-		t.Fatal("Vorschlag")
 	}
 }

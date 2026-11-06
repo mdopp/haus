@@ -21,8 +21,8 @@ import (
 )
 
 // Owner 2026-11-05: Immich for the household's contacts — a „Fotos“ link,
-// the face as the phones' picture of a card without one, and Immich's
-// named people without a contact as suggestions on Kontakte.
+// and the face as the phones' picture of a card without one. Immich's
+// people are not offered as contacts (owner 2026-11-06).
 
 // faceJPEG is a face as Immich cuts one: 250 px, one colour.
 func faceJPEG(t *testing.T, c color.Color) []byte {
@@ -38,8 +38,8 @@ func faceJPEG(t *testing.T, c color.Color) []byte {
 	return b.Bytes()
 }
 
-// fotosConfig is sprungConfig's box with Immich and the owner's key:
-// Immich knows Oma Erna and Ben, and Ben has no contact.
+// fotosConfig is sprungConfig's box with Immich and the owner's key (anna's
+// account): Immich knows Oma Erna and Ben, and Ben has no contact.
 func fotosConfig(t *testing.T) (StartConfig, *immichfake.Server) {
 	t.Helper()
 	cfg, _ := sprungConfig(t)
@@ -210,82 +210,4 @@ func TestKontaktKarteGesichtThroughNapi(t *testing.T) {
 	if photoOf(t, dav.Objects()["/homes/haushalt-kontakte/oma.vcf"]) == nil {
 		t.Fatal("a phone without a picture took the stored one")
 	}
-}
-
-func postKontakte(t *testing.T, cfg StartConfig, form url.Values) *httptest.ResponseRecorder {
-	t.Helper()
-	req := httptest.NewRequest("POST", KontakteImmichPath, strings.NewReader(form.Encode()))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Remote-User", "anna")
-	req.Header.Set("Sec-Fetch-Site", "same-origin")
-	rec := httptest.NewRecorder()
-	KontakteAusImmich(cfg).ServeHTTP(rec, req)
-	return rec
-}
-
-// Kontakte: Immich's named people without a contact, quiet, each to make
-// or to hide; hidden stays hidden, made is a card with the name and no
-// stored picture. Nothing without a tap; nothing without the key.
-func TestKontakteVorschlaege(t *testing.T) {
-	cfg, _ := fotosConfig(t)
-	_, body, _ := familyPage(t, Kontakte, cfg, "GET", KontaktePath, "family")
-	mustContain(t, body, "In Immich, aber noch kein Haushalts-Kontakt", "<span>Ben Berg</span>", `name=id value="p-ben"`,
-		`data-laeuft="Legt an …">als Haushalts-Kontakt anlegen</button>`, `<button class=leise data-laeuft="Blendet aus …">ausblenden</button>`, `<img src="data:image/jpeg;base64,`)
-	mustNotContain(t, body, "<span>Oma Erna</span>")
-	before := len(mustContacts(t, cfg))
-
-	if rec := postKontakte(t, cfg, url.Values{"tun": {"ausblenden"}, "id": {"p-ben"}}); rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/kontakte?ausgeblendet=1" {
-		t.Fatalf("ausblenden: %d %v", rec.Code, rec.Header())
-	}
-	_, body, _ = familyPage(t, Kontakte, cfg, "GET", "/kontakte?ausgeblendet=1", "family")
-	mustContain(t, body, "Ausgeblendet: Homes schlägt diese Person nicht mehr vor.")
-	mustNotContain(t, body, "Ben Berg", "In Immich, aber")
-	if len(mustContacts(t, cfg)) != before {
-		t.Fatal("hiding made a contact")
-	}
-
-	cfg, _ = fotosConfig(t) // a new Homes data folder: Ben suggested again
-	rec := postKontakte(t, cfg, url.Values{"tun": {"anlegen"}, "id": {"p-ben"}})
-	loc, _ := url.Parse(rec.Header().Get("Location"))
-	if rec.Code != http.StatusSeeOther || loc.Path != KontaktePath || loc.Query().Get("angelegt") == "" {
-		t.Fatalf("anlegen: %d %v", rec.Code, rec.Header())
-	}
-	all := mustContacts(t, cfg)
-	if len(all) != before+1 {
-		t.Fatalf("%d contacts", len(all))
-	}
-	_, body, _ = familyPage(t, Kontakte, cfg, "GET", loc.String(), "family")
-	mustContain(t, body, "„Ben Berg“ ist jetzt ein Haushalts-Kontakt")
-	mustNotContain(t, body, "In Immich, aber")
-	served := KontaktKarte(cfg)("BEGIN:VCARD\r\nVERSION:4.0\r\nUID:"+loc.Query().Get("angelegt")+"\r\nFN:Ben Berg\r\nEND:VCARD\r\n", "")
-	mustContain(t, served, "X-HOMES=immich") // the face comes as for every card without a picture
-	// a second tap makes no second card
-	postKontakte(t, cfg, url.Values{"tun": {"anlegen"}, "id": {"p-ben"}})
-	if len(mustContacts(t, cfg)) != before+1 {
-		t.Fatal("a second card")
-	}
-	if rec := postKontakte(t, cfg, url.Values{"tun": {"anlegen"}, "id": {"unbekannt"}}); rec.Code != http.StatusConflict ||
-		!strings.Contains(rec.Body.String(), "Diese Person kennt Homes aus Immich nicht mehr.") {
-		t.Fatalf("unknown: %d %s", rec.Code, rec.Body)
-	}
-	if code, _, _ := familyPage(t, KontakteAusImmich, cfg, "GET", KontakteImmichPath, "family"); code != http.StatusMethodNotAllowed {
-		t.Fatalf("GET: %d", code)
-	}
-
-	cfg.Gesichter.Immich = nil // no key: no suggestions
-	_, body, _ = familyPage(t, Kontakte, cfg, "GET", KontaktePath, "family")
-	mustNotContain(t, body, "In Immich, aber")
-}
-
-func mustContacts(t *testing.T, cfg StartConfig) []string {
-	t.Helper()
-	all, _, err := cfg.Contacts.Contacts(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	var out []string
-	for _, c := range all {
-		out = append(out, c.Name)
-	}
-	return out
 }

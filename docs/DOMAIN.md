@@ -19,7 +19,7 @@ here.
 | **Haushalts-Kontakte** | The household's shared address books, on every phone; one card is a Haushalts-Kontakt. | vCard in Homes' Radicale home; `/napi/gemeinsam/kontakte`; module `kontakte` | Radicale |
 | **Haushalts-Kalender** | The household's shared calendars (Termine and Erinnerungen), on every phone. | VCALENDAR collections in Homes' Radicale home; `/napi/gemeinsam/kalender`; module `kalender` | Radicale |
 | **Firma** (Kontakt) | A Haushalts-Kontakt Homes made for a sender of documents. Only these cards are completed from documents. | `CATEGORIES:Firma`; Bote tool `kontakt_ergaenzen` | Radicale |
-| **Handy-Kontakte** | A person's own phone contacts, mirrored for their Archiv. Never shared, never sent to another phone. | address book `/<person>/handy-kontakte/`; `POST /napi/kontakte` | the phone (Radicale holds the mirror) |
+| **Handy-Kontakte** | A person's own phone contacts, mirrored for their Archiv. Never shared, never sent to another phone. Homes reads the Immich key owner's, for their persons in Immich and Meine Kontakte. | address book `/<person>/handy-kontakte/`; `POST /napi/kontakte` | the phone (Radicale holds the mirror) |
 | **Homes-Konto** | The Android account „Homes“: it carries the Haushalts-Kontakte, Termine and Erinnerungen into the phone's dialer, messengers and calendar. | app `konto/` (two sync adapters); module `konto`; `/napi/gemeinsam/…` | Homes app (the data: Radicale) |
 | **Termin** | An appointment in a Haushalts-Kalender. | VEVENT; Bote tool `termin_anlegen` | Radicale |
 | **Erinnerung** | Something due, which rings on the phones. Read-only on the phone. | VTODO with an alarm; `erinnerung_anlegen` | Radicale |
@@ -34,7 +34,8 @@ here.
 | **Daten sichern** | The phone's backups going to the person's Archiv. | module `sicherung`; app `sicherung/`; `/napi/sicherung/…` | Homes app → Archiv |
 | **„Dokumente“, „Nachrichten“, „Fotos“** | The links on a contact: its Dokumente in Paperless, the viewer's own messages with it in their Archiv, and the Immich person of its name. | vCard `homes-dokumente.URL`, `homes-nachrichten.URL`, `homes-fotos.URL`; `/kontakte/<uid>/dokumente`, `…/nachrichten`, `…/fotos` | Homes; made when served, never stored |
 | **Gesicht** (Kontaktbild aus Immich) | The face of a contact's Immich person, as the phones' picture of a card that has none. | vCard `homes-foto.PHOTO;X-HOMES=immich`; `internal/gesichter`; `HOMES_IMMICH_KEY` | Immich (Homes keeps a small copy); made when served, never stored |
-| **Person** (in Immich) | Someone Immich's face recognition knows by a name. One without a Haushalts-Kontakt is offered on Kontakte. | Immich `/api/people`; `/kontakte/aus-immich` | Immich |
+| **Person** (in Immich) | Someone Immich knows by name. Every Haushalts-Kontakt and each of the key owner's Handy-Kontakte has one (owner 2026-11-06); Homes makes a missing one without a face, and the owner merges a named face into it in Immich. Never offered as a Haushalts-Kontakt. | Immich `/api/people`, `/api/search/person`; `zuordnung` in `HOMES_DATA/immich-gesichter.json` | Immich |
+| **Meine Kontakte** | The Immich key owner's own Handy-Kontakte as a list in Homes, each opening its Immich person. | `/kontakte/privat`, `/kontakte/privat/<uid>/fotos` | Radicale (the private book, only read) |
 | **Standortverlauf** | Where a person was: recorded by the app or imported from Google. | module `standort`; `/napi/standort`, `/napi/standort/import` | Reitti |
 | **Hochladen** | The app's job for shared files: songs, albums and Takeout ZIPs. It goes on with the screen off. | app `hochladen/Hochladen.kt` | Homes app |
 | **Musik-Eingang** | The inbox folder that beets sorts into the music. | `musik-eingang`; `HOMES_MUSIC_INBOX`; `/napi/musik` | beets |
@@ -74,7 +75,7 @@ flowchart LR
   homes -- "Sicherungen, Such-Link" --> arch
   arch -- "liest Handy-Kontakte" --> rad
   homes -- "Punkte, Importe" --> reitti
-  homes -- "Personen, Gesichter, Links" --> immich
+  homes -- "Personen, Gesichter, Links, Namen" --> immich
   homes -- "Zustände, Schalten" --> ha
   ha -- "Mitteilung" --> bote
   bote -- "Haushalts-Werkzeuge" --> homes
@@ -90,17 +91,17 @@ else reads it, writes it through its owner, or only links to it.
 
 | System | Owns (source of truth) | What the others do with it |
 |---|---|---|
-| **Radicale** | the Haushalts-Kalender (Termine, Erinnerungen), the Haushalts-Kontakte, Handy-Kontakte, the lists (Einkauf, Musik-Wunschliste) | Homes reads and writes them over CalDAV/CardDAV and serves them to the phones. It decorates a card with its links but keeps no copy. The Archiv reads its person's Handy-Kontakte. |
+| **Radicale** | the Haushalts-Kalender (Termine, Erinnerungen), the Haushalts-Kontakte, Handy-Kontakte, the lists (Einkauf, Musik-Wunschliste) | Homes reads and writes them over CalDAV/CardDAV and serves them to the phones. It decorates a card with its links but keeps no copy. The Archiv reads its person's Handy-Kontakte; Homes reads the Immich key owner's for Immich and Meine Kontakte, and never writes them. |
 | **Paperless** | Dokumente, Korrespondenten, tags, custom fields | dokumente files Stapel and fills only empty fields. Homes searches Paperless, drops uploads into its consume folder, and links into it. |
 | **dokumente** (`mdopp/dokumente`) | the Stapel's state, and its record of what it read and reminded (`laib-vertraege.json`) | It is Paperless' reader. It completes contacts only through Homes' `kontakt_ergaenzen`. |
 | **Archiv** (msgvault, Laib template `archiv`) | a person's messages and mail, and the vault's key | Homes only drops the phone's backups into its inbox and links to its search. It cannot read the archive. |
-| **Immich** | the photos, its people and their faces (per Immich user: Homes reads the owner's) | Homes reads the named people and their faces with the owner's key, keeps small faces as a cache, and links to a person's page. It writes nothing there. |
+| **Immich** | the photos, its people, their names and faces (per Immich user: Homes works with the owner's) | Homes reads the people and their faces with the owner's key, keeps small faces as a cache, and links to a person's page. It makes a person (name and birthday, no face) for each contact Immich has none of that name for, and keeps those persons' name and birthday with their contact; it never deletes, hides, merges or renames another. |
 | **Reitti** | the Standortverlauf's points | Homes passes points and imports on. It keeps only the person's Reitti token and which hours an import already brought. |
 | **Home Assistant** | devices, their states, automations | Homes shows and switches them. Automations speak to people through the Bote. |
 | **Bote** | the chat channel to each person (`people` in box.yml) | Home Assistant, beets and Laib send it Mitteilungen. It calls Homes' household tools. |
 | **beets** | the music library, and its verdict on each upload | Homes shows the Musik-Eingang's rows and moves a deleted upload into its Papierkorb. |
 | **Laib** | what the box runs, its wiring and values (`MODULE_AUS`), Anfragen, Box-Aufgaben, the Inbox | Homes asks Laib and files Anfragen. It never decides (haus#1). |
-| **Homes** | the module list, the Papierkorb, the paired devices, the backup ledger, the contact links and faces (made when served), who was hidden from the Immich suggestions | the pages and `/napi` |
+| **Homes** | the module list, the Papierkorb, the paired devices, the backup ledger, the contact links and faces (made when served) | the pages and `/napi` |
 | **Homes app** | the phone's copy in the Homes-Konto, the Hochladen queue, positions not yet sent | It sends only through Homes' `/napi`. |
 
 ## 3. Event flows
@@ -144,9 +145,12 @@ flowchart TD
 - **„Fotos“ / the face:** „Fotos“ opens the one Immich person named as the
   contact, or Immich's search for the name. A card without a picture of
   its own reaches the phones with that person's face, made when served:
-  a phone sending it back loses it again. Immich's named people without a
-  contact appear on Kontakte as a quiet suggestion; only a tap makes a
-  card, „ausblenden“ hides one for good.
+  a phone sending it back loses it again. Immich's people are never
+  offered as Haushalts-Kontakte (owner 2026-11-06). Instead every contact
+  has an Immich person of its name, made by Homes when Immich has none:
+  the owner names a face in Immich, Immich offers that person, the owner
+  merges. The key's owner opens their own Handy-Kontakte's photos from
+  *Meine Kontakte*. Nothing is copied into an address book.
 
 ### b. A Termin changed on a phone
 

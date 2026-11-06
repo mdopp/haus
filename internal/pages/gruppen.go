@@ -44,8 +44,9 @@ func Gruppen(cfg StartConfig) map[string][]modul.Route {
 	gs.add("kalender", cards.ReminderPages, Erinnerung(cfg))
 	gs.add("kontakte", KontaktePath, Kontakte(cfg)) // the address book, by name (owner 2026-11-05)
 	gs.add("kontakte", cards.ContactPages, Kontakt(cfg))
-	gs.add("kontakte", KontakteImmichPath, KontakteAusImmich(cfg)) // Immich's people as contacts (owner 2026-11-05)
-	if cfg.Einkauf != nil || cfg.Wuensche != nil {                 // haus#118; with einkauf off, the music wish list only (ADR 0001 H4)
+	gs.add("kontakte", MeineKontaktePath, MeineKontakte(cfg))     // the Immich key owner's own, each to its photos (owner 2026-11-06)
+	gs.add("kontakte", MeineKontaktePath+"/", MeineKontakte(cfg)) // …/<uid>/fotos
+	if cfg.Einkauf != nil || cfg.Wuensche != nil {                // haus#118; with einkauf off, the music wish list only (ADR 0001 H4)
 		name := "einkauf"
 		if cfg.Einkauf == nil {
 			name = "musik"

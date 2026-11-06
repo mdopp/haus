@@ -249,20 +249,37 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     of its own. The search (`?q=`, and live while typing) finds name,
     number and e-mail, compared as `namen.Plain`. The same quiet line as
     Kalender says where to edit; Radicale not answering is *Die Kontakte
-    lassen sich gerade nicht lesen.*, once. Under the list, with the module
-    `fotos` and `HOMES_IMMICH_KEY` (owner 2026-11-05): *In Immich, aber noch
-    kein Haushalts-Kontakt*, at most 8 of Immich's named people without a
-    contact of their name, each with its face, *als Haushalts-Kontakt
-    anlegen* and *ausblenden*. Both post to `/kontakte/aus-immich`
-    (`tun=anlegen|ausblenden`, `id=<Immich person id>`): *anlegen* writes a
-    card with the name only (a vCard 4.0 into the Haushalt's address book;
-    one of that name there already is taken instead) and answers 303 to
-    `/kontakte?angelegt=<uid>`; *ausblenden* keeps the id in
-    `HOMES_DATA/immich-ausgeblendet.json` and answers 303 to
-    `/kontakte?ausgeblendet=1`; each then says what happened above the list.
-    Nothing is made without a tap. Immich is asked in the background only:
-    its named people hourly, a face once and again when Immich changed it
-    or after 7 days, 96 px, in `HOMES_DATA/immich-gesichter.json`.
+    lassen sich gerade nicht lesen.*, once. Immich's people are never
+    offered as contacts (owner 2026-11-06). For the Immich key's owner one
+    quiet line under the list leads to *Meine Kontakte*.
+  - *Meine Kontakte* (`/kontakte/privat`, kontakte module, with `fotos` and
+    `HOMES_IMMICH_KEY`; owner 2026-11-06): the key owner's own Handy-Kontakte
+    (`/<login>/handy-kontakte/`, read only, never mixed with the household's
+    book), as Kontakte lists the household's, with its search. A name leads
+    to `/kontakte/privat/<uid>/fotos`: 302 to the Immich person Homes gave
+    the contact, else the one person of its name, else Immich's search; an
+    unknown uid is 404. Only the key's owner sees it: the login Homes saw on
+    a page with `Remote-Email` equal to the e-mail of the key's Immich
+    account (`GET /api/users/me`); anyone else gets 303 to `/kontakte`. When
+    the last run lacked a permission, one line says which to tick in Immich.
+  - *Every contact a person in Immich* (owner 2026-11-06, background, hourly,
+    at most 200 calls a run, the rest in the next): each Haushalts-Kontakt
+    and each of the key owner's Handy-Kontakte (firm cards aside) gets the
+    Immich person of its name. One Immich has of that name (compared as
+    `namen.Plain`; `GET /api/search/person?withHidden=true`, which finds
+    faceless and hidden ones) is taken as it is; else Homes makes one
+    (`POST /api/people` with the name and the birthday when it is a whole
+    date). A person Homes made follows its contact's name and birthday
+    (`PUT /api/people/{id}`). Homes never deletes, hides, merges or renames
+    any other person; a contact gone loses only its line in the mapping
+    (`HOMES_DATA/immich-gesichter.json`, `zuordnung`, by `haushalt/<uid>` or
+    `privat/<uid>`). A person without a face is not in Immich's grid
+    (`getAllForUser` joins the faces); naming a face with that name in
+    Immich offers the merge, and the faces come to it. The household's
+    „Fotos“ uses the same mapping. The key needs `person.read`,
+    `person.create`, `person.update` and `user.read`. Immich's named
+    people's faces are asked hourly too, a face once and again when Immich
+    changed it or after 7 days.
   - *Deine Kalender* (`/kalender/verwalten`, haus#66), linked from
     Kalender: every calendar with where it comes from (*aus Google, nur
     lesen · verbunden seit … · zuletzt abgeglichen vor 5 min*, laib's
