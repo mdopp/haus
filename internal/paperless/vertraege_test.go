@@ -29,13 +29,17 @@ func TestKuendigenBis(t *testing.T) {
 }
 
 // haus#139: the contracts a question names, with their fields by name, when
-// to give notice, the document's link, and "prüfen" as unsure.
+// to give notice, the document's link, and "prüfen" as unsure. A contract
+// is one by its document type only (owner, 2026-11-06): a tag „Vertrag“ or
+// the Bereich tag „Versicherung“ makes none.
 func TestVertraege(t *testing.T) {
 	f := paperlessfake.New("tok")
 	defer f.Close()
-	f.DocType(1, "Versicherung")
+	f.DocType(1, "Versicherungsschein")
 	f.DocType(2, "Rechnung")
+	f.DocType(4, "Vertrag")
 	f.Tag(7, "Vertrag")
+	f.Tag(8, "Versicherung")
 	f.Tag(9, "prüfen")
 	f.Correspondent(3, "HUK-Coburg")
 	f.Field(11, "Anbieter", "string")
@@ -45,8 +49,10 @@ func TestVertraege(t *testing.T) {
 	f.Add(
 		paperlessfake.Doc{ID: 1, Title: "Kfz-Versicherung 2026", DocumentType: 1, Correspondent: 3, Created: "2025-11-02",
 			Fields: map[int]any{11: "HUK-Coburg", 12: "2027-01-01", 13: "1 Monat", 14: "EUR84.50"}},
-		paperlessfake.Doc{ID: 2, Title: "Stromvertrag Stadtwerke", Tags: []int{7, 9}, Created: "2024-05-01", Fields: map[int]any{11: "Stadtwerke"}},
+		paperlessfake.Doc{ID: 2, Title: "Stromvertrag Stadtwerke", DocumentType: 4, Tags: []int{9}, Created: "2024-05-01", Fields: map[int]any{11: "Stadtwerke"}},
 		paperlessfake.Doc{ID: 3, Title: "Kfz-Werkstatt Rechnung", DocumentType: 2},
+		paperlessfake.Doc{ID: 4, Title: "Handyvertrag Telekom", Tags: []int{7}},
+		paperlessfake.Doc{ID: 5, Title: "Beitragsrechnung Hausratversicherung", DocumentType: 2, Tags: []int{8}},
 	)
 	c := &Client{URL: f.URL, Token: "tok", PublicURL: "https://paperless.box"}
 	ctx := context.Background()
@@ -55,13 +61,22 @@ func TestVertraege(t *testing.T) {
 		t.Fatalf("%+v %v", vs, err)
 	}
 	v := vs[0]
-	if v.Title != "Kfz-Versicherung 2026" || v.Art != "Versicherung" || v.Correspondent != "HUK-Coburg" || v.Felder["Betrag"] != "84,50 €" ||
+	if v.Title != "Kfz-Versicherung 2026" || v.Art != "Versicherungsschein" || v.Correspondent != "HUK-Coburg" || v.Felder["Betrag"] != "84,50 €" ||
 		v.Felder["Nächster Kündigungstermin"] != "01.01.2027" || v.KuendigenBis.Format("02.01.2006") != "01.12.2026" || v.Link != "https://paperless.box/documents/1/details" || v.Unsicher {
 		t.Errorf("%+v", v)
 	}
 	vs, _ = c.Vertraege(ctx, "Bis wann muss ich den Stromvertrag kündigen?", nil, 5)
 	if len(vs) != 1 || !vs[0].Unsicher || vs[0].Art != "Vertrag" {
-		t.Errorf("by tag, unsure: %+v", vs)
+		t.Errorf("by type, unsure: %+v", vs)
+	}
+	if vs, _ := c.Vertraege(ctx, "Wann endet der Handyvertrag?", nil, 5); len(vs) != 0 {
+		t.Errorf("a tag „Vertrag“ makes no contract: %+v", vs)
+	}
+	if vs, _ := c.Vertraege(ctx, "Was kostet die Hausratversicherung?", nil, 5); len(vs) != 0 {
+		t.Errorf("the Bereich tag „Versicherung“ makes no contract: %+v", vs)
+	}
+	if vs, _ := c.Vertraege(ctx, "Wann läuft die Kfz-Versicherung aus?", []string{"Bescheid"}, 5); len(vs) != 0 {
+		t.Errorf("HOMES_VERTRAG_ARTEN replaces the default: %+v", vs)
 	}
 	if vs, _ := c.Vertraege(ctx, "Wann kündigen?", nil, 5); len(vs) != 0 {
 		t.Errorf("no word names one: %+v", vs)
