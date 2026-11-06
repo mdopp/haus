@@ -28,7 +28,7 @@ here.
 | **Dokument** | A filed letter, invoice or file. | Paperless document; `/dokumente/<id>` | Paperless |
 | **Stapel** | One run of the scanner, split into Dokumente. | Paperless custom field `Stapel`; dokumente `scan/` | dokumente |
 | **Korrespondent** | Who sent a Dokument. | Paperless correspondent | Paperless |
-| **Vertrag**, **Rechnung** | A Dokument of that type or tag. Its fields are read, and a notice date gets an Erinnerung. | `VERTRAG_ARTEN`, `RECHNUNG_ARTEN`; Paperless custom fields; dokumente `vertraege/` | dokumente (the fields live in Paperless) |
+| **Vertrag**, **Rechnung** | A Vertrag is a Dokument of the type „Vertrag“ or „Versicherungsschein“, never by a tag (the Bereich tag „Versicherung“ only orders; owner 2026-11-06); a Rechnung one of that type or tag. Its fields are read, and a notice date gets an Erinnerung. | `VERTRAG_TYPEN` (Homes: `HOMES_VERTRAG_ARTEN`), `RECHNUNG_ARTEN`; Paperless custom fields; dokumente `vertraege/` | dokumente (the fields live in Paperless) |
 | **prüfen** | A tag: a person should look at this Dokument. | Paperless tag `prüfen` | dokumente sets it |
 | **Archiv** | A person's own message archive (mail, WhatsApp, Signal, SMS), in a vault only that person opens. | Laib template `archiv` (msgvault), one per person; `archiv.<domain>`; `HOMES_ARCHIV_DIR/<person>` | Archiv |
 | **Daten sichern** | The phone's backups going to the person's Archiv. | module `sicherung`; app `sicherung/`; `/napi/sicherung/…` | Homes app → Archiv |

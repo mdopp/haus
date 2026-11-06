@@ -24,9 +24,11 @@ import (
 // it tags the document "prüfen". A question about a contract is answered
 // from them, always naming the document.
 
-// VertragsArten are the document types and tags that make a document a
-// contract (laib's VERTRAG_ARTEN default).
-var VertragsArten = []string{"Vertrag", "Versicherung", "Bescheid"}
+// VertragsArten are the document types that make a document a contract
+// (owner, 2026-11-06; dokumente's VERTRAG_TYPEN default): by its type only,
+// never by a tag. A Bereich tag such as „Versicherung“ orders documents and
+// makes none a contract.
+var VertragsArten = []string{"Vertrag", "Versicherungsschein"}
 
 // Pruefen is the tag laib puts on a contract it is not sure of.
 const Pruefen = "prüfen"
@@ -80,7 +82,7 @@ func (c *Client) Vertraege(ctx context.Context, frage string, arten []string, ma
 		return nil, err
 	}
 	typeName, tagName, field := map[int]string{}, map[int]string{}, map[int]named{}
-	var typeIDs, tagIDs []int
+	var typeIDs []int
 	for _, t := range types {
 		typeName[t.ID] = t.Name
 		if want[strings.ToLower(t.Name)] {
@@ -89,9 +91,6 @@ func (c *Client) Vertraege(ctx context.Context, frage string, arten []string, ma
 	}
 	for _, t := range tags {
 		tagName[t.ID] = t.Name
-		if want[strings.ToLower(t.Name)] {
-			tagIDs = append(tagIDs, t.ID)
-		}
 	}
 	for _, f := range fields {
 		field[f.ID] = f
@@ -108,32 +107,18 @@ func (c *Client) Vertraege(ctx context.Context, frage string, arten []string, ma
 			Value any `json:"value"`
 		} `json:"custom_fields"`
 	}
-	seen := map[int]bool{}
-	var docs []raw
-	for _, q := range []url.Values{{"document_type__id__in": {idList(typeIDs)}}, {"tags__id__in": {idList(tagIDs)}}} {
-		for k, v := range q {
-			if v[0] == "" {
-				delete(q, k)
-			}
-		}
-		if len(q) == 0 {
-			continue
-		}
-		q.Set("page_size", "200")
-		q.Set("fields", "id,title,correspondent,document_type,tags,created,custom_fields")
-		var page struct {
-			Results []raw `json:"results"`
-		}
-		if err := c.get(ctx, "/api/documents/", q, &page); err != nil {
-			return nil, err
-		}
-		for _, d := range page.Results {
-			if !seen[d.ID] {
-				seen[d.ID] = true
-				docs = append(docs, d)
-			}
-		}
+	if len(typeIDs) == 0 {
+		return nil, nil
 	}
+	var page struct {
+		Results []raw `json:"results"`
+	}
+	q := url.Values{"document_type__id__in": {idList(typeIDs)}, "page_size": {"200"},
+		"fields": {"id,title,correspondent,document_type,tags,created,custom_fields"}}
+	if err := c.get(ctx, "/api/documents/", q, &page); err != nil {
+		return nil, err
+	}
+	docs := page.Results
 	corrIDs := map[int]bool{}
 	for _, d := range docs {
 		if d.Correspondent != nil {
@@ -159,9 +144,6 @@ func (c *Client) Vertraege(ctx context.Context, frage string, arten []string, ma
 			v.Tags = append(v.Tags, tagName[t])
 			if strings.EqualFold(tagName[t], Pruefen) {
 				v.Unsicher = true
-			}
-			if v.Art == "" && want[strings.ToLower(tagName[t])] {
-				v.Art = tagName[t]
 			}
 		}
 		if len(d.Created) >= 10 {

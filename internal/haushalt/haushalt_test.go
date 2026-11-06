@@ -1400,7 +1400,7 @@ func TestEinkaufsliste(t *testing.T) {
 func TestVertraegeFinden(t *testing.T) {
 	f := paperlessfake.New("tok")
 	defer f.Close()
-	f.DocType(1, "Versicherung")
+	f.DocType(1, "Versicherungsschein")
 	f.Tag(9, "prüfen")
 	f.Field(11, "Anbieter", "string")
 	f.Field(12, "Nächster Kündigungstermin", "date")
@@ -1412,7 +1412,7 @@ func TestVertraegeFinden(t *testing.T) {
 		paperlessfake.Doc{ID: 2, Title: "Hausratversicherung", DocumentType: 1, Tags: []int{9}})
 	h := Handler(Config{Token: tok, Loc: berlin(t), Documents: &paperless.Client{URL: f.URL, Token: "tok", PublicURL: "https://paperless.box"}})
 	text, isErr := call(t, h, "vertraege_finden", map[string]any{"frage": "Wann läuft die Kfz-Versicherung aus?"})
-	want := "Kfz-Versicherung 2026 (Versicherung)\n- Anbieter: HUK-Coburg\n- Kündigungsfrist: 1 Monat\n- Nächster Kündigungstermin: 01.01.2027\n" +
+	want := "Kfz-Versicherung 2026 (Versicherungsschein)\n- Anbieter: HUK-Coburg\n- Kündigungsfrist: 1 Monat\n- Nächster Kündigungstermin: 01.01.2027\n" +
 		"- Kündigen bis spätestens: 01.12.2026\n- Betrag: 84,50 € monatlich\nDokument: https://paperless.box/documents/1/details"
 	if isErr || text != want {
 		t.Fatalf("%q", text)

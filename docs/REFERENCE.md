@@ -1055,6 +1055,12 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     page on Homes, `<HOMES_PUBLIC_URL>/dokumente/<id>`, which sends the
     person on to Paperless. Read-only (GET only), no redirect followed, the
     token never in an answer.
+    `vertraege_finden(frage)` answers from a contract's Paperless fields
+    (Anbieter, Kündigungsfrist, …), always with the document's link. A
+    contract is a document whose document type is named in
+    `HOMES_VERTRAG_ARTEN` (comma-separated; default `Vertrag,
+    Versicherungsschein`, as dokumente's `VERTRAG_TYPEN`), never one by a
+    tag: the Bereich tag „Versicherung“ only orders (owner, 2026-11-06).
   A backend that does not answer (refused, timed out) is a plain tool
   error, `Radicale antwortet gerade nicht; später noch einmal versuchen`
   (or Paperless), its detail in Homes' log; any other answer it did not
