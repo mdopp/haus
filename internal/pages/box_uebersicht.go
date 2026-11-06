@@ -23,12 +23,12 @@ import (
 func achtung(ctx context.Context, r *http.Request, cfg BoxConfig) string {
 	var ready laib.Readiness
 	var rows []laib.Service
-	var found []laib.Finding
+	var found laib.Befunde
 	var waiting []laib.Proposal
 	var reports []laib.Entry
 	var err, derr, ierr, rerr error
 	fetchCtx(ctx, func(ctx context.Context) { ready, rows, err = cfg.Laib.Status(ctx) },
-		func(ctx context.Context) { found, derr = cfg.Laib.Diag(ctx) },
+		func(ctx context.Context) { found, derr = cfg.Laib.Befunde(ctx) },
 		func(ctx context.Context) { waiting, ierr = cfg.Laib.Inbox(ctx) },
 		func(ctx context.Context) { reports, rerr = cfg.Laib.JournalLatest(ctx, 1, "report") })
 	if err != nil {
@@ -45,13 +45,13 @@ func achtung(ctx context.Context, r *http.Request, cfg BoxConfig) string {
 			add(c, serviceLabel(s)+aboutIt(s.Detail))
 		}
 	}
-	for _, f := range found {
+	for _, f := range found.Findings {
 		if (f.Severity == "rot" || f.Severity == "gelb") && !shown[f.Service] {
 			add(f.Severity, "<b>"+html.EscapeString(cmp.Or(f.Say, f.Probe))+"</b>"+aboutIt(f.Detail))
 		}
 	}
 	switch {
-	case errors.Is(derr, laib.ErrNoTool): // without diag, its red lines in laib status (laib#856)
+	case errors.Is(derr, laib.ErrNoTool): // a Laib without befunde: diag's red lines in laib status (laib#856)
 		for _, p := range ready.Problems {
 			var line string
 			json.Unmarshal(p, &line)
@@ -60,6 +60,8 @@ func achtung(ctx context.Context, r *http.Request, cfg BoxConfig) string {
 		add("k", texte.T("box.diag-fehlt"))
 	case derr != nil:
 		add("gelb", texte.T("box.diag-stumm"))
+	case found.At == nil: // never „Alles in Ordnung“ over what was not measured
+		add("k", texte.T("box.diag-nie"))
 	}
 	if ready.Lock != "" {
 		add("gelb", "gesperrt: "+html.EscapeString(ready.Lock))
@@ -75,11 +77,28 @@ func achtung(ctx context.Context, r *http.Request, cfg BoxConfig) string {
 	} else if n := len(waiting); n > 0 { // deciding is Laib's page's (ADR 0012, haus#157)
 		add("k", laibLink(cfg, "/inbox", texte.Anzahl(n, texte.T("box.wartet"), texte.T("box.wartet.n"))))
 	}
-	top := "<p><b class=gruen>" + texte.T("box.ruhig") + "</b> · " + kept(ready, isAdmin(r), cfg) + "</p>"
+	foot := kept(ready, isAdmin(r), cfg)
+	if found.At != nil {
+		foot += " · " + fmt.Sprintf(texte.T("box.gemessen"), seit(*found.At, time.Now()))
+	}
+	top := "<p><b class=gruen>" + texte.T("box.ruhig") + "</b> · " + foot + "</p>"
 	if all := append(append(lines["rot"], lines["gelb"]...), lines["k"]...); len(all) > 0 {
-		top = "<ul class=zeilen>" + strings.Join(all, "") + "</ul><p class=k>" + kept(ready, isAdmin(r), cfg) + "</p>"
+		top = "<ul class=zeilen>" + strings.Join(all, "") + "</ul><p class=k>" + foot + "</p>"
 	}
 	return "<h1>Box</h1>" + top + morningReport(reports, rerr) + "<p>" + laibLink(cfg, "/journal", "Das Journal auf der Laib-Seite") + "</p>"
+}
+
+// seit says how long ago diag measured: vor 12 min, vor 3 h, else the day.
+func seit(at, now time.Time) string {
+	switch d := now.Sub(at); {
+	case d < time.Minute:
+		return "gerade eben"
+	case d < 2*time.Hour:
+		return fmt.Sprintf("vor %d min", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("vor %d h", int(d.Hours()))
+	}
+	return when(at)
 }
 
 // aboutIt is a line's detail below it, Box-Aufgabe #N a link.

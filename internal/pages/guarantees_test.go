@@ -21,6 +21,9 @@ func fakeLaib(t *testing.T, ready map[string]any, rows []map[string]any) *laib.C
 		}
 		json.NewDecoder(r.Body).Decode(&req)
 		text := "[]"
+		if req.Params.Name == "laib_befunde" { // diag ran, found nothing
+			text = `{"at":"2026-11-06T10:00:00Z","findings":[]}`
+		}
 		if req.Params.Name == "laib_status" {
 			b, _ := json.Marshal(map[string]any{"ready": ready, "services": rows})
 			text = string(b)

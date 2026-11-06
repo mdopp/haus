@@ -130,8 +130,8 @@ var auditLaib = map[string]string{
 		`"disks":[{"role":"system","path":"/var","size":512000000000,"used":102400000000,"free":409600000000,"pct":20},{"role":"data","path":"/mnt/data/stacks","size":4000000000000,"used":3480000000000,"free":520000000000,"pct":87},{"role":"boot","path":"/boot","size":1023303680,"used":402653184,"free":620650496,"pct":39.3}],` +
 		`"gpu":{"name":"NVIDIA GeForce RTX 3090","pct":34,"memUsed":21474836480,"memTotal":25769803776,"temp":58,"power":142,"powerLimit":350,"holder":"","window":"household","model":"qwen3.6-35b-a3b"},` +
 		`"temps":[{"name":"cpu","c":54},{"name":"nvme0","c":41},{"name":"nvme1","c":39}]}`,
-	"laib_diag": `[{"severity":"gelb","probe":"bote","detail":"Der Bote antwortet nicht auf die Probe: signal-cli seit 3 h ohne Empfang","say":"Nachrichten über Signal kommen vielleicht nicht an."},` +
-		`{"severity":"gelb","probe":"cert","detail":"kein Zertifikat für die LAN-IP 192.168.1.10","say":"Über die IP-Adresse warnt der Browser."},{"severity":"info","probe":"watchdog","detail":"kein Wächter von außen","aufgabe":2}]`,
+	"laib_befunde": `{"at":"2026-11-06T10:48:00Z","findings":[{"severity":"gelb","probe":"bote","detail":"Der Bote antwortet nicht auf die Probe: signal-cli seit 3 h ohne Empfang","say":"Nachrichten über Signal kommen vielleicht nicht an."},` +
+		`{"severity":"gelb","probe":"cert","detail":"kein Zertifikat für die LAN-IP 192.168.1.10","say":"Über die IP-Adresse warnt der Browser."},{"severity":"info","probe":"watchdog","detail":"kein Wächter von außen","aufgabe":2}]}`,
 	"laib_zuhause": `{"street":"Musterweg 1","postcode":"12345","city":"Musterstadt","country":"DE","latitude":50.1,"longitude":8.6}`,
 }
 

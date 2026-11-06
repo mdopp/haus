@@ -545,10 +545,12 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   which fit a 411 px phone without scrolling sideways:
   *Übersicht* (`/box`), „Was braucht mich?“: on top only what needs the
   admin, red before yellow — the services not green by Laib's names
-  (haus#156), the red and yellow findings of `laib diag` (not info, not a
-  service already listed; while the homes hand lacks the verb `diag`, the
-  red lines of `laib status` and a quiet line saying the yellow ones are
-  missing), a lock, drift, the due Box-Aufgaben, and *N Entscheidungen
+  (haus#156), the red and yellow findings of the last `laib diag` run,
+  read with `laib befunde` (laib#1085: it measures nothing and closes no
+  Box-Aufgabe; not info, not a service already listed; *Befunde gemessen
+  vor 12 min* next to the guarantees; before the first run a quiet line
+  says so; a Laib without `befunde` gives the red lines of `laib status`
+  and a quiet line saying the yellow ones are missing), a lock, drift, the due Box-Aufgaben, and *N Entscheidungen
   warten* (`<laib>/inbox`, the one approval surface, laib ADR 0012) only
   when there are any. Nothing of that: one calm line, *Alles in Ordnung.*
   with the last backup and the last change (Rückgängig on Laib's page);

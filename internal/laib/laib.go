@@ -909,11 +909,15 @@ func (c *Client) Auslastung(ctx context.Context) (Auslastung, error) {
 	return out, err
 }
 
-// Diag is `laib diag`: what its probes found (Box → Übersicht); a Finding's
-// Severity is rot, gelb or info, Say what it means in one plain sentence.
+// Befunde is `laib befunde` (laib#1085): the last laib diag run's time (nil:
+// none yet) and findings, read without a run; Severity is rot, gelb or info.
 type Finding struct{ Severity, Probe, Service, Detail, Say string }
+type Befunde struct {
+	At       *time.Time
+	Findings []Finding
+}
 
-func (c *Client) Diag(ctx context.Context) (out []Finding, err error) {
-	err = c.callJSON(ctx, "diag", "", &out)
+func (c *Client) Befunde(ctx context.Context) (out Befunde, err error) {
+	err = c.callJSON(ctx, "befunde", "", &out)
 	return
 }
