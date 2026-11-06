@@ -82,7 +82,7 @@ func TestEachLeafModuleOff(t *testing.T) {
 	const wunschliste = "/einkauf?liste=liste-musik" // the Haushalt pills: served with einkauf or musik on
 	probes := map[string][]probe{
 		"gesundheit":   {{"/mehr", "gesundheit.example/werte", "!gesundheit.example/werte"}},
-		"werkstatt":    {{"/box", `box-werkstatt`, "!box-werkstatt"}},
+		"werkstatt":    {{"/box/aufgaben", `box-werkstatt`, "!box-werkstatt"}},
 		"netzlaufwerk": {{"/mehr", `href="/netzlaufwerk"`, `!href="/netzlaufwerk"`}, {"/netzlaufwerk", "Passwort", "Gibt es hier noch nicht"}},
 		"podcasts":     {{"/mehr", `href="/podcasts"`, `!href="/podcasts"`}, {"/podcasts", "Podcast abonnieren", "Gibt es hier noch nicht"}},
 		"gesehen":      {{"/mehr", `href="/gesehen"`, `!href="/gesehen"`}, {"/gesehen", "eintragen musst du nichts", "Gibt es hier noch nicht"}},

@@ -32,9 +32,9 @@ func TestBoxReadsAsLines(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 	h := Box(&laib.Client{URL: srv.URL, Token: "t"}, "https://laib.box.test")
-	page := getAt(h, "/box/dienste?ganz=1", "admins")
+	page := get(h, "admins")
 	mustContain(t, page, "overflow-wrap:break-word",
-		`<h2>Nicht grün</h2><ul class=zeilen><li><span class="punkt rot" role=img aria-label="rot"></span><span class=was><b>auth</b><span class=text>Passwort-Mails über smtp.gmail.com · geprüft vor 28 h</span>`,
+		`<h1>Box</h1><ul class=zeilen><li><span class="punkt rot" role=img aria-label="rot"></span><span class=was><b>auth</b><span class=text>Passwort-Mails über smtp.gmail.com · geprüft vor 28 h</span>`,
 		`<span class="punkt gelb" role=img aria-label="gelb"></span><span class=was><b>paperless</b><span class=text>Redis langsam</span>`)
 	mustNotContain(t, page, "td,th{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top;overflow-wrap:anywhere", "<b>adguard</b>")
 	before(t, page, "<b>auth</b>", "<b>paperless</b>")

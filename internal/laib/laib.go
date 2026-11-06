@@ -36,10 +36,6 @@ type Client struct {
 // Readiness is `laib status --json`.ready.
 type Readiness struct {
 	State     string `json:"state"`
-	Services  int    `json:"services"`
-	Green     int    `json:"green"`
-	Yellow    int    `json:"yellow"`
-	Red       int    `json:"red"`
 	LastHeard string `json:"lastHeard"`
 	Lock      string `json:"lock,omitempty"`
 	Drift     int    `json:"drift"`
@@ -53,13 +49,11 @@ type Readiness struct {
 		Repos int    `json:"repos"`
 		OK    bool   `json:"ok"` // green and not older than 36 h (laib#856)
 		// OnlyOnDataDisk: saved, but only on the disk it protects; the copy off the box is missing (laib#856)
-		OnlyOnDataDisk bool   `json:"onlyOnDataDisk"`
-		Problem        string `json:"problem"` // why ok is false
+		OnlyOnDataDisk bool `json:"onlyOnDataDisk"`
 	} `json:"lastBackup"`
 	// Problems are what is red beyond one service: disk, backup, firewall, slow probes (laib#856)
 	Problems   []json.RawMessage `json:"problems"`
 	LastChange struct {
-		Proposal   int    `json:"proposal"`
 		Summary    string `json:"summary"`
 		At         string `json:"at"`
 		Reversible bool   `json:"reversible"`
@@ -91,10 +85,9 @@ type Skill struct {
 		Weekly string `json:"weekly"`
 		Event  string `json:"event"`
 	} `json:"trigger"`
-	Tools   []string `json:"tools"`
-	Modell  string   `json:"modell"` // frei | urteil | nein
-	Status  string   `json:"status"` // active | paused | refused
-	Refused string   `json:"refused"`
+	Modell  string `json:"modell"` // frei | urteil | nein
+	Status  string `json:"status"` // active | paused | refused
+	Refused string `json:"refused"`
 }
 
 // Skills are the Operator's skills; ErrNoTool while Homes' hand may not list them.
@@ -109,10 +102,9 @@ func (c *Client) Skills(ctx context.Context) ([]Skill, error) {
 
 // Service is one row of `laib status --json`.services.
 type Service struct {
-	Name   string            `json:"name"`
-	State  string            `json:"state"` // grün | gelb | rot
-	Units  map[string]string `json:"units"`
-	Detail string            `json:"detail,omitempty"`
+	Name   string `json:"name"`
+	State  string `json:"state"` // grün | gelb | rot
+	Detail string `json:"detail,omitempty"`
 	// Title and Beschreibung are the service as Laib's own page names it
 	// (laib v0.43.0: media → „Jellyfin“, „Filme, Serien, Musik“); Homes
 	// names a service only by them, so both pages read the same
@@ -138,8 +130,7 @@ type Proposal struct {
 	Created time.Time `json:"created"`
 	Files   []string  `json:"files"`
 	Class   string    `json:"class"`
-	Kind    string    `json:"kind,omitempty"`    // the edit's shape; template-update is an update waiting
-	Reasons []string  `json:"reasons,omitempty"` // why only a human may allow it (laib#34)
+	Kind    string    `json:"kind,omitempty"` // the edit's shape; template-update is an update waiting
 }
 
 // Entry is one journal line.
@@ -916,4 +907,13 @@ func (c *Client) Auslastung(ctx context.Context) (Auslastung, error) {
 	var out Auslastung
 	err := c.callJSON(ctx, "auslastung", "", &out)
 	return out, err
+}
+
+// Diag is `laib diag`: what its probes found (Box → Übersicht); a Finding's
+// Severity is rot, gelb or info, Say what it means in one plain sentence.
+type Finding struct{ Severity, Probe, Service, Detail, Say string }
+
+func (c *Client) Diag(ctx context.Context) (out []Finding, err error) {
+	err = c.callJSON(ctx, "diag", "", &out)
+	return
 }

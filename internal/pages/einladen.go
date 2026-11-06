@@ -153,7 +153,7 @@ func Einladen(cfg BoxConfig) http.HandlerFunc {
 			}
 		}
 		if inv.problem != "" {
-			writeBox(w, r, cfg, http.StatusBadRequest, inv)
+			writeBox(w, r, cfg, http.StatusBadRequest, inv, nil)
 			return
 		}
 		inv.form = in
@@ -165,14 +165,14 @@ func Einladen(cfg BoxConfig) http.HandlerFunc {
 			if errors.Is(err, laib.ErrNoTool) {
 				code = http.StatusNotImplemented
 			}
-			writeBox(w, r, cfg, code, inv)
+			writeBox(w, r, cfg, code, inv, nil)
 			return
 		}
 		inv.done = &got
 		inv.signal = in.Signal != ""
 		inv.form = laib.Invite{} // the form is empty again for the next one
 		log.Printf("homes: einladen: %s by %s: mailed %v", in.User, r.Header.Get("Remote-User"), got.Mailed)
-		writeBox(w, r, cfg, http.StatusOK, inv)
+		writeBox(w, r, cfg, http.StatusOK, inv, nil)
 	}
 }
 
@@ -189,19 +189,19 @@ func signalLater(w http.ResponseWriter, r *http.Request, cfg BoxConfig) {
 		inv.problem = saysBadSignal
 	}
 	if inv.problem != "" {
-		writeBox(w, r, cfg, http.StatusBadRequest, inv)
+		writeBox(w, r, cfg, http.StatusBadRequest, inv, nil)
 		return
 	}
 	p, err := cfg.Laib.PersonSignal(r.Context(), user, number)
 	if err != nil {
 		log.Printf("homes: einladen: signal for %s by %s: %v", user, r.Header.Get("Remote-User"), err)
 		inv.problem = inviteProblem(err)
-		writeBox(w, r, cfg, http.StatusBadGateway, inv)
+		writeBox(w, r, cfg, http.StatusBadGateway, inv, nil)
 		return
 	}
 	log.Printf("homes: einladen: signal for %s by %s: Vorschlag #%d", user, r.Header.Get("Remote-User"), p.Proposal)
 	inv.numbered = &p
-	writeBox(w, r, cfg, http.StatusOK, inv)
+	writeBox(w, r, cfg, http.StatusOK, inv, nil)
 }
 
 // inviteProblem is Laib's refusal as the admin reads it: its own sentence

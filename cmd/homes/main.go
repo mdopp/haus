@@ -195,7 +195,7 @@ func familyMux(s site) *http.ServeMux {
 	pagesMux.HandleFunc("/abmelden", pages.Abmelden(s.publicURL))                 // Authelia's logout, back to Homes (haus#61)
 	pagesMux.HandleFunc("/schrift/", pages.Font())                                // Geist, from Homes itself (haus#35)
 	pagesMux.HandleFunc(pages.SymbolPath, pages.Symbol())                         // the icon and the web app manifest (owner 2026-11-02)
-	boxCfg := pages.BoxConfig{Laib: s.ops, LaibURL: s.laibURL, Tickets: s.tickets, Family: family, Voice: s.voice}
+	boxCfg := pages.BoxConfig{Laib: s.ops, LaibURL: s.laibURL, Tickets: s.tickets, Family: family, Voice: s.voice, Devices: s.store}
 	box := pages.BoxPage(boxCfg)
 	pagesMux.HandleFunc("/box", box)
 	pagesMux.HandleFunc("/box/einladen", pages.Einladen(boxCfg))    // the card "Person einladen", admins only (haus#56)

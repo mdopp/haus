@@ -87,36 +87,27 @@ func Aufgaben(cfg BoxConfig) http.HandlerFunc {
 			return
 		}
 		if err != nil {
-			http.Error(w, aufgabeProblem(err), aufgabeCode(err))
+			said, code := aufgabeProblem(err)
+			http.Error(w, said, code)
 			return
 		}
 		log.Printf("homes: box-aufgabe #%d %s by %s", id, r.PostForm.Get("tun"), who)
 		card := aufgabenCard(r.Context(), cfg.Laib, time.Now(), said, "")
-		writeBoxWith(w, r, cfg, http.StatusOK, invitation{}, map[string]string{"box-aufgaben": card})
+		writeBox(w, r, cfg, http.StatusOK, invitation{}, map[string]string{"aufgaben": card})
 	}
 }
 
 // aufgabeProblem is laib's refusal as laib says it ("Box-Aufgabe #9 gibt es
-// nicht"), else a sentence for what did not answer.
-func aufgabeProblem(err error) string {
+// nicht"), else a sentence for what did not answer, and its status code.
+func aufgabeProblem(err error) (string, int) {
 	switch {
 	case errors.Is(err, laib.ErrNoTool):
-		return saysAufgabenNoTool
+		return saysAufgabenNoTool, http.StatusForbidden
 	case strings.HasPrefix(err.Error(), "laib aufgabe: "):
-		return strings.TrimPrefix(err.Error(), "laib aufgabe: ")
+		return strings.TrimPrefix(err.Error(), "laib aufgabe: "), http.StatusConflict
 	}
 	log.Printf("homes: box-aufgabe: %v", err)
-	return saysAufgabeDown
-}
-
-func aufgabeCode(err error) int {
-	switch {
-	case errors.Is(err, laib.ErrNoTool):
-		return http.StatusForbidden
-	case strings.HasPrefix(err.Error(), "laib aufgabe: "):
-		return http.StatusConflict
-	}
-	return http.StatusBadGateway
+	return saysAufgabeDown, http.StatusBadGateway
 }
 
 // day is a JJJJ-MM-TT date as the page says it: "25.10.".

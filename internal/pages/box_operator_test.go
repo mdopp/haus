@@ -30,7 +30,8 @@ func skillLaib(t *testing.T, list []map[string]any, mayList bool) *laib.Client {
 		case "laib_status":
 			b, _ := json.Marshal(map[string]any{"ready": map[string]any{"state": "bereit", "operatorWork": map[string]any{"skills": map[string]any{
 				"routineblick": map[string]any{"at": ran, "outcome": "green", "caused": "eine Notiz"},
-				"vorfall":      map[string]any{"at": ran, "outcome": "skipped", "why": "kein roter Dienst"}}}}, "services": []any{}})
+				"vorfall":      map[string]any{"at": ran, "outcome": "skipped", "why": "kein roter Dienst"},
+				"sicherung":    map[string]any{"at": ran, "outcome": "error", "why": "restic fehlt"}}}}, "services": []any{}})
 			res["content"] = []map[string]string{{"text": string(b)}}
 		case "laib_skill":
 			if !mayList {
@@ -56,25 +57,31 @@ func TestBoxShowsWhatTheOperatorCan(t *testing.T) {
 		{"name": "sicherung", "source": "builtin", "description": "Prüft die Sicherung.", "trigger": map[string]string{"weekly": "Mo 08:00"}, "modell": "nein", "status": "paused"},
 		{"name": "eigen", "source": "state", "description": "Ein eigener.", "trigger": map[string]string{"every": "10m"}, "status": "refused", "refused": "das Werkzeug exec ist nicht erlaubt"},
 	}
-	body := getAt(BoxWith(skillLaib(t, list, true), "https://laib.box.test", nil), "/box/operator?ganz=1", "admins")
-	mustContain(t, body, "<h1>Was der Operator kann</h1>",
+	body := get(BoxWith(skillLaib(t, list, true), "https://laib.box.test", nil), "admins")
+	mustContain(t, body, "<details id=operator><summary>Operator: <span class=gelb>unbekannt</span></summary>",
 		"<b>Routineblick</b><span class=text>Schaut täglich nach, ob alles läuft.</span><span class=text>täglich 06:30 · Ein Skript sammelt, das Modell urteilt.</span>",
 		"Zuletzt heute, ", ": lief, alles gut. eine Notiz",
 		"wenn ein Dienst rot wird · Das Modell löst das Problem selbst.", ": übersprungen (kein roter Dienst)",
-		"montags 08:00 · Nur ein Skript, kein Modell. · ruht gerade", "Noch nicht gelaufen",
+		"montags 08:00 · Nur ein Skript, kein Modell. · ruht gerade", ": schiefgegangen (restic fehlt)",
 		"alle 10 Minuten", "Laib lässt ihn nicht laufen: das Werkzeug exec ist nicht erlaubt", "Ein eigener Skill dieser Box",
 		`<a href="https://github.com/mdopp/laib/tree/main/skills/routineblick" target=_blank rel=noopener>Der Skill auf GitHub</a>`,
-		`<a href=/box/operator aria-current=page>Operator</a>`, "Homes zeigt nur.")
+		"Homes zeigt nur.")
 	mustNotContain(t, body, "skills/eigen", "<form", "<button")
-	if strings.Contains(getAt(BoxWith(skillLaib(t, list, true), "https://laib.box.test", nil), "/box/operator?ganz=1", "family"), "Was der Operator kann") {
+	// owner 2026-11-06: first only the skills whose last run was not good (here: the refused one), „Alle Skills zeigen“ the rest
+	mustContain(t, body, `<input type=checkbox id=alle-skills><label for=alle-skills>Alle Skills zeigen</label>`, `#alle-skills:not(:checked)~ul .gut{display:none}`,
+		`<li class=gut><span class="punkt gruen" role=img aria-label="aktiv"></span><span class=was><b>Routineblick</b>`, `<li><span class="punkt rot" role=img aria-label="verweigert"></span><span class=was><b>Eigen</b>`,
+		`<li><span class="punkt k" role=img aria-label="ruht"></span><span class=was><b>Sicherung</b>`, `<li class=gut><span class="punkt gruen" role=img aria-label="aktiv"></span><span class=was><b>Vorfall</b>`, "Noch nicht gelaufen")
+	mustNotContain(t, body, "Alle Skills liefen zuletzt gut.")
+	if strings.Contains(getAt(BoxWith(skillLaib(t, list, true), "https://laib.box.test", nil), "/box?ganz=1", "family"), "Routineblick") {
 		t.Error("the family sees the skills")
 	}
 }
 
 // Homes may not list them yet: what ran shows by its name, and the page says why the rest is missing
 func TestBoxOperatorWithoutTheGrant(t *testing.T) {
-	body := getAt(BoxWith(skillLaib(t, nil, false), "https://laib.box.test", nil), "/box/operator?ganz=1", "admins")
-	mustContain(t, body, saysSkillsNoList, "<b>Routineblick</b>", "<b>Vorfall</b>", ": übersprungen (kein roter Dienst)")
+	body := get(BoxWith(skillLaib(t, nil, false), "https://laib.box.test", nil), "admins")
+	mustContain(t, body, saysSkillsNoList, "<b>Routineblick</b>", "<b>Vorfall</b>", ": übersprungen (kein roter Dienst)", `<li><span class="punkt k" role=img aria-label="unbekannt"></span><span class=was><b>Sicherung</b>`)
+	mustNotContain(t, body, "Alle Skills liefen zuletzt gut.")
 	mustNotContain(t, body, "Laib antwortet nicht")
 }
 
