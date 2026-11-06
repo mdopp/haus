@@ -779,7 +779,7 @@ test('Meine Kontakte: the own Handy-Kontakte, each to its person in Immich', asy
   await expect(page.getByText('In Immich, aber noch kein Haushalts-Kontakt')).toHaveCount(0);
   await page.getByRole('link', { name: 'Meine Kontakte' }).click();
   await expect(page).toHaveURL(/\/kontakte\/privat$/);
-  await expect(page.locator('.kontakte li')).toHaveCount(3);
+  await expect(page.locator('.kontakte li')).toHaveCount(5);
   await expect(page.getByRole('link', { name: 'Oma Hilde' })).toHaveAttribute('href', '/kontakte/privat/k0/fotos');
   await page.screenshot({ path: info.outputPath('meine-kontakte-411.png'), fullPage: true });
   const r = await page.request.get('/kontakte/privat/k0/fotos', { maxRedirects: 0 });

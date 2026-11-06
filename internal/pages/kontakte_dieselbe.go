@@ -75,25 +75,31 @@ func Dieselbe(cfg StartConfig) http.HandlerFunc {
 				http.Error(w, "Ja, Nein oder Überspringen? Die Antwort fehlt.", http.StatusBadRequest)
 				return
 			}
+			a, b := r.PostForm.Get("a"), r.PostForm.Get("b")
+			antworten, gesagt := func(ctx context.Context) (string, error) { return cfg.Gesichter.Antworten(ctx, a, b, antwort) }, dieselbeGesagt
 			if kontakt != "" {
-				said, problem = istAntworten(r.Context(), cfg, kontakt, r.PostForm.Get("b"), antwort)
-			} else {
-				said, problem = dieselbeAntworten(r.Context(), cfg, r.PostForm.Get("a"), r.PostForm.Get("b"), antwort)
+				antworten, gesagt = func(ctx context.Context) (string, error) { return cfg.Gesichter.Bestaetigen(ctx, kontakt, b, antwort) }, istGesagt
 			}
+			said, problem = dieselbeAntworten(r.Context(), antwort, antworten, gesagt)
 		}
 		seite, _ := strconv.Atoi(r.FormValue("seite"))
 		writePage(w, http.StatusOK, dieselbeSeite(r, cfg, seite, said, problem))
 	}
 }
 
-// dieselbeAntworten passes the answer on and says how it ended.
-func dieselbeAntworten(ctx context.Context, cfg StartConfig, a, b, antwort string) (said, problem string) {
+// dieselbeGesagt are a pair's answers as the page says them.
+var dieselbeGesagt = map[string]texte.ID{"nein": texte.DieselbeGemerkt, "spaeter": texte.DieselbeHinten, "stumm": texte.DieselbeStumm}
+
+// dieselbeAntworten passes the answer on (antworten, to Immich within
+// dieselbeWait) and says how it ended: a merge by the name kept, the
+// others and Immich not answering ("stumm") as gesagt has them.
+func dieselbeAntworten(ctx context.Context, antwort string, antworten func(context.Context) (string, error), gesagt map[string]texte.ID) (said, problem string) {
 	ctx, cancel := context.WithTimeout(ctx, dieselbeWait)
 	defer cancel()
-	name, err := cfg.Gesichter.Antworten(ctx, a, b, antwort)
+	name, err := antworten(ctx)
 	var fehlt immich.FehltRecht
 	switch {
-	case errors.Is(err, gesichter.ErrKeinPaar):
+	case errors.Is(err, gesichter.ErrKeinPaar), errors.Is(err, gesichter.ErrKeineFrage):
 		return "", texte.T(texte.DieselbeWeg)
 	case errors.As(err, &fehlt):
 		return "", "" // the page's line says which permission
@@ -101,14 +107,12 @@ func dieselbeAntworten(ctx context.Context, cfg StartConfig, a, b, antwort strin
 		return "", texte.T(texte.DieselbeNichtGemacht)
 	case err != nil:
 		log.Printf("homes: dieselbe person: %v", err)
-		return "", texte.T(texte.DieselbeStumm)
+		return "", texte.T(gesagt["stumm"])
 	case antwort == "ja":
 		log.Printf("homes: dieselbe person: merged into %q", name)
 		return fmt.Sprintf(texte.T(texte.DieselbeZusammen), name), ""
-	case antwort == "nein":
-		return texte.T(texte.DieselbeGemerkt), ""
 	}
-	return texte.T(texte.DieselbeHinten), ""
+	return texte.T(gesagt[antwort]), ""
 }
 
 // dieselbeSeite is the page: its line, the outcome, the pairs of seite.

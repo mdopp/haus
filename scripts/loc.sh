@@ -50,9 +50,9 @@ budget() { # budget <name> <cap> <dir…>
 # while typing, the Bereich tiles, type and person chips, Versicherungen and Garantie läuft noch, the rows
 # 2026-11-06, owner approved 2026-11-06: Dieselbe Person: „Dieselbe Person?“ (16,341 -> 16,497):
 # /kontakte/dieselbe (kontakte_dieselbe.go): pairs of faces, ten a page, Ja/Nein/Überspringen, the outcome on the page, the quiet links
-# 2026-11-06, owner asked for it 2026-11-06, the raise WAITS for the owner's yes: „Ist das …?“ (16,497 -> 16,579):
+# 2026-11-06, owner asked for it 2026-11-06, the raise WAITS for the owner's yes: „Ist das …?“ (16,497 -> 16,555):
 # a contact's picture beside the person Immich gave its face, Ja/Nein/Kein Foto (kontakte_ist.go), on „Dieselbe Person?“
-budget pages 16580 internal/pages     # the family's pages, one per file: 14,684
+budget pages 16556 internal/pages     # the family's pages, one per file: 14,684
 # 2026-11-05, owner 2026-11-05: writable Homes-Konto (5,033 -> 5,121): PUT and DELETE of one shared
 # appointment or card for the phones, the Papierkorb on delete, the feed for a phone that writes back
 budget napi 5121 internal/napi        # the app's widgets' and share sheet's API: 4,793

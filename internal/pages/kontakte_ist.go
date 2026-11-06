@@ -1,17 +1,12 @@
 package pages
 
 import (
-	"context"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"html"
-	"log"
 	"strconv"
 	"strings"
 
-	"github.com/mdopp/homes/internal/gesichter"
-	"github.com/mdopp/homes/internal/immich"
 	"github.com/mdopp/homes/internal/texte"
 )
 
@@ -45,28 +40,5 @@ func istFragen(cfg StartConfig, seite int) string {
 	return b.String() + "<h2>" + t(texte.Dieselbe) + "</h2>"
 }
 
-// istAntworten passes the answer about a contact's picture on and says how
-// it ended.
-func istAntworten(ctx context.Context, cfg StartConfig, kontakt, person, antwort string) (said, problem string) {
-	ctx, cancel := context.WithTimeout(ctx, dieselbeWait)
-	defer cancel()
-	name, err := cfg.Gesichter.Bestaetigen(ctx, kontakt, person, antwort)
-	var fehlt immich.FehltRecht
-	switch {
-	case errors.Is(err, gesichter.ErrKeineFrage):
-		return "", texte.T(texte.DieselbeWeg)
-	case errors.As(err, &fehlt):
-		return "", "" // the page's line says which permission
-	case errors.Is(err, gesichter.ErrNichtZusammen):
-		return "", texte.T(texte.DieselbeNichtGemacht)
-	case err != nil:
-		log.Printf("homes: ist das: %v", err)
-		return "", texte.T(texte.IstDasStumm)
-	case antwort == "ja":
-		log.Printf("homes: ist das: a contact's person merged into %q", name)
-		return fmt.Sprintf(texte.T(texte.DieselbeZusammen), name), ""
-	case antwort == "nein":
-		return texte.T(texte.IstDasNeinGemerkt), ""
-	}
-	return texte.T(texte.IstDasKeinFotoGemerkt), ""
-}
+// istGesagt are the answers about a picture as the page says them.
+var istGesagt = map[string]texte.ID{"nein": texte.IstDasNeinGemerkt, "keinfoto": texte.IstDasKeinFotoGemerkt, "stumm": texte.IstDasStumm}
