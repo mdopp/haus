@@ -52,7 +52,9 @@ budget() { # budget <name> <cap> <dir…>
 # /kontakte/dieselbe (kontakte_dieselbe.go): pairs of faces, ten a page, Ja/Nein/Überspringen, the outcome on the page, the quiet links
 # 2026-11-06, owner approved 2026-11-06: Kontaktfotos: „Ist das …?“ (16,497 -> 16,555):
 # a contact's picture beside the person Immich gave its face, Ja/Nein/Kein Foto (kontakte_ist.go), on „Dieselbe Person?“
-budget pages 16556 internal/pages     # the family's pages, one per file: 14,684
+# 2026-11-07, owner approved 2026-11-07: Befunde in der Box-Übersicht (16,555 -> 16,574): laib befunde
+# (laib#1085) instead of diag, „Befunde gemessen vor X min“ (seit), the line before diag's first run
+budget pages 16575 internal/pages     # the family's pages, one per file: 14,684
 # 2026-11-05, owner 2026-11-05: writable Homes-Konto (5,033 -> 5,121): PUT and DELETE of one shared
 # appointment or card for the phones, the Papierkorb on delete, the feed for a phone that writes back
 budget napi 5121 internal/napi        # the app's widgets' and share sheet's API: 4,793
@@ -91,7 +93,9 @@ budget cmd 1448 cmd/homes             # homes' wiring: 1,018 with the demo then
 # immich.Zusammenfuehren (POST /api/people/merge), Naechste (closestPersonId), Fotos (statistics), Rechte (api-keys/me), and immichfake's
 # 2026-11-06, owner approved 2026-11-06: Kontaktfotos: contacts' pictures (14,434 -> 14,575):
 # immich.Hochladen (archived), Funde (GET /api/faces), Entfernen (DELETE /api/assets), multipart and 204; immichfake's
-budget connectors 14576 $connectors   # one client per service, with its fake: 11,327, 12,543 with abs and musicbrainz
+# 2026-11-07, owner approved 2026-11-07: Befunde in der Box-Übersicht (14,575 -> 14,579): laib.Befunde,
+# the last diag run's time and findings, in place of laib.Diag
+budget connectors 14580 $connectors   # one client per service, with its fake: 11,327, 12,543 with abs and musicbrainz
 # 2026-11-04, internal/jsonfile (47 lines, 50 of cap) from household's cap to shared's: it
 # replaces nine copies of a save, 62 of their lines in household
 # 2026-11-05, owner 2026-11-05 yes: Immich for the contacts (9,583 -> 9,874):
