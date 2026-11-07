@@ -28,8 +28,8 @@ HOMES_USAGE_URL=http://host.containers.internal:8094 HOMES_USAGE_TOKEN=<usage-me
 
 `HOMES_DATA` (default `/data`) holds `devices.json` and `favoriten.json`; `HOMES_PUBLIC_URL` is the
 origin the setup link carries (default `https://<Host>`). Homes' Laib token is the `homes` hand: status, inbox, journal, restart —
-nothing else (no exec, no write). There are no static device tokens. Image: `ghcr.io/mdopp/homes`. Laib template: `homes` (routes `homes.<domain>` and,
-until laib#1021 ends, the old `haus.<domain>`, both `bypass: [/napi/]`; the
+nothing else (no exec, no write). There are no static device tokens. Image: `ghcr.io/mdopp/homes`. Laib template: `homes` (route `www.<domain>`, the domain itself redirects
+there, `bypass: [/napi/]`; the
 upload needs the share's consume folder mounted writable at
 `HOMES_UPLOAD_DIR`, on a file system with hard links, and Caddy letting a
 request of 64 MB through; the message backups need

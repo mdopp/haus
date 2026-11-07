@@ -11,7 +11,7 @@ import (
 // Abmelden is the way out (haus#61, like Laib's own since laib#480):
 // Authelia's logout, and the login afterwards returns to Homes, so a wrong
 // account, or a shared tablet's month-long login, can switch from Homes.
-// publicURL is Homes' own address (HOMES_PUBLIC_URL, https://homes.<domain>);
+// publicURL is Homes' own address (HOMES_PUBLIC_URL, https://www.<domain>);
 // Authelia is auth.<domain> beside it. Unset, the request's own host
 // stands in. It logs nobody out itself: the GET only sends on.
 func Abmelden(publicURL string) http.HandlerFunc {

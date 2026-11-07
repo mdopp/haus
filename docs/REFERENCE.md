@@ -617,7 +617,7 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   (restart). `POST …/approvals/{id}/approve|deny` answers 403: Homes decides
   nothing (haus#1); approvals reach the admin through the relay (laib ADR 0012).
 
-- Pairing: in the app, enter `https://homes.<domain>`. The app opens
+- Pairing: in the app, enter Homes' address, `https://www.<domain>`. The app opens
   `/pair-device` in a Custom Tab, Authelia logs the person in, they confirm,
   and Homes redirects to `cloud.dopp.homes://pair#token=homes_device_…&id=…`,
   the token in the fragment (haus#6). `GET /box/geraete` lists the devices,
@@ -633,12 +633,10 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   the old app (`cloud.dopp.haus`) sees the package is not its own and tells
   the person to install Homes and remove Haus afterwards.
 
-- The old address: the box routes `haus.<domain>` here too (laib#1021). A
-  request there for anything but `/napi/…` — the only paths the old app
-  calls with its device token — is redirected (308) to the same path on
-  `HOMES_PUBLIC_URL`; `/napi/…` is served there as it is (OkHttp drops
-  `Authorization` on a redirect to another host). Requests from inside the
-  box (`host.containers.internal`, `127.0.0.1`) are never redirected.
+- Homes' address is `HOMES_PUBLIC_URL`, `https://www.<domain>` on the box
+  (laib ADR 0031 amendment, owner 2026-11-07); every link Homes makes uses
+  it. The old names `homes.<domain>` and `haus.<domain>` are gone, with no
+  redirect: a phone paired to either pairs again.
 
 - The person's modules and setup tasks, for the app (owner 2026-11-04;
   the app's launcher and its setup list): `GET /napi/einrichtung` with a

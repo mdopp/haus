@@ -113,7 +113,7 @@ type Quellen struct {
 	// Erkennen is a module's own check, where Homes reads its service
 	// already (Jellyfin's devices): true is a device of the person's
 	Erkennen map[string]func(ctx context.Context, person string) (bool, error)
-	Adresse  string            // Homes' public address, https://homes.<domain>
+	Adresse  string            // Homes' public address, https://www.<domain>
 	Ziele    map[string]string // the app's launcher shortcuts that this box has (Antwort.Ziele)
 	Now      func() time.Time  // nil: time.Now
 	// Immich is how many of the Immich key owner's questions are open

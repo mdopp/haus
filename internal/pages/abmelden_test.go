@@ -40,6 +40,7 @@ func TestAbmeldenSendsToAutheliasLogout(t *testing.T) {
 	for _, c := range []struct{ public, host, want string }{
 		{"https://homes.example.org", "", "https://auth.example.org/logout?rd=https%3A%2F%2Fhomes.example.org%2F"},
 		{"https://homes.example.org/", "ignored.test", "https://auth.example.org/logout?rd=https%3A%2F%2Fhomes.example.org%2F"},
+		{"https://www.dopp.cloud", "", "https://auth.dopp.cloud/logout?rd=https%3A%2F%2Fwww.dopp.cloud%2F"}, // Homes' address since 2026-11-07
 		{"", "homes.dopp.cloud:443", "https://auth.dopp.cloud/logout?rd=https%3A%2F%2Fhomes.dopp.cloud%2F"},
 	} {
 		rec := httptest.NewRecorder()
