@@ -54,14 +54,15 @@ func spurenKarte(r *http.Request, cfg StartConfig) string {
 }
 
 // spurModule are the modules whose trace is on Mehr: off, and not the
-// admins' own (their trace is on the Box page).
+// admins' own (their trace is on the Box page) nor switched off on
+// purpose (never shown to the family).
 func spurModule(cfg StartConfig) []modul.Modul {
 	if cfg.Module == nil {
 		return nil
 	}
 	var out []modul.Modul
 	for _, m := range cfg.Module.Module() {
-		if !m.An() && !m.Admins {
+		if !m.An() && !m.Admins && !m.Abgeschaltet() {
 			out = append(out, m)
 		}
 	}
@@ -158,7 +159,7 @@ func Anfordern(cfg StartConfig) http.HandlerFunc {
 			m, ok = cfg.Module.Eins(r.FormValue("modul"))
 		}
 		switch {
-		case !ok || m.An():
+		case !ok || m.An() || m.Abgeschaltet():
 			say(http.StatusNotFound, texte.AnfordernGibtsNicht)
 			return
 		case cfg.Laib == nil:
@@ -204,6 +205,10 @@ func modulAus(w http.ResponseWriter, r *http.Request, cfg StartConfig, name, pat
 	m, ok := modul.Modul{Name: name, Titel: texte.Titel(name), Warum: modul.Fehlt}, false
 	if x, found := cfg.Module.Eins(name); found && !x.An() { // on, its backend unset: nothing to wish for
 		m, ok = x, true
+	}
+	if m.Abgeschaltet() && !isAdmin(r) { // switched off on purpose: not there for the family
+		Elsewhere(cfg)(w, r)
+		return
 	}
 	var ws modul.Wuensche
 	if ok {

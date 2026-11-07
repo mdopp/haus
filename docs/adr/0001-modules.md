@@ -666,3 +666,24 @@ place; the setup belongs with each function, and as a task per app.
   ticked by hand; kept in `HOMES_DATA/einrichtung.json`.
 - **`GET /napi/einrichtung`** is the app's view of it (docs/REFERENCE.md);
   `/napi/kann` is unchanged but lists the three modules.
+
+## 12. Amendment 2026-11-07 — switched off is not shown
+
+The owner, 2026-11-07: a module switched off on purpose (`MODULE_AUS`)
+showed on Mehr as „gibt es hier noch nicht“ with „Hier anfordern“, once
+its service was gone too (Gesundheit: `MODULE_AUS: gesundheit`, the
+service removed, so `fehlt` won and the family was offered a request).
+
+- **Aus wins.** A module `HOMES_MODULE_AUS` names is `warum: aus` whether
+  its backend runs or not; its reason says both („Auf dieser Box
+  ausgeschaltet. Auf dieser Box läuft … nicht.“).
+- **Not shown to the family.** An `aus` module leaves no trace on Mehr
+  (§10 applies to `fehlt` only), its own page is a 404 for the family,
+  `/napi/kann` leaves it out (no entry, so no trace and no `bietet` in the
+  app), and neither `/mehr/anfordern` nor `/napi/kann/anfordern` takes a
+  wish for it. The admins see it under Box → Haushalt → Module with its
+  reason and its switch (H7), which is where it is switched on again.
+
+Weighed: §10's „nothing is hidden“ was about what the box lacks; what the
+owner switched off is a decision, and offering to request it asks the
+family to undo it. No cost in code beyond one check per place.

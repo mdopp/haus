@@ -94,3 +94,23 @@ func TestStartSendsTheFirstVisitToWillkommen(t *testing.T) {
 		t.Fatalf("seen: %d\n%s", rec.Code, rec.Body.String())
 	}
 }
+
+// The key owner's open questions in Immich are one task among theirs, with
+// the count as it is now, leading to „Dieselbe Person?“; gone once nothing
+// is open (owner 2026-11-07).
+func TestImmichFragenSindEineAufgabe(t *testing.T) {
+	cfg := setupBox(t, "fotos")
+	cfg.Einrichtung.Haken.Setzen("anna", "fotos", einrichten.Hand, time.Now())
+	n := 4
+	cfg.Einrichtung.Immich = func(p string) int {
+		if p == "anna" {
+			return n
+		}
+		return 0
+	}
+	mustContain(t, welcomePage(t, cfg).Body.String(), `<a href="/kontakte/dieselbe">4 Personen in Immich prüfen</a>`)
+	n = 0
+	page := welcomePage(t, cfg).Body.String()
+	mustContain(t, page, "Alles eingerichtet.")
+	mustNotContain(t, page, "in Immich prüfen")
+}

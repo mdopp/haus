@@ -280,7 +280,8 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     „Fotos“ uses the same mapping. The key needs `person.read`,
     `person.create`, `person.update`, `person.merge` and `user.read`, and
     `asset.upload`, `face.read` and `asset.delete` for the contacts'
-    pictures (*Ist das …?*); `person.statistics` adds the photo counts. Immich's named
+    pictures (*Ist das …?*), and `asset.read` for the places and company
+    beside a pair's faces; `person.statistics` adds the photo counts. Immich's named
     people's faces are asked hourly too, a face once and again when Immich
     changed it or after 7 days.
   - *One name, one person* (owner 2026-11-06, the same hourly run, before
@@ -310,6 +311,20 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     `immich-gesichter.json`, `nein`: the pair never comes back) and
     *Überspringen* (last). Only a pair on offer is merged; a pair gone,
     Immich not answering or a missing `person.merge` is said on the page.
+    A pair is offered only when both faces are kept as JPEGs (Immich
+    answers 404 for a person whose face it has no thumbnail of, and a
+    closest face is fetched at most 80 a run) and neither person is in no
+    photo; until then it waits (owner 2026-11-07). Each face links to its
+    person's page in Immich (`/people/<id>`, a new tab), and under it stand
+    one grey line each: *Orte* (the three most frequent places of its
+    newest 100 photos, the city else the country, and the span of years)
+    and *Auch dabei* (the three named persons most often in the same
+    photos), read with `POST /api/search/metadata` (`personIds`,
+    `withExif`, `withPeople`) once after Homes starts, then daily, kept as
+    `umfeld`. While any pair or question is open, the key's owner has one
+    task, „N Personen in Immich prüfen“, on Deine Aufgaben, Mehr and in
+    the app (`/napi/einrichtung`, `immich-pruefen`), gone by itself once
+    none is.
   - *Ist das …?* (owner 2026-11-06: a contact's picture is a suggestion,
     never an answer; on the same page, before the pairs): the hourly run
     uploads, at most 10 a run, the picture (vCard PHOTO, a JPEG) of each of
@@ -320,7 +335,9 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     and never touched). The next runs read its faces (`GET
     /api/faces?id=`): Immich gives the face of an archived photo to a
     person close enough on its own, never starts one for it. That person
-    is the question, beside the picture: *Ja, das ist …* (POST
+    is the question, beside the picture (the picture links to Homes' upload
+    in Immich, `/photos/<asset>`, the person to its page; asked only when
+    both pictures are kept as JPEGs): *Ja, das ist …* (POST
     `kontakt`, `b`, `antwort=ja`: the contact's person is merged into it,
     `POST /api/people/merge`, that person first; the contact's line
     follows), *Nein* (Homes' upload is deleted, `DELETE /api/assets` with
@@ -633,19 +650,24 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     "version": 1,
     "offen": 1,
     "module": [
-      {"name": "fotos", "titel": "Fotos", "icon": "fotos", "web": "https://photos.example.org",
+      {"name": "fotos", "titel": "Fotos", "icon": "fotos", "oeffnen": false, "web": "https://photos.example.org",
        "app": {"name": "Immich", "paket": "app.alextran.immich",
                "store": "https://play.google.com/store/apps/details?id=app.alextran.immich"},
        "nur_web": false,
        "aufgabe": {"titel": "Fotos auf dem Handy einrichten", "erledigt": false,
                    "einrichten": "https://homes.example.org/einrichten/fotos"}},
-      {"name": "filme", "titel": "Filme und Musik", "icon": "filme", "web": "https://media.example.org",
+      {"name": "filme", "titel": "Filme und Musik", "icon": "filme", "oeffnen": false, "web": "https://media.example.org",
        "app": {"name": "Jellyfin", "paket": "org.jellyfin.mobile",
                "store": "https://play.google.com/store/apps/details?id=org.jellyfin.mobile"},
        "nur_web": false,
        "aufgabe": {"titel": "Filme und Musik auf dem Handy einrichten", "erledigt": true,
                    "am": "2026-11-04", "wie": "app", "einrichten": "https://homes.example.org/einrichten/filme"}},
-      {"name": "einkauf", "titel": "Einkauf", "icon": "einkauf", "web": "https://homes.example.org/einkauf", "nur_web": true}
+      {"name": "einkauf", "titel": "Einkauf", "icon": "einkauf", "oeffnen": false, "web": "https://homes.example.org/einkauf", "nur_web": true},
+      {"name": "dokumente", "titel": "Dokumente", "icon": "dokumente", "oeffnen": true, "web": "https://homes.example.org/dokumente", "nur_web": true},
+      {"name": "immich-pruefen", "titel": "3 Personen in Immich prüfen", "icon": "fotos", "oeffnen": false,
+       "web": "https://homes.example.org/kontakte/dieselbe", "nur_web": true,
+       "aufgabe": {"titel": "3 Personen in Immich prüfen", "erledigt": false,
+                   "einrichten": "https://homes.example.org/kontakte/dieselbe"}}
     ],
     "ziele": {
       "einkauf": "https://homes.example.org/einkauf",
@@ -656,8 +678,23 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   ```
 
   `name` is the module's key (as in `/napi/kann`), `icon` the app's key
-  for its picture (the module's name; an unknown one gets the app's
-  default). `web` is the module's page in Homes where it has one, else its
+  for its picture (an unknown one gets the app's default). Homes sends the
+  module's name as its icon unless the module names its own; the keys the
+  app knows are the module names `einkauf`, `dokumente`, `kalender`,
+  `musik`, `podcasts`, `filme`, `fotos`, `passwoerter`, `sprechen`,
+  `netzlaufwerk`, `geraete`, `kontakte`, `notizen`, `werkstatt`, `nutzung`,
+  `gesehen`, `energie`, `konto`, `sicherung`, `standort` (homes-android
+  `Bilder`); a new key needs the app's picture first. `oeffnen` (owner
+  2026-11-07) is `true` for the modules the app lists under „Öffnen“, in
+  the answer's order (today `dokumente`, `musik`, `standort`, each while
+  on and with a `web`); it replaces the app's own list, and an app that
+  does not read it keeps its list. An entry that is no module comes after
+  the modules: `immich-pruefen`, the Immich key owner's open questions
+  („Dieselbe Person?“ and „Ist das …?“, owner 2026-11-07) as one open
+  task with the count as it is now, `web` and `einrichten` on
+  `/kontakte/dieselbe`, `nur_web` true, sent only to that person and only
+  while one is open; it counts in `offen`. An older app shows it among the
+  tasks like any web-only task and opens its page. `web` is the module's page in Homes where it has one, else its
   service's own address; absent when there is none. `app` is absent and
   `nur_web` true for a module without its own app. `aufgabe` is the
   person's task, only for a module with an app: `erledigt`, since `am`,
@@ -680,7 +717,10 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   cannot be kept 500 with a German `error`. Both want a paired device
   (401), and are 404 `not_found` on a Homes without them (an older one):
   the app then behaves as before. `GET /napi/kann` (ADR 0001 §2) is
-  unchanged; it lists the three new modules like any other.
+  unchanged; it lists the three new modules like any other. A module
+  switched off on purpose (`HOMES_MODULE_AUS`, `warum: aus`) is in neither
+  answer (ADR 0001 §12): no trace, no „Hier anfordern“, also when its
+  service is gone too; only Box → Haushalt → Module shows it.
 
 - Teilen → Homes → Musik (owner 2026-11-04: songs and ZIPs come from the
   phone by sharing, not by a picker on the page): `POST /napi/musik`,

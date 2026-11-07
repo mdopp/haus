@@ -228,10 +228,11 @@ func TestModuleAusIgnoresWhatItCannot(t *testing.T) {
 			t.Errorf("%s is aus", m.Name)
 		}
 	}
-	// a module that is missing stays fehlt, also when it is named
+	// a module that is missing and named off is aus: off wins, it is
+	// never offered (owner 2026-11-07), and its reason says both
 	_, l = switched(t, kannSite(t), "standort")
-	if m, _ := l.Eins("standort"); m.Warum != modul.Fehlt {
-		t.Errorf("standort without Reitti, named off: %s", m.Warum)
+	if m, _ := l.Eins("standort"); m.Warum != modul.Aus || !strings.Contains(m.Grund, "ausgeschaltet") || !strings.Contains(m.Grund, "Reitti") {
+		t.Errorf("standort without Reitti, named off: %s %q", m.Warum, m.Grund)
 	}
 }
 

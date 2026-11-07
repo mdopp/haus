@@ -76,9 +76,10 @@ func anfordern(t *testing.T, h http.Handler, bearer, name string) (int, kannEntr
 	return code, e
 }
 
-// The traces' words follow the wish (ADR 0001 §10): fehlt and aus offer
-// „Hier anfordern“; a wish filed is angefordert, then its states from
-// Laib; abgelehnt offers it again; a module on has no trace.
+// The traces' words follow the wish (ADR 0001 §10): fehlt offers „Hier
+// anfordern“; a wish filed is angefordert, then its states from Laib;
+// abgelehnt offers it again; a module on has no trace; one switched off on
+// purpose is not in the answer at all (owner 2026-11-07).
 func TestKannTracesFollowTheWish(t *testing.T) {
 	fresh, f := kannBoxes(t)
 	h := fresh()
@@ -89,8 +90,8 @@ func TestKannTracesFollowTheWish(t *testing.T) {
 	if s := k["standort"]; s.SpurID != "fehlt" || s.Spur != "auf dieser Box nicht eingerichtet" || !s.Anfordern || s.Wunsch != nil {
 		t.Errorf("standort: %+v", s)
 	}
-	if p := k["podcasts"]; p.SpurID != "aus" || p.Spur != "ausgeschaltet" || !p.Anfordern {
-		t.Errorf("podcasts: %+v", p)
+	if p, da := k["podcasts"]; da {
+		t.Errorf("podcasts is switched off, yet the app sees it: %+v", p)
 	}
 	code, e := anfordern(t, h, "dev1", "standort")
 	if code != 200 || e.SpurID != "angefordert" || e.Spur != "angefordert" || e.Anfordern || e.Wunsch == nil {
@@ -120,7 +121,7 @@ func TestAnfordernRefuses(t *testing.T) {
 	if code, _ := anfordern(t, h, "", "standort"); code != 401 {
 		t.Errorf("without a device → %d, want 401", code)
 	}
-	for _, name := range []string{"geraete", "gibtsnicht", ""} {
+	for _, name := range []string{"geraete", "gibtsnicht", "", "podcasts"} {
 		if code, e := anfordern(t, h, "dev1", name); code != 404 || e.Error == "" {
 			t.Errorf("%q → %d %+v, want 404 with a sentence", name, code, e)
 		}
@@ -133,7 +134,7 @@ func TestAnfordernRefuses(t *testing.T) {
 	was := wishWait
 	wishWait = 50 * time.Millisecond
 	defer func() { wishWait = was }()
-	if code, e := anfordern(t, h, "dev1", "podcasts"); code != 504 || !strings.Contains(e.Error, "nicht rechtzeitig") {
+	if code, e := anfordern(t, h, "dev1", "standort"); code != 504 || !strings.Contains(e.Error, "nicht rechtzeitig") {
 		t.Errorf("Laib slow → %d %+v", code, e)
 	}
 }

@@ -138,20 +138,23 @@ func TestPairedAndDetected(t *testing.T) {
 }
 
 // GET /napi/einrichtung's answer: the modules on, for everyone, with an
-// address or an app; each app's task; the open count is the open tasks.
+// address or an app; each app's task; the open count is the open tasks;
+// „Öffnen“ and the icon as each module says (owner 2026-11-07).
 func TestNapiAnswer(t *testing.T) {
-	q := box(t, fotos, filme, notiz, ort, aus, modul.Modul{Name: "werkstatt", Admins: true, Nav: []modul.Eintrag{{Pfad: "/box"}}}, modul.Modul{Name: "konto"})
+	zuOeffnen := notiz
+	zuOeffnen.Oeffnen, zuOeffnen.Icon = true, "notiz"
+	q := box(t, fotos, filme, zuOeffnen, ort, aus, modul.Modul{Name: "werkstatt", Admins: true, Nav: []modul.Eintrag{{Pfad: "/box"}}}, modul.Modul{Name: "konto"})
 	q.Ziele = map[string]string{"einkauf": "https://homes.box.test/einkauf"}
 	q.Installiert("anna", []string{"org.jellyfin.mobile"})
 	got := q.Napi("anna")
 	b, _ := json.Marshal(got)
 	want := `{"version":1,"offen":1,"module":[` +
-		`{"name":"fotos","titel":"Fotos","icon":"fotos","web":"https://photos.box.test","app":{"name":"Immich","paket":"app.alextran.immich","store":"https://play.google.com/store/apps/details?id=app.alextran.immich"},"nur_web":false,` +
+		`{"name":"fotos","titel":"Fotos","icon":"fotos","oeffnen":false,"web":"https://photos.box.test","app":{"name":"Immich","paket":"app.alextran.immich","store":"https://play.google.com/store/apps/details?id=app.alextran.immich"},"nur_web":false,` +
 		`"aufgabe":{"titel":"Fotos auf dem Handy einrichten","erledigt":false,"einrichten":"https://homes.box.test/einrichten/fotos"}},` +
-		`{"name":"filme","titel":"Filme und Musik","icon":"filme","web":"https://media.box.test","app":{"name":"Jellyfin","paket":"org.jellyfin.mobile","store":"https://play.google.com/store/apps/details?id=org.jellyfin.mobile"},"nur_web":false,` +
+		`{"name":"filme","titel":"Filme und Musik","icon":"filme","oeffnen":false,"web":"https://media.box.test","app":{"name":"Jellyfin","paket":"org.jellyfin.mobile","store":"https://play.google.com/store/apps/details?id=org.jellyfin.mobile"},"nur_web":false,` +
 		`"aufgabe":{"titel":"Filme und Musik auf dem Handy einrichten","erledigt":true,"am":"` + time.Now().Format("2006-01-02") + `","wie":"app","einrichten":"https://homes.box.test/einrichten/filme"}},` +
-		`{"name":"notizen","titel":"Notizen","icon":"notizen","web":"https://homes.box.test/notizen","nur_web":true},` +
-		`{"name":"standort","titel":"Standort","icon":"standort","web":"https://reitti.box.test","nur_web":true}],` +
+		`{"name":"notizen","titel":"Notizen","icon":"notiz","oeffnen":true,"web":"https://homes.box.test/notizen","nur_web":true},` +
+		`{"name":"standort","titel":"Standort","icon":"standort","oeffnen":false,"web":"https://reitti.box.test","nur_web":true}],` +
 		`"ziele":{"einkauf":"https://homes.box.test/einkauf"}}`
 	if string(b) != want {
 		t.Errorf("got\n%s\nwant\n%s", b, want)
@@ -187,5 +190,49 @@ func TestDienste(t *testing.T) {
 	srv.Close()
 	if got := Dienste(context.Background(), &laib.Client{URL: srv.URL, Token: "t"}, 100*time.Millisecond); got != nil {
 		t.Errorf("Laib down: %v", got)
+	}
+}
+
+// The key owner's open questions in Immich are one task while any is open
+// (owner 2026-11-07): with the count as it is now, for them only, in
+// /napi/einrichtung as an entry of its own leading to the questions; none
+// once nothing is open, nor with the fotos module off.
+func TestImmichFragenAlsAufgabe(t *testing.T) {
+	q := box(t, fotos)
+	n := 3
+	q.Immich = func(p string) int {
+		if p != "anna" {
+			return 0
+		}
+		return n
+	}
+	fr := q.Fragen("anna")
+	if len(fr) != 1 || fr[0].Modul != ImmichPruefen || fr[0].Titel != "3 Personen in Immich prüfen" || q.Fragen("ben") != nil {
+		t.Fatalf("%+v", fr)
+	}
+	a := q.Napi("anna")
+	last := a.Module[len(a.Module)-1]
+	if a.Offen != 2 || last.Name != ImmichPruefen || last.Icon != "fotos" || !last.NurWeb || last.App != nil || last.Web != "https://homes.box.test/kontakte/dieselbe" ||
+		last.Aufgabe == nil || last.Aufgabe.Erledigt || last.Aufgabe.Einrichten != last.Web || last.Aufgabe.Titel != "3 Personen in Immich prüfen" {
+		t.Fatalf("%d %+v %+v", a.Offen, last, last.Aufgabe)
+	}
+	if b := q.Napi("ben"); b.Offen != 1 || b.Module[len(b.Module)-1].Name == ImmichPruefen {
+		t.Fatalf("ben: %+v", b)
+	}
+	n = 1
+	if fr := q.Fragen("anna"); fr[0].Titel != "1 Person in Immich prüfen" {
+		t.Fatal(fr[0].Titel)
+	}
+	n = 0
+	if q.Fragen("anna") != nil || q.Napi("anna").Offen != 1 {
+		t.Fatal("a task with nothing open")
+	}
+	n = 2
+	off := box(t, modul.Modul{Name: "fotos", Titel: "Fotos", Warum: modul.Fehlt, Grund: "kein Immich"})
+	if off.Immich = q.Immich; off.Fragen("anna") != nil {
+		t.Fatal("a task with fotos off")
+	}
+	if _, ok := q.Eine("anna", ImmichPruefen); ok {
+		t.Fatal("the questions are no module's setup")
 	}
 }

@@ -85,6 +85,10 @@ type Modul struct {
 	// Schaltbar: HOMES_MODULE_AUS can switch it off (ADR 0001 H3–H6); the
 	// Box page offers its switch only then
 	Schaltbar bool
+	// Oeffnen: the app lists it under „Öffnen“ (/napi/einrichtung
+	// "oeffnen"); Icon is the app's key for its picture, "" its Name
+	Oeffnen bool
+	Icon    string
 
 	Nav   []Eintrag // its entries in the family's selection
 	Start []string  // Start's parts it fills: "im-haus", "meine-geraete", "heute"
@@ -113,6 +117,11 @@ type Einrichtung struct {
 
 // An: is the module on?
 func (m Modul) An() bool { return m.Warum == "" }
+
+// Abgeschaltet: the owner switched it off (Aus), whatever else is missing
+// (owner 2026-11-07): the family never sees it, nothing offers to request
+// it; only the admins' Box → Haushalt → Module shows it with its reason.
+func (m Modul) Abgeschaltet() bool { return m.Warum == Aus }
 
 // Liste is the box's modules in catalog order, on and off. Every holder
 // of one Liste (the pages, /napi, the setup tasks) sees a Setzen at once.
@@ -275,7 +284,9 @@ func (m Modul) Spur(w *Wunsch) string {
 }
 
 // Anfordern: does an off module's trace offer „Hier anfordern“?
-func (m Modul) Anfordern(w Wuensche) bool { return !m.An() && w.Geht && !w.von(m.Name).Offen() }
+func (m Modul) Anfordern(w Wuensche) bool {
+	return !m.An() && !m.Abgeschaltet() && w.Geht && !w.von(m.Name).Offen()
+}
 
 // Kann is GET /napi/kann (ADR 0001 §2, §10): the box's modules for words,
 // and what the app may offer, the union of the offers of those on.
@@ -311,6 +322,9 @@ type KannEins struct {
 func (l *Liste) Kann(w Wuensche) Kann {
 	k := Kann{Version: 1, Module: []KannEins{}, App: Angebot{}.plus(Angebot{})}
 	for _, m := range l.alle() {
+		if m.Abgeschaltet() { // switched off on purpose: not in the app at all, no trace, no wish
+			continue
+		}
 		e := KannEins{Name: m.Name, Titel: m.Titel, An: m.An(), Backend: m.Backend, Standard: m.Standard,
 			Warum: m.Warum, Grund: m.Grund, Bietet: Angebot{}.plus(m.App), Admins: m.Admins, SpurID: m.Spur(w.von(m.Name)), Anfordern: m.Anfordern(w)}
 		if !m.An() {

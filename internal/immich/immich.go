@@ -134,9 +134,33 @@ func (c *Client) Gesicht(ctx context.Context, id string) ([]byte, error) {
 	return c.get(ctx, "/api/people/"+url.PathEscape(id)+"/thumbnail")
 }
 
-// Braucht are the permissions Homes needs of the key; person.statistics
-// only counts the photos.
-var Braucht = append([]string{"person.read", "person.create", "person.update", "person.merge", "user.read"}, BildRechte...)
+// Braucht are the permissions Homes needs of the key (asset.read: a
+// person's places and company, Umfeld); person.statistics only counts the
+// photos.
+var Braucht = append([]string{"person.read", "person.create", "person.update", "person.merge", "user.read", "asset.read"}, BildRechte...)
+
+// Foto is one photo as Umfeld reads it: when, where, and who is in it.
+type Foto struct {
+	Wann string `json:"localDateTime"`
+	Exif struct {
+		Stadt string `json:"city"`
+		Land  string `json:"country"`
+	} `json:"exifInfo"`
+	Personen []Person `json:"people"`
+}
+
+// Umfeld are the newest n photos of person id with their place and
+// people (POST /api/search/metadata, personIds, withExif, withPeople;
+// asset.read).
+func (c *Client) Umfeld(ctx context.Context, id string, n int) ([]Foto, error) {
+	b, _ := json.Marshal(map[string]any{"personIds": []string{id}, "withExif": true, "withPeople": true, "size": n, "order": "desc"})
+	body, err := c.send(ctx, http.MethodPost, "/api/search/metadata", b)
+	var answer struct{ Assets struct{ Items []Foto } }
+	if err == nil {
+		err = json.Unmarshal(body, &answer)
+	}
+	return answer.Assets.Items, err
+}
 
 // BildRechte are those the contacts' pictures need (Hochladen, Funde,
 // Entfernen).

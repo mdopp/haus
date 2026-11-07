@@ -35,11 +35,18 @@ func bau(m modul.Modul, an bool, grund string) modul.Modul {
 	m.Titel = texte.Titel(m.Name)                           // the one table of words (internal/texte)
 	m.Nav = pages.Nav(m.Name)                               // its entries in the family's selection (ADR 0001 H6)
 	m.Admins = m.Name == "werkstatt" || m.Name == "nutzung" // their trace is on the Box page (ADR 0001 §10)
+	m.Oeffnen = slices.Contains(oeffnen, m.Name)            // the app's „Öffnen“, from Homes (owner 2026-11-07)
 	if !an {
 		m.Warum, m.Grund = modul.Fehlt, grund
 	}
 	return m
 }
+
+// oeffnen are the modules the app lists under „Öffnen“ (owner 2026-11-04:
+// the whole list was too long; most are in the Homes app itself, or in an
+// app of their own): Dokumente, Musik verwalten, the Zeitleiste; the app
+// shows them in the answer's order, the catalog's. Homes says it per module in /napi/einrichtung.
+var oeffnen = []string{"dokumente", "standort", "musik"}
 
 // katalog is Homes' areas (ADR 0001 §7) in catalog order, each on or off
 // by what the box gave Homes: today's checks of each backend, made
@@ -291,6 +298,8 @@ func ausschalten(s *site, ms []modul.Modul, liste string) []modul.Modul {
 		case name == "" || i < 0 && s.dienste == nil: // a link module waits for Laib's answer (dienstePflegen)
 		case i < 0:
 			log.Printf("homes: HOMES_MODULE_AUS: no module %q, ignored", name)
+		case ms[i].Warum == modul.Fehlt: // its backend is gone too: off wins, so it is never offered (owner 2026-11-07)
+			ms[i].Warum, ms[i].Grund = modul.Aus, texte.T(texte.GrundAus)+" "+ms[i].Grund
 		case schaltbar[name] == nil:
 			log.Printf("homes: HOMES_MODULE_AUS: %s cannot be switched off yet (ADR 0001 H6), it stays on", name)
 		case ms[i].An():
@@ -335,6 +344,9 @@ func einrichtung(s site, gekoppelt func(string) bool, jf *jellyfin.Client) *einr
 	}
 	if jf != nil { // a task is only ever asked of a module that is on
 		q.Erkennen = map[string]func(context.Context, string) (bool, error){"filme": jf.HatGeraet}
+	}
+	if g := s.gesichter; g != nil { // the key owner's open questions in Immich, a task while there are any
+		q.Immich = g.Offen
 	}
 	if s.hh.Einkauf != nil { // the app's launcher shortcuts: the shopping list, the timeline, the camera into Paperless
 		q.Ziele["einkauf"] = s.publicURL + pages.EinkaufPath

@@ -125,15 +125,21 @@ const (
 	DieselbeNeinLaeuft   ID = "dieselbe.nein.laeuft"
 	DieselbeSpaeter      ID = "dieselbe.spaeter"
 	DieselbeSpaeterLauft ID = "dieselbe.spaeter.laeuft"
-	DieselbeZusammen     ID = "dieselbe.zusammen" // merged: „%s“ is the name kept
-	DieselbeGemerkt      ID = "dieselbe.gemerkt"  // „Nein“ kept
-	DieselbeHinten       ID = "dieselbe.hinten"   // skipped
-	DieselbeWeg          ID = "dieselbe.weg"      // the pair is no longer offered
-	DieselbeNichtGemacht ID = "dieselbe.nicht"    // Immich merged neither: one is gone
-	DieselbeStumm        ID = "dieselbe.stumm"    // Immich did not answer
-	DieselbeSeiten       ID = "dieselbe.seiten"   // „Seite %d von %d“
-	DieselbeWeiter       ID = "dieselbe.weiter"   // the next ten
-	DieselbeZurueck      ID = "dieselbe.zurueck"  // the ten before
+	DieselbeZusammen     ID = "dieselbe.zusammen"    // merged: „%s“ is the name kept
+	DieselbeGemerkt      ID = "dieselbe.gemerkt"     // „Nein“ kept
+	DieselbeHinten       ID = "dieselbe.hinten"      // skipped
+	DieselbeWeg          ID = "dieselbe.weg"         // the pair is no longer offered
+	DieselbeNichtGemacht ID = "dieselbe.nicht"       // Immich merged neither: one is gone
+	DieselbeStumm        ID = "dieselbe.stumm"       // Immich did not answer
+	DieselbeSeiten       ID = "dieselbe.seiten"      // „Seite %d von %d“
+	DieselbeWeiter       ID = "dieselbe.weiter"      // the next ten
+	DieselbeZurueck      ID = "dieselbe.zurueck"     // the ten before
+	DieselbeOrte         ID = "dieselbe.orte"        // under a face: „%s“ the places, then the years
+	DieselbeMit          ID = "dieselbe.mit"         // under a face: „%s“ the named persons in the same photos
+	DieselbeInImmich     ID = "dieselbe.immich"      // a face's link: „%s“ the name, all its photos in Immich
+	DieselbeInImmichOhne ID = "dieselbe.immich.ohne" // the same for a face without a name
+	DieselbeAufgabe      ID = "dieselbe.aufgabe"     // the key owner's task: „%s“ how many, „3 Personen“
+	DieselbeAufgabeWarum ID = "dieselbe.aufgabe.warum"
 	// „Ist das …?“: a contact's picture beside the person Immich gave its face
 	IstDas                ID = "ist-das"             // the section
 	IstDasHinweis         ID = "ist-das.hinweis"     // its quiet line
@@ -300,6 +306,12 @@ var de = map[ID]string{
 	"dieselbe.seiten":           "Seite %d von %d",
 	"dieselbe.weiter":           "Weitere",
 	"dieselbe.zurueck":          "Zurück",
+	"dieselbe.orte":             "Orte: %s",
+	"dieselbe.mit":              "Auch dabei: %s",
+	"dieselbe.immich":           "Alle Fotos von %s in Immich",
+	"dieselbe.immich.ohne":      "Alle Fotos dieses Gesichts in Immich",
+	"dieselbe.aufgabe":          "%s in Immich prüfen",
+	"dieselbe.aufgabe.warum":    "Immich hält Gesichter für dieselbe Person oder fragt, ob ein Kontaktbild passt. Ein Ja führt sie zusammen.",
 	"ist-das":                   "Ist das …?",
 	"ist-das.hinweis":           "Das Bild aus deinem Handy-Kontakt, daneben die Person, der Immich das Gesicht darauf zuordnet. Erst dein Ja führt sie zusammen.",
 	"ist-das.frage":             "Ist das %s?",
