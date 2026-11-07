@@ -857,7 +857,8 @@ test('what the box lacks is a quiet trace; a wish follows Laib', async ({ page, 
   const standort = card.locator('#spur-standort');
   await expect(standort).toContainText('Standortverlauf');
   await expect(standort).toContainText('auf dieser Box nicht eingerichtet');
-  await expect(card.locator('#spur-netzlaufwerk')).toContainText('ausgeschaltet');
+  // switched off on purpose (MODULE_AUS) is no trace at all (owner 2026-11-07, ADR 0001 §12)
+  await expect(card.locator('#spur-netzlaufwerk')).toHaveCount(0);
   await expect(card.locator('#spur-geraete')).toHaveCount(0);
   // quiet: the trace's text is the muted colour, never the danger colour
   const color = await standort.evaluate((el) => getComputedStyle(el).color);
@@ -897,9 +898,10 @@ test('what the box lacks is a quiet trace; a wish follows Laib', async ({ page, 
 
 test('a wish Laib cannot take is said on the page, the trace stays', async ({ page, request }, info) => {
   await request.get('/demo/laib?ms=0&fehler=0');
+  await request.get('/demo/wunsch?modul=standort&stand=abgelehnt'); // offered again, whatever ran before
   await page.goto('/mehr');
   await mark(page);
-  const spur = page.locator('#spur-netzlaufwerk'); // switched off in the demo
+  const spur = page.locator('#spur-standort'); // its backend missing in the demo
   await expect(spur.getByRole('button')).toBeVisible();
   await request.get('/demo/laib?ms=0&fehler=1');
   await spur.getByRole('button').click();
