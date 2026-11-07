@@ -382,7 +382,7 @@ func demoModule(docs bool, an ...string) *modul.Liste {
 		m("musik", "beets", "", ""), m("gesehen", "media", "", ""), m("dokumente", "paperless", "", ""),
 		m("standort", "reitti", modul.Fehlt, "Auf dieser Box läuft kein Reitti."),
 		m("podcasts", "audiobookshelf", "", ""), m("netzlaufwerk", "file-share", modul.Aus, "Auf dieser Box ausgeschaltet."),
-		m("gesundheit", "gesundheit", modul.Fehlt, "Auf dieser Box läuft Gesundheit nicht."), m("fotos", "immich", "", ""), m("filme", "media", "", "")})
+		m("fotos", "immich", "", ""), m("filme", "media", "", "")})
 	if err != nil {
 		log.Fatal(err)
 	}

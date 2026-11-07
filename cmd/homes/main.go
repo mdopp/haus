@@ -76,7 +76,6 @@ type site struct {
 	welcome     bool            // haus#56: Start sends a device's first visit to /willkommen
 	stt         pages.STT       // haus#63: the Sprechen field's microphone through HA's speech-to-text; no provider, no microphone
 	haPublic    string          // haus#64: Home Assistant's public address, Geräte's "In Home Assistant öffnen"; empty, no link
-	gesundheit  string          // haus#192: the Gesundheit program's address, a card on Mehr; empty, no card
 	inverted    map[string]bool // haus#64: covers wired the wrong way round, shown and set turned over
 	radicale    string          // haus#66: Radicale's public address, its web page and the phones' CalDAV addresses; empty, none
 	views       *ansicht.Store  // haus#66: each person's calendar colours and hidden calendars
@@ -122,7 +121,7 @@ func familyOf(s site) pages.StartConfig {
 	family := pages.StartConfig{Podcasts: s.podcasts, Gesehen: s.gesehen, Laib: s.ops, Witness: s.napi.Witness, LaibURL: s.laibURL, HA: s.napi.HA, Energy: s.napi.Energy, Calendar: s.hh.Calendar, Contacts: s.hh.Contacts,
 		Notes: s.hh.Notes, Library: s.hh.Library, Judge: s.hh.Judge, Docs: s.hh.Documents, Loc: s.hh.Loc, Favorites: s.favorites, Bote: s.bote,
 		Samba: s.samba, SambaHost: s.sambaHost, Usage: s.usage, PublicURL: s.publicURL, Welcome: s.welcome, STT: s.stt,
-		HAPublicURL: s.haPublic, Inverted: s.inverted, RadicalePublicURL: s.radicale, Views: s.views, GesundheitURL: s.gesundheit,
+		HAPublicURL: s.haPublic, Inverted: s.inverted, RadicalePublicURL: s.radicale, Views: s.views,
 		DocumentsMail: s.docsMail, PaperlessPublicURL: s.paperlessPublic, PaperlessLANOnly: s.paperlessLAN, Sicherung: s.napi.Sicherung,
 		Reitti: s.napi.Reitti, Module: s.napi.Module, Einrichtung: s.napi.Einrichtung, PhoneCountry: s.hh.PhoneCountry, Gesichter: s.gesichter}
 	family.Archive, family.ArchivURL = archivOf(s)
@@ -429,10 +428,6 @@ func main() {
 	// the app's Standortverlauf (owner 2026-11-02): Reitti inside the box,
 	// HOMES_REITTI_URL (http://host.containers.internal:<port>); unset, /napi/standort is 503
 	cfg.Reitti = reitti.FromEnv(dataDir)
-	gesundheit := pages.AppURL(pages.OnDomain(os.Getenv("HOMES_GESUNDHEIT_URL"), os.Getenv("HOMES_PUBLIC_URL"))) // haus#192
-	if gesundheit == "" && os.Getenv("HOMES_GESUNDHEIT_URL") != "" {
-		log.Printf("homes: HOMES_GESUNDHEIT_URL %q is no address on the house's domain: no Gesundheit card", os.Getenv("HOMES_GESUNDHEIT_URL"))
-	}
 	haPublic := pages.AppURL(pages.OnDomain(os.Getenv("HOMES_HA_PUBLIC_URL"), os.Getenv("HOMES_PUBLIC_URL"))) // haus#64
 	if haPublic == "" && os.Getenv("HOMES_HA_PUBLIC_URL") != "" {
 		log.Printf("homes: HOMES_HA_PUBLIC_URL %q is not an http(s) address: no link to Home Assistant", os.Getenv("HOMES_HA_PUBLIC_URL"))
@@ -462,8 +457,8 @@ func main() {
 		publicURL: os.Getenv("HOMES_PUBLIC_URL"), tickets: werkstatt.FromEnv(), favorites: cfg.Favorites, bote: b, podcasts: pods, gesehen: gs,
 		samba: samba.FromEnv(), sambaHost: os.Getenv("HOMES_SAMBA_HOST"),
 		usage: counter, voice: voice, welcome: true,
-		stt:        pages.STT{Provider: os.Getenv("HOMES_STT_PROVIDER"), Language: env("HOMES_STT_LANGUAGE", "de")},
-		gesundheit: gesundheit, haPublic: haPublic, inverted: pages.InvertedFromList(os.Getenv("HOMES_COVER_INVERTED")),
+		stt:      pages.STT{Provider: os.Getenv("HOMES_STT_PROVIDER"), Language: env("HOMES_STT_LANGUAGE", "de")},
+		haPublic: haPublic, inverted: pages.InvertedFromList(os.Getenv("HOMES_COVER_INVERTED")),
 		radicale: radicalePublic, views: ansicht.Open(dataDir, os.Getenv("HOMES_RADICALE_USER")), dataDir: dataDir,
 		docsMail: docsMail, paperlessPublic: paperlessPublic, paperlessLAN: paperlessLAN, musik: musicInbox(), boteSignal: strings.TrimSpace(os.Getenv("HOMES_BOTE_SIGNAL")),
 		domain: einrichten.Domain(os.Getenv("HOMES_PUBLIC_URL")), archive: archive, gesichter: gesichter.FromEnv(dataDir)}
