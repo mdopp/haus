@@ -833,6 +833,14 @@ for (const path of ['/start', '/raeume', '/medien', '/energie', '/notizen', '/me
   });
 }
 
+// Start at 411 px (owner 2026-11-07, „Rigoros einfach“): the picture the owner compares before and after.
+test('picture of /start at 411 px', async ({ page }, info) => {
+  await page.setViewportSize({ width: 411, height: 900 });
+  await page.goto('/start');
+  await page.waitForLoadState('networkidle');
+  await page.screenshot({ path: info.outputPath('start-411.png'), fullPage: true });
+});
+
 // Energie in the widget's look (owner, 2026-11-03), for the owner to see
 // before it merges: the Jahr span, and the page in the light.
 test('picture of /energie in Jahr', async ({ page }, info) => {
