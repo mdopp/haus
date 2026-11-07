@@ -29,8 +29,11 @@ func istFragen(cfg StartConfig, seite int) string {
 		if f.Bild != nil {
 			bild = `<img src="data:image/jpeg;base64,` + base64.StdEncoding.EncodeToString(f.Bild) + `" alt="" width=96 height=96>`
 		}
+		if href := cfg.Gesichter.FotoSeite(f.Asset); href != "" { // Homes' upload of the picture, in Immich
+			bild = immichLink(href, t(texte.IstDasKontaktbild), bild)
+		}
 		b.WriteString(`<section class="paar frage"><p><b>` + html.EscapeString(fmt.Sprintf(texte.T(texte.IstDasFrage), f.Name)) + `</b></p><div class=zwei>` +
-			`<figure>` + bild + `<figcaption><b>` + html.EscapeString(f.Name) + `</b><span>` + t(texte.IstDasKontaktbild) + `</span></figcaption></figure>` + dieselbeGesicht(f.Person) +
+			`<figure>` + bild + `<figcaption><b>` + html.EscapeString(f.Name) + `</b><span>` + t(texte.IstDasKontaktbild) + `</span></figcaption></figure>` + dieselbeGesicht(cfg, f.Person) +
 			`</div><form method=post action=` + DieselbePath + `><input type=hidden name=kontakt value="` + html.EscapeString(f.Key) +
 			`"><input type=hidden name=b value="` + html.EscapeString(f.Person.ID) + `"><input type=hidden name=seite value=` + strconv.Itoa(seite) +
 			`><button name=antwort value=ja data-laeuft="` + t(texte.DieselbeJaLaeuft) + `">` + html.EscapeString(fmt.Sprintf(texte.T(texte.IstDasJa), f.Name)) +

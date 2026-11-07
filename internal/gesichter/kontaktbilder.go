@@ -272,10 +272,12 @@ func (g *Gesichter) pruefen(ctx context.Context, b kontaktbild, eigen string, mi
 type Frage struct {
 	Key, Name string // the contact, as in Zuordnung, and its name
 	Bild      []byte // its picture, small
+	Asset     string // Homes' upload of it in Immich; "" none
 	Person    Seite  // the person Immich holds it for; Fotos as counted, -1 not
 }
 
-// Fragen are the questions open, by the contact's name.
+// Fragen are the questions open, by the contact's name; one without both
+// pictures (a valid JPEG each) or whose person is in no photo waits.
 func (g *Gesichter) Fragen() []Frage {
 	if g == nil || g.Immich == nil {
 		return nil
@@ -292,7 +294,10 @@ func (g *Gesichter) Fragen() []Frage {
 		if z, ok := g.stand.Fotos[b.Person]; ok {
 			n = z.N
 		}
-		out = append(out, Frage{key, g.stand.Zuordnung[key].Name, b.Bild, Seite{b.Person, b.Name, n, b.Dessen}})
+		f := Frage{key, g.stand.Zuordnung[key].Name, b.Bild, b.Asset, g.stand.seite(b.Person, b.Name, n, b.Dessen)}
+		if Gesehen(f.Bild) && f.Person.zeigbar() { // both faces to show, or nothing to decide
+			out = append(out, f)
+		}
 	}
 	slices.SortFunc(out, func(x, y Frage) int { return strings.Compare(x.Name+x.Key, y.Name+y.Key) })
 	return out

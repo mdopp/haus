@@ -321,7 +321,15 @@ type Seite struct {
 	ID, Name string // Name "": without a name
 	Fotos    int    // -1: not counted
 	Bild     []byte // the small face; nil none
+	// Orte, Von–Bis and Mit are where its photos were taken, in which
+	// years and with whom (umfeld.go); none while not read
+	Orte     []string
+	Von, Bis int
+	Mit      []string
 }
+
+// zeigbar: s can be asked about, a face to show and photos, or not counted.
+func (s Seite) zeigbar() bool { return Gesehen(s.Bild) && s.Fotos != 0 }
 
 // Paar is two persons Immich holds close: A a named one, B one of its
 // closest.
@@ -330,13 +338,29 @@ type Paar struct{ A, B Seite }
 // Key is the pair's name in Nein and Spaeter, the same either way round.
 func (p Paar) Key() string { return paarKey(p.A.ID, p.B.ID) }
 
+// seite is person id as a page shows it, with its places and company.
+func (st stand) seite(id, name string, fotos int, bild []byte) Seite {
+	u := st.Umfeld[id]
+	return Seite{ID: id, Name: name, Fotos: fotos, Bild: bild, Orte: u.Orte, Von: u.Von, Bis: u.Bis, Mit: u.Mit}
+}
+
+// Offen is how many pairs and questions wait for person: the Immich key's
+// owner; 0 for anyone else.
+func (g *Gesichter) Offen(person string) int {
+	if person == "" || g.Wessen() != person {
+		return 0
+	}
+	return len(g.Paare()) + len(g.Fragen())
+}
+
 func paarKey(a, b string) string {
 	return min(a, b) + "|" + max(a, b)
 }
 
 // Paare are the pairs to ask about, the likeliest first: closest, more so
 // when each is among the other's closest, an unnamed face before a named
-// person; the skipped last, a „Nein“ never.
+// person; the skipped last, a „Nein“ never, nor one whose side has no face
+// kept (a valid JPEG) or no photo.
 func (g *Gesichter) Paare() []Paar {
 	if g == nil || g.Immich == nil {
 		return nil
@@ -354,7 +378,7 @@ func (g *Gesichter) Paare() []Paar {
 		if z, ok := st.Fotos[id]; ok {
 			n = z.N
 		}
-		return Seite{id, strings.TrimSpace(wer[id].Name), n, st.Bilder[id].JPEG}
+		return st.seite(id, strings.TrimSpace(wer[id].Name), n, st.Bilder[id].JPEG)
 	}
 	type kandidat struct {
 		Paar
@@ -369,6 +393,10 @@ func (g *Gesichter) Paare() []Paar {
 				continue
 			}
 			gesehen[key] = true
+			pa, pb := seite(a), seite(b)
+			if !pa.zeigbar() || !pb.zeigbar() { // no face to show, or none in a photo: nothing to decide
+				continue
+			}
 			wert := 2 * (i + 1)
 			if slices.Contains(st.Naehe[b].Kandidaten, a) {
 				wert -= 2
@@ -376,7 +404,7 @@ func (g *Gesichter) Paare() []Paar {
 			if strings.TrimSpace(wer[b].Name) == "" {
 				wert--
 			}
-			out = append(out, kandidat{Paar{seite(a), seite(b)}, wert})
+			out = append(out, kandidat{Paar{pa, pb}, wert})
 		}
 	}
 	slices.SortStableFunc(out, func(x, y kandidat) int {

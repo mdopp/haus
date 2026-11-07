@@ -92,7 +92,7 @@ func (c Config) anfordern(w http.ResponseWriter, r *http.Request) {
 	if ok {
 		m, ok = c.Module.Eins(in.Modul)
 	}
-	if !ok || m.An() {
+	if !ok || m.An() || m.Abgeschaltet() { // on, or switched off on purpose: nothing to wish for
 		answer(w, http.StatusNotFound, map[string]any{"ok": false, "reason": "not_found", "error": texte.T(texte.AnfordernGibtsNicht)})
 		return
 	}

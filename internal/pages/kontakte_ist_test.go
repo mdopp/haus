@@ -53,6 +53,9 @@ func TestIstDas(t *testing.T) {
 	body := as(Dieselbe, cfg, DieselbePath, "anna", "anna@box.test").Body.String()
 	mustContain(t, body, "<h2>Ist das …?</h2>", "<b>Ist das Mama?</b>", "<b>Mama</b><span>Bild im Kontakt</span>", "<i>ohne Namen</i>", "<b>Ist das Tina?</b>", "<b>Ben</b>",
 		`name=kontakt value="privat/m"`, `name=b value="u1"`, `value=ja data-laeuft="Führt zusammen …">Ja, das ist Mama</button>`, `>Nein</button>`, `value=keinfoto class=leise data-laeuft="Nimmt das Bild heraus …">Kein Foto von Mama</button>`)
+	// the contact's picture opens Homes' upload in Immich, the person all its photos, each in a new tab
+	mustContain(t, body, `<a href="https://photos.box.test/photos/a-`, `target=_blank rel=noopener aria-label="Bild im Kontakt"><img`,
+		`<a href="https://photos.box.test/people/u1" target=_blank rel=noopener`)
 	if len(fake.Merges()) != 0 || len(fake.Fotos()) != 2 {
 		t.Fatalf("before an answer: %v %v", fake.Merges(), fake.Fotos())
 	}

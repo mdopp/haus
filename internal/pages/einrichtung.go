@@ -115,6 +115,9 @@ func einrichtung(r *http.Request, cfg StartConfig) []aufgabe {
 	for _, a := range cfg.Einrichtung.Fuer(user) { // each module's own app, and the Homes app (owner 2026-11-04)
 		out = append(out, aufgabe{titel: a.Titel, warum: a.Warum, href: einrichtenHref(a.Modul), erledigt: a.Erledigt != nil})
 	}
+	for _, a := range cfg.Einrichtung.Fragen(user) { // the key owner's questions in Immich, while open
+		out = append(out, aufgabe{titel: a.Titel, warum: a.Warum, href: DieselbePath})
+	}
 	if cfg.Discogs != nil { // the household's Discogs app is there; each person connects their own
 		_, verbunden := cfg.Discogs.Konto(user)
 		out = append(out, aufgabe{titel: "Discogs verbinden", warum: "Dann weiß Homes, welche Platten du hast, und deine Wünsche kommen auf deine Wantlist.",

@@ -261,3 +261,22 @@ func TestLinkModulesFollowLaibOnceItAnswers(t *testing.T) {
 	mu.Unlock()
 	warte("media gone", func() bool { return !s.napi.Module.An("filme") && s.napi.Module.An("fotos") })
 }
+
+// „Öffnen“ in the app comes from Homes (owner 2026-11-07): Dokumente, the
+// Zeitleiste and Musik verwalten, every other module not; each has the
+// app's picture by its name.
+func TestOeffnenComesFromHomes(t *testing.T) {
+	full, _, _ := fullSite(t)
+	var got []string
+	for _, m := range katalog(full) {
+		if m.Oeffnen {
+			got = append(got, m.Name)
+		}
+		if m.Icon != "" {
+			t.Errorf("%s: an icon of its own, %q, the app does not know", m.Name, m.Icon)
+		}
+	}
+	if !slices.Equal(got, []string{"dokumente", "musik", "standort"}) { // the catalog's order
+		t.Fatalf("Öffnen: %v", got)
+	}
+}

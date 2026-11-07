@@ -5,6 +5,7 @@
 // /api/people/<id>/thumbnail, which it counts, …/statistics, POST
 // /api/people, PUT /api/people/<id>, POST /api/people/merge, GET
 // /api/search/person (faceless and hidden ones too), GET /api/users/me,
+// POST /api/search/metadata (personIds, over Bibliothek),
 // and the photos Homes uploads: POST /api/assets (multipart, a duplicate
 // for bytes it has), GET /api/faces?id= (the faces Erkennen gives the
 // photo) and DELETE /api/assets.
@@ -54,6 +55,15 @@ type Server struct {
 	Erkennen func(name string, jpeg []byte) []string
 	assets   []*asset
 	hoch     int // uploads taken
+	// Bibliothek are the photos the metadata search finds, newest first
+	Bibliothek []Foto
+}
+
+// Foto is a photo of the library as /api/search/metadata finds it: when,
+// where, and who is in it (by person id).
+type Foto struct {
+	Wann, Stadt, Land string
+	Wer               []string
 }
 
 // asset is a photo Homes uploaded.
@@ -177,7 +187,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	case r.URL.Path == "/api/api-keys/me":
 		rechte := []string{"all"}
 		if len(s.Ohne) > 0 {
-			rechte = slices.DeleteFunc([]string{"person.read", "person.create", "person.update", "person.merge", "person.statistics", "user.read", "asset.upload", "face.read", "asset.delete"}, func(r string) bool { return slices.Contains(s.Ohne, r) })
+			rechte = slices.DeleteFunc([]string{"person.read", "person.create", "person.update", "person.merge", "person.statistics", "user.read", "asset.read", "asset.upload", "face.read", "asset.delete"}, func(r string) bool { return slices.Contains(s.Ohne, r) })
 		}
 		json.NewEncoder(w).Encode(map[string]any{"id": "k1", "name": "Homes", "permissions": rechte})
 	case r.URL.Path == "/api/users/me":
@@ -230,6 +240,10 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 			json.NewDecoder(r.Body).Decode(&body)
 			s.assets = slices.DeleteFunc(s.assets, func(a *asset) bool { return slices.Contains(body.IDs, a.ID) })
 			w.WriteHeader(http.StatusNoContent)
+		}
+	case r.URL.Path == "/api/search/metadata" && r.Method == http.MethodPost:
+		if s.darf(w, "asset.read") {
+			s.umfeld(w, r)
 		}
 	case r.URL.Path == "/api/faces" && r.Method == http.MethodGet:
 		if s.darf(w, "face.read") {
@@ -374,4 +388,29 @@ func btoi(b bool) int {
 		return 1
 	}
 	return 0
+}
+
+// umfeld is /api/search/metadata with personIds: the photos showing all
+// of them, newest first, size at most, with exifInfo and people.
+func (s *Server) umfeld(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		PersonIds []string `json:"personIds"`
+		Size      int      `json:"size"`
+	}
+	json.NewDecoder(r.Body).Decode(&body)
+	items := []map[string]any{}
+	for _, f := range s.Bibliothek {
+		fehlt := slices.ContainsFunc(body.PersonIds, func(id string) bool { return !slices.Contains(f.Wer, id) })
+		if fehlt || len(items) >= max(body.Size, 1) {
+			continue
+		}
+		var leute []map[string]any
+		for _, id := range f.Wer {
+			if p := s.find(id); p != nil {
+				leute = append(leute, map[string]any{"id": p.ID, "name": p.Name})
+			}
+		}
+		items = append(items, map[string]any{"localDateTime": f.Wann, "exifInfo": map[string]string{"city": f.Stadt, "country": f.Land}, "people": leute})
+	}
+	json.NewEncoder(w).Encode(map[string]any{"assets": map[string]any{"items": items, "count": len(items), "nextPage": nil}})
 }

@@ -10,6 +10,7 @@
 package einrichten
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -115,13 +116,38 @@ type Quellen struct {
 	Adresse  string            // Homes' public address, https://homes.<domain>
 	Ziele    map[string]string // the app's launcher shortcuts that this box has (Antwort.Ziele)
 	Now      func() time.Time  // nil: time.Now
+	// Immich is how many of the Immich key owner's questions are open
+	// („Dieselbe Person?“, „Ist das …?“) for person: 0 for anyone else; nil none
+	Immich func(person string) int
 }
+
+// ImmichPruefen is the key of the task of the open questions in Immich; it
+// is no module.
+const ImmichPruefen = "immich-pruefen"
+
+// ImmichPfad is where those questions are answered (pages.DieselbePath).
+const ImmichPfad = "/kontakte/dieselbe"
 
 // Aufgabe is one module's setup for one person.
 type Aufgabe struct {
 	Modul, Titel, Warum string
 	Einrichtung         *modul.Einrichtung
 	Erledigt            *Stand // nil while open
+}
+
+// Fragen are the person's questions to answer, each one task while it is
+// open and none once nothing is: today those in Immich, for the key's
+// owner only (owner 2026-11-07), the count as it is now. The task's
+// Modul is ImmichPruefen, done at ImmichPfad.
+func (q *Quellen) Fragen(person string) []Aufgabe {
+	if q == nil || q.Immich == nil || person == "" || !q.Module.An("fotos") {
+		return nil
+	}
+	n := q.Immich(person)
+	if n <= 0 {
+		return nil
+	}
+	return []Aufgabe{{Modul: ImmichPruefen, Titel: fmt.Sprintf(texte.T(texte.DieselbeAufgabe), texte.Anzahl(n, "Person", "Personen")), Warum: texte.T(texte.DieselbeAufgabeWarum)}}
 }
 
 // Seite is where a task is done when its module has no page of its own.
@@ -215,7 +241,8 @@ type Antwort struct {
 type NapiModul struct {
 	Name    string       `json:"name"`
 	Titel   string       `json:"titel"`
-	Icon    string       `json:"icon"` // the app's key for its picture: the module's name
+	Icon    string       `json:"icon"`    // the app's key for its picture (docs/REFERENCE.md); the module's name unless it has its own
+	Oeffnen bool         `json:"oeffnen"` // the app lists it under „Öffnen“, in this list's order
 	Web     string       `json:"web,omitempty"`
 	App     *NapiApp     `json:"app,omitempty"`
 	NurWeb  bool         `json:"nur_web"`
@@ -248,7 +275,7 @@ func (q *Quellen) Napi(person string) Antwort {
 		if e == nil {
 			e = &modul.Einrichtung{}
 		}
-		n := NapiModul{Name: m.Name, Titel: m.Titel, Icon: m.Name, Web: e.Web, NurWeb: e.App == ""}
+		n := NapiModul{Name: m.Name, Titel: m.Titel, Icon: cmp.Or(m.Icon, m.Name), Oeffnen: m.Oeffnen, Web: e.Web, NurWeb: e.App == ""}
 		if len(m.Nav) > 0 { // its page in Homes before its service's own
 			n.Web = q.Adresse + m.Nav[0].Pfad
 		}
@@ -268,6 +295,12 @@ func (q *Quellen) Napi(person string) Antwort {
 			}
 		}
 		out.Module = append(out.Module, n)
+	}
+	for _, a := range q.Fragen(person) { // a question is no module: an entry of its own, after them, only while open
+		web := q.Adresse + ImmichPfad
+		out.Module = append(out.Module, NapiModul{Name: a.Modul, Titel: a.Titel, Icon: "fotos", Web: web, NurWeb: true,
+			Aufgabe: &NapiAufgabe{Titel: a.Titel, Einrichten: web}})
+		out.Offen++
 	}
 	return out
 }

@@ -34,7 +34,7 @@ const (
 const dieselbeStyle = `<style>.paar{margin:18px 0 0;padding:14px;border-radius:16px;background:var(--card)}
 .paar .zwei{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:0}.paar figure{margin:0;text-align:center;min-width:0}
 .paar img,.paar .ohne{display:block;width:96px;height:96px;margin:0 auto 8px;border-radius:50%;object-fit:cover;background:var(--track)}
-.paar figcaption{overflow-wrap:anywhere}.paar figcaption b{display:block}.paar figcaption i,.paar figcaption span{display:block;color:var(--muted);font-size:.85rem}
+.paar figure>a{display:block}.paar figcaption{overflow-wrap:anywhere}.paar figcaption b{display:block}.paar figcaption i,.paar figcaption span,.paar figcaption small{display:block;color:var(--muted);font-size:.85rem}.paar figcaption small{font-size:.78rem;margin-top:2px}
 .paar form{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 0}.paar form button{flex:1 1 auto}.paar form button.leise{flex:0 0 auto}
 .blaettern{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:20px 0 0}</style>`
 
@@ -132,7 +132,7 @@ func dieselbeSeite(r *http.Request, cfg StartConfig, seite int, said, problem st
 		b.WriteString("<p class=k>" + t(texte.DieselbeLeer) + "</p>")
 	}
 	for _, p := range paare[(seite-1)*dieselbeJeSeite : min(len(paare), seite*dieselbeJeSeite)] {
-		b.WriteString(`<section class=paar><div class=zwei>` + dieselbeGesicht(p.A) + dieselbeGesicht(p.B) + `</div><form method=post action=` + DieselbePath +
+		b.WriteString(`<section class=paar><div class=zwei>` + dieselbeGesicht(cfg, p.A) + dieselbeGesicht(cfg, p.B) + `</div><form method=post action=` + DieselbePath +
 			`><input type=hidden name=a value="` + html.EscapeString(p.A.ID) + `"><input type=hidden name=b value="` + html.EscapeString(p.B.ID) +
 			`"><input type=hidden name=seite value=` + strconv.Itoa(seite) + `><button name=antwort value=ja data-laeuft="` + t(texte.DieselbeJaLaeuft) + `">` + t(texte.DieselbeJa) +
 			`</button><button name=antwort value=nein data-laeuft="` + t(texte.DieselbeNeinLaeuft) + `">` + t(texte.DieselbeNein) +
@@ -150,12 +150,21 @@ func dieselbeSeite(r *http.Request, cfg StartConfig, seite int, said, problem st
 	return b
 }
 
-// dieselbeGesicht is one person of a pair: the face, the name or „ohne
-// Namen“, the photos when counted.
-func dieselbeGesicht(s gesichter.Seite) string {
+// dieselbeGesicht is one person of a pair: the face, a link to all its
+// photos in Immich (a new tab), the name or „ohne Namen“, the photos when
+// counted, and a grey line each for its places and years and who else is
+// in its photos, when read.
+func dieselbeGesicht(cfg StartConfig, s gesichter.Seite) string {
 	bild := `<span class=ohne aria-hidden=true></span>`
 	if s.Bild != nil {
 		bild = `<img src="data:image/jpeg;base64,` + base64.StdEncoding.EncodeToString(s.Bild) + `" alt="" width=96 height=96>`
+	}
+	if href := cfg.Gesichter.PersonSeite(s.ID); href != "" {
+		label := texte.T(texte.DieselbeInImmichOhne)
+		if s.Name != "" {
+			label = fmt.Sprintf(texte.T(texte.DieselbeInImmich), s.Name)
+		}
+		bild = immichLink(href, label, bild)
 	}
 	name := "<i>" + html.EscapeString(texte.T(texte.DieselbeOhneName)) + "</i>"
 	if s.Name != "" {
@@ -164,5 +173,23 @@ func dieselbeGesicht(s gesichter.Seite) string {
 	if s.Fotos >= 0 {
 		name += "<span>" + html.EscapeString(texte.Anzahl(s.Fotos, "Foto", "Fotos")) + "</span>"
 	}
+	jahre := strconv.Itoa(s.Von)
+	if s.Bis > s.Von {
+		jahre += "–" + strconv.Itoa(s.Bis)
+	}
+	if orte := strings.Join(s.Orte, ", "); orte != "" || s.Von > 0 {
+		if s.Von > 0 {
+			orte = strings.TrimPrefix(orte+" · "+jahre, " · ")
+		}
+		name += "<small>" + html.EscapeString(fmt.Sprintf(texte.T(texte.DieselbeOrte), orte)) + "</small>"
+	}
+	if len(s.Mit) > 0 {
+		name += "<small>" + html.EscapeString(fmt.Sprintf(texte.T(texte.DieselbeMit), strings.Join(s.Mit, ", "))) + "</small>"
+	}
 	return "<figure>" + bild + "<figcaption>" + name + "</figcaption></figure>"
+}
+
+// immichLink is inner as a link to href in Immich, in a new tab.
+func immichLink(href, label, inner string) string {
+	return `<a href="` + html.EscapeString(href) + `" target=_blank rel=noopener aria-label="` + html.EscapeString(label) + `">` + inner + `</a>`
 }

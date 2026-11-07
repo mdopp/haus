@@ -65,9 +65,10 @@ type Gesichter struct {
 	Dir      string         // HOMES_DATA
 	Now      func() time.Time
 
-	mu      sync.Mutex
-	geladen bool
-	stand   stand
+	mu         sync.Mutex
+	geladen    bool
+	stand      stand
+	umfeldLauf time.Time // the last run of Umfelder that went through; zero: none since Homes started
 }
 
 // stand is what Homes keeps of Immich.
@@ -92,6 +93,8 @@ type stand struct {
 	// Kontaktbilder are the owner's contacts' pictures in Immich, by
 	// "privat/<uid>" (kontaktbilder.go)
 	Kontaktbilder map[string]kontaktbild `json:"kontaktbilder,omitempty"`
+	// Umfeld is, by person shown on „Dieselbe Person?“, its places and company (umfeld.go)
+	Umfeld map[string]umfeld `json:"umfeld,omitempty"`
 }
 
 // zuordnung is a contact's Immich person; Eigen: Homes made it, so Homes
@@ -137,7 +140,7 @@ func (g *Gesichter) laden() {
 	}
 	st := &g.stand
 	st.Zuordnung, st.Naehe, st.Andere, st.Fotos, st.Nein, st.Spaeter = leer(st.Zuordnung), leer(st.Naehe), leer(st.Andere), leer(st.Fotos), leer(st.Nein), leer(st.Spaeter)
-	st.Kontaktbilder = leer(st.Kontaktbilder)
+	st.Kontaktbilder, st.Umfeld = leer(st.Kontaktbilder), leer(st.Umfeld)
 }
 
 func leer[V any](m map[string]V) map[string]V {
@@ -179,6 +182,30 @@ func (g *Gesichter) Link(key, name string) string {
 	}
 	q, _ := json.Marshal(map[string]string{"query": strings.TrimSpace(name)})
 	return g.Web + "/search?" + url.Values{"query": {string(q)}}.Encode()
+}
+
+// PersonSeite is person id's page in Immich, all of its photos; "" without
+// an address.
+func (g *Gesichter) PersonSeite(id string) string {
+	if g == nil || g.Web == "" || id == "" {
+		return ""
+	}
+	return g.Web + "/people/" + url.PathEscape(id)
+}
+
+// FotoSeite is the photo asset's page in Immich; "" without one.
+func (g *Gesichter) FotoSeite(asset string) string {
+	if g == nil || g.Web == "" || asset == "" {
+		return ""
+	}
+	return g.Web + "/photos/" + url.PathEscape(asset)
+}
+
+// Gesehen: b is a face to show, a JPEG Immich cut with a size; an empty
+// or broken one is none.
+func Gesehen(b []byte) bool {
+	c, err := jpeg.DecodeConfig(bytes.NewReader(b))
+	return err == nil && c.Width > 0 && c.Height > 0
 }
 
 // Bild is the small face of name's person, as kept; nil without one.
@@ -322,6 +349,9 @@ func (g *Gesichter) Pflegen(ctx context.Context, jede time.Duration, kontakte *c
 		}
 		if err := g.Vorschlagen(ctx); err != nil && ctx.Err() == nil {
 			log.Printf("homes: immich: the closest faces: %v", err)
+		}
+		if err := g.Umfelder(ctx); err != nil && ctx.Err() == nil {
+			log.Printf("homes: immich: the places and company of the pairs: %v", err)
 		}
 		select {
 		case <-ctx.Done():

@@ -114,3 +114,19 @@ func TestDieselbeAntworten(t *testing.T) {
 		t.Fatal("merged without the permission")
 	}
 }
+
+// Each face opens all of its person's photos in Immich in a new tab, and
+// under it a grey line each for its places and years and who else is in
+// its photos, read in the background (owner 2026-11-07).
+func TestDieselbeKontext(t *testing.T) {
+	cfg, fake := dieselbeConfig(t)
+	fake.Bibliothek = []immichfake.Foto{
+		{Wann: "2019-07-01T10:00:00.000Z", Stadt: "Münster", Wer: []string{"p-anna", "p-ben"}},
+		{Wann: "2012-07-01T10:00:00.000Z", Land: "Italien", Wer: []string{"p-anna", "u0"}},
+	}
+	cfg.Gesichter.Umfelder(t.Context())
+	body := as(Dieselbe, cfg, DieselbePath, "anna", "anna@box.test").Body.String()
+	mustContain(t, body, `<a href="https://photos.box.test/people/p-anna" target=_blank rel=noopener aria-label="Alle Fotos von Anna in Immich"><img`,
+		`<a href="https://photos.box.test/people/u0" target=_blank rel=noopener aria-label="Alle Fotos dieses Gesichts in Immich">`,
+		`<small>Orte: Italien, Münster · 2012–2019</small><small>Auch dabei: Ben</small>`, `<small>Orte: Italien · 2012</small><small>Auch dabei: Anna</small>`)
+}
