@@ -24,7 +24,6 @@ import (
 	"github.com/mdopp/homes/internal/gesichter"
 	"github.com/mdopp/homes/internal/immich"
 	"github.com/mdopp/homes/internal/immich/immichfake"
-	"github.com/mdopp/homes/internal/kontaktantwort"
 	"github.com/mdopp/homes/internal/napi"
 	"github.com/mdopp/homes/internal/pages"
 	"github.com/mdopp/homes/internal/samba"
@@ -93,7 +92,7 @@ func mehrSeiten(mux *http.ServeMux, cfg pages.StartConfig, dav *davfake.Server, 
 	}
 	cfg.Gesichter = demoGesichter(dir, cfg.Contacts) // Anna's key: Meine Kontakte, each a person in Immich (owner 2026-11-06)
 	// Kontakt prüfen lassen (owner 2026-11-07): the review pages here, the page without a login on a listener of its own, as on the box
-	cfg.Antworten, cfg.DNS, cfg.KontaktURL = &kontaktantwort.Store{Path: filepath.Join(dir, kontaktantwort.Datei)}, demoDNS{}, "http://"+*kontaktAddr
+	cfg.DNS, cfg.KontaktURL = demoDNS{}, "http://"+*kontaktAddr // the store is main's, shared with Deine Aufgaben
 	mux.HandleFunc(pages.PruefenPath, pages.Pruefen(cfg))
 	mux.HandleFunc(pages.AntwortenPath, pages.Antworten(cfg))
 	mux.HandleFunc(pages.AntwortenPath+"/", pages.Antworten(cfg))
