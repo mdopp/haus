@@ -369,7 +369,8 @@ const frageStyle = `<style>:root{color-scheme:light;--bg:#f6f7f9;--card:#fff;--i
 @media (prefers-color-scheme:dark){:root{color-scheme:dark;--bg:#0c0c0e;--card:#16161c;--ink:#f2f2f5;--muted:#a0a6b4;--line:#2a2a33;--accent:#f97316;--warn:#f59e0b}}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 main{max-width:32rem;margin:0 auto;padding:28px 16px 48px}h1{font-size:1.5rem;line-height:1.25;margin:0 0 12px}p{margin:0 0 14px}.k{color:var(--muted);font-size:.92rem}
-fieldset{margin:0 0 14px;padding:14px;border:0;border-radius:16px;background:var(--card)}legend{float:left;width:100%;margin:0 0 8px;font-weight:600}
+fieldset{min-width:0;margin:0 0 14px;padding:14px;border:0;border-radius:16px;background:var(--card)}legend{float:left;width:100%;margin:0 0 8px;font-weight:600}
+fieldset>:not(legend){clear:both}.nummer>*,.tag>*,.zeile>*{min-width:0}
 label{display:block;margin:0 0 10px;font-size:.88rem;color:var(--muted)}label:last-child{margin-bottom:0}
 input,select{display:block;width:100%;margin-top:4px;padding:12px;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:12px}
 input:focus{outline:2px solid var(--accent);outline-offset:1px}.zeile{display:grid;grid-template-columns:7rem 1fr;gap:10px}

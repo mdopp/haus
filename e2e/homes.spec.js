@@ -1018,6 +1018,9 @@ test('Kontakt prüfen lassen: link, the public form, the review', async ({ page,
   await expect(kontakt.locator('input[name=nachname]')).toHaveValue('Hilde');
   await expect(kontakt.locator('input[name=tel]').first()).toHaveValue('0711 445566');
   await expect(kontakt.getByText('Anna Beispiel')).toHaveCount(0);
+  // nothing wider than the phone: no field pushed off the right edge
+  expect(await kontakt.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(411);
+  expect(await kontakt.locator('input[name=tel]').first().evaluate((e) => e.offsetWidth)).toBeGreaterThan(150); // the number readable, not „071“
   await kontakt.screenshot({ path: info.outputPath('kontakt-formular-411.png'), fullPage: true });
   await kontakt.locator('input[name=tel]').nth(1).fill('0171 2345678');
   await kontakt.locator('input[name=mail]').first().fill('hilde@nowhere.example');
