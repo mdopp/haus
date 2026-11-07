@@ -59,13 +59,7 @@ func TestOnePlayerPerThing(t *testing.T) {
 
 	_, body, _ := familyPage(t, Start, StartConfig{HA: hc}, "GET", "/start", "family")
 	im := section(t, body, "karte-im-haus")
-	if n := strings.Count(im, "TV spielt"); n != 1 {
-		t.Errorf("%d TV rows, want 1:\n%s", n, im)
-	}
-	if n := strings.Count(im, "Küche spielt"); n != 1 {
-		t.Errorf("%d Küche rows, want 1:\n%s", n, im)
-	}
-	mustContain(t, im, `value="media_player.tv"`, `value="media_player.kuche"`)
+	mustContain(t, im, "Küche und TV spielen", `value="media_player.media_pause"`) // one line, one Pause (owner 2026-11-07)
 	mustNotContain(t, im, "media_player.tv_2", "media_player.a_kuche", "Annas Handy", "Tatort")
 
 	_, body, _ = familyPage(t, Medien, StartConfig{HA: hc}, "GET", "/medien", "family")

@@ -17,7 +17,7 @@ import (
 // Einrichtung (haus#188; owner 2026-10-28: „es gibt häufige/regelmäßige und
 // einmalige/seltene Dinge“): what a person sets up once is a task, not a
 // page in the menu. Mehr shows the open ones at the top, each with its
-// guided page; Start says it quietly while an important one is open;
+// guided page; Start's Braucht dich has the important ones;
 // Deine Aufgaben lists them all, the done ones to do again. Done is what
 // Homes sees; a module's app, where nothing can tell, the person's tick.
 const aufgabenPath = "/aufgaben"
@@ -29,6 +29,7 @@ type aufgabe struct {
 	href         string // the page that leads through it
 	gespraech    int    // a Box-Aufgabe done together with the Bote: its id (laib#878)
 	wichtig      bool   // security and access before the optional
+	frage        bool   // a question from Immich (Dieselbe Person?): Braucht dich, not optional
 	erledigt     bool
 }
 
@@ -116,7 +117,7 @@ func einrichtung(r *http.Request, cfg StartConfig) []aufgabe {
 		out = append(out, aufgabe{titel: a.Titel, warum: a.Warum, href: einrichtenHref(a.Modul), erledigt: a.Erledigt != nil})
 	}
 	for _, a := range cfg.Einrichtung.Fragen(user) { // the key owner's questions in Immich, while open
-		out = append(out, aufgabe{titel: a.Titel, warum: a.Warum, href: DieselbePath})
+		out = append(out, aufgabe{titel: a.Titel, warum: a.Warum, href: DieselbePath, frage: true})
 	}
 	if cfg.Discogs != nil { // the household's Discogs app is there; each person connects their own
 		_, verbunden := cfg.Discogs.Konto(user)
@@ -218,21 +219,6 @@ func einrichtungCard(open []aufgabe, laibSays string) string {
 		c.AddLink(aufgabenRowTitle, laibSays, aufgabenPath)
 	}
 	return c.HTML()
-}
-
-// einrichtungZeile is Start's quiet line while an important task is open.
-func einrichtungZeile(r *http.Request, cfg StartConfig) string {
-	var wichtig []string
-	for _, a := range offen(einrichtung(r, cfg)) { // Homes' own only: Start never waits for Laib (haus#67)
-		if a.wichtig {
-			wichtig = append(wichtig, a.titel)
-		}
-	}
-	if len(wichtig) == 0 {
-		return ""
-	}
-	n := map[bool]string{true: "1 Sache einzurichten", false: strconv.Itoa(len(wichtig)) + " Sachen einzurichten"}[len(wichtig) == 1]
-	return `<p class=ruhig><span class="punkt gelb"></span><a href=` + aufgabenPath + `>` + n + `</a>: ` + html.EscapeString(strings.Join(wichtig, ", ")) + `</p>`
 }
 
 // DeineAufgaben is the page Deine Aufgaben: what is open, and what is done, to do again.

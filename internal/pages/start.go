@@ -2,7 +2,7 @@ package pages
 
 import (
 	"context"
-	"fmt"
+	"html"
 	"net/http"
 	"sort"
 	"strconv"
@@ -121,20 +121,16 @@ type StartConfig struct {
 var backendWait = 4 * time.Second
 
 const (
-	maxNames   = 5  // lamp names in the lights' row
-	maxPlaying = 3  // media players in Im Haus
 	maxGeraete = 12 // tiles in Deine Geräte
-	maxAgenda  = 6  // rows in Heute und demnächst
-	horizon    = 14 // days ahead for appointments and reminders
+	maxHeute   = 3  // lines in Heute (owner 2026-11-07)
+	horizon    = 14 // days ahead on Kalender
 )
 
-// What Start says when a part cannot do its job, or is empty: then how it
-// fills (haus#35, "leer heißt erklären").
+// What Start says when a part cannot do its job, or is empty (haus#35).
 const (
 	saysNoSwitching = "Schalten geht im Moment nicht."
 	saysPinHow      = "Tippe unter Geräte bei einem Gerät auf ☆, dann erscheint es hier."
-	saysNothingDue  = "Nichts in den nächsten zwei Wochen."
-	saysAgendaHow   = "Termine und Erinnerungen aus dem Kalender stehen hier."
+	saysNichtsHeute = "Heute und morgen steht nichts im Kalender."
 )
 
 // marke is Start's head, the app's start screen in words and mark: the
@@ -151,14 +147,15 @@ var marke = func() string {
 	return "<header class=marke>" + s + "<div><h1>Homes</h1><p class=claim>Dein Zuhause, klar im Blick.</p></div></header>"
 }()
 
-// Start is the family's page (haus#12, haus#35): Homes' mark, name and claim (as in the app, owner 2026-11-03) and the day,
-// then each part answering one question a family member has — who is
-// home and what is on (Im Haus, one action a row), my own things (Deine
-// Geräte, the app's tiles, switched in place), what comes up (Heute und demnächst) — and
-// the box in one calm line at the bottom, at the top when something is
-// wrong. A backend that is not configured is not mentioned; one not
-// answering is one plain line where its rows would be, its error in the
-// log, not on the page.
+// sprechenKnopf is the way to Sprechen from Start's head (owner 2026-11-07:
+// a small, unobtrusive entry, not a field in the way).
+const sprechenKnopf = `<a class=sprechen-knopf href=/sprechen aria-label=Sprechen title=Sprechen><svg viewBox="0 0 24 24" width=22 height=22 aria-hidden=true fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.4A8 8 0 1 1 21 12z"/></svg></a>`
+
+// Start is the family's page (haus#12, haus#35; owner 2026-11-07: „Rigoros
+// einfach“, docs/DOMAIN.md Gestaltungsregeln): Homes' mark and the day, then
+// at most four blocks, each its state and at most one action — Braucht dich
+// (only when something is open), Deine Geräte, Heute, Im Haus. A backend not
+// configured is not mentioned; one not answering is one plain line, its error in the log.
 func Start(cfg StartConfig) http.HandlerFunc {
 	var box *boxStatus
 	if cfg.Laib != nil {
@@ -166,7 +163,7 @@ func Start(cfg StartConfig) http.HandlerFunc {
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case StartBoxPath: // the box line, after the page (haus#67)
+		case StartBoxPath: // Braucht dich with Laib's part, after the page (haus#67)
 			startBox(w, r, cfg, box)
 			return
 		case "/start", "":
@@ -180,24 +177,25 @@ func Start(cfg StartConfig) http.HandlerFunc {
 		now, loc := cfg.clock()
 
 		var (
-			ready    laib.Readiness
-			services []laib.Service
-			laibErr  error
-			boxOK    bool
-			states   []ha.State
-			haErr    error
-			reg      ha.Registry
-			events   []caldav.Event
-			evErr    error
-			todos    []caldav.Todo
-			todoErr  error
-			favs     []string
-			favErr   error
-			reads    []func(context.Context)
+			kept    *boxRead
+			states  []ha.State
+			haErr   error
+			reg     ha.Registry
+			events  []caldav.Event
+			evErr   error
+			todos   []caldav.Todo
+			todoErr error
+			favs    []string
+			favErr  error
+			reads   []func(context.Context)
 		)
 		person := r.Header.Get("Remote-User")
-		if box != nil { // laib's status kept, waited for briefly (haus#67)
-			reads = append(reads, func(context.Context) { ready, services, laibErr, boxOK = box.read(boxInline) })
+		if box != nil { // laib's status as kept, never waited for (haus#67)
+			reads = append(reads, func(context.Context) {
+				if ready, services, err, ok := box.read(boxInline); ok && err == nil {
+					kept = &boxRead{ready, services}
+				}
+			})
 		}
 		if cfg.HA != nil {
 			reads = append(reads,
@@ -207,7 +205,7 @@ func Start(cfg StartConfig) http.HandlerFunc {
 		}
 		if cfg.Calendar != nil {
 			reads = append(reads,
-				func(ctx context.Context) { events, evErr = cfg.Calendar.Events(ctx, now, now.AddDate(0, 0, horizon)) },
+				func(ctx context.Context) { events, evErr = cfg.Calendar.Events(ctx, now, endOfTomorrow(now, loc)) },
 				func(ctx context.Context) { todos, todoErr = cfg.Calendar.OpenTodos(ctx) })
 		}
 		pins := cfg.Favorites != nil && cfg.HA != nil && person != ""
@@ -216,65 +214,44 @@ func Start(cfg StartConfig) http.HandlerFunc {
 		}
 		fetch(r, reads...)
 		states = cfg.allAsSeen(states) // a cover wired the wrong way round, turned over (haus#64)
-		logErrs("start", map[string]error{"laib": laibErr, "home assistant": haErr, "calendar": evErr, "reminders": todoErr, "favorites": favErr})
+		logErrs("start", map[string]error{"home assistant": haErr, "calendar": evErr, "reminders": todoErr, "favorites": favErr})
 
 		b := familyHead(r, cfg, "Homes", "Start")
-		b.WriteString(liveRefresh("alle", 120)) // lamps and players by push; the day and the box line every two minutes
-		b.WriteString(marke + "<p class=datum>" + dateWords(now, loc) + "</p>")
-		var top, bottom string
-		if cfg.Laib != nil {
-			quiet := haErr == nil && evErr == nil && todoErr == nil && favErr == nil
-			if boxOK {
-				top, bottom = familyBox(ready, services, laibErr, quiet, now, loc)
-			} else {
-				top, bottom = boxLater(quiet)
-			}
-		}
-		b.WriteString(top)
+		b.WriteString(liveRefresh("alle", 120)) // lamps and players by push; the day and Braucht dich every two minutes
+		head := marke
 		if cfg.Bote != nil {
-			b.WriteString(sprechenField(cfg, false))
+			head = strings.Replace(marke, "</header>", sprechenKnopf+"</header>", 1)
 		}
-		// the day first, then what you switch, then the house (owner 2026-10-24)
-		if cfg.Calendar != nil {
-			b.WriteString(agenda(events, evErr, todos, todoErr, now, loc).HTML())
-		}
+		b.WriteString(head + "<p class=datum>" + dateWords(now, loc) + "</p>")
+		b.WriteString(brauchtDichSpaeter(r, cfg, kept))
 		if pins {
 			b.WriteString(deineGeraete(favs, favErr, states, haErr, reg, now.In(loc).Format("15:04")))
 		}
-		if cfg.HA != nil {
-			b.WriteString(imHaus(states, haErr, reg).HTML())
-			if haErr == nil {
-				b.WriteString(energieZeile(cfg, states))
-			}
+		if cfg.Calendar != nil {
+			b.WriteString(heute(events, evErr, todos, todoErr, now, loc))
 		}
-		b.WriteString(bottom)
-		b.WriteString(einrichtungZeile(r, cfg)) // haus#188: an important setup still open, quietly
-		b.WriteString(toNetzlaufwerk(cfg.Samba, person))
+		if cfg.HA != nil {
+			b.WriteString(imHaus(cfg, states, haErr, reg))
+		}
 		writePage(w, http.StatusOK, b)
 	}
 }
 
-// imHaus answers "who is home, and what is on?": the people at home, the
-// lamps that are on with one button to turn them off, what plays with
-// Pause, one row per thing (haus#83). What HA hides is left out; a group
-// is not a lamp.
-func imHaus(states []ha.State, haErr error, reg ha.Registry) cards.Card {
-	hidden := reg.Hidden
-	c := cards.Card{Title: "Im Haus", Look: cards.Boxes}
+// imHaus answers "who is home, and what is on?" in one line (owner
+// 2026-11-07): the people at home, the lamps on, what plays, and the
+// energy now leading to Energie — with one action: the lamps off, else a
+// player's Pause. What HA hides is left out; a group is not a lamp.
+func imHaus(cfg StartConfig, states []ha.State, haErr error, reg ha.Registry) string {
+	const open = "<section class=\"karte im-haus\" aria-labelledby=karte-im-haus><h2 id=karte-im-haus>Im Haus</h2><ul>"
 	if haErr != nil {
-		c.Add(saysNoHouse+" "+saysNoSwitching, "")
-		return c
+		return open + "<li>" + saysNoHouse + " " + saysNoSwitching + "</li></ul></section>"
 	}
 	persons := 0
-	var home []string
-	type playing struct {
-		id, name, what string
-		pause          bool
-	}
-	var plays []playing
+	var home, plays []string
+	var pause *cards.Action
 	twins := twinPlayers(states, reg, false)
 	for _, s := range states {
-		if !shown(s, hidden) || twins[s.EntityID] {
+		if !shown(s, reg.Hidden) || twins[s.EntityID] {
 			continue
 		}
 		domain, _, _ := strings.Cut(s.EntityID, ".")
@@ -285,62 +262,43 @@ func imHaus(states []ha.State, haErr error, reg ha.Registry) cards.Card {
 				home = append(home, friendly(s))
 			}
 		case domain == "media_player" && s.State == "playing":
-			title, _ := s.Attributes["media_title"].(string)
-			artist, _ := s.Attributes["media_artist"].(string)
-			what := trimRunes(oneLine(title), 80)
-			if a := trimRunes(oneLine(artist), 60); a != "" {
-				if what != "" {
-					what += " · "
-				}
-				what += a
+			plays = append(plays, friendly(s))
+			if f, _ := number(s.Attributes["supported_features"]); int64(f)&pauseFeature != 0 && pause == nil {
+				pause = &cards.Action{Label: "Pause", Entity: s.EntityID, Do: "media_player.media_pause", Back: "/start"}
 			}
-			f, _ := number(s.Attributes["supported_features"])
-			plays = append(plays, playing{s.EntityID, friendly(s), what, int64(f)&pauseFeature != 0})
 		}
 	}
+	var parts []string
 	if persons > 0 {
 		sort.Strings(home)
-		switch len(home) {
-		case 0:
-			c.Add("Niemand ist zu Hause", "")
-		case 1:
-			c.Add(home[0]+" ist da", "")
-		default:
-			c.Add(andList(home)+" sind da", "")
-		}
+		parts = append(parts, map[bool]string{true: "Niemand zu Hause", false: andList(home) + " da"}[len(home) == 0])
 	}
-	lamps := litLamps(states, hidden)
-	switch len(lamps) {
+	var action *cards.Action
+	switch lamps := litLamps(states, reg.Hidden); len(lamps) {
 	case 0:
-		c.Add("Alle Lichter sind aus", "")
+		parts = append(parts, "Alle Lichter aus")
 	case 1:
-		c.Rows = append(c.Rows, cards.Row{Text: "1 Licht an", Detail: friendly(lamps[0]),
-			Action: &cards.Action{Label: "Aus", Entity: lamps[0].EntityID, Do: "light.turn_off", Back: "/start"}})
+		parts = append(parts, friendly(lamps[0])+" an")
+		action = &cards.Action{Label: "Aus", Entity: lamps[0].EntityID, Do: "light.turn_off", Back: "/start"}
 	default:
-		names := make([]string, len(lamps))
-		for i, l := range lamps {
-			names[i] = friendly(l)
-		}
-		sort.Strings(names)
-		list := strings.Join(names[:min(len(names), maxNames)], ", ")
-		if len(names) > maxNames {
-			list += fmt.Sprintf(" und %d weitere", len(names)-maxNames)
-		}
-		c.Rows = append(c.Rows, cards.Row{Text: fmt.Sprintf("%d Lichter an", len(lamps)), Detail: list,
-			Action: &cards.Action{Label: "Alle aus", Do: allLightsOff, Back: "/start"}})
+		parts = append(parts, strconv.Itoa(len(lamps))+" Lichter an")
+		action = &cards.Action{Label: "Alle aus", Do: allLightsOff, Back: "/start"}
 	}
-	sort.SliceStable(plays, func(i, j int) bool { return plays[i].name < plays[j].name })
-	for i, p := range plays {
-		if i == maxPlaying {
-			break
-		}
-		row := cards.Row{Text: p.name + " spielt", Detail: p.what}
-		if p.pause {
-			row.Action = &cards.Action{Label: "Pause", Entity: p.id, Do: "media_player.media_pause", Back: "/start"}
-		}
-		c.Rows = append(c.Rows, row)
+	if len(plays) > 0 {
+		sort.Strings(plays)
+		parts = append(parts, andList(plays)+map[bool]string{true: " spielt", false: " spielen"}[len(plays) == 1])
 	}
-	return c
+	if action == nil {
+		action = pause
+	}
+	line := html.EscapeString(strings.Join(parts, " · "))
+	if e := energieKurz(cfg, states); e != "" {
+		line += " · <a href=/energie>" + html.EscapeString(e) + "</a>"
+	}
+	if action == nil {
+		return open + "<li>" + line + "</li></ul></section>"
+	}
+	return open + "<li class=tu><div>" + line + "</div>" + action.Form() + "</li></ul></section>"
 }
 
 // pauseFeature is HA's MediaPlayerEntityFeature.PAUSE.
@@ -420,68 +378,79 @@ func capital(s string) string {
 	return string(unicode.ToUpper(r)) + s[n:]
 }
 
-// agenda answers "what comes up?" (Heute und demnächst): appointments and
-// reminders together, by time — an overdue reminder first, one without a
-// date last, "offen" — each leading to its page. Notes are not things
-// that come; they have their own tab.
-func agenda(events []caldav.Event, evErr error, todos []caldav.Todo, todoErr error, now time.Time, loc *time.Location) cards.Card {
-	c := cards.Card{Title: "Heute und demnächst", Look: cards.Times}
+// heute answers "what is today?" (owner 2026-11-07): at most maxHeute
+// lines of today and tomorrow — the appointments and the reminders due, an
+// overdue one first — each leading to its page, then Kalender. Nothing
+// coming is one quiet line.
+func heute(events []caldav.Event, evErr error, todos []caldav.Todo, todoErr error, now time.Time, loc *time.Location) string {
 	type item struct {
-		at    time.Time
-		dated bool
-		row   cards.Row
+		at  time.Time
+		row cards.Row
 	}
 	var items []item
+	until := endOfTomorrow(now, loc)
 	if evErr == nil {
 		for _, e := range events {
-			when, detail := dayWord(e.Start, now, loc)+" "+e.Start.In(loc).Format("15:04"), trimRunes(oneLine(e.Location), 80)
-			switch {
-			case e.AllDay && e.Start.Before(now):
-				when = "heute"
-			case e.AllDay:
-				when = dayWord(e.Start, now, loc)
-			case e.Start.Before(now):
-				when, detail = "jetzt", strings.TrimSuffix("bis "+e.End.In(loc).Format("15:04")+" · "+detail, " · ")
+			when := zeit(e.Start, e.AllDay, now, loc)
+			if !e.AllDay && e.Start.Before(now) {
+				when = "jetzt"
 			}
-			items = append(items, item{e.Start, true, cards.Row{Text: summary(e.Summary), Detail: detail, When: when, Href: "/kalender"}})
+			items = append(items, item{e.Start, cards.Row{Text: summary(e.Summary), When: when, Href: "/kalender"}})
 		}
 	}
 	if todoErr == nil {
-		until := now.AddDate(0, 0, horizon)
 		for _, t := range todos {
-			if !t.Due.IsZero() && !t.Due.Before(until) {
+			if t.Due.IsZero() || !t.Due.Before(until) {
 				continue
 			}
-			row := cards.Row{Text: summary(t.Summary), When: dueWords(t, now, loc), Href: "/kalender"}
+			row := cards.Row{Text: summary(t.Summary), When: zeit(t.Due, t.DueAllDay, now, loc), Href: "/kalender"}
+			if overdue := dueWords(t, now, loc); strings.HasPrefix(overdue, "überfällig") {
+				row.When = "überfällig"
+			}
 			if uid := strings.TrimSpace(t.UID); uid != "" {
 				row.Href = cards.ReminderPage(uid)
 			}
-			if t.Due.IsZero() {
-				row.When = "offen"
-			}
-			items = append(items, item{t.Due, !t.Due.IsZero(), row})
+			items = append(items, item{t.Due, row})
 		}
 	}
-	sort.SliceStable(items, func(i, j int) bool {
-		if items[i].dated != items[j].dated {
-			return items[i].dated
-		}
-		return items[i].at.Before(items[j].at)
-	})
+	failed := evErr != nil || todoErr != nil
+	if len(items) == 0 && !failed {
+		return "<p class=ruhig><span class=\"punkt grau\"></span><a href=/kalender>" + saysNichtsHeute + "</a></p>"
+	}
+	sort.SliceStable(items, func(i, j int) bool { return items[i].at.Before(items[j].at) })
+	c := cards.Card{Title: "Heute", Look: cards.Times, Link: &cards.Link{Href: "/kalender", Text: "Kalender →"}}
 	for i, it := range items {
-		if i == maxAgenda {
-			c.AddLink("und "+strconv.Itoa(len(items)-maxAgenda)+" weitere", "", "/kalender")
+		if i == maxHeute {
+			c.Link.Text = "Kalender · " + strconv.Itoa(len(items)-maxHeute) + " weitere →"
 			break
 		}
 		c.Rows = append(c.Rows, it.row)
 	}
-	switch {
-	case evErr != nil || todoErr != nil:
+	if failed {
 		c.Add(saysNoCalendar, "")
-	case len(items) == 0:
-		c.Add(saysNothingDue, saysAgendaHow)
 	}
-	return c
+	return c.HTML()
+}
+
+// zeit is a line's time in Heute: 14:00 today, morgen 08:30, heute or
+// morgen for a whole day.
+func zeit(t time.Time, allDay bool, now time.Time, loc *time.Location) string {
+	day := dayWord(t, now, loc)
+	switch {
+	case allDay && t.Before(now):
+		return "heute"
+	case allDay:
+		return day
+	case day == "heute":
+		return t.In(loc).Format("15:04")
+	}
+	return day + " " + t.In(loc).Format("15:04")
+}
+
+// endOfTomorrow is the midnight after tomorrow, in loc: Heute's end.
+func endOfTomorrow(now time.Time, loc *time.Location) time.Time {
+	y, m, d := now.In(loc).Date()
+	return time.Date(y, m, d+2, 0, 0, 0, 0, loc)
 }
 
 // saysNoSuchPage is what a path Homes does not serve says.

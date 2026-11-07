@@ -43,20 +43,14 @@ func when(t time.Time) string {
 	return t.Format("02.01. 15:04")
 }
 
-// familyBox is the box in the family's words on Start (haus#35, owner
-// decision 2026-10-15): one calm line at the bottom when all is well —
-// "Alles in Ordnung · eure Daten sind von gestern Abend gesichert". When
-// a service is down or the data is not backed up, it is on top instead,
-// saying what it means for the family and that someone is on it — amber
+// boxAchtung is the box in the family's words on Start (haus#35, owner
+// decision 2026-10-15), only when something is wrong (owner 2026-11-07:
+// all well says nothing): a service the family uses down, or the data not
+// backed up, saying what it means and that someone is on it — amber
 // (selbst) when the box mends it itself, red (hilfe) only when a person is
-// needed: nobody automatic is on it, or the data is not backed up; the
-// admin's words (services, places, the Operator) stay on /box. Laib not
-// answering is #34's plain line, at the bottom. "Alles in Ordnung" only
-// when quiet: no part of the page said something does not answer.
-func familyBox(ready laib.Readiness, rows []laib.Service, err error, quiet bool, now time.Time, loc *time.Location) (top, bottom string) {
-	if err != nil {
-		return "", "<p class=ruhig><span class=\"punkt grau\"></span>Wie es der Box geht, lässt sich gerade nicht sagen.</p>"
-	}
+// needed: nobody automatic is on it, or the data is not backed up. The
+// admin's words (services, places, the Operator) stay on /box.
+func boxAchtung(ready laib.Readiness, rows []laib.Service, now time.Time, loc *time.Location) string {
 	var wrong []string
 	var down []string
 	for _, s := range rows {
@@ -81,16 +75,10 @@ func familyBox(ready laib.Readiness, rows []laib.Service, err error, quiet bool,
 		// haus#173, the owner 2026-10-28: one place is not „gesichert“ — the copy off the box is missing
 		saved = saysNurImHaus
 	default:
-		saved = "eure Daten sind " + backupWords(at, now, loc) + " gesichert"
+		saved = "Eure Daten sind " + backupWords(at, now, loc) + " gesichert."
 	}
-	nurHier := saved == saysNurImHaus
-	switch {
-	case len(wrong) == 0 && nurHier:
-		return "", "<p class=ruhig><span class=\"punkt gelb\"></span>" + saysNurImHaus + "</p>"
-	case len(wrong) == 0 && quiet:
-		return "", "<p class=ruhig><span class=punkt></span>Alles in Ordnung · " + saved + "</p>"
-	case len(wrong) == 0:
-		return "", "<p class=ruhig><span class=punkt></span>E" + saved[1:] + "</p>"
+	if len(wrong) == 0 {
+		return ""
 	}
 	who, kind := "Wer die Box betreut, weiß Bescheid.", "hilfe"
 	switch {
@@ -107,14 +95,11 @@ func familyBox(ready laib.Readiness, rows []laib.Service, err error, quiet bool,
 	}
 	var b strings.Builder
 	b.WriteString("<section class=\"achtung " + kind + "\" role=status aria-label=\"Die Box\"><p>" + html.EscapeString(strings.Join(wrong, " ")) + "</p><p>" + who + "</p>")
-	switch {
-	case nurHier:
-		b.WriteString("<p>" + saysNurImHaus + "</p>")
-	case saved != "":
-		b.WriteString("<p>E" + saved[1:] + ".</p>")
+	if saved != "" {
+		b.WriteString("<p>" + saved + "</p>")
 	}
 	b.WriteString("</section>")
-	return b.String(), ""
+	return b.String()
 }
 
 // backupWords says when the last backup was, the way the family says it:

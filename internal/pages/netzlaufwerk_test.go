@@ -124,15 +124,17 @@ func TestNetzlaufwerkSaysWhenSambaDoesNotAnswer(t *testing.T) {
 	}
 }
 
+// owner 2026-11-07: Start has no Netzlaufwerk line; a password not set yet
+// is a task in Braucht dich, one set is nothing on Start.
 func TestStartLeadsToTheNetzlaufwerk(t *testing.T) {
 	_, cfg := netzlaufwerk(t, true)
-	for user, want := range map[string]string{"anna": "Noch kein Passwort fürs Netzlaufwerk", "ben": "Passwort fürs Netzlaufwerk ändern"} {
+	for user, want := range map[string]bool{"anna": true, "ben": false} {
 		req := httptest.NewRequest("GET", "/start", nil)
 		req.Header.Set("Remote-User", user)
 		rec := httptest.NewRecorder()
 		Start(cfg).ServeHTTP(rec, req)
-		if !strings.Contains(rec.Body.String(), want) || !strings.Contains(rec.Body.String(), "href=/netzlaufwerk") {
-			t.Errorf("%s: Start lacks %q", user, want)
+		if got := strings.Contains(rec.Body.String(), `<a href="/netzlaufwerk">Netzlaufwerk-Passwort festlegen</a>`); got != want {
+			t.Errorf("%s: the task on Start %v, want %v", user, got, want)
 		}
 	}
 }

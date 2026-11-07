@@ -38,18 +38,13 @@ func achtung(ctx context.Context, r *http.Request, cfg BoxConfig) string {
 	add := func(class, what string) {
 		lines[class] = append(lines[class], "<li>"+dot(class, cmp.Or(map[string]string{"k": "Hinweis"}[class], class))+"<span class=was>"+what+"</span></li>")
 	}
-	shown := map[string]bool{}
-	for _, s := range rows {
-		if c := cls(s.State); c != "gruen" {
-			shown[s.Name] = true
-			add(c, serviceLabel(s)+aboutIt(s.Detail))
+	notGreen(rows, found, func(class string, s *laib.Service, f *laib.Finding) {
+		if s != nil {
+			add(class, serviceLabel(*s)+aboutIt(s.Detail))
+		} else {
+			add(class, "<b>"+html.EscapeString(cmp.Or(f.Say, f.Probe))+"</b>"+aboutIt(f.Detail))
 		}
-	}
-	for _, f := range found.Findings {
-		if (f.Severity == "rot" || f.Severity == "gelb") && !shown[f.Service] {
-			add(f.Severity, "<b>"+html.EscapeString(cmp.Or(f.Say, f.Probe))+"</b>"+aboutIt(f.Detail))
-		}
-	}
+	})
 	switch {
 	case errors.Is(derr, laib.ErrNoTool): // a Laib without befunde: diag's red lines in laib status (laib#856)
 		for _, p := range ready.Problems {
@@ -86,6 +81,24 @@ func achtung(ctx context.Context, r *http.Request, cfg BoxConfig) string {
 		top = "<ul class=zeilen>" + strings.Join(all, "") + "</ul><p class=k>" + foot + "</p>"
 	}
 	return "<h1>Box</h1>" + top + morningReport(reports, rerr) + "<p>" + laibLink(cfg, "/journal", "Das Journal auf der Laib-Seite") + "</p>"
+}
+
+// notGreen calls each for every service not green, then for laib diag's
+// red and yellow findings beyond those services: the Übersicht's lines,
+// and what Start's Braucht dich counts for an admin (one rule for both).
+func notGreen(rows []laib.Service, found laib.Befunde, each func(class string, s *laib.Service, f *laib.Finding)) {
+	shown := map[string]bool{}
+	for i := range rows {
+		if c := cls(rows[i].State); c != "gruen" {
+			shown[rows[i].Name] = true
+			each(c, &rows[i], nil)
+		}
+	}
+	for i, f := range found.Findings {
+		if (f.Severity == "rot" || f.Severity == "gelb") && !shown[f.Service] {
+			each(f.Severity, nil, &found.Findings[i])
+		}
+	}
 }
 
 // seit says how long ago diag measured: vor 12 min, vor 3 h, else the day.

@@ -2,22 +2,23 @@ package pages
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/mdopp/homes/internal/cards"
 	"github.com/mdopp/homes/internal/laib"
+	"github.com/mdopp/homes/internal/texte"
 )
 
 // Start does not wait for laib (haus#67; owner 2026-11-03: not even
 // briefly): laib's status takes a second, the rest of Start a few
 // milliseconds. Homes keeps the status statusFresh, and while it is older
-// but not past statusKeep shows it at once and reads it anew behind the
-// page; a page with none kept has a place for the box line, and the page's
-// script fetches it from StartBoxPath once laib has answered. Variables for
-// the tests.
+// but not past statusKeep uses it at once and reads it anew behind the
+// page; Braucht dich comes whole from StartBoxPath once laib has answered.
+// Variables for the tests.
 var (
 	statusFresh = 45 * time.Second
 	statusKeep  = 5 * time.Minute
@@ -43,11 +44,14 @@ func boxStatusFor(c *laib.Client) *boxStatus {
 	return s
 }
 
-// StartBoxPath is where Start's script fetches the box line.
+// StartBoxPath is where Start fetches Braucht dich with Laib's part.
 const StartBoxPath = "/start/box"
 
-// saysBoxLooking is the box line's place until laib has answered.
-const saysBoxLooking = "Wie es der Box geht, wird gerade nachgesehen …"
+// saysBoxSilent is an admin's row in Braucht dich while laib does not answer.
+const saysBoxSilent = "Wie es der Box geht, lässt sich gerade nicht sagen."
+
+// maxBraucht are the tasks in Braucht dich; more is one row to Deine Aufgaben.
+const maxBraucht = 3
 
 // boxStatus is laib's status, kept for Start: one read at a time, which
 // every page asking meanwhile shares; a failed read is not kept.
@@ -109,29 +113,90 @@ func (s *boxStatus) read(wait time.Duration) (ready laib.Readiness, services []l
 	return s.ready, s.services, nil, true
 }
 
-// boxLater is the box line's two places while laib has not answered, and
-// the script that fills them: the top for what is wrong, the bottom for
-// the calm line. ruhig says whether the rest of the page answered (no
-// "Alles in Ordnung" otherwise). Without script the bottom says the box is
-// being looked at; a fetch that fails says it cannot be said.
-func boxLater(quiet bool) (top, bottom string) {
-	q := "0"
-	if quiet {
-		q = "1"
-	}
-	_, failed := familyBox(laib.Readiness{}, nil, errLaibSilent, quiet, time.Time{}, time.UTC)
-	f, _ := json.Marshal(failed)
-	return "<div id=box-oben></div>", "<div id=box-unten><p class=ruhig><span class=\"punkt grau\"></span>" + saysBoxLooking + "</p></div>" +
-		`<script>(function(){var o=document.getElementById('box-oben'),u=document.getElementById('box-unten'),f=` + string(f) + `;if(!window.fetch||!u)return;` +
-		`fetch('` + StartBoxPath + `?ruhig=` + q + `',{credentials:'same-origin'}).then(function(r){if(!r.ok)throw new Error(r.status);return r.json()})` +
-		`.then(function(j){o.innerHTML=j.oben||'';u.innerHTML=j.unten||''}).catch(function(){u.innerHTML=f})})()</script>`
+// boxRead is laib's status as Start read it.
+type boxRead struct {
+	ready    laib.Readiness
+	services []laib.Service
 }
 
-// errLaibSilent stands for laib not answering in time.
-var errLaibSilent = context.DeadlineExceeded
+// laibTeil is what Laib adds to Braucht dich; nil is not read (yet).
+type laibTeil struct {
+	status    *boxRead
+	statusErr error           // laib did not answer: an admin is told
+	aufgaben  *laib.Aufgaben  // the person's own Box-Aufgaben (laib#878)
+	befunde   laib.Befunde    // laib diag's, for an admin
+	wartet    []laib.Proposal // decisions waiting, for an admin
+}
 
-// startBox answers StartBoxPath: the box line as Start would have shown it,
-// {"oben":…,"unten":…}, once laib has answered or backendWait has passed.
+// brauchtDichSpaeter is Braucht dich's place on Start: what Homes knows at
+// once (its own tasks, the status as kept), the whole card from
+// StartBoxPath once Laib has answered; that failing leaves the first.
+func brauchtDichSpaeter(r *http.Request, cfg StartConfig, kept *boxRead) string {
+	own := brauchtDich(r, cfg, laibTeil{status: kept})
+	if cfg.Laib == nil {
+		return own
+	}
+	return nachladen(StartBoxPath, own, own)
+}
+
+// brauchtDich answers "what needs me?" (owner 2026-11-07; the UX review's
+// one place for it): the person's important tasks and Immich's questions,
+// for an admin the box's red and yellow and the decisions waiting — never
+// an optional app; nothing open, no card. For the family a service down is
+// the box's banner above it (boxAchtung).
+func brauchtDich(r *http.Request, cfg StartConfig, l laibTeil) string {
+	as := einrichtung(r, cfg)
+	if l.aufgaben != nil {
+		as = mitLaibs(r, cfg, as, *l.aufgaben)
+	}
+	c := cards.Card{Title: "Braucht dich"}
+	n := 0
+	for _, a := range offen(as) {
+		if !a.wichtig && !a.frage {
+			continue
+		}
+		if n++; n <= maxBraucht {
+			c.AddLink(a.titel, a.stand, a.href)
+		}
+	}
+	if n > maxBraucht {
+		c.AddLink(texte.Anzahl(n-maxBraucht, "weitere Aufgabe", "weitere Aufgaben"), "", aufgabenPath)
+	}
+	if !isAdmin(r) {
+		if l.status == nil {
+			return c.HTML()
+		}
+		now, loc := cfg.clock()
+		return boxAchtung(l.status.ready, l.status.services, now, loc) + c.HTML()
+	}
+	if l.statusErr != nil {
+		c.Add(saysBoxSilent, "")
+	}
+	if l.status != nil {
+		count := map[string]int{}
+		notGreen(l.status.services, l.befunde, func(class string, _ *laib.Service, _ *laib.Finding) { count[class]++ })
+		var says []string
+		for _, class := range []string{"rot", "gelb"} {
+			if count[class] > 0 {
+				says = append(says, strconv.Itoa(count[class])+" "+class)
+			}
+		}
+		if f := l.status.ready.AufgabenFaellig; f > 0 {
+			says = append(says, texte.Anzahl(f, texte.T("box.faellig"), texte.T("box.faellig.n")))
+		}
+		if len(says) > 0 {
+			c.AddLink("Box: "+strings.Join(says, " · "), "", "/box")
+		}
+	}
+	if n := len(l.wartet); n > 0 { // deciding is Laib's page's (ADR 0012, haus#157)
+		c.AddLink(texte.Anzahl(n, texte.T("box.wartet"), texte.T("box.wartet.n")), "", strings.TrimRight(cfg.LaibURL, "/")+"/inbox")
+	}
+	return c.HTML()
+}
+
+// startBox answers StartBoxPath: Braucht dich with Laib's part (the status,
+// the person's Box-Aufgaben, an admin's findings and waiting decisions)
+// once laib has answered or backendWait has passed; "" when nothing is open.
 func startBox(w http.ResponseWriter, r *http.Request, cfg StartConfig, box *boxStatus) {
 	if !showOnly(w, r, "Die Startseite") {
 		return
@@ -140,15 +205,34 @@ func startBox(w http.ResponseWriter, r *http.Request, cfg StartConfig, box *boxS
 		http.NotFound(w, r)
 		return
 	}
-	ready, services, err, ok := box.read(backendWait)
-	if !ok {
-		err = errLaibSilent
+	var l laibTeil
+	var derr, ierr error
+	user := r.Header.Get("Remote-User")
+	reads := []func(context.Context){func(context.Context) {
+		ready, services, err, ok := box.read(backendWait)
+		if !ok {
+			err = context.DeadlineExceeded // laib not answering in time
+		}
+		if l.statusErr = err; err == nil {
+			l.status = &boxRead{ready, services}
+		}
+	}}
+	if user != "" {
+		reads = append(reads, func(ctx context.Context) {
+			if la, ok, err := cfg.Laib.KeptAufgaben(ctx, user); ok {
+				l.aufgaben = &la
+			} else if err != nil {
+				logLaibAufgaben(err)
+			}
+		})
 	}
-	logErrs("start", map[string]error{"laib": err})
-	now, loc := cfg.clock()
-	quiet, _ := strconv.ParseBool(r.URL.Query().Get("ruhig"))
-	top, bottom := familyBox(ready, services, err, quiet, now, loc)
-	w.Header().Set("Content-Type", "application/json")
+	if isAdmin(r) {
+		reads = append(reads, func(ctx context.Context) { l.befunde, derr = cfg.Laib.Befunde(ctx) },
+			func(ctx context.Context) { l.wartet, ierr = cfg.Laib.Inbox(ctx) })
+	}
+	fetch(r, reads...)
+	logErrs("start", map[string]error{"laib": l.statusErr, "befunde": derr, "inbox": ierr})
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
-	json.NewEncoder(w).Encode(map[string]string{"oben": top, "unten": bottom})
+	w.Write([]byte(brauchtDich(r, cfg, l)))
 }

@@ -833,6 +833,33 @@ for (const path of ['/start', '/raeume', '/medien', '/energie', '/notizen', '/me
   });
 }
 
+// owner 2026-11-07 („Rigoros einfach“): Start is at most four blocks, each its state and at most one
+// action — Braucht dich (filled after the page from Laib: the box's red and yellow, a decision waiting),
+// Deine Geräte, Heute (three lines, today and tomorrow, then Kalender), Im Haus (one line, Energie a link)
+test('Start is four blocks, state first, one action each', async ({ page }) => {
+  await page.setViewportSize({ width: 411, height: 900 });
+  await page.goto('/start');
+  const braucht = page.getByRole('region', { name: 'Braucht dich' });
+  await expect(braucht.getByRole('link', { name: /^Box: 1 rot · \d gelb$/ })).toHaveAttribute('href', '/box');
+  await expect(braucht.getByRole('link', { name: '1 Entscheidung wartet' })).toHaveAttribute('href', 'https://laib.example/inbox');
+  const blocks = await page.evaluate(() => [...document.querySelectorAll('section.karte h2')].map((h) => h.textContent));
+  expect(blocks).toEqual(['Braucht dich', 'Deine Geräte', 'Heute', 'Im Haus']);
+  const heute = page.getByRole('region', { name: 'Heute' });
+  await expect(heute.locator('li')).toHaveCount(3);
+  await expect(heute).toContainText('Müll gelb');
+  await expect(heute).not.toContainText('Elternabend');
+  await expect(heute.getByRole('link', { name: /^Kalender/ })).toHaveAttribute('href', '/kalender');
+  const imHaus = page.getByRole('region', { name: 'Im Haus' });
+  await expect(imHaus.locator('li')).toHaveCount(1);
+  await expect(imHaus.getByRole('link', { name: /Dach .* Haus/ })).toHaveAttribute('href', '/energie');
+  await expect(imHaus.locator('form')).toHaveCount(1);
+  for (const gone of ['Heute und demnächst', 'Alles in Ordnung', 'einzurichten', 'Netzlaufwerk']) await expect(page.getByText(gone)).toHaveCount(0);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/start');
+  const wide = await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1);
+  expect(wide, 'no sideways scroll at 1280 px').toBe(true);
+});
+
 // Start at 411 px (owner 2026-11-07, „Rigoros einfach“): the picture the owner compares before and after.
 test('picture of /start at 411 px', async ({ page }, info) => {
   await page.setViewportSize({ width: 411, height: 900 });

@@ -289,22 +289,3 @@ func dayWords(t time.Time, loc *time.Location) string {
 	t = t.In(loc)
 	return strconv.Itoa(t.Day()) + ". " + months[t.Month()-1] + " " + strconv.Itoa(t.Year())
 }
-
-// toNetzlaufwerk is Start's way to the page, for a member only: a to-do
-// while they have no password, a quiet link once they have one.
-func toNetzlaufwerk(d *samba.Dir, person string) string {
-	if d == nil || person == "" {
-		return ""
-	}
-	acc, err := d.Accounts()
-	since, member := acc[person]
-	if err != nil || !member {
-		return ""
-	}
-	if since.IsZero() {
-		c := cardsList("Netzlaufwerk")
-		c.items = append(c.items, "<li><a href="+netzlaufwerkPath+">Noch kein Passwort fürs Netzlaufwerk<span class=k>Festlegen, um die Dateien des Hauses am Computer oder Handy zu öffnen</span></a></li>")
-		return c.html()
-	}
-	return "<p class=ruhig><span class=\"punkt grau\"></span><a href=" + netzlaufwerkPath + ">Passwort fürs Netzlaufwerk ändern</a></p>"
-}

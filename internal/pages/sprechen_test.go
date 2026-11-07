@@ -41,22 +41,20 @@ func say(t *testing.T, h http.HandlerFunc, user, text string, hdr map[string]str
 	return post(t, h, "/sprechen", url.Values{"nachricht": {text}}, user, hdr)
 }
 
-// haus#12: Start has the Sprechen field at the top, under the day and
-// above the cards: one plain field and Senden, posting to Homes itself, a
-// plain form without script (haus#63: with it, the answer has its page). It names no assistant: its name appears where you talk to it
-// (haus#35). Without the Bote there is no field and no word about it.
+// haus#12, owner 2026-11-07: Start has Sprechen as a small entry in its
+// head, not a field in the way: a button to /sprechen, where the field is.
+// It names no assistant: its name appears where you talk to it (haus#35).
+// Without the Bote there is no entry and no word about it.
 func TestStartHasTheSprechenField(t *testing.T) {
 	named(t, "Ada")
 	fake, hc := house(t)
 	fake.Set("light.flur", "on", map[string]any{"friendly_name": "Flurlicht"})
 	_, bc := fakeBote(t)
 	_, body := startPage(t, StartConfig{HA: hc, Bote: bc}, "family")
-	mustContain(t, body, "<form method=post action=/sprechen class=sprechen>", ">Sprechen</label>", "name=nachricht", "maxlength=1000",
-		"required", "<button class=senden>Senden</button>")
-	before(t, body, "class=datum", "action=/sprechen")
-	before(t, body, "action=/sprechen", "karte-im-haus")
-	// the script hands the sentence on to /sprechen; the form works without it
-	mustNotContain(t, body, "Ada", "Bote", "Hermes", "8642", "class=mikro")
+	mustContain(t, body, `<a class=sprechen-knopf href=/sprechen aria-label=Sprechen`)
+	before(t, body, "<h1>Homes</h1>", "<a class=sprechen-knopf")
+	before(t, body, "<a class=sprechen-knopf", "</header>")
+	mustNotContain(t, body, "Ada", "Bote", "Hermes", "8642", "class=mikro", "name=nachricht")
 
 	_, body = startPage(t, StartConfig{HA: hc}, "family")
 	mustNotContain(t, body, "/sprechen", "Sprechen", "Bote")
@@ -76,11 +74,11 @@ func TestSprechenIsNoTab(t *testing.T) {
 	}{{Start, "/start"}, {Notizen, "/notizen"}} {
 		_, body, _ := familyPage(t, p.page, cfg, "GET", p.path, "family,admins")
 		mustContain(t, body, "<nav class=tabs", "href=/box")
-		mustNotContain(t, body, "href=/sprechen")
+		mustNotContain(t, body, "<a href=/sprechen")
 	}
 	_, body, _ := talkPage(t, Sprechen(cfg), "anna")
 	mustContain(t, body, "<nav class=tabs", "href=/start aria-current=page>")
-	mustNotContain(t, body, "href=/sprechen")
+	mustNotContain(t, body, "<a href=/sprechen")
 	if n := strings.Count(body, "aria-current=page"); n != 1 {
 		t.Fatalf("%d tabs marked on /sprechen", n)
 	}
