@@ -164,7 +164,6 @@ var de = map[ID]string{
 	"modul.sicherung":    "Daten sichern",
 	"modul.standort":     "Standortverlauf",
 	"modul.netzlaufwerk": "Netzlaufwerk",
-	"modul.gesundheit":   "Gesundheit",
 	"modul.werkstatt":    "Werkstatt",
 	"modul.nutzung":      "Was wird genutzt",
 	"modul.fotos":        "Fotos",

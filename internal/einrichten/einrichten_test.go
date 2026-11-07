@@ -25,11 +25,11 @@ func box(t *testing.T, ms ...modul.Modul) *Quellen {
 }
 
 var (
-	fotos  = modul.Modul{Name: "fotos", Titel: "Fotos", Einrichtung: App("Immich", "app.alextran.immich", "https://photos.box.test", "https://immich.app/docs")}
-	filme  = modul.Modul{Name: "filme", Titel: "Filme und Musik", Einrichtung: App("Jellyfin", "org.jellyfin.mobile", "https://media.box.test", "https://jellyfin.org/docs")}
-	notiz  = modul.Modul{Name: "notizen", Titel: "Notizen", Nav: []modul.Eintrag{{Titel: "Notizen", Pfad: "/notizen"}}}
-	gesund = modul.Modul{Name: "gesundheit", Titel: "Gesundheit", Einrichtung: &modul.Einrichtung{Web: "https://gesundheit.box.test"}}
-	aus    = modul.Modul{Name: "passwoerter", Titel: "Passwörter", Warum: modul.Fehlt, Grund: "nicht da", Einrichtung: App("Bitwarden", "com.x8bit.bitwarden", "https://vault.box.test", "x")}
+	fotos = modul.Modul{Name: "fotos", Titel: "Fotos", Einrichtung: App("Immich", "app.alextran.immich", "https://photos.box.test", "https://immich.app/docs")}
+	filme = modul.Modul{Name: "filme", Titel: "Filme und Musik", Einrichtung: App("Jellyfin", "org.jellyfin.mobile", "https://media.box.test", "https://jellyfin.org/docs")}
+	notiz = modul.Modul{Name: "notizen", Titel: "Notizen", Nav: []modul.Eintrag{{Titel: "Notizen", Pfad: "/notizen"}}}
+	ort   = modul.Modul{Name: "standort", Titel: "Standort", Einrichtung: &modul.Einrichtung{Web: "https://reitti.box.test"}}
+	aus   = modul.Modul{Name: "passwoerter", Titel: "Passwörter", Warum: modul.Fehlt, Grund: "nicht da", Einrichtung: App("Bitwarden", "com.x8bit.bitwarden", "https://vault.box.test", "x")}
 )
 
 func offen(q *Quellen, person string) []string {
@@ -45,7 +45,7 @@ func offen(q *Quellen, person string) []string {
 // A module that is on and has its own app is a task, open while nothing
 // says otherwise; one without an app, or off, is none.
 func TestATaskForEachModuleWithAnApp(t *testing.T) {
-	q := box(t, fotos, notiz, gesund, aus)
+	q := box(t, fotos, notiz, ort, aus)
 	as := q.Fuer("anna")
 	if len(as) != 1 || as[0].Modul != "fotos" || as[0].Titel != "Fotos auf dem Handy einrichten" || as[0].Warum != "Mit der App „Immich“." || as[0].Erledigt != nil {
 		t.Fatalf("tasks: %+v", as)
@@ -140,7 +140,7 @@ func TestPairedAndDetected(t *testing.T) {
 // GET /napi/einrichtung's answer: the modules on, for everyone, with an
 // address or an app; each app's task; the open count is the open tasks.
 func TestNapiAnswer(t *testing.T) {
-	q := box(t, fotos, filme, notiz, gesund, aus, modul.Modul{Name: "werkstatt", Admins: true, Nav: []modul.Eintrag{{Pfad: "/box"}}}, modul.Modul{Name: "konto"})
+	q := box(t, fotos, filme, notiz, ort, aus, modul.Modul{Name: "werkstatt", Admins: true, Nav: []modul.Eintrag{{Pfad: "/box"}}}, modul.Modul{Name: "konto"})
 	q.Ziele = map[string]string{"einkauf": "https://homes.box.test/einkauf"}
 	q.Installiert("anna", []string{"org.jellyfin.mobile"})
 	got := q.Napi("anna")
@@ -151,7 +151,7 @@ func TestNapiAnswer(t *testing.T) {
 		`{"name":"filme","titel":"Filme und Musik","icon":"filme","web":"https://media.box.test","app":{"name":"Jellyfin","paket":"org.jellyfin.mobile","store":"https://play.google.com/store/apps/details?id=org.jellyfin.mobile"},"nur_web":false,` +
 		`"aufgabe":{"titel":"Filme und Musik auf dem Handy einrichten","erledigt":true,"am":"` + time.Now().Format("2006-01-02") + `","wie":"app","einrichten":"https://homes.box.test/einrichten/filme"}},` +
 		`{"name":"notizen","titel":"Notizen","icon":"notizen","web":"https://homes.box.test/notizen","nur_web":true},` +
-		`{"name":"gesundheit","titel":"Gesundheit","icon":"gesundheit","web":"https://gesundheit.box.test","nur_web":true}],` +
+		`{"name":"standort","titel":"Standort","icon":"standort","web":"https://reitti.box.test","nur_web":true}],` +
 		`"ziele":{"einkauf":"https://homes.box.test/einkauf"}}`
 	if string(b) != want {
 		t.Errorf("got\n%s\nwant\n%s", b, want)

@@ -1043,61 +1043,6 @@ GET /napi/gibtsnicht → /napi/
 DELETE /napi/kann → /napi/
 GET /napi/upload → /napi/
 GET /napi/ha/call → /napi/
-== ohne gesundheit
-GET /napi/assistent → GET /napi/assistent
-GET /napi/app → GET /napi/app
-GET /napi/persona → GET /napi/persona
-GET /napi/box/home → GET /napi/box/home
-GET /napi/box/services → GET /napi/box/services
-GET /napi/box/approvals → GET /napi/box/approvals
-GET /napi/box/upgrades → GET /napi/box/upgrades
-POST /napi/box/services/homes/operate → POST /napi/box/services/{name}/operate
-POST /napi/box/approvals/1/approve → POST /napi/box/approvals/{id}/approve
-POST /napi/box/approvals/1/deny → POST /napi/box/approvals/{id}/deny
-GET /napi/kann → GET /napi/kann
-POST /napi/kann/anfordern → POST /napi/kann/anfordern
-GET /napi/whoami → GET /napi/whoami
-GET /napi/portal/events → GET /napi/portal/events
-POST /napi/portal/watch → POST /napi/portal/watch
-POST /napi/ha/call → POST /napi/ha/call
-GET /napi/portal/state → GET /napi/portal/state
-GET /napi/portal/entity-history → GET /napi/portal/entity-history
-GET /napi/portal/active → GET /napi/portal/active
-GET /napi/portal/camera/camera.tuer/snapshot → GET /napi/portal/camera/{entity_id}/snapshot
-GET /napi/portal/start/addable → GET /napi/portal/start/addable
-GET /napi/portal/favorites → GET /napi/portal/favorites
-GET /napi/portal/energy → GET /napi/portal/energy
-GET /napi/defs/tool → GET /napi/defs/tool
-POST /napi/action-callback → POST /napi/action-callback
-GET /napi/portal/tasks → GET /napi/portal/tasks
-GET /napi/portal/contacts → GET /napi/portal/contacts
-GET /napi/portal/documents → GET /napi/portal/documents
-GET /napi/portal/notes → GET /napi/portal/notes
-POST /napi/upload → POST /napi/upload
-POST /napi/musik → /napi/
-GET /napi/sicherung/stand → GET /napi/sicherung/stand
-POST /napi/sicherung/fehlend → POST /napi/sicherung/fehlend
-POST /napi/sicherung/uploads → POST /napi/sicherung/uploads
-HEAD /napi/sicherung/uploads/x1 → HEAD /napi/sicherung/uploads/{id}
-PATCH /napi/sicherung/uploads/x1 → PATCH /napi/sicherung/uploads/{id}
-GET /napi/sicherung/schluessel → GET /napi/sicherung/schluessel
-GET /napi/sicherung/letzte → GET /napi/sicherung/letzte
-GET /napi/sicherung/letzte/whatsapp/a/b.jpg → GET /napi/sicherung/letzte/{quelle}/{pfad...}
-HEAD /napi/sicherung/letzte/whatsapp/a/b.jpg → GET /napi/sicherung/letzte/{quelle}/{pfad...}
-POST /napi/merken → POST /napi/merken
-POST /napi/kontakte → POST /napi/kontakte
-GET /napi/gemeinsam/kontakte → GET /napi/gemeinsam/kontakte
-GET /napi/gemeinsam/kalender → GET /napi/gemeinsam/kalender
-GET /napi/standort → GET /napi/standort
-POST /napi/standort → POST /napi/standort
-POST /napi/standort/import → POST /napi/standort/import
-HEAD /napi/standort/import/x1 → HEAD /napi/standort/import/{id}
-PATCH /napi/standort/import/x1 → PATCH /napi/standort/import/{id}
-GET /napi/standort/import/x1 → GET /napi/standort/import/{id}
-GET /napi/gibtsnicht → /napi/
-DELETE /napi/kann → /napi/
-GET /napi/upload → /napi/
-GET /napi/ha/call → /napi/
 == ohne werkstatt
 GET /napi/assistent → GET /napi/assistent
 GET /napi/app → GET /napi/app

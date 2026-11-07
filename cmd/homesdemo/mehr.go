@@ -117,12 +117,12 @@ func boxAntwort(name string, args map[string]any) (string, bool) {
 // person invited, the household's address.
 var auditLaib = map[string]string{
 	"laib_status": `{"ready":{"state":"bereit","services":23,"green":20,"yellow":2,"red":1,"operator":"läuft","drift":0,"aufgaben":0,` +
-		`"lastBackup":{"at":"2026-11-06T03:12:00Z","repos":2,"ok":true},"lastChange":{"summary":"Gesundheit auf 0.9.1","at":"2026-11-05T18:40:00Z","reversible":true}},"services":[` +
+		`"lastBackup":{"at":"2026-11-06T03:12:00Z","repos":2,"ok":true},"lastChange":{"summary":"Paperless auf 2.18.4","at":"2026-11-05T18:40:00Z","reversible":true}},"services":[` +
 		`{"name":"paperless","state":"gelb","title":"Paperless","beschreibung":"Dokumente","detail":"Redis antwortet langsam"},` +
 		`{"name":"immich","state":"rot","title":"Immich","beschreibung":"Fotos","detail":"Machine-Learning-Container startet nicht · seit 2 h"},` +
 		`{"name":"media","state":"gelb","title":"Jellyfin","beschreibung":"Filme, Serien, Musik","detail":"Zertifikat läuft in 9 Tagen ab"},` +
 		`{"name":"adguard","state":"grün","title":"AdGuard"}]}`,
-	"laib_inbox":          `[{"id":412,"actor":"claude","reason":"Gesundheit: neue Version 0.9.2","tier":"apply","status":"open","created":"2026-11-04T09:00:00Z"}]`,
+	"laib_inbox":          `[{"id":412,"actor":"claude","reason":"Immich: neue Version 2.3.1","tier":"apply","status":"open","created":"2026-11-04T09:00:00Z"}]`,
 	"laib_journal":        `[{"t":"2026-11-04T06:00:00Z","actor":"operator","verb":"note","reason":"report","result":"ok","detail":"Nachts lief alles. Immich-ML startet nicht; Neustart zweimal versucht, wartet auf dich."}]`,
 	"laib_skill":          `[{"name":"morgenbericht","source":"builtin","description":"Schreibt jeden Morgen, wie die Nacht war","trigger":{"daily":"06:00"},"tools":["laib_status","laib_note"],"modell":"frei","status":"active"}]`,
 	"laib_person_pending": `[{"user":"oma","name":"Oma Hilde","email":"hilde@example.org","invited_at":"2026-11-01T10:00:00Z"}]`,

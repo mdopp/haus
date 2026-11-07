@@ -11,6 +11,10 @@ Jellyfin).
   steps are issues (below), done in the order given. Amended 2026-11-04
   (below, §10): no function is hidden. An area this box lacks leaves a
   quiet trace with „Hier anfordern“, and the trace shows the wish's state.
+  Amended 2026-11-07: the module `gesundheit` (a card on Mehr linking to
+  the Gesundheit program, `HOMES_GESUNDHEIT_URL`) was removed on the
+  owner's decision; health documents live in Paperless and are found under
+  Dokumente (the Bereich „Gesundheit“). Its mentions below are history.
 - **Deciders:** the owner (mdopp), 2026-11-04: „sollte es nicht ein Plugin
   sein, so dass man in anderen Installationen mehr/andere Tools nutzen
   kann; dass man auswählen kann, was der Server und damit die App kann und
@@ -385,7 +389,6 @@ module: `LAIB_URL`, `LAIB_TOKEN`, `LAIB_PUBLIC_URL`, `LAIB_DOMAIN`,
 | `sicherung` | Daten sichern | archiv (each person's inbox) | `HOMES_ARCHIV_DIR`; opt. `HOMES_ARCHIV_INTERN`, `HOMES_ARCHIV_SECRET_<PERSON>` | `/daten-sichern`, `/nachrichten-sichern` · Mehr | – | `sicherung/*` (503 while off) | sicherung `whatsapp`, `signal`, `sms`; mehr `daten-sichern` |
 | `standort` | Standortverlauf | reitti | `HOMES_REITTI_URL`; opt. `HOMES_REITTI_PUBLIC_URL` | `/standort` · Mehr | – | `standort`, `standort/import/*` (503 while off) | teilen `standort-import`; mehr `standortverlauf` |
 | `netzlaufwerk` | Netzlaufwerk | file-share (Samba) | `HOMES_SAMBA_DIR`, `HOMES_SAMBA_HOST` | `/netzlaufwerk` · Mehr | – | – | – |
-| `gesundheit` | Gesundheit | gesundheit (a link only) | `HOMES_GESUNDHEIT_URL` | the card on Mehr | – | – | – |
 | `werkstatt` | Werkstatt | GitHub (admins) | `HOMES_WERKSTATT_REPOS`; opt. `HOMES_GITHUB_API` | the card on Box | – | – | – |
 | `nutzung` | Was wird genutzt | usage-metrics (admins) | `HOMES_USAGE_URL`, `HOMES_USAGE_TOKEN` | Box's „Was wird genutzt“ | – | counts `/napi` | – |
 | `fotos` | Fotos | immich (a link only, on while Laib runs it) | – | `/einrichten/fotos` | – | – | the Immich app's setup |

@@ -133,37 +133,8 @@ func Mehr(cfg StartConfig) http.HandlerFunc {
 		}
 		konto := cards.Card{Title: "Konto"}
 		konto.AddLink("Abmelden", strings.TrimSpace("Angemeldet als "+r.Header.Get("Remote-User")), "/abmelden")
-		b.WriteString(pages.HTML() + gesundheitKarte(cfg) + einmal.HTML() + konto.HTML() + `<style>.karte.leise li a{color:var(--muted)}</style>`)
+		b.WriteString(pages.HTML() + einmal.HTML() + konto.HTML() + `<style>.karte.leise li a{color:var(--muted)}</style>`)
 		b.WriteString(spurenKarte(r, cfg)) // what this box lacks, last and quiet (ADR 0001 §10)
 		writePage(w, http.StatusOK, b)
 	}
-}
-
-// What the Gesundheit card says (haus#192): its pages, each a link, and
-// honestly who sees what in one quiet line — Homes links and holds nothing of it.
-// Owner, 2026-10-30: the first row was text that looked like a link, and one
-// „Weiter in Gesundheit“ hid that Gesundheit has several pages.
-const saysGesundheitWer = "Nur du siehst deine Werte; wer die Box verwaltet (Admin), sieht die Dokumente in Paperless. Nur zu Hause im WLAN."
-
-// gesundheitSeiten are Gesundheit's pages (mdopp/gesundheit#10), in the order a person uses them.
-var gesundheitSeiten = []struct{ text, detail, path string }{
-	{"Werte", "Blutwerte und Messungen: im Normalbereich?, was hat sich verändert", "/werte"},
-	{"Befunde", "Arztbriefe und Laborblätter, die neuesten zuerst", "/befunde"},
-	{"Wie es mir ging", "Deine Tagesnotizen im Verlauf", "/befinden"},
-	{"Für den Arzt", "Fragen zu deinen Werten, zum Ausdrucken", "/arzt"},
-}
-
-// gesundheitKarte is Mehr's card for the Gesundheit program (haus#192, laib#893), only on a box that
-// has it (HOMES_GESUNDHEIT_URL, its module on: the service runs): an internal route, so the links
-// open at home only, as Paperless does.
-func gesundheitKarte(cfg StartConfig) string {
-	if cfg.GesundheitURL == "" || !alleAn(cfg, []string{"gesundheit"}) {
-		return ""
-	}
-	c := cards.Card{Title: "Gesundheit", Note: saysGesundheitWer}
-	base := strings.TrimSuffix(cfg.GesundheitURL, "/")
-	for _, s := range gesundheitSeiten {
-		c.AddLink(s.text, s.detail, base+s.path)
-	}
-	return c.HTML()
 }

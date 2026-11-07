@@ -38,10 +38,6 @@ func leafSite(t *testing.T) site {
 	s.napi.Reitti = &reitti.Reitti{URL: "http://127.0.0.1:1", Dir: t.TempDir()}
 	s.napi.Sicherung = napi.NewSicherung(t.TempDir(), t.TempDir())
 	s.samba = &samba.Dir{Path: t.TempDir()}
-	s.gesundheit = "https://gesundheit.example"
-	if s.dienste != nil {
-		s.dienste["gesundheit"] = true // its module follows the service Laib runs
-	}
 	s.tickets = &werkstatt.Tickets{API: "http://127.0.0.1:1", Repos: []string{"mdopp/homes"}}
 	s.napi.Whoami = func(b string) (string, bool) { return "anna", b == "dev1" }
 	// H4: the lists and the music wish list on the one Radicale, the music
@@ -78,13 +74,12 @@ func switched(t *testing.T, s site, aus string) (site, *modul.Liste) {
 // or the surface's 404, never its handler; its entries are gone; /napi/kann
 // has it an:false, warum aus; every other leaf module is as before.
 func TestEachLeafModuleOff(t *testing.T) {
-	leaves := []string{"gesundheit", "werkstatt", "netzlaufwerk", "podcasts", "gesehen", "standort", "sicherung",
+	leaves := []string{"werkstatt", "netzlaufwerk", "podcasts", "gesehen", "standort", "sicherung",
 		"dokumente", "notizen", "musik", "einkauf", "kalender", "kontakte", "konto", "geraete", "energie", "sprechen", "nutzung"}
 	// what each serves while on, and what it answers off: a path and a word on it
 	type probe struct{ path, on, off string }
 	const wunschliste = "/einkauf?liste=liste-musik" // the Haushalt pills: served with einkauf or musik on
 	probes := map[string][]probe{
-		"gesundheit":   {{"/mehr", "gesundheit.example/werte", "!gesundheit.example/werte"}},
 		"werkstatt":    {{"/box/aufgaben", `box-werkstatt`, "!box-werkstatt"}},
 		"netzlaufwerk": {{"/mehr", `href="/netzlaufwerk"`, `!href="/netzlaufwerk"`}, {"/netzlaufwerk", "Passwort", "Gibt es hier noch nicht"}},
 		"podcasts":     {{"/mehr", `href="/podcasts"`, `!href="/podcasts"`}, {"/podcasts", "Podcast abonnieren", "Gibt es hier noch nicht"}},

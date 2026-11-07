@@ -62,7 +62,7 @@ func TestEveryVariableHasAnOwner(t *testing.T) {
 
 func TestTheCatalogBuilds(t *testing.T) {
 	full, _, _ := fullSite(t)
-	full.podcasts, full.gesundheit, full.musik = nil, "", "/musik-eingang"
+	full.podcasts, full.musik = nil, "/musik-eingang"
 	l, err := modul.Bauen(katalog(full))
 	if err != nil {
 		t.Fatal(err)
@@ -72,7 +72,7 @@ func TestTheCatalogBuilds(t *testing.T) {
 			t.Errorf("%s is off with its backend set", name)
 		}
 	}
-	for _, name := range []string{"podcasts", "gesundheit", "standort", "sicherung", "sprechen"} {
+	for _, name := range []string{"podcasts", "standort", "sicherung", "sprechen"} {
 		if l.An(name) {
 			t.Errorf("%s is on without its backend", name)
 		}
@@ -94,10 +94,10 @@ func TestTheCatalogBuilds(t *testing.T) {
 	for _, m := range katalog(site{dienste: map[string]bool{}}) {
 		names[m.Name] = true
 	}
-	if len(names) != 22 {
-		t.Errorf("the catalog has %d modules, ADR 0001 §7 lists 22", len(names))
+	if len(names) != 21 {
+		t.Errorf("the catalog has %d modules, ADR 0001 §7 lists 21", len(names))
 	}
-	if n := len(katalog(site{})); n != 18 { // Laib silent: the four link modules wait (dienstePflegen)
+	if n := len(katalog(site{})); n != 17 { // Laib silent: the four link modules wait (dienstePflegen)
 		t.Errorf("Laib silent, %d modules", n)
 	}
 }
@@ -260,30 +260,4 @@ func TestLinkModulesFollowLaibOnceItAnswers(t *testing.T) {
 	services = `[{"name":"immich"}]`
 	mu.Unlock()
 	warte("media gone", func() bool { return !s.napi.Module.An("filme") && s.napi.Module.An("fotos") })
-}
-
-// Gesundheit retired (2026-11-06): its module follows the service Laib runs, not only
-// its address; before Laib has answered, the address alone decides.
-func TestGesundheitFollowsItsService(t *testing.T) {
-	s, _, _ := fullSite(t)
-	s.gesundheit = "https://gesundheit.example"
-	an := func() bool {
-		l, err := modul.Bauen(katalog(s))
-		if err != nil {
-			t.Fatal(err)
-		}
-		return l.An("gesundheit")
-	}
-	s.dienste["gesundheit"] = true
-	if !an() {
-		t.Error("off while the service runs")
-	}
-	delete(s.dienste, "gesundheit")
-	if an() {
-		t.Error("on while the service is gone")
-	}
-	s.dienste = nil
-	if !an() {
-		t.Error("off before Laib has said what runs")
-	}
 }
