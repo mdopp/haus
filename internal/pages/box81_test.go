@@ -23,6 +23,9 @@ func slowStatusLaib(t *testing.T, slow time.Duration) *laib.Client {
 		}
 		json.NewDecoder(r.Body).Decode(&req)
 		text := "[]"
+		if req.Params.Name == "laib_befunde" { // diag ran, found nothing
+			text = `{"at":"2026-11-06T10:00:00Z","findings":[]}`
+		}
 		if req.Params.Name == "laib_status" {
 			select {
 			case <-time.After(slow):

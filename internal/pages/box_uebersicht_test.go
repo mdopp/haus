@@ -6,12 +6,14 @@ import (
 	"net/http/httptest"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/mdopp/homes/internal/laib"
 )
 
 // overviewLaib is a Laib with these service rows, this many open inbox
-// cards and this answer to laib_diag ("" is unknown tool: the hand may not);
+// cards and these findings from laib_befunde ("" is unknown tool: an older
+// Laib; "kaputt" an error; "nie" not measured yet), measured 12 min ago;
 // ready changes the readiness; it records the tools Homes asked for.
 func overviewLaib(t *testing.T, services []map[string]any, inbox int, diag string, ready func(map[string]any), asked *[]string) BoxConfig {
 	t.Helper()
@@ -42,11 +44,19 @@ func overviewLaib(t *testing.T, services []map[string]any, inbox int, diag strin
 			}
 			b, _ := json.Marshal(ps)
 			text = string(b)
-		case "laib_diag":
-			text, isErr = diag, diag == "" || diag == "kaputt"
-			if diag == "" {
-				text = "homes may not diag"
+		case "laib_befunde":
+			at, _ := json.Marshal(time.Now().Add(-12 * time.Minute))
+			text, isErr = `{"at":`+string(at)+`,"findings":`+diag+`}`, diag == "" || diag == "kaputt"
+			switch diag {
+			case "":
+				text = "unknown tool laib_befunde"
+			case "kaputt":
+				text = "kaputt"
+			case "nie":
+				text = `{"at":null,"findings":[]}`
 			}
+		case "laib_diag":
+			t.Error("the page ran laib diag")
 		}
 		json.NewEncoder(w).Encode(map[string]any{"result": map[string]any{"content": []map[string]string{{"text": text}}, "isError": isErr}})
 	}))
@@ -73,8 +83,8 @@ func TestBoxOverviewShowsWhatNeedsTheAdmin(t *testing.T) {
 	mustContain(t, page, "<b>Dokumente</b>", "Redis langsam", "<b>Fotos</b>", "startet nicht",
 		"<b>Signal kommt vielleicht nicht an.</b>", "Der Bote antwortet nicht", "<b>raid</b>", `<a href="/box/aufgaben#aufgabe-3">Box-Aufgabe #3</a>`,
 		"<a href=/box/aufgaben>1 Box-Aufgabe fällig</a>", `<a href="https://laib.box.test/inbox">2 Entscheidungen warten</a>`,
-		"Letzte Sicherung", "Letzte Änderung: Paperless wird installiert", "<h2>Morgenbericht</h2>", `<details id=operator>`)
-	mustNotContain(t, page, "Werbefilter", "kein Wächter", "immich.service ist failed", "Alles in Ordnung", "immich: mehr Speicher")
+		"Letzte Sicherung", "Letzte Änderung: Paperless wird installiert", "Befunde gemessen vor 12 min", "<h2>Morgenbericht</h2>", `<details id=operator>`)
+	mustNotContain(t, page, "Werbefilter", "kein Wächter", "immich.service ist failed", "Alles in Ordnung", "immich: mehr Speicher", "Laib das Verb befunde kennt")
 	before(t, page, "<b>Fotos</b>", "<b>raid</b>")              // red first
 	before(t, page, "<b>raid</b>", "<b>Dokumente</b>")          // then yellow
 	before(t, page, "<b>Signal kommt", "1 Box-Aufgabe fällig")  // the due Aufgaben after the findings
@@ -88,19 +98,24 @@ func TestBoxOverviewCalmIsOneLine(t *testing.T) {
 	var asked []string
 	cfg := overviewLaib(t, []map[string]any{{"name": "adguard", "state": "grün", "title": "Werbefilter"}}, 0, `[{"severity":"info","probe":"watchdog","detail":"kein Wächter"}]`, nil, &asked)
 	page := getAt(BoxPage(cfg), "/box/teil?was=stand", "admins")
-	mustContain(t, page, "Alles in Ordnung.", "Letzte Sicherung", "Rückgängig", "Morgenbericht")
-	mustNotContain(t, page, "Werbefilter", "zeilen", "Entscheidung", "kein Wächter")
+	mustContain(t, page, "Alles in Ordnung.", "Letzte Sicherung", "Rückgängig", "Befunde gemessen vor 12 min", "Morgenbericht")
+	mustNotContain(t, page, "Werbefilter", "zeilen", "Entscheidung", "kein Wächter", "noch nicht gelaufen")
 }
 
-// Without the verb diag, the red lines laib status carries stand in, and
-// the page says yellow findings are missing: never „Alles in Ordnung“
-// over what was not measured. diag failing is said too.
+// A Laib without befunde (before laib#1085): the red lines laib status
+// carries stand in, and the page says yellow findings are missing: never
+// „Alles in Ordnung“ over what was not measured. befunde failing is said
+// too, and so is a box where laib diag has not run yet.
 func TestBoxOverviewWithoutDiag(t *testing.T) {
 	var asked []string
 	cfg := overviewLaib(t, nil, 0, "", func(r map[string]any) { r["problems"] = []string{"disk: /var zu 97 % voll"} }, &asked)
 	page := get(BoxPage(cfg), "admins")
-	mustContain(t, page, "disk: /var zu 97 % voll", "sobald Laib ihm das Verb diag gibt")
-	mustNotContain(t, page, "Alles in Ordnung")
+	mustContain(t, page, "disk: /var zu 97 % voll", "sobald Laib das Verb befunde kennt")
+	mustNotContain(t, page, "Alles in Ordnung", "Befunde gemessen")
+	cfg = overviewLaib(t, nil, 0, "nie", nil, &asked)
+	page = get(BoxPage(cfg), "admins")
+	mustContain(t, page, "laib diag ist noch nicht gelaufen")
+	mustNotContain(t, page, "Alles in Ordnung", "Befunde gemessen", "Laib das Verb befunde kennt")
 	cfg = overviewLaib(t, nil, 0, "kaputt", nil, &asked)
 	page = get(BoxPage(cfg), "admins")
 	mustContain(t, page, "Die Befunde von laib diag lassen sich gerade nicht lesen.")
@@ -141,5 +156,18 @@ func TestBoxOldPagesLeadToTheOverview(t *testing.T) {
 		if rec := boxAt(h, from, "family"); rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/start" {
 			t.Errorf("family %s → %d", from, rec.Code)
 		}
+	}
+}
+
+// seit: minutes for the first two hours, then hours, then the day.
+func TestSeit(t *testing.T) {
+	now := time.Date(2026, 11, 6, 12, 0, 0, 0, time.Local)
+	for d, want := range map[time.Duration]string{30 * time.Second: "gerade eben", 12 * time.Minute: "vor 12 min", 119 * time.Minute: "vor 119 min", 5 * time.Hour: "vor 5 h"} {
+		if got := seit(now.Add(-d), now); got != want {
+			t.Errorf("%v: %q, want %q", d, got, want)
+		}
+	}
+	if got := seit(now.Add(-50*time.Hour), now); got != when(now.Add(-50*time.Hour)) {
+		t.Errorf("two days: %q", got)
 	}
 }
