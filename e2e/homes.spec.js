@@ -251,6 +251,7 @@ test('Deine Geräte are the app\'s tiles', async ({ page }, info) => {
   await page.getByRole('dialog', { name: 'Garagentor öffnen?' }).getByRole('button', { name: 'Abbrechen' }).click();
   expect(await stays(page)).toBe(true);
 
+  await page.locator('[data-seite="/raeume/lock.haustuer"]').scrollIntoViewIfNeeded(); // below the Sprechen field on a 360 px phone
   const lock = await page.locator('[data-seite="/raeume/lock.haustuer"]').boundingBox();
   await page.mouse.move(lock.x + 30, lock.y + 30);
   await page.mouse.down();

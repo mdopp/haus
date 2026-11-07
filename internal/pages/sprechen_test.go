@@ -53,7 +53,7 @@ func TestStartHasTheSprechenField(t *testing.T) {
 	fake.Set("light.flur", "on", map[string]any{"friendly_name": "Flurlicht"})
 	_, bc := fakeBote(t)
 	_, body := startPage(t, StartConfig{HA: hc, Bote: bc, Favorites: favorites(t, `{"anna": ["light.flur"]}`)}, "family")
-	mustContain(t, body, "<form method=post action=/sprechen class=sprechen>", "name=nachricht", "aria-label=Sprechen", "maxlength=1000",
+	mustContain(t, body, "<form method=post action=/sprechen class=sprechen data-ganz>", "name=nachricht", "aria-label=Sprechen", "maxlength=1000",
 		"required", "<button class=senden>Senden</button>")
 	before(t, body, "class=datum", "action=/sprechen")
 	before(t, body, "action=/sprechen", "karte-deine-geraete")

@@ -67,7 +67,7 @@ var errSlow = errors.New("sprechen: no first word within boteWait")
 // above it, the field is named for a screen reader (owner 2026-11-07).
 func sprechenField(cfg StartConfig, here bool) string {
 	var b strings.Builder
-	b.WriteString("<form method=post action=/sprechen class=sprechen")
+	b.WriteString("<form method=post action=/sprechen class=sprechen data-ganz") // its own script sends it and says it runs
 	if here {
 		name := html.EscapeString(assistent.Name())
 		b.WriteString(` data-hier data-wer="` + name + `" data-denkt="` + html.EscapeString(saysThinking(assistent.Name())) + `"`)
