@@ -6,7 +6,7 @@ for the whole family, served by your own box, not by somebody's cloud.**
 > **Language:** the pages and the app speak German today; English, Spanish and French are on the way.
 
 Homes is the family's web page on a [Laib](https://github.com/mdopp/laib)
-box. Open `homes.<your domain>` on any phone or computer, sign in once,
+box. Open `www.<your domain>` (or just `<your domain>`) on any phone or computer, sign in once,
 and the house is there. Its partner is the Android app
 [homes-android](https://github.com/mdopp/homes-android), which puts the
 same house on your home screen.
@@ -64,7 +64,7 @@ flowchart LR
   laib["Laib<br/>runs and checks the box"]
   svc[("Home Assistant, Radicale,<br/>Paperless, Jellyfin, Reitti, …")]
 
-  family -- "homes.your-domain" --> homes
+  family -- "www.your-domain" --> homes
   family --> app
   app -- "/napi, paired phone" --> homes
   bote -- "household tools" --> homes
@@ -82,7 +82,7 @@ state, and serves the app its API (`/napi`).
 
 Homes comes with Laib as the built-in `homes` template. On your box, ask
 for it (`laib propose --add homes "…"`), approve it in Laib's Inbox, and it
-answers at `https://homes.<your domain>`. Most areas appear by
+answers at `https://www.<your domain>`. Most areas appear by
 themselves once their service runs on the box.
 
 For the phone: install the [app](https://github.com/mdopp/homes-android)

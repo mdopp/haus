@@ -109,7 +109,7 @@ func routes(s site) http.Handler {
 	mux.Handle("/mcp/haushalt", haushalt.Handler(s.hh))
 	// counted behind the proxy secret: only what Caddy let through is a page view (haus#50)
 	mux.Handle("/", pages.RequireProxy(s.proxySecret, pages.Counted(s.usage, familyMux(s))))
-	return legacyHost(s.publicURL, mux) // haus.<domain>'s pages to homes.<domain> (laib#1021)
+	return mux
 }
 
 // familyMux is the family's pages, behind the proxy secret.

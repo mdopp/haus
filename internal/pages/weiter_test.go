@@ -9,6 +9,7 @@ func TestOnDomain(t *testing.T) {
 		{"https://caldav.", "https://homes.dopp.cloud", "https://caldav.dopp.cloud"},
 		{"https://home./", "https://homes.dopp.cloud/", "https://home.dopp.cloud/"},
 		{"https://caldav.dopp.cloud", "https://homes.dopp.cloud", "https://caldav.dopp.cloud"},
+		{"https://caldav.", "https://www.dopp.cloud", "https://caldav.dopp.cloud"}, // Homes' address since 2026-11-07
 		{"https://caldav.", "", "https://caldav."},
 		{"", "https://homes.dopp.cloud", ""},
 	} {

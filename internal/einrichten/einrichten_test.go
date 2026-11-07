@@ -162,7 +162,7 @@ func TestNapiAnswer(t *testing.T) {
 }
 
 func TestDomainAndAddresses(t *testing.T) {
-	if Domain("https://homes.dopp.cloud") != "dopp.cloud" || Domain("") != "" || Domain("https://localhost:8650") != "" {
+	if Domain("https://homes.dopp.cloud") != "dopp.cloud" || Domain("https://www.dopp.cloud") != "dopp.cloud" || Domain("") != "" || Domain("https://localhost:8650") != "" {
 		t.Errorf("Domain: %q %q %q", Domain("https://homes.dopp.cloud"), Domain(""), Domain("https://localhost:8650"))
 	}
 	if Web("photos", "dopp.cloud") != "https://photos.dopp.cloud" || Web("photos", "") != "" || App("x", "y", "", "z") != nil {

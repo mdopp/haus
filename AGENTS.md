@@ -14,8 +14,9 @@ contract is the Homes app in `mdopp/homes-android` (laib ADR 0022): its
 `data/*.kt` parsers' field names are the law. Its names (deep-link scheme,
 token prefix, `/napi/box`) live in `internal/app`, one set; nothing old is
 carried (ADR 0022 §4) except what the rename from Haus keeps until every phone
-runs Homes (laib#1021): the `haus_device_` tokens, the `haus.<domain>`
-address for `/napi/`, `GET /napi/app`. Names stored in other apps keep the
+runs Homes (laib#1021): the `haus_device_` tokens and `GET /napi/app`
+(the address `haus.<domain>` is gone since 2026-11-07: Homes is
+`www.<domain>`, `HOMES_PUBLIC_URL`, and no host is written in the code). Names stored in other apps keep the
 old name (the iCal `X-HAUS-*` and PRODIDs, usage-metrics' app `haus`); each
 is marked where it is defined. The program's own logins are `homes` (owner,
 2026-11-03): a collection path Homes stored under `/haus/` is read as
@@ -177,7 +178,7 @@ npx playwright install chromium && npx playwright test`; `go run
   phones in the field. homes-android's `NapiContractTest` pins a copy of the
   handlers; change both sides, the server first, additively.
 - **Old names stay where data was stored under them** (`haus_device_`
-  tokens, `haus.<domain>`, the iCal `X-HAUS-*` properties, usage-metrics'
+  tokens, the iCal `X-HAUS-*` properties, usage-metrics'
   app `haus`). They are marked where defined; do not "clean them up".
 - **No secret in the repo**, not even in a test: tokens reach Homes as
   `HOMES_*` from Laib's secrets.
