@@ -6,6 +6,7 @@ On a Laib box the `homes` template does all of this; this page is for running it
 LAIB_URL=http://host.containers.internal:5900 LAIB_TOKEN=<the homes hand's token, minted on laib add homes> \
 HOMES_PROXY_SECRET=<what Caddy sends as X-Homes-Proxy> LAIB_PUBLIC_URL=https://laib.<domain> \
 HOMES_LISTEN=0.0.0.0:8650 HOMES_ASSISTANT=Homes \
+HOMES_KONTAKT_LISTEN=0.0.0.0:8652 HOMES_KONTAKT_URL=https://kontakt.<domain> \
 HOMES_HA_URL=http://host.containers.internal:8123 HOMES_HA_TOKEN=<a long-lived HA token> \
 HOMES_ENERGY_FLOW=pv=sensor.…,house=sensor.…,grid=sensor.…,battery=sensor.… HOMES_ENERGY_TOTALS=PV-Erzeugung=sensor.…,… \
 HOMES_ENERGY_STATS=bezug=sensor.…,einspeisung=sensor.…,solar=sensor.… \
@@ -26,7 +27,12 @@ HOMES_IMMICH_URL=http://host.containers.internal:2283 HOMES_IMMICH_KEY=<an API k
 HOMES_USAGE_URL=http://host.containers.internal:8094 HOMES_USAGE_TOKEN=<usage-metrics' USAGE_METRICS_TOKEN> ./homes
 ```
 
-`HOMES_DATA` (default `/data`) holds `devices.json` and `favoriten.json`; `HOMES_PUBLIC_URL` is the
+`HOMES_KONTAKT_LISTEN` and `HOMES_KONTAKT_URL` are Kontakt prüfen lassen's page
+without a login (module `kontakte`): a second listener on which Homes serves
+that one page and nothing else, behind Laib's route `kontakt.<domain>` (auth
+none, rate and body limited in Caddy); either unset, no listener and no
+links. `HOMES_DATA` (default `/data`) holds `devices.json`, `favoriten.json`
+and `kontakt-antworten.json` (the links' hashes and the answers, 0600); `HOMES_PUBLIC_URL` is the
 origin the setup link carries (default `https://<Host>`). Homes' Laib token is the `homes` hand: status, inbox, journal, restart —
 nothing else (no exec, no write). There are no static device tokens. Image: `ghcr.io/mdopp/homes`. Laib template: `homes` (route `www.<domain>`, the domain itself redirects
 there, `bypass: [/napi/]`; the

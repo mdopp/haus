@@ -14,17 +14,26 @@ import (
 
 // Contact is one card as the tools see it.
 type Contact struct {
-	UID      string
-	Name     string // FN
-	Nickname string
-	Org      string
-	Phones   []string
-	Emails   []string
+	UID  string
+	Name string // FN
+	// Given and Family are N's first two parts; Company is ORG's first,
+	// Title TITLE (Kontakt prüfen lassen edits them)
+	Given, Family, Company, Title string
+	Nickname                      string
+	Org                           string
+	Phones                        []string
+	// PhoneKinds are the numbers' kinds, in the same order: mobil, privat,
+	// geschaeftlich, or "" (from TEL's TYPE)
+	PhoneKinds []string
+	Emails     []string
 	// Birthday is JJJJ-MM-TT, or --MM-TT without a year; a card's
 	// birthday in another form is kept as its text.
 	Birthday string
 	// Addresses are the postal addresses (ADR), each one line.
 	Addresses []string
+	// Postal are the same addresses as their street, code, place and
+	// country, in the same order (Kontakt prüfen lassen edits them)
+	Postal []Address
 	// Categories are CATEGORIES' values; "Firma" marks a firm's card
 	// Homes made from a document (haus#163).
 	Categories []string
@@ -183,6 +192,26 @@ func propName(n string) string {
 	return n
 }
 
+// PhoneKind is a TEL's TYPE as the family names it: mobil, geschaeftlich,
+// privat, or "".
+func PhoneKind(types string) string {
+	t := "," + strings.ToUpper(types) + ","
+	switch {
+	case strings.Contains(t, ",CELL,"):
+		return "mobil"
+	case strings.Contains(t, ",WORK,"):
+		return "geschaeftlich"
+	case strings.Contains(t, ",HOME,"):
+		return "privat"
+	}
+	return ""
+}
+
+// phoneType is a kind as TEL's TYPE parameter, "" for none.
+func phoneType(kind string) string {
+	return map[string]string{"mobil": ";TYPE=CELL", "geschaeftlich": ";TYPE=WORK", "privat": ";TYPE=HOME"}[kind]
+}
+
 // Contacts reads every VCARD in a parsed stream.
 func Contacts(root *Component) []Contact {
 	var out []Contact
@@ -202,9 +231,16 @@ func Contacts(root *Component) []Contact {
 				ct.Nickname = v
 			case "ORG":
 				ct.Org = orgParts(p.Value)
+				ct.Company = strings.TrimSpace(parts(p.Value)[0])
+			case "N":
+				n := append(parts(p.Value), "", "")
+				ct.Family, ct.Given = strings.TrimSpace(n[0]), strings.TrimSpace(n[1])
+			case "TITLE":
+				ct.Title = strings.TrimSpace(v)
 			case "TEL":
 				if v = strings.TrimSpace(strings.TrimPrefix(v, "tel:")); v != "" {
 					ct.Phones = append(ct.Phones, v)
+					ct.PhoneKinds = append(ct.PhoneKinds, PhoneKind(p.Params["TYPE"]))
 				}
 			case "EMAIL":
 				if v = strings.TrimSpace(strings.TrimPrefix(v, "mailto:")); v != "" {
@@ -215,6 +251,7 @@ func Contacts(root *Component) []Contact {
 			case "ADR":
 				if a := address(p.Value); a != "" {
 					ct.Addresses = append(ct.Addresses, a)
+					ct.Postal = append(ct.Postal, AddressOf(p.Value))
 				}
 			case "CATEGORIES":
 				for _, c := range listParts(p.Value) {

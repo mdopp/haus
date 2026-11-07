@@ -71,6 +71,7 @@ func Kontakt(cfg StartConfig) http.HandlerFunc {
 				}
 			}
 			b.WriteString(c.HTML() + kontaktSpruenge(cfg, ct.UID))
+			b.WriteString(pruefenKnopf(r, cfg, ct.UID))
 			writePage(w, http.StatusOK, b)
 			return
 		}

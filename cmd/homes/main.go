@@ -10,9 +10,11 @@ import (
 	"github.com/mdopp/homes/internal/papierkorb"
 	"log"
 	"maps"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -35,6 +37,7 @@ import (
 	"github.com/mdopp/homes/internal/ha"
 	"github.com/mdopp/homes/internal/haushalt"
 	"github.com/mdopp/homes/internal/jellyfin"
+	"github.com/mdopp/homes/internal/kontaktantwort"
 	"github.com/mdopp/homes/internal/laib"
 	"github.com/mdopp/homes/internal/modul"
 	"github.com/mdopp/homes/internal/musicbrainz"
@@ -91,6 +94,8 @@ type site struct {
 	dienste                   map[string]bool              // the services Laib runs (dienstePflegen): the link modules; nil, Laib has not said yet
 	archive                   map[string]napi.ArchivIntern // each person's message archive (HOMES_ARCHIV_INTERN): a contact's Nachrichten
 	gesichter                 *gesichter.Gesichter         // Immich for the contacts (HOMES_IMMICH_*): Fotos, faces, a person per contact; nil, none
+	antworten                 *kontaktantwort.Store        // Kontakt prüfen lassen (owner 2026-11-07): the links and answers, in HOMES_DATA
+	kontaktURL                string                       // the public page's host (HOMES_KONTAKT_URL, https://kontakt.<domain>); "", no links
 }
 
 // routes is Homes' whole surface: /napi for the app, /mcp/haushalt for the
@@ -112,6 +117,30 @@ func routes(s site) http.Handler {
 	return mux
 }
 
+// kontaktServer serves the one page without a login on its own listener
+// (HOMES_KONTAKT_LISTEN, owner 2026-11-07): nothing but pages.KontaktServer
+// is registered there, so no routing mistake on the public host reaches
+// another Homes route. Unset (or no HOMES_KONTAKT_URL): no listener.
+func kontaktServer(ctx context.Context, st site) {
+	addr := os.Getenv("HOMES_KONTAKT_LISTEN")
+	if addr == "" || st.kontaktURL == "" {
+		return
+	}
+	cfg := pages.StartConfig{Antworten: st.antworten, DNS: net.DefaultResolver, PhoneCountry: st.hh.PhoneCountry}
+	srv := &http.Server{Addr: addr, Handler: pages.KontaktServer(cfg), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 20 * time.Second,
+		WriteTimeout: 20 * time.Second, MaxHeaderBytes: 8 << 10}
+	go func() {
+		<-ctx.Done()
+		srv.Close()
+	}()
+	go func() {
+		log.Printf("homes: the contacts' page on %s for %s, nothing else there", addr, st.kontaktURL)
+		if err := srv.ListenAndServe(); err != http.ErrServerClosed {
+			log.Printf("homes: the contacts' page: %v", err)
+		}
+	}()
+}
+
 // familyMux is the family's pages, behind the proxy secret.
 // familyOf is what the family's pages are built from: the backends the
 // site has, and what Homes keeps itself.
@@ -125,6 +154,7 @@ func familyOf(s site) pages.StartConfig {
 		DocumentsMail: s.docsMail, PaperlessPublicURL: s.paperlessPublic, PaperlessLANOnly: s.paperlessLAN, Sicherung: s.napi.Sicherung,
 		Reitti: s.napi.Reitti, Module: s.napi.Module, Einrichtung: s.napi.Einrichtung, PhoneCountry: s.hh.PhoneCountry, Gesichter: s.gesichter}
 	family.Archive, family.ArchivURL = archivOf(s)
+	family.Antworten, family.DNS, family.KontaktURL = s.antworten, net.DefaultResolver, s.kontaktURL
 	// the lists, the music wish list and the shelf, before any page takes its copy of family
 	family.Einkauf, family.Wuensche = s.hh.Einkauf, s.hh.Wuensche
 	if s.hh.Wuensche != nil {
@@ -461,9 +491,11 @@ func main() {
 		haPublic: haPublic, inverted: pages.InvertedFromList(os.Getenv("HOMES_COVER_INVERTED")),
 		radicale: radicalePublic, views: ansicht.Open(dataDir, os.Getenv("HOMES_RADICALE_USER")), dataDir: dataDir,
 		docsMail: docsMail, paperlessPublic: paperlessPublic, paperlessLAN: paperlessLAN, musik: musicInbox(), boteSignal: strings.TrimSpace(os.Getenv("HOMES_BOTE_SIGNAL")),
-		domain: einrichten.Domain(os.Getenv("HOMES_PUBLIC_URL")), archive: archive, gesichter: gesichter.FromEnv(dataDir)}
-	start := st                     // what the list is built from again once Laib says what runs (dienstePflegen)
-	st.napi.Module = logModule(&st) // HOMES_MODULE_AUS takes what it switches off out of st
+		domain: einrichten.Domain(os.Getenv("HOMES_PUBLIC_URL")), archive: archive, gesichter: gesichter.FromEnv(dataDir),
+		antworten: &kontaktantwort.Store{Path: filepath.Join(dataDir, kontaktantwort.Datei)}, kontaktURL: os.Getenv("HOMES_KONTAKT_URL")}
+	st.napi.Antworten = st.antworten // the phone's accepted corrections of its own contacts
+	start := st                      // what the list is built from again once Laib says what runs (dienstePflegen)
+	st.napi.Module = logModule(&st)  // HOMES_MODULE_AUS takes what it switches off out of st
 	st.napi.Einrichtung = einrichtung(st, devices.Gekoppelt(store), jellyfin.KeyFromEnv())
 	// the counter stops only once the server has: a page is counted after
 	// it is answered, so the last flush waits for the requests under way (#92)
@@ -484,6 +516,7 @@ func main() {
 	addr := env("HOMES_LISTEN", "127.0.0.1:8650")
 	log.Printf("homes %s: listening on %s as %s, laib %s, home assistant %v, haushalt %d tools, memory library %v (tidy-up %v), uploads %q, the Bote %v, counting %v (voice %v), pages only behind the proxy secret", Version, addr, assistent.Name(), ops.URL, cfg.HA != nil, len(haushalt.Tools(hh)), hh.Library != nil, hh.Judge != nil, cfg.UploadDir, b != nil, counter != nil, voice != nil)
 	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
+	kontaktServer(ctx, st) // Kontakt prüfen lassen's public page, on a listener of its own
 	drained := make(chan struct{})
 	go func() {
 		<-ctx.Done()
