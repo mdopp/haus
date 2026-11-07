@@ -11,6 +11,16 @@ The German terms are the ubiquitous language: the family reads them on
 the pages and in the app, and the code uses them. They are not translated
 here.
 
+## Gestaltungsregeln
+
+The owner, 2026-11-07: „Rigoros einfach. Wir haben so viele Funktionen, dass die größte Kunst ist, dass es den Benutzer nicht erschlägt, sondern hilft. Dinge selbst macht. Weniger Zeit einnimmt als das selbst zu suchen und auf Papier zu machen.“
+
+- **State first.** A block opens with how things are, in words; nothing to read before acting.
+- **One action.** Each block shows its state and at most one action; the rest is one tap away.
+- **No lead paragraphs.** No explanation above content; what must be said is a state line, the long form behind „Wie das funktioniert“.
+- **Automate instead of explain.** If a sentence tells the family how to do something, Homes should do it.
+- **Measure taps per task** (how many to get it done); usage counts only once the family really uses it.
+
 ## 1. Glossary
 
 | Term | What it is | In code / API | Owner |

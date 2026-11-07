@@ -17,7 +17,7 @@ says so once in the log; a page never waits for it.
 
 | Event | Counted when | The card says |
 |---|---|---|
-| `seite.<page>` | a page is shown (GET, 200; behind the proxy secret): `start`, `raeume`, `ding` (a thing's page), `energie`, `medien`, `kalender`, `erinnerung`, `kontakt`, `dokument`, `notizen`, `notiz`, `sprechen`, `mehr`, `box`, `geraete`, `koppeln`; Start's box line fetched later (`/start/box`) is no view, its plain line counts for `start`; a script's words are not lines | *Start geöffnet*, … |
+| `seite.<page>` | a page is shown (GET, 200; behind the proxy secret): `start`, `raeume`, `ding` (a thing's page), `energie`, `medien`, `kalender`, `erinnerung`, `kontakt`, `dokument`, `notizen`, `notiz`, `sprechen`, `mehr`, `box`, `geraete`, `koppeln`; Start's *Braucht dich* fetched later (`/start/box`) is no view, its plain line counts for `start`; a script's words are not lines | *Start geöffnet*, … |
 | `schalten.<domain>.<service>`, `schalten.light.dimmen`, `schalten.alle-lichter-aus` | a page's switch past its guards (`light.turn_on` … `cover.set_cover_position`; a dimmer's slider is `light.dimmen`) | *Licht ausgeschaltet*, *Licht gedimmt*, *Rollladen hochgefahren*, *Alle Lichter ausgeschaltet*, … |
 | `stern.an`, `stern.aus` | the ☆ past its guards | *Ein Gerät auf Start geheftet (☆)* |
 | `suche.notizen` | a search on Notizen (never its words) | *In den Notizen gesucht* |

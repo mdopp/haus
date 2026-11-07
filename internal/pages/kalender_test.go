@@ -141,9 +141,9 @@ func TestKalenderReminderDueOnADay(t *testing.T) {
 		`<a href="/kalender/erinnerung/c">Freitag</a> <span class=k>Fr 16.10.</span>`)
 	mustNotContain(t, body, "00:00", "überfällig seit heute")
 
-	_, body = startPage(t, StartConfig{Calendar: cal}, "")
-	mustContain(t, body, "<time>heute</time>", "<time>überfällig seit gestern</time>", "<time>Fr 16.10.</time>")
-	mustNotContain(t, body, "00:00")
+	_, body = startPage(t, StartConfig{Calendar: cal}, "") // Heute: today and tomorrow only
+	mustContain(t, body, "<time>heute</time>", "<time>überfällig</time>")
+	mustNotContain(t, body, "00:00", "Freitag")
 }
 
 // Radicale in trouble leaves the cards out and says so in Start's one

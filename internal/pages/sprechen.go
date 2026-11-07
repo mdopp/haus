@@ -63,18 +63,16 @@ var errSlow = errors.New("sprechen: no first word within boteWait")
 // the answer comes in pieces on /sprechen (sprechenScript). On Start it
 // carries its name and hands the sentence on to /sprechen; on its own page
 // the heading says it, and the answer shows right there under the assistant's
-// name — which only that page says (haus#35).
+// name — which only that page says (haus#35). Compact on Start: no label
+// above it, the field is named for a screen reader (owner 2026-11-07).
 func sprechenField(cfg StartConfig, here bool) string {
 	var b strings.Builder
-	b.WriteString("<form method=post action=/sprechen class=sprechen")
+	b.WriteString("<form method=post action=/sprechen class=sprechen data-ganz") // its own script sends it and says it runs
 	if here {
 		name := html.EscapeString(assistent.Name())
 		b.WriteString(` data-hier data-wer="` + name + `" data-denkt="` + html.EscapeString(saysThinking(assistent.Name())) + `"`)
 	}
 	b.WriteString(">")
-	if !here {
-		b.WriteString("<label for=nachricht>Sprechen</label>")
-	}
 	b.WriteString(`<div><input type=text id=nachricht name=nachricht maxlength=1000 required autocomplete=off enterkeyhint=send ` +
 		`placeholder="Eine Frage oder eine Bitte" aria-label=Sprechen>`)
 	if canHear(cfg) {

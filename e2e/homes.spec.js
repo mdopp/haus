@@ -251,6 +251,7 @@ test('Deine Geräte are the app\'s tiles', async ({ page }, info) => {
   await page.getByRole('dialog', { name: 'Garagentor öffnen?' }).getByRole('button', { name: 'Abbrechen' }).click();
   expect(await stays(page)).toBe(true);
 
+  await page.locator('[data-seite="/raeume/lock.haustuer"]').scrollIntoViewIfNeeded(); // below the Sprechen field on a 360 px phone
   const lock = await page.locator('[data-seite="/raeume/lock.haustuer"]').boundingBox();
   await page.mouse.move(lock.x + 30, lock.y + 30);
   await page.mouse.down();
@@ -832,6 +833,49 @@ for (const path of ['/start', '/raeume', '/medien', '/energie', '/notizen', '/me
     await page.screenshot({ path: info.outputPath(path.slice(1) + '.png'), fullPage: true });
   });
 }
+
+// owner 2026-11-07 („Rigoros einfach“): Start is at most four blocks, each its state and at most one
+// action — Braucht dich (filled after the page from Laib: the box's red and yellow, a decision waiting),
+// the Sprechen field, Deine Geräte, Heute (three lines, today and tomorrow, then Kalender), Im Haus (one line, Energie a link)
+test('Start is four blocks, state first, one action each', async ({ page }) => {
+  await page.setViewportSize({ width: 411, height: 900 });
+  await page.goto('/start');
+  const braucht = page.getByRole('region', { name: 'Braucht dich' });
+  await expect(braucht.getByRole('link', { name: /^Box: 1 rot · \d gelb$/ })).toHaveAttribute('href', '/box');
+  await expect(braucht.getByRole('link', { name: '1 Entscheidung wartet' })).toHaveAttribute('href', 'https://laib.example/inbox');
+  const blocks = await page.evaluate(() => [...document.querySelectorAll('section.karte h2')].map((h) => h.textContent));
+  expect(blocks).toEqual(['Braucht dich', 'Deine Geräte', 'Heute', 'Im Haus']);
+  // the chat stays (owner 2026-11-07): one line to type or speak, right on Start, between Braucht dich and Deine Geräte
+  const feld = page.getByRole('textbox', { name: 'Sprechen' });
+  await expect(feld).toBeVisible();
+  const y = async (sel) => (await page.locator(sel).first().boundingBox()).y;
+  expect(await y('#karte-braucht-dich')).toBeLessThan(await y('form.sprechen'));
+  expect(await y('form.sprechen')).toBeLessThan(await y('#karte-deine-geraete'));
+  const zeile = await page.locator('form.sprechen > div').boundingBox();
+  expect(zeile.height, 'the field is one line').toBeLessThan(60);
+  const heute = page.getByRole('region', { name: 'Heute' });
+  await expect(heute.locator('li')).toHaveCount(3);
+  await expect(heute).toContainText('Müll gelb');
+  await expect(heute).not.toContainText('Elternabend');
+  await expect(heute.getByRole('link', { name: /^Kalender/ })).toHaveAttribute('href', '/kalender');
+  const imHaus = page.getByRole('region', { name: 'Im Haus' });
+  await expect(imHaus.locator('li')).toHaveCount(1);
+  await expect(imHaus.getByRole('link', { name: /Dach .* Haus/ })).toHaveAttribute('href', '/energie');
+  await expect(imHaus.locator('form')).toHaveCount(1);
+  for (const gone of ['Heute und demnächst', 'Alles in Ordnung', 'einzurichten', 'Netzlaufwerk']) await expect(page.getByText(gone)).toHaveCount(0);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/start');
+  const wide = await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1);
+  expect(wide, 'no sideways scroll at 1280 px').toBe(true);
+});
+
+// Start at 411 px (owner 2026-11-07, „Rigoros einfach“): the picture the owner compares before and after.
+test('picture of /start at 411 px', async ({ page }, info) => {
+  await page.setViewportSize({ width: 411, height: 900 });
+  await page.goto('/start');
+  await page.waitForLoadState('networkidle');
+  await page.screenshot({ path: info.outputPath('start-411.png'), fullPage: true });
+});
 
 // Energie in the widget's look (owner, 2026-11-03), for the owner to see
 // before it merges: the Jahr span, and the page in the light.

@@ -23,18 +23,28 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
 
 ## Pages, cards and `/napi` (laib#28)
 
-- `GET /start` — the family's page behind Authelia (haus#12, haus#35):
-  *Zuhause* and the day, then one part per question a family member has.
-  *Im Haus*: who is home (`person.*`: "Anna und Ben sind da"), the lamps
-  that are on with their names and one button (*Aus* for one, *Alle aus*
-  for several; a group, any entity with an `entity_id` list, is not a
-  lamp), what plays on a `media_player` with *Pause* when it can pause.
-  One thing is one row, on Start, Medien and Räume alike (haus#83): HA
-  devices that share an identifier (dashes and case aside: a Chromecast
-  through Cast and through Music Assistant) are twins, shown and steered
-  through the one that plays, else the paused one, else not Music
-  Assistant's mirror; a Jellyfin session is someone's app, on Medien only
-  while it plays. A player refusing a command (HA 500) is said as such.
+- `GET /start` — the family's page behind Authelia (haus#12, haus#35;
+  owner 2026-11-07, „Rigoros einfach“, [DOMAIN.md](DOMAIN.md#gestaltungsregeln)):
+  *Homes* and the day, then at most four blocks in this order, each its
+  state and at most one action, and the Sprechen field (below); no lead paragraph, no setup or Netzlaufwerk line, no
+  two-week preview.
+  *Braucht dich*, only while something is open: the person's important
+  tasks (Homes' own, e.g. the Netzlaufwerk password, and Laib's
+  `person:<login>` Box-Aufgaben), Immich's questions (*Dieselbe Person?*),
+  at most three and *N weitere Aufgaben* to Deine Aufgaben; for an admin
+  *Box: 1 rot · 2 gelb · 1 Box-Aufgabe fällig* (the services not green and
+  laib diag's red and yellow findings beyond them, the Übersicht's rule) to
+  /box and *1 Entscheidung wartet* to Laib's inbox. Never an optional app.
+  For the family a service they use down or the data not backed up is a
+  banner above it (*Gerade nicht erreichbar: Immich (Fotos).*, *Eure Daten
+  sind seit 3 Tagen nicht gesichert.*, who is on it): amber when the box
+  mends it itself, red only when a person is needed. All well says nothing.
+  Start does not wait for Laib (haus#67): the card comes with Homes' own
+  tasks and the status as kept (45 s, at most 5 min), and fills itself
+  from `GET /start/box` (HTML, "" when nothing is open; the status, the
+  person's kept Box-Aufgaben, for admins `laib befunde` and `laib inbox`).
+  Laib not answering says nothing to the family, to an admin *Wie es der
+  Box geht, lässt sich gerade nicht sagen.*
   *Deine Geräte*: the person's own things as the app's tiles (homes-android
   #245, variant A2; laib ADR 0017: favorites go to Homes):
   `HOMES_DATA/favoriten.json`, `{"<Remote-User>": ["light.buero", …]}`,
@@ -57,32 +67,29 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   failing) the tiles grey under *Box nicht erreichbar … Stand 08:14*. None says how
   to get one (*Tippe unter Geräte bei einem Gerät auf ☆,
   dann erscheint es hier.*); no `Remote-User`, no store: no part.
-  *Heute und demnächst*: appointments and open reminders of the next 14
-  days together, by time (overdue first, one without a date last,
-  *offen*), at most six, each leading to its page; none says so and how it
-  fills. Notes are not on Start: they are under Mehr.
-  The box is one calm line at the bottom (*Alles in Ordnung · eure Daten
-  sind von gestern Abend gesichert*; without *Alles in Ordnung* when a part
-  of the page does not answer); a service down or the data not backed up
-  for three days moves it to the top, saying what it means (*Gerade nicht
-  erreichbar: Fotos.*, *Eure Daten sind seit 3 Tagen nicht gesichert.*) and
-  who is on it: amber when the box mends it itself, red only when a person
-  is needed (nobody automatic on it, or the data not backed up). The admin's words (services, places, the last change,
-  Rückgängig) are /box's. Start does not wait for laib's status (a
-  second, haus#67): Homes keeps it 45 s and waits for a read at most
-  250 ms; a page served before laib answered has the line's two places
-  (*Wie es der Box geht, wird gerade nachgesehen …* at the bottom) and a
-  script that fetches `GET /start/box?ruhig=0|1` (`{oben, unten}`, the
-  same read, `ruhig` whether the rest of the page answered), or says
-  laib's plain line when that fails.
+  *Heute*: today's and tomorrow's appointments and the reminders due by
+  then, by time (overdue first, *überfällig*), at most three one-line
+  rows (*14:00 Zahnarzt*, *morgen Müll gelb*), each leading to its page,
+  then *Kalender →* (*Kalender · 2 weitere →*); nothing is one quiet line
+  *Heute und morgen steht nichts im Kalender.* to Kalender.
+  *Im Haus*: one line — who is home (`person.*`: *Anna und Ben da*), the
+  lamps on (*Flur an*, *3 Lichter an*; a group, any entity with an
+  `entity_id` list, is not a lamp), what plays, and Energie now (*Dach
+  3,2 kW · Haus 800 W · Akku 74 %*, a link to /energie) — with one button:
+  *Aus*/*Alle aus* while a lamp is on, else *Pause* for a player that can.
+  One thing is one row, on Start, Medien and Räume alike (haus#83): HA
+  devices that share an identifier (dashes and case aside: a Chromecast
+  through Cast and through Music Assistant) are twins, shown and steered
+  through the one that plays, else the paused one, else not Music
+  Assistant's mirror; a Jellyfin session is someone's app, on Medien only
+  while it plays. A player refusing a command (HA 500) is said as such.
   Each part only when its backend is set (`HOMES_HA_URL` + `HOMES_HA_TOKEN`,
   `HOMES_RADICALE_*`); one not set is not mentioned. One not
   answering within 4s is one plain line where its rows would be (*Licht
   und Geräte antworten gerade nicht. Schalten geht im Moment nicht.*, *Der
   Kalender antwortet gerade nicht.* once, a line in *Deine Geräte* when its
   file or HA does not), never its name or its error, which go to Homes'
-  log; Laib not answering is *Wie es der Box geht, lässt sich gerade nicht
-  sagen.* at the bottom. The page is always a 200. Cards are one renderer,
+  log. The page is always a 200. Cards are one renderer,
   `internal/cards` (title, rows, optional link; a list, boxes, tiles or a
   time column; a row may carry one button), for the pages and later the
   widgets' JSON. `/` redirects to `/start`; every other page path Homes
@@ -107,9 +114,8 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   when its backend is set. `GET /mehr` holds Dokumente (owner 2026-10-27:
   Dokumente unter Mehr, haus#159), the music, Aufgaben, the
   Netzlaufwerk password, Box for admins, each only when this box has it,
-  and *Konto* with who is signed in and *Abmelden*. Start: the day (*Heute und demnächst*) first, then *Meine
-  Geräte*, *Im Haus*, and Energie in one line (the roof, the house, the
-  battery's charge, the grid) leading to Energie. From 900 px wide the bar is a list on the
+  and *Konto* with who is signed in and *Abmelden*. Start: *Braucht dich*, the Sprechen
+  field, *Deine Geräte*, *Heute*, *Im Haus* (Energie a link in its line). From 900 px wide the bar is a list on the
   right, Mehr open in it (its entries, who is signed in, Abmelden; Mehr's
   own entry is the phone's), the page and its entry marked, and the cards
   in two columns beside it. At the top of a page only the login, small
@@ -1339,8 +1345,10 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     already let only close notes through, and the model said "none" when
     a passage missed the answer, not when the note did.
 
-- The Sprechen field (haus#12, laib ADR 0016): on Start under the day,
-  above the cards, while the Bote is set (no tab of its own: `/sprechen`
+- The Sprechen field (haus#12, laib ADR 0016; owner 2026-11-07: „Die
+  Möglichkeit des Chats soll bleiben!“): on Start after *Braucht dich* and
+  before *Deine Geräte*, compact (one line, the microphone, *Senden*, no
+  label above it), while the Bote is set (no tab of its own: `/sprechen`
   belongs to Start)
   (`HOMES_BOTE_URL`, the Bote's OpenAI base `http://host.containers.internal:8642/v1`,
   and `HOMES_BOTE_KEY`, Hermes' `API_SERVER_KEY`; laib renders the key only
@@ -1404,8 +1412,7 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   what is set. Sprechen says the word in one line with a link there.
 
 - The Netzlaufwerk page (haus#52, laib#296): `/netzlaufwerk`, linked from
-  Start for a family member or admin (a to-do card while they have no
-  password, a quiet link after). Each person sets their own password for the
+  Mehr, and from Start's *Braucht dich* while a member has no password. Each person sets their own password for the
   network drive (Samba): what it is for, how to connect (`\\<HOMES_SAMBA_HOST>\data`,
   `smb://…/data`), that it may equal their family password. An admin sees
   everyone's state, sets a new one for anyone or removes one. Until a person
@@ -1569,5 +1576,5 @@ instead (owner 2026-10-24): with `data-live` the script listens on
 `state_changed` subscription to HA while anyone listens, sensors left
 out) and fetches the page in place as soon as a thing on it changes —
 Räume, a thing, Medien (`seite`), Start any thing (`alle`); their N=120
-is only the fallback and for the day's calendar and the box line. `data-ganz`
+is only the fallback and for the day's calendar and Braucht dich. `data-ganz`
 leaves a form to the browser.

@@ -30,8 +30,8 @@ func TestRoutesCountPageViews(t *testing.T) {
 	for _, q := range []struct{ path, secret string }{
 		{"/start", "geheim"},
 		{"/start?von=widget.device", "geheim"},
-		{"/start/box?ruhig=1", "geheim"}, // each page's box line, which its script fetches after it
-		{"/start/box?ruhig=1", "geheim"},
+		{"/start/box", "geheim"}, // each page's Braucht dich, fetched after it: no view
+		{"/start/box", "geheim"},
 		{"/start", ""},
 		{"/gibtsnicht", "geheim"},
 		{"/napi/box/home", ""},
@@ -49,8 +49,8 @@ func TestRoutesCountPageViews(t *testing.T) {
 	for k, n := range fake.Counts() {
 		got[k.App+" "+k.Event] += n
 	}
-	// testSite's Laib does not answer: Start's box line, fetched after the page, says so, and that line counts for Start
-	if want := map[string]int64{"haus seite.start": 2, "haus von.widget.device": 1, "haus gestoert.start.box": 2}; !reflect.DeepEqual(got, want) {
+	// testSite's Laib does not answer: the family is told nothing (owner 2026-11-07), so nothing degraded is counted
+	if want := map[string]int64{"haus seite.start": 2, "haus von.widget.device": 1}; !reflect.DeepEqual(got, want) {
 		t.Errorf("counted %v, want %v", got, want)
 	}
 	for _, b := range fake.Bodies() {

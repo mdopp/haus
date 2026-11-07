@@ -187,9 +187,11 @@ func familyEvening(t *testing.T) StartConfig {
 		Favorites: favorites(t, `{"anna": ["light.buero", "cover.wohnzimmer", "climate.bad", "light.flur"], "ben": ["light.kueche"]}`)}
 }
 
-// haus#35: Start is Homes' mark, name and claim, as the app's start screen
-// (owner 2026-11-03), and the day — no admin words on top. Then Im Haus, Meine Geräte,
-// Heute und demnächst, and the box in one calm line at the bottom.
+// haus#35, owner 2026-11-07 („Rigoros einfach“): Start is Homes' mark,
+// name and claim (owner 2026-11-03) and the day — no admin words, no lead
+// paragraph — then at most four blocks in order: Braucht dich (only when
+// something is open), Deine Geräte, Heute, Im Haus. All well, nothing more:
+// no calm box line, no setup line, no Netzlaufwerk line, no two weeks ahead.
 func TestStartIsHomes(t *testing.T) {
 	named(t, "Ada")
 	code, body := startPage(t, familyEvening(t), "family")
@@ -197,78 +199,81 @@ func TestStartIsHomes(t *testing.T) {
 		t.Fatalf("status %d", code)
 	}
 	mustContain(t, body, "<title>Homes</title>", "<h1>Homes</h1>", "Dein Zuhause, klar im Blick.", "<header class=marke><svg", "url(#marke-clip)", "Mittwoch, 14. Oktober", `lang=de`,
-		"<h2 id=karte-im-haus>Im Haus</h2>", "<h2 id=karte-deine-geraete>Deine Geräte</h2>",
-		"<h2 id=karte-heute-und-demnaechst>Heute und demnächst</h2>",
-		"Alles in Ordnung · eure Daten sind von gestern Abend gesichert")
-	mustNotContain(t, body, "Ada",
+		"<h2 id=karte-deine-geraete>Deine Geräte</h2>", "<h2 id=karte-heute>Heute</h2>", "<h2 id=karte-im-haus>Im Haus</h2>")
+	mustNotContain(t, body, "Ada", "karte-braucht-dich", "Heute und demnächst", "Alles in Ordnung", "gesichert", "einzurichten", "Netzlaufwerk",
 		"Alles läuft", "Letzte Sicherung", "Orten", "Letzte Änderung", "Paperless wird installiert", "Operator", "Laib",
-		"Haushalt</h2>", "Jetzt</h2>", "Favoriten</h2>", "Einkaufsliste", "<script>alert", "fonts.googleapis", "fonts.gstatic")
-	// the day first, then what you switch, then the house (owner 2026-10-24)
-	before(t, body, "<h1>Homes</h1>", "karte-heute-und-demnaechst")
-	before(t, body, "karte-heute-und-demnaechst", "karte-deine-geraete")
-	before(t, body, "karte-deine-geraete", "karte-im-haus")
-	before(t, body, "karte-im-haus", "Alles in Ordnung")
+		"Haushalt</h2>", "Jetzt</h2>", "Favoriten</h2>", "Energie</h2>", "Einkaufsliste", "<script>alert", "fonts.googleapis", "fonts.gstatic")
+	if n := strings.Count(body, "<h2 id=karte-"); n > 4 {
+		t.Fatalf("%d blocks on Start, at most four", n)
+	}
+	before(t, body, "<h1>Homes</h1>", "karte-deine-geraete")
+	before(t, body, "karte-deine-geraete", "karte-heute")
+	before(t, body, "karte-heute", "karte-im-haus")
 }
 
-// haus#35: Im Haus says who is home, what is on — each with its one
-// action — and what plays. The appointments are not "now".
+// owner 2026-11-07: Im Haus is one line — who is home, the lamps on, what
+// plays — with one action: the lamps off before a player's Pause. The
+// appointments are not "now".
 func TestStartImHaus(t *testing.T) {
 	_, body := startPage(t, familyEvening(t), "family")
 	im := section(t, body, "karte-im-haus")
-	mustContain(t, im, "Anna und Ben sind da",
-		"2 Lichter an", "Bürolicht, Küche",
-		`<form method=post action=/schalten>`, `name=tun value="alle-lichter-aus"`, `>Alle aus</button>`,
-		"Wohnzimmer spielt", "Abbey Road · The Beatles",
-		`name=geraet value="media_player.wohnzimmer"`, `name=tun value="media_player.media_pause"`, `>Pause</button>`,
-		`name=zurueck value="/start"`)
-	mustNotContain(t, im, "Carla", "Küchenradio", "Deutschlandfunk", "Zahnarzt", "Flurlicht")
-	before(t, im, "sind da", "Lichter an")
-	before(t, im, "Lichter an", "Wohnzimmer spielt")
+	mustContain(t, im, "Anna und Ben da · 2 Lichter an · Wohnzimmer spielt",
+		`<form method=post action=/schalten>`, `name=tun value="alle-lichter-aus"`, `>Alle aus</button>`, `name=zurueck value="/start"`)
+	mustNotContain(t, im, "Carla", "Küchenradio", "Deutschlandfunk", "Zahnarzt", "Flurlicht", "Abbey Road", ">Pause</button>", "Bürolicht")
+	if n := strings.Count(im, "<form"); n != 1 {
+		t.Fatalf("%d actions in Im Haus, want one", n)
+	}
 }
 
-// One lamp on is switched off by name; none on says so, with nothing to
-// press; a player that cannot pause gets no Pause.
+// One lamp on is switched off by name; none on says so; then a player
+// that can pause has Pause; one that cannot, nothing to press.
 func TestStartImHausSaysItPlainly(t *testing.T) {
 	fake, hc := house(t)
 	fake.Set("person.anna", "not_home", map[string]any{"friendly_name": "Anna"})
 	fake.Set("light.flur", "off", map[string]any{"friendly_name": "Flur"})
 	fake.Set("media_player.wohnzimmer", "idle", map[string]any{"friendly_name": "Wohnzimmer"})
 	_, body := startPage(t, StartConfig{HA: hc}, "")
-	mustContain(t, body, "Niemand ist zu Hause", "Alle Lichter sind aus")
+	mustContain(t, body, "Niemand zu Hause · Alle Lichter aus")
 	mustNotContain(t, body, "Wohnzimmer", "spielt", "<form")
 
 	fake2, hc2 := house(t)
 	fake2.Set("person.anna", "home", map[string]any{"friendly_name": "Anna"})
 	fake2.Set("light.flur", "on", map[string]any{"friendly_name": "Flur"})
-	fake2.Set("media_player.radio", "playing", map[string]any{"friendly_name": "Radio", "media_title": "WDR 2", "supported_features": 4.0})
+	fake2.Set("media_player.radio", "playing", map[string]any{"friendly_name": "Radio", "media_title": "WDR 2", "supported_features": 1.0})
 	_, body = startPage(t, StartConfig{HA: hc2}, "")
-	mustContain(t, body, "Anna ist da", "1 Licht an", "Flur",
-		`name=geraet value="light.flur"`, `name=tun value="light.turn_off"`, `>Aus</button>`, "Radio spielt", "WDR 2")
-	mustNotContain(t, body, "alle-lichter-aus", ">Pause</button>", "Niemand")
+	mustContain(t, body, "Anna da · Flur an · Radio spielt", `name=geraet value="light.flur"`, `name=tun value="light.turn_off"`, `>Aus</button>`)
+	mustNotContain(t, body, "alle-lichter-aus", ">Pause</button>", "Niemand", "WDR 2")
+
+	fake2.Set("light.flur", "off", map[string]any{"friendly_name": "Flur"})
+	_, body = startPage(t, StartConfig{HA: hc2}, "")
+	mustContain(t, body, "Alle Lichter aus · Radio spielt", `name=geraet value="media_player.radio"`, `>Pause</button>`)
+	fake2.Set("media_player.radio", "playing", map[string]any{"friendly_name": "Radio", "supported_features": 4.0}) // no pause
+	_, body = startPage(t, StartConfig{HA: hc2}, "")
+	mustNotContain(t, section(t, body, "karte-im-haus"), "<form")
 
 	fake3, hc3 := house(t)
 	for _, p := range []string{"Anna", "Ben", "Carla"} {
 		fake3.Set("person."+strings.ToLower(p), "home", map[string]any{"friendly_name": p})
 	}
 	_, body = startPage(t, StartConfig{HA: hc3}, "")
-	mustContain(t, body, "Anna, Ben und Carla sind da")
+	mustContain(t, body, "Anna, Ben und Carla da")
 
 	// no person entities: nothing said about who is home
 	fake4, hc4 := house(t)
 	fake4.Set("light.flur", "off", map[string]any{"friendly_name": "Flur"})
 	_, body = startPage(t, StartConfig{HA: hc4}, "")
-	mustNotContain(t, body, "sind da", "ist da", "Niemand")
+	mustNotContain(t, body, " da ·", "Niemand")
 }
 
-// Many lights on: the names are cut, the count is not.
+// Many lights on: the count, no names, and Alle aus.
 func TestStartCutsLongLightLists(t *testing.T) {
 	fake, hc := house(t)
 	for _, n := range []string{"A", "B", "C", "D", "E", "F", "G"} {
 		fake.Set("light."+strings.ToLower(n), "on", map[string]any{"friendly_name": "Licht " + n})
 	}
 	_, body := startPage(t, StartConfig{HA: hc}, "")
-	mustContain(t, body, "7 Lichter an", "Licht A", "Licht E", "und 2 weitere", "alle-lichter-aus")
-	mustNotContain(t, body, "Licht F", "Licht G")
+	mustContain(t, body, "7 Lichter an", "alle-lichter-aus")
+	mustNotContain(t, body, "Licht A", "Licht G")
 }
 
 // A group (an entity carrying an entity_id list, light groups included)
@@ -279,7 +284,7 @@ func TestStartCountsLampsNotGroups(t *testing.T) {
 	fake.Set("light.erdgeschoss", "on", map[string]any{"friendly_name": "Erdgeschoss", "entity_id": []any{"light.kueche", "light.flur"}})
 	fake.Set("light.flur", "off", map[string]any{"friendly_name": "Flur"})
 	_, body := startPage(t, StartConfig{HA: hc}, "")
-	mustContain(t, body, "1 Licht an", "Küche", `name=geraet value="light.kueche"`)
+	mustContain(t, body, "Küche an", `name=geraet value="light.kueche"`)
 	mustNotContain(t, body, "2 Lichter an", "Erdgeschoss")
 }
 
@@ -297,8 +302,8 @@ func TestStartLeavesOutWhatHAHides(t *testing.T) {
 	fake.Set("light.status_led", "on", map[string]any{"friendly_name": "Status-LED"})
 	fake.Set("media_player.diag", "playing", map[string]any{"friendly_name": "Diagnoseplayer", "media_title": "Test", "supported_features": 1.0})
 	_, body := startPage(t, StartConfig{HA: hc}, "")
-	mustContain(t, body, "1 Licht an", "Küche")
-	mustNotContain(t, body, "Alte Lampe", "Status-LED", "Diagnoseplayer", "Lichter an")
+	mustContain(t, body, "Küche an")
+	mustNotContain(t, body, "Alte Lampe", "Status-LED", "Diagnoseplayer", "Lichter an", "spielt")
 }
 
 // haus#35: Deine Geräte — the person's things, in their order, each
@@ -404,59 +409,53 @@ func TestStartCutsLongFavoriteLists(t *testing.T) {
 	mustNotContain(t, g, "Lampe 13", "Lampe 15")
 }
 
-// haus#35: Heute und demnächst — appointments and reminders together, by
-// time, each leading to its page; done, past and far things left out.
-// Notes are not on Start: they have their own tab.
-func TestStartHeuteUndDemnaechst(t *testing.T) {
+// owner 2026-11-07: Heute — today and tomorrow only, at most three lines,
+// appointments and reminders together by time, an overdue one first, each
+// leading to its page, then Kalender. Done, past, later and undated things
+// are left out; Notes are not on Start: they have their own tab.
+func TestStartHeute(t *testing.T) {
 	_, body := startPage(t, familyEvening(t), "family")
-	a := section(t, body, "karte-heute-und-demnaechst")
+	a := section(t, body, "karte-heute")
 	mustContain(t, a,
-		`<time>heute 19:00</time>`, `<a href="/kalender/erinnerung/muell">Müll rausbringen</a>`,
-		`<time>morgen 08:30</time>`, `<a href="/kalender">Zahnarzt</a>`, "Ben",
-		`<time>Sa 17.10.</time>`, `<a href="/kalender/erinnerung/oma">Geschenk für Oma</a>`)
-	mustNotContain(t, a, "Gestern vorbei", "Erledigt schon", "Einkaufsliste")
+		`<time>19:00</time><div><a href="/kalender/erinnerung/muell">Müll rausbringen</a>`,
+		`<time>morgen 08:30</time><div><a href="/kalender">Zahnarzt</a>`, `<a href="/kalender">Kalender →</a>`)
+	mustNotContain(t, a, "Gestern vorbei", "Erledigt schon", "Einkaufsliste", "Geschenk für Oma", "Sa 17.10.", "Ben", "<span class=k>")
 	before(t, a, "Müll rausbringen", "Zahnarzt")
-	before(t, a, "Zahnarzt", "Geschenk für Oma")
 }
 
-// A reminder without a due date comes after everything with one, "offen";
-// one overdue comes first; the list has an end, and says how much more.
-func TestStartHeuteUndDemnaechstOrder(t *testing.T) {
+// The overdue first, at most three, the rest counted on Kalender's link;
+// an undated reminder is not today's.
+func TestStartHeuteOrder(t *testing.T) {
 	dav, cal := calendar(t)
 	dav.Put("/homes/familie/a.ics", todo("a", "Irgendwann", ""))
 	dav.Put("/homes/familie/b.ics", todo("b", "Liegt schon", "DUE:20261013T070000Z\r\n"))
 	dav.Put("/homes/familie/c.ics", todo("c", "Steuer", "DUE:20261030T070000Z\r\n"))
-	for i := 1; i <= 6; i++ {
-		dav.Put(fmt.Sprintf("/homes/familie/e%d.ics", i), event(fmt.Sprintf("e%d", i), fmt.Sprintf("202610%02dT150000Z", 14+i), fmt.Sprintf("202610%02dT160000Z", 14+i), fmt.Sprintf("Termin %d", i)))
+	dav.Put("/homes/familie/d.ics", todo("d", "Morgen ganz", "DUE;VALUE=DATE:20261015\r\n"))
+	for i, at := range []string{"20261014T120000Z", "20261014T150000Z", "20261015T150000Z", "20261016T150000Z"} {
+		dav.Put(fmt.Sprintf("/homes/familie/e%d.ics", i), event(fmt.Sprintf("e%d", i), at, strings.Replace(at, "T1", "T2", 1), fmt.Sprintf("Termin %d", i)))
 	}
 	_, body := startPage(t, StartConfig{Calendar: cal}, "")
-	a := section(t, body, "karte-heute-und-demnaechst")
-	mustContain(t, a, "überfällig seit gestern 09:00", "Liegt schon", "Termin 1", "Termin 5", "und 2 weitere", `href="/kalender"`)
-	mustNotContain(t, a, "Steuer", "Termin 6", "Irgendwann")
-	before(t, a, "Liegt schon", "Termin 1")
-
-	dav2, cal2 := calendar(t)
-	dav2.Put("/homes/familie/a.ics", todo("a", "Irgendwann", ""))
-	dav2.Put("/homes/familie/2.ics", event("2", "20261015T130000Z", "20261015T140000Z", "Zahnarzt"))
-	_, body = startPage(t, StartConfig{Calendar: cal2}, "")
-	a = section(t, body, "karte-heute-und-demnaechst")
-	mustContain(t, a, "<time>offen</time>", "Irgendwann")
-	before(t, a, "Zahnarzt", "Irgendwann")
+	a := section(t, body, "karte-heute")
+	mustContain(t, a, "<time>überfällig</time>", "Liegt schon", "<time>14:00</time>", "Termin 0", "<time>17:00</time>", "Termin 1",
+		`<a href="/kalender">Kalender · 2 weitere →</a>`)
+	mustNotContain(t, a, "Steuer", "Termin 2", "Termin 3", "Irgendwann", "Morgen ganz")
+	before(t, a, "Liegt schon", "Termin 0")
 }
 
-// haus#35: nothing coming up says so and how it fills.
-func TestStartHeuteUndDemnaechstEmptySaysHow(t *testing.T) {
-	_, cal := calendar(t)
+// Nothing today or tomorrow: one quiet line to Kalender, no card.
+func TestStartHeuteEmpty(t *testing.T) {
+	dav, cal := calendar(t)
+	dav.Put("/homes/familie/s.ics", event("s", "20261020T150000Z", "20261020T160000Z", "Später"))
 	_, body := startPage(t, StartConfig{Calendar: cal}, "")
-	mustContain(t, section(t, body, "karte-heute-und-demnaechst"),
-		"Nichts in den nächsten zwei Wochen.", "Termine und Erinnerungen aus dem Kalender stehen hier.")
+	mustContain(t, body, `<p class=ruhig><span class="punkt grau"></span><a href=/kalender>`+saysNichtsHeute+`</a></p>`)
+	mustNotContain(t, body, "karte-heute", "Später")
 }
 
-// haus#35, owner decision 2026-10-15: the box is one calm line at the
-// bottom, in the family's words. When something is wrong it moves to the
-// top and says what it means for the family; the admin's words stay on
-// /box. Amber when the box mends it itself, red only when a person is
-// needed: nobody automatic on it, or the data not backed up for days.
+// haus#35, owner 2026-10-15 and 2026-11-07: the box on Start is only what is
+// wrong, in the family's words, above the blocks; all well says nothing.
+// Amber when the box mends it itself, red only when a person is needed:
+// nobody automatic on it, or the data not backed up for days. The admin's
+// words stay on /box.
 func TestStartBoxLine(t *testing.T) {
 	loc := berlin(t)
 	immich := map[string]any{"name": "immich", "title": "Immich", "beschreibung": "Fotos"}
@@ -474,20 +473,18 @@ func TestStartBoxLine(t *testing.T) {
 		name  string
 		ready map[string]any
 		rows  []map[string]any
-		top   []string // in the banner above Im Haus
-		calm  string   // the line at the bottom; "" for none
+		top   []string // in the banner above Im Haus; none: nothing about the box
 		kind  string   // the banner's: selbst (amber, the box mends it) or hilfe (red, a person is needed)
 	}{
-		{"all well", allGreen(t), ok, nil, "Alles in Ordnung · eure Daten sind von gestern Abend gesichert", ""},
-		{"backed up tonight", readyAt(t, time.Date(2026, 10, 14, 3, 12, 0, 0, loc), "läuft"), ok, nil, "Alles in Ordnung · eure Daten sind von heute Nacht gesichert", ""},
+		{"all well", allGreen(t), ok, nil, ""},
 		{"two down, the box on it", allGreen(t), down,
-			[]string{"Gerade nicht erreichbar: Immich (Fotos) und Paperless (Dokumente).", "Die Box versucht, das selbst zu beheben.", "Eure Daten sind von gestern Abend gesichert."}, "", "selbst"},
+			[]string{"Gerade nicht erreichbar: Immich (Fotos) und Paperless (Dokumente).", "Die Box versucht, das selbst zu beheben.", "Eure Daten sind von gestern Abend gesichert."}, "selbst"},
 		{"down, nobody automatic", readyAt(t, time.Date(2026, 10, 13, 21, 31, 0, 0, loc), "aus"), down[:1],
-			[]string{"Gerade nicht erreichbar: Immich (Fotos).", "Wer die Box betreut, weiß Bescheid."}, "", "hilfe"},
+			[]string{"Gerade nicht erreichbar: Immich (Fotos).", "Wer die Box betreut, weiß Bescheid."}, "hilfe"},
 		{"no backup for days", readyAt(t, time.Date(2026, 10, 10, 21, 0, 0, 0, loc), "läuft"), ok,
-			[]string{"Eure Daten sind seit 3 Tagen nicht gesichert.", "Die Box versucht, das selbst zu beheben."}, "", "hilfe"},
+			[]string{"Eure Daten sind seit 3 Tagen nicht gesichert.", "Die Box versucht, das selbst zu beheben."}, "hilfe"},
 		{"never backed up", readyAt(t, time.Time{}, "fehlt"), ok,
-			[]string{"Eure Daten sind noch nicht gesichert.", "Wer die Box betreut, weiß Bescheid."}, "", "hilfe"},
+			[]string{"Eure Daten sind noch nicht gesichert.", "Wer die Box betreut, weiß Bescheid."}, "hilfe"},
 	} {
 		fake, hc := house(t)
 		fake.Set("light.flur", "on", map[string]any{"friendly_name": "Flur"})
@@ -499,37 +496,25 @@ func TestStartBoxLine(t *testing.T) {
 			}
 			before(t, body, w, "karte-im-haus")
 		}
-		if c.calm != "" {
-			mustContain(t, body, "class=ruhig", c.calm)
-			before(t, body, "karte-im-haus", c.calm)
-			mustNotContain(t, body, `class="achtung`)
+		if c.kind == "" {
+			mustNotContain(t, body, `class="achtung`, "gesichert", "Alles in Ordnung", "class=ruhig")
 		} else {
 			other := map[string]string{"selbst": "hilfe", "hilfe": "selbst"}[c.kind]
 			if !strings.Contains(body, `<section class="achtung `+c.kind+`"`) || strings.Contains(body, `class="achtung `+other+`"`) {
 				t.Errorf("%s: the banner is not %s:\n%s", c.name, c.kind, body)
 			}
-			mustNotContain(t, body, "class=ruhig", "Alles in Ordnung")
 		}
 		mustNotContain(t, body, "Alles läuft", "Letzte Sicherung", "Orten", "Operator", "Admin", "Letzte Änderung", "Rückgängig",
 			"immich", "paperless", "Laib", "rot<", "grün")
 	}
-	// the box well but the house not answering: the box line does not say
-	// "Alles in Ordnung" under a page that says something does not answer
-	fake, hc := house(t)
-	fake.Down(true)
-	_, body := startPage(t, StartConfig{Laib: fakeLaib(t, allGreen(t), ok), HA: hc}, "family")
-	mustContain(t, body, "class=ruhig", "Eure Daten sind von gestern Abend gesichert", "Licht und Geräte antworten gerade nicht.")
-	mustNotContain(t, body, "Alles in Ordnung", `class="achtung`)
-	// Laib not answering: #34's line, at the bottom, without its error
-	code, body := startPage(t, StartConfig{Laib: brokenLaib(t)}, "")
-	if code != 200 {
-		t.Fatalf("status %d", code)
+	// Laib not answering, or not configured: not a word to the family
+	for _, l := range []*laib.Client{brokenLaib(t), nil} {
+		code, body := startPage(t, StartConfig{Laib: l}, "")
+		if code != 200 {
+			t.Fatalf("status %d", code)
+		}
+		mustNotContain(t, body, `class="achtung`, "Box geht", "Die Box", "gesichert", "connection refused", "500", "boom")
 	}
-	mustContain(t, body, "class=ruhig", "Wie es der Box geht, lässt sich gerade nicht sagen.")
-	mustNotContain(t, body, "Alles in Ordnung", `class="achtung`, "connection refused", "500", "boom")
-	// no Laib configured: not a word
-	_, body = startPage(t, StartConfig{}, "")
-	mustNotContain(t, body, "class=ruhig", `class="achtung`, "Box geht", "Die Box", "gesichert", "Alles in Ordnung")
 }
 
 // How long ago the backup was, the way the family says it.
@@ -573,17 +558,16 @@ func TestStartSaysPlainlyWhatDoesNotAnswer(t *testing.T) {
 		t.Fatalf("status %d", code)
 	}
 	mustContain(t, body,
-		"Wie es der Box geht, lässt sich gerade nicht sagen.",
 		"<h2 id=karte-im-haus>Im Haus</h2>", "Licht und Geräte antworten gerade nicht. Schalten geht im Moment nicht.",
 		"<h2 id=karte-deine-geraete>Deine Geräte</h2>", "Deine Favoriten sind gerade nicht zu sehen.",
-		"<h2 id=karte-heute-und-demnaechst>Heute und demnächst</h2>", "Der Kalender antwortet gerade nicht.")
+		"<h2 id=karte-heute>Heute</h2>", "Der Kalender antwortet gerade nicht.")
 	mustNotLeak(t, body, "Flur", "Laib", "favoriten.json", "Alles in Ordnung", "<form", host(hc.URL), host(cal.URL))
 	for _, once := range []string{"Der Kalender antwortet gerade nicht.", "Licht und Geräte antworten gerade nicht."} {
 		if n := strings.Count(body, once); n != 1 {
 			t.Fatalf("%q said %d times", once, n)
 		}
 	}
-	before(t, body, "karte-heute-und-demnaechst", "Wie es der Box geht")
+	before(t, body, "karte-heute", "karte-im-haus")
 }
 
 // Only the reminders failing (the appointments read): the appointments,
@@ -604,9 +588,9 @@ func TestStartSaysFailingRemindersWithTheAppointments(t *testing.T) {
 	t.Cleanup(front.Close)
 	cal.URL = front.URL
 	_, body := startPage(t, StartConfig{Calendar: cal}, "")
-	a := section(t, body, "karte-heute-und-demnaechst")
+	a := section(t, body, "karte-heute")
 	mustContain(t, a, "Zahnarzt", "morgen 15:00", "Der Kalender antwortet gerade nicht.")
-	mustNotContain(t, body, "REPORT", "500", "Nichts in den nächsten")
+	mustNotContain(t, body, "REPORT", "500", saysNichtsHeute)
 }
 
 // What is not configured is not mentioned: no HA, no calendar — no
@@ -616,8 +600,7 @@ func TestStartSaysNothingAboutWhatIsNotConfigured(t *testing.T) {
 	if code != 200 {
 		t.Fatalf("status %d", code)
 	}
-	mustContain(t, body, "Alles in Ordnung · eure Daten sind von gestern Abend gesichert")
-	mustNotContain(t, body, "karte-im-haus", "karte-deine-geraete", "karte-heute", "Licht", "Termin", "Erinnerung", "Notiz", "nicht konfiguriert", "HOMES_")
+	mustNotContain(t, body, "Alles in Ordnung", "karte-braucht-dich", "karte-im-haus", "karte-deine-geraete", "karte-heute", "Licht", "Termin", "Erinnerung", "Notiz", "nicht konfiguriert", "HOMES_")
 }
 
 // haus#35: the family's pages switch Home Assistant things through
@@ -751,9 +734,11 @@ func must[T any](v T, err error) T {
 	return v
 }
 
-// haus#173 (laib#856): one place is not „gesichert“ — the owner's amber line;
-// red lists only what the family uses; a problem beyond one service is no
-// „Alles in Ordnung“; an incident being worked is „kümmert sich“
+// haus#173 (laib#856): one place is not „gesichert“ — said inside the
+// banner when something else is wrong, nothing on its own (owner
+// 2026-11-07: an admin finds it in Braucht dich); red lists only what the
+// family uses; a problem beyond one service is said; an incident being
+// worked is „kümmert sich“
 func TestStartTellsTheTruthAboutTheBackup(t *testing.T) {
 	line := func(ready map[string]any, rows []map[string]any) string {
 		fake, hc := house(t)
@@ -762,36 +747,30 @@ func TestStartTellsTheTruthAboutTheBackup(t *testing.T) {
 		return body
 	}
 	ok := []map[string]any{{"name": "immich", "title": "Immich", "beschreibung": "Fotos", "state": "grün"}}
-
-	two := allGreen(t)
-	mustContain(t, line(two, ok), "Alles in Ordnung · eure Daten sind von gestern Abend gesichert")
+	red := []map[string]any{{"name": "immich", "title": "Immich", "beschreibung": "Fotos", "state": "rot"}}
 
 	one := allGreen(t)
 	one["lastBackup"].(map[string]any)["repos"] = 1
-	body := line(one, ok)
-	mustContain(t, body, `<span class="punkt gelb"></span>Gesichert, aber nur hier im Haus. Die Kopie außer Haus fehlt noch.`)
-	mustNotContain(t, body, "Alles in Ordnung", "gesichert</p>")
+	mustNotContain(t, line(one, ok), saysNurImHaus, `class="achtung`)
+	mustContain(t, line(one, red), "Gerade nicht erreichbar: Immich (Fotos).", saysNurImHaus)
 
 	flag := allGreen(t)
 	flag["lastBackup"].(map[string]any)["onlyOnDataDisk"] = true
-	mustContain(t, line(flag, ok), saysNurImHaus)
+	mustContain(t, line(flag, red), saysNurImHaus)
 
 	// only the admins' services red: Start stays calm
 	adminRed := []map[string]any{{"name": "llama", "title": "Sprachmodell", "state": "rot"}, {"name": "werkstatt", "state": "rot"}}
-	body = line(allGreen(t), adminRed)
-	mustContain(t, body, "Alles in Ordnung")
-	mustNotContain(t, body, "Sprachmodell", "Gerade nicht erreichbar")
+	mustNotContain(t, line(allGreen(t), adminRed), "Sprachmodell", "Gerade nicht erreichbar", `class="achtung`)
 
-	// a problem beyond one service: no „Alles in Ordnung“
+	// a problem beyond one service
 	prob := allGreen(t)
 	prob["problems"] = []any{map[string]any{"detail": "Datenträger fast voll"}}
-	body = line(prob, ok)
+	body := line(prob, ok)
 	mustContain(t, body, "An der Box stimmt gerade etwas nicht.")
-	mustNotContain(t, body, "Alles in Ordnung", "Datenträger")
+	mustNotContain(t, body, "Datenträger")
 
 	// the Operator works an incident: it is on it
 	inc := allGreen(t)
 	inc["operatorWork"] = map[string]any{"incident": "immich rot"}
-	body = line(inc, []map[string]any{{"name": "immich", "title": "Immich", "beschreibung": "Fotos", "state": "rot"}})
-	mustContain(t, body, "Gerade nicht erreichbar: Immich (Fotos).", "Die Box kümmert sich gerade darum.")
+	mustContain(t, line(inc, red), "Gerade nicht erreichbar: Immich (Fotos).", "Die Box kümmert sich gerade darum.")
 }

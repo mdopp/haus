@@ -100,7 +100,7 @@ func TestEachLeafModuleOff(t *testing.T) {
 			{"mcp:", `"einkaufsliste_dazu"`, `!"einkaufsliste_dazu"`}},
 		// H5, one Radicale account: each goes alone, the others keep theirs
 		"kalender": {{wunschliste, `href=/kalender`, `!href=/kalender`}, {"/kalender", "Milch kaufen", "noch nicht eingerichtet"},
-			{"/start", "Heute und demnächst", "!Heute und demnächst"}, {"/kalender/erinnerung/milch-1", "Milch kaufen", "!Milch kaufen"},
+			{"/start", "<h2 id=karte-heute>", "!<h2 id=karte-heute>"}, {"/kalender/erinnerung/milch-1", "Milch kaufen", "!Milch kaufen"},
 			{"napi:/napi/defs/tool", `"tool-id":"task"`, `!"tool-id":"task"`}, {"napi:/napi/portal/tasks", "#200", "#404"},
 			{"mcp:", `"termin_anlegen"`, `!"termin_anlegen"`}},
 		"kontakte": {{"/kontakte/urn:uuid:b", "Bernd Bauer", "!Bernd Bauer"},

@@ -13,6 +13,12 @@ import (
 // fakeLaib answers `laib status --json` over MCP with the given readiness and rows.
 func fakeLaib(t *testing.T, ready map[string]any, rows []map[string]any) *laib.Client {
 	t.Helper()
+	return fakeLaibWith(t, ready, rows, nil)
+}
+
+// fakeLaibWith is fakeLaib with more answers, by tool name (laib_inbox …).
+func fakeLaibWith(t *testing.T, ready map[string]any, rows []map[string]any, more map[string]string) *laib.Client {
+	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			Params struct {
@@ -23,6 +29,9 @@ func fakeLaib(t *testing.T, ready map[string]any, rows []map[string]any) *laib.C
 		text := "[]"
 		if req.Params.Name == "laib_befunde" { // diag ran, found nothing
 			text = `{"at":"2026-11-06T10:00:00Z","findings":[]}`
+		}
+		if m, ok := more[req.Params.Name]; ok {
+			text = m
 		}
 		if req.Params.Name == "laib_status" {
 			b, _ := json.Marshal(map[string]any{"ready": ready, "services": rows})

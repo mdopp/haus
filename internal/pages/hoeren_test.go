@@ -148,7 +148,7 @@ func TestSprechenSaysItIsThinking(t *testing.T) {
 	named(t, "Ada")
 	_, bc := fakeBote(t)
 	_, body, _ := talkPage(t, Sprechen(StartConfig{Bote: bc}), "anna")
-	mustContain(t, body, `<form method=post action=/sprechen class=sprechen data-hier data-wer="Ada" data-denkt="Ada denkt nach …">`,
+	mustContain(t, body, `<form method=post action=/sprechen class=sprechen data-ganz data-hier data-wer="Ada" data-denkt="Ada denkt nach …">`,
 		"name=nachricht", "<button class=senden>Senden</button>", "<script>", "'Accept':'text/event-stream'", "el('span','laeuft')", ".laeuft{",
 		jsString(saysDown("")))
 	mustNotContain(t, body, "class=mikro") // no speech-to-text set: no microphone

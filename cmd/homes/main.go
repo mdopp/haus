@@ -190,7 +190,7 @@ func archivOf(s site) (map[string]bool, string) {
 func familyMux(s site) *http.ServeMux {
 	pagesMux := http.NewServeMux()
 	family := familyOf(s)
-	start := pages.Start(family) // one: the page and its box line share laib's status (haus#67)
+	start := pages.Start(family) // one: the page and its Braucht dich share laib's status (haus#67)
 	pagesMux.HandleFunc("/start", start)
 	live := &pages.Live{HA: family.HA} // the pages' push: Home Assistant's changes and Homes' own
 	pagesMux.Handle(pages.LivePath, live)

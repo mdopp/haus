@@ -15,8 +15,8 @@ import (
 )
 
 // haus#188 (owner 2026-10-28): what a person sets up once is a task — open
-// ones in Mehr's „Einrichtung“, the important first, gone once done; Start
-// says an important one quietly; Deine Aufgaben lists them all, the done
+// ones in Mehr's „Einrichtung“, the important first, gone once done; Start's
+// Braucht dich has an important one, never an optional one; Deine Aufgaben lists them all, the done
 // ones to do again
 func TestEinrichtungKommtUndGeht(t *testing.T) {
 	fs := sambafake.New(t, map[string]int64{"anna": 0, "ben": 1777777777}, true)
@@ -29,7 +29,8 @@ func TestEinrichtungKommtUndGeht(t *testing.T) {
 	mustContain(t, e, `<a href="/netzlaufwerk">Netzlaufwerk-Passwort festlegen</a>`)
 	mustNotContain(t, e, "Discogs verbinden", "Stimme", "Aufnahmen") // connected already; nothing trains a wake word any more
 	_, start := startPage(t, cfg, "family")
-	mustContain(t, start, `<a href=/aufgaben>1 Sache einzurichten</a>: Netzlaufwerk-Passwort festlegen`)
+	mustContain(t, section(t, start, "karte-braucht-dich"), `<a href="/netzlaufwerk">Netzlaufwerk-Passwort festlegen</a>`)
+	mustNotContain(t, start, "Discogs")
 
 	// the password set: nothing open, nothing on Start
 	if err := cfg.Samba.Set("anna", "ein-gutes-passwort"); err != nil {
@@ -38,7 +39,7 @@ func TestEinrichtungKommtUndGeht(t *testing.T) {
 	_, body, _ = familyPage(t, Mehr, cfg, "GET", mehrPath, "family")
 	mustNotContain(t, body, "karte-deine-aufgaben")
 	_, start = startPage(t, cfg, "family")
-	mustNotContain(t, start, "einzurichten")
+	mustNotContain(t, start, "karte-braucht-dich", "Netzlaufwerk")
 
 	_, body, _ = familyPage(t, DeineAufgaben, cfg, "GET", aufgabenPath, "family")
 	mustContain(t, body, "<h1>Deine Aufgaben</h1>", "Alles eingerichtet.", "<h2 id=karte-erledigt>Erledigt</h2>", "Noch einmal: Damit du die Dateien", `<a href="/discogs">Discogs verbinden</a>`)

@@ -26,6 +26,8 @@ import (
 	"time"
 
 	"github.com/mdopp/homes/internal/abruf"
+	"github.com/mdopp/homes/internal/bote"
+	"github.com/mdopp/homes/internal/bote/botefake"
 	"github.com/mdopp/homes/internal/devices"
 	"github.com/mdopp/homes/internal/discogs"
 	"github.com/mdopp/homes/internal/namen"
@@ -128,6 +130,7 @@ func main() {
 	defer dav.Close()
 	dav.AddCalendar("/homes/haushalt/", "Haushalt")
 	dav.AddPrincipal("anna")
+	demoTermine(dav, time.Now())
 	absFake := absfake.New("demo")
 	defer absFake.Close()
 	pods := podcasts.Open(&abs.Client{URL: absFake.URL, Token: "demo"}, dir)
@@ -166,7 +169,6 @@ func main() {
 	cfg.Antworten = &kontaktantwort.Store{Path: filepath.Join(dir, kontaktantwort.Datei)} // Kontakt prüfen lassen's answers: a task on Deine Aufgaben
 	mux := http.NewServeMux()
 	mux.HandleFunc(pages.EinrichtenPages, pages.Einrichten(cfg))
-	mux.HandleFunc("/start", pages.Start(cfg))
 	mux.HandleFunc("/schrift/", pages.Font()) // Geist, as on the box: the pictures and the layout gate in the family's font
 	mux.HandleFunc("/raeume", pages.Raeume(cfg))
 	mux.HandleFunc(cards.ThingPages, pages.Ding(cfg))
@@ -188,7 +190,6 @@ func main() {
 	mux.HandleFunc("/dokumente", pages.Dokumente(doku))
 	mux.HandleFunc(pages.DokumenteSuchePath, pages.DokumenteSuche(doku))
 	mux.HandleFunc("/willkommen", pages.Willkommen(cfg))
-	mux.HandleFunc("/sprechen", pages.Sprechen(cfg))
 	store, err := devices.Open(dir)
 	if err == nil { // haus#172: pairing and removing a phone, end to end
 		mux.HandleFunc("/box/geraete", pages.Geraete(store, "https://homes.example", cfg))
@@ -218,6 +219,19 @@ func main() {
 	mux.Handle("/demo/laib/mcp", demoLaib)
 	mehr := cfg
 	mehr.Laib = &laib.Client{URL: "http://" + *addr + "/demo/laib", Token: "demo"}
+	// Start with the demo's Laib (owner 2026-11-07: Start as the box shows it, before and after):
+	// Immich red, two yellow, a decision waiting; Anna is an admin
+	start := mehr
+	start.LaibURL = "https://laib.example"
+	// the Sprechen field on Start and its page, with a Bote and the microphone (owner 2026-11-07: the chat stays)
+	boteFake := botefake.New("demo")
+	defer boteFake.Close()
+	start.Bote, start.STT = &bote.Client{URL: boteFake.Base(), Key: boteFake.Key}, pages.STT{Provider: "stt.demo", Language: "de"}
+	fake.SetSTT("stt.demo", "Mach das Licht im Flur an")
+	mux.HandleFunc("/sprechen", pages.Sprechen(start))
+	mux.HandleFunc(pages.HoerenPath, pages.Hoeren(start))
+	mux.HandleFunc("/start", pages.Start(start))
+	mux.HandleFunc(pages.StartBoxPath, pages.Start(start))
 	mux.HandleFunc("/mehr", pages.Mehr(mehr))
 	mux.HandleFunc(pages.MehrAufgabenPath, pages.Mehr(mehr))
 	mux.HandleFunc(pages.SpurenPath, pages.Mehr(mehr))
@@ -350,6 +364,23 @@ func demoEnergyCounters(fake *hafake.HA, now time.Time) {
 // sunOf is how much the sun gives on a day, 0 in midwinter to 1 in midsummer.
 func sunOf(t time.Time) float64 {
 	return (1 - math.Cos(2*math.Pi*float64(t.YearDay()-10)/365)) / 2
+}
+
+// demoTermine are the household's days around now: a dentist and the
+// bin tomorrow, a parcel to fetch today, a parents' evening in five days.
+func demoTermine(dav *davfake.Server, now time.Time) {
+	y, m, d := now.Date()
+	at := func(days, h, min int) string {
+		return time.Date(y, m, d+days, h, min, 0, 0, time.Local).UTC().Format("20060102T150405Z")
+	}
+	day := func(days int) string { return time.Date(y, m, d+days, 0, 0, 0, 0, time.Local).Format("20060102") }
+	ev := func(uid, start, end, summary string) string {
+		return "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:" + uid + "\r\n" + start + "\r\n" + end + "\r\nSUMMARY:" + summary + "\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+	}
+	dav.Put("/homes/haushalt/zahnarzt.ics", ev("zahnarzt", "DTSTART:"+at(1, 8, 30), "DTEND:"+at(1, 9, 30), "Zahnarzt Ben"))
+	dav.Put("/homes/haushalt/muell.ics", ev("muell", "DTSTART;VALUE=DATE:"+day(1), "DTEND;VALUE=DATE:"+day(2), "Müll gelb"))
+	dav.Put("/homes/haushalt/elternabend.ics", ev("elternabend", "DTSTART:"+at(5, 19, 0), "DTEND:"+at(5, 21, 0), "Elternabend Kita"))
+	dav.Put("/homes/haushalt/paket.ics", "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VTODO\r\nUID:paket\r\nSUMMARY:Paket abholen\r\nDUE;VALUE=DATE:"+day(0)+"\r\nEND:VTODO\r\nEND:VCALENDAR\r\n")
 }
 
 // laibFake is Laib's MCP for Mehr: one task for everyone, after delay,
