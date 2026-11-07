@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"flag"
 	"fmt"
 	"image"
 	"image/color"
 	"image/jpeg"
+	"log"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -88,6 +91,12 @@ func mehrSeiten(mux *http.ServeMux, cfg pages.StartConfig, dav *davfake.Server, 
 		dav.Put("/homes/haushalt-kontakte/h"+strconv.Itoa(i)+".vcf", card+"END:VCARD\r\n")
 	}
 	cfg.Gesichter = demoGesichter(dir, cfg.Contacts) // Anna's key: Meine Kontakte, each a person in Immich (owner 2026-11-06)
+	// Kontakt prüfen lassen (owner 2026-11-07): the review pages here, the page without a login on a listener of its own, as on the box
+	cfg.DNS, cfg.KontaktURL = demoDNS{}, "http://"+*kontaktAddr // the store is main's, shared with Deine Aufgaben
+	mux.HandleFunc(pages.PruefenPath, pages.Pruefen(cfg))
+	mux.HandleFunc(pages.AntwortenPath, pages.Antworten(cfg))
+	mux.HandleFunc(pages.AntwortenPath+"/", pages.Antworten(cfg))
+	go func() { log.Print(http.ListenAndServe(*kontaktAddr, pages.KontaktServer(cfg))) }()
 	mux.HandleFunc(pages.KontaktePath, pages.Kontakte(cfg))
 	mux.HandleFunc(pages.MeineKontaktePath, pages.MeineKontakte(cfg))
 	mux.HandleFunc(pages.MeineKontaktePath+"/", pages.MeineKontakte(cfg))
@@ -100,6 +109,23 @@ func mehrSeiten(mux *http.ServeMux, cfg pages.StartConfig, dav *davfake.Server, 
 	mux.HandleFunc("/box/einladen", pages.Einladen(boxCfg))
 	mux.HandleFunc(pages.AufgabenPath, pages.Aufgaben(boxCfg))
 	mux.HandleFunc("/adresse", pages.Adresse(cfg))
+}
+
+// kontaktAddr is where the demo serves the contacts' page.
+var kontaktAddr = flag.String("kontakt", "127.0.0.1:8652", "where the contacts' page listens")
+
+// demoDNS says every domain takes mail but nowhere.example.
+type demoDNS struct{}
+
+func (demoDNS) LookupMX(_ context.Context, name string) ([]*net.MX, error) {
+	if name == "nowhere.example" {
+		return nil, &net.DNSError{Err: "no such host", Name: name, IsNotFound: true}
+	}
+	return []*net.MX{{Host: "mx." + name + "."}}, nil
+}
+
+func (demoDNS) LookupHost(_ context.Context, name string) ([]string, error) {
+	return nil, &net.DNSError{Err: "no such host", Name: name, IsNotFound: true}
 }
 
 // boxAntwort is the demo Laib's answer to one of Box's verbs; laib_status for one

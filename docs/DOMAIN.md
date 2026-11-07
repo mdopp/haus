@@ -20,6 +20,8 @@ here.
 | **Haushalts-Kalender** | The household's shared calendars (Termine and Erinnerungen), on every phone. | VCALENDAR collections in Homes' Radicale home; `/napi/gemeinsam/kalender`; module `kalender` | Radicale |
 | **Firma** (Kontakt) | A Haushalts-Kontakt Homes made for a sender of documents. Only these cards are completed from documents. | `CATEGORIES:Firma`; Bote tool `kontakt_ergaenzen` | Radicale |
 | **Handy-Kontakte** | A person's own phone contacts, mirrored for their Archiv. Never shared, never sent to another phone. Homes reads the Immich key owner's, for their persons in Immich, their pictures („Ist das …?“) and Meine Kontakte. | address book `/<person>/handy-kontakte/`; `POST /napi/kontakte` | the phone (Radicale holds the mirror) |
+| **Kontakt prüfen lassen** | A link a person sends one of their contacts: on a page without a login the contact confirms, corrects or adds their own fields. Nothing reaches an address book without the person's review. | `internal/kontaktantwort`; `/kontakte/pruefen`; `kontakt.<domain>/<token>` | Homes (the answers); the card stays Radicale's or the phone's |
+| **Kontakt-Antwort** | What came back from such a link, field by field before → after, waiting for the review; a task while it waits. | `/kontakte/antworten`; `/napi/kontakte/korrekturen` | Homes |
 | **Homes-Konto** | The Android account „Homes“: it carries the Haushalts-Kontakte, Termine and Erinnerungen into the phone's dialer, messengers and calendar. | app `konto/` (two sync adapters); module `konto`; `/napi/gemeinsam/…` | Homes app (the data: Radicale) |
 | **Termin** | An appointment in a Haushalts-Kalender. | VEVENT; Bote tool `termin_anlegen` | Radicale |
 | **Erinnerung** | Something due, which rings on the phones. Read-only on the phone. | VTODO with an alarm; `erinnerung_anlegen` | Radicale |
@@ -282,6 +284,31 @@ flowchart TD
 - **Closed by Homes:** once Homes finds the Modul on, it ticks the
   Box-Aufgabe off itself, and the Anfrage becomes `umgesetzt`. Homes
   holds no verdict at any step (ADR 0001 §10).
+
+### f. Kontakt prüfen lassen
+
+```mermaid
+flowchart TD
+  f1(["Link erstellt<br/>Homes, Kontakte"]) --> f2(["Link geteilt<br/>WhatsApp, SMS, Mail vom Handy"])
+  f2 --> f3(["Angaben bestätigt oder korrigiert<br/>kontakt.&lt;domain&gt;, ohne Anmeldung"])
+  f3 --> f4(["Antwort geprüft: vorher → nachher<br/>Homes, Kontakt-Antworten"])
+  f4 -- "Haushalts-Kontakt" --> f5(["ins Adressbuch geschrieben<br/>Homes → Radicale"])
+  f5 --> f6(["auf alle Handys<br/>Homes-Konto"])
+  f4 -- "Handy-Kontakt" --> f7(["in den Kontakt des Handys geschrieben<br/>Homes-App, beim Sichern"])
+  f7 --> f8(["gemeldet, was geschrieben ist<br/>Homes-App → Homes"])
+  f4 -- "verworfen" --> f9(["nichts geändert"])
+```
+
+- **The link** is the only thing the contact needs: long, random, once,
+  14 days. Homes keeps its hash only. The person sends it themselves; the
+  Bote writes to the household only.
+- **The page** shows that contact's own fields and nothing else of the
+  house, on a host of its own, from a listener that serves nothing else.
+- **Nothing by itself:** the answer waits apart from every address book.
+  The checks flag what looks wrong; the person takes each field or not.
+- **The phone writes its own contacts:** a Handy-Kontakt lives on the
+  phone (Google), so the Homes app writes the taken changes into the
+  phone's contact of that lookup key, and only those, and says which.
 
 ## Keeping this current
 

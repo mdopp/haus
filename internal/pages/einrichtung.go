@@ -12,6 +12,7 @@ import (
 	"github.com/mdopp/homes/internal/assistent"
 	"github.com/mdopp/homes/internal/cards"
 	"github.com/mdopp/homes/internal/laib"
+	"github.com/mdopp/homes/internal/texte"
 )
 
 // Einrichtung (haus#188; owner 2026-10-28: „es gibt häufige/regelmäßige und
@@ -117,6 +118,11 @@ func einrichtung(r *http.Request, cfg StartConfig) []aufgabe {
 	}
 	for _, a := range cfg.Einrichtung.Fragen(user) { // the key owner's questions in Immich, while open
 		out = append(out, aufgabe{titel: a.Titel, warum: a.Warum, href: DieselbePath})
+	}
+	if cfg.Antworten != nil { // Kontakt prüfen lassen: the answers waiting for the review (owner 2026-11-07)
+		if n := len(cfg.Antworten.ZuPruefen(user)); n > 0 {
+			out = append(out, aufgabe{titel: antwortenAufgabe(n), warum: texte.T(texte.AntwortenAufgabeWarum), href: AntwortenPath, wichtig: true})
+		}
 	}
 	if cfg.Discogs != nil { // the household's Discogs app is there; each person connects their own
 		_, verbunden := cfg.Discogs.Konto(user)

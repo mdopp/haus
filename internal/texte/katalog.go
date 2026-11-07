@@ -151,6 +151,100 @@ const (
 	IstDasNeinGemerkt     ID = "ist-das.nein.gemerkt"      // „Nein“ kept
 	IstDasKeinFotoGemerkt ID = "ist-das.kein-foto.gemerkt" // „Kein Foto“ kept
 	IstDasStumm           ID = "ist-das.stumm"             // Immich did not answer
+	// Kontakt prüfen lassen (owner 2026-11-07): the start, the answers' review, the page without a login
+	PruefenTitel          ID = "pruefen"      // the start page, its link and the contact's button
+	PruefenKurz           ID = "pruefen.kurz" // the quiet line's words after it
+	PruefenHinweis        ID = "pruefen.hinweis"
+	PruefenHandy          ID = "pruefen.handy" // the two books
+	PruefenHaus           ID = "pruefen.haus"
+	PruefenLeer           ID = "pruefen.leer"
+	PruefenVorher         ID = "pruefen.vorher"    // „%s“ is the contact's name
+	PruefenWas            ID = "pruefen.was"       // „%s“ is the first name
+	PruefenErstellen      ID = "pruefen.erstellen" // the button, and pressed
+	PruefenErstelltLaeuft ID = "pruefen.erstellen.laeuft"
+	PruefenErstellt       ID = "pruefen.erstellt"
+	PruefenNachricht      ID = "pruefen.nachricht" // the text field's name
+	PruefenText           ID = "pruefen.text"      // the prepared message: the first name, the link
+	PruefenTeilen         ID = "pruefen.teilen"    // the share sheet, and copy
+	PruefenKopieren       ID = "pruefen.kopieren"
+	PruefenKopiert        ID = "pruefen.kopiert"
+	PruefenNurJetzt       ID = "pruefen.nur-jetzt"
+	PruefenWeg            ID = "pruefen.weg"
+	PruefenZurueck        ID = "pruefen.zurueck"
+	PruefenNicht          ID = "pruefen.nicht"
+	PruefenNurAdmins      ID = "pruefen.nur-admins"
+	AntwortenTitel        ID = "antworten"         // the review's page
+	AntwortenAufgabe      ID = "antworten.aufgabe" // the task: „%s“ how many, „2 Kontakt-Antworten“
+	AntwortenAufgabeWarum ID = "antworten.aufgabe.warum"
+	AntwortenLeer         ID = "antworten.leer"
+	AntwortenBestaetigt   ID = "antworten.bestaetigt"
+	AntwortenZurueck      ID = "antworten.zurueck"
+	AntwortWeg            ID = "antwort.weg"
+	AntwortVon            ID = "antwort.von" // the date, the book
+	BuchHaus              ID = "buch.haus"
+	BuchHandy             ID = "buch.handy"
+	AntwortNurBestaetigt  ID = "antwort.nur-bestaetigt"
+	AntwortNeu            ID = "antwort.neu"
+	AntwortEntfernt       ID = "antwort.entfernt"
+	AntwortAuswahl        ID = "antwort.auswahl" // the buttons, and pressed
+	AntwortAlle           ID = "antwort.alle"
+	AntwortLaeuft         ID = "antwort.laeuft"
+	AntwortErledigt       ID = "antwort.erledigt"
+	AntwortVerwerfen      ID = "antwort.verwerfen"
+	AntwortVerwirft       ID = "antwort.verwirft"
+	AntwortVerwerfenFrage ID = "antwort.verwerfen.frage"
+	AntwortVerworfen      ID = "antwort.verworfen" // what came of it
+	AntwortGeschrieben    ID = "antwort.geschrieben"
+	AntwortZumHandy       ID = "antwort.zum-handy"
+	AntwortUebersprungen  ID = "antwort.uebersprungen"
+	AntwortKontaktWeg     ID = "antwort.kontakt-weg"
+	AntwortNicht          ID = "antwort.nicht"
+	AntwortErledigtGesagt ID = "antwort.erledigt.gesagt"
+	StandUebernommen      ID = "stand.uebernommen" // what became of a change
+	StandAbgelehnt        ID = "stand.abgelehnt"
+	StandUebersprungen    ID = "stand.uebersprungen"
+	StandAngenommen       ID = "stand.angenommen"
+	ArtName               ID = "art.name" // the fields
+	ArtTelefon            ID = "art.telefon"
+	ArtMail               ID = "art.mail"
+	ArtAdresse            ID = "art.adresse"
+	ArtGeburtstag         ID = "art.geburtstag"
+	ArtVorname            ID = "art.vorname"
+	ArtNachname           ID = "art.nachname"
+	ArtFirma              ID = "art.firma"
+	ArtPosition           ID = "art.position"
+	NummerMobil           ID = "nummer.mobil"
+	NummerPrivat          ID = "nummer.privat"
+	NummerGeschaeftlich   ID = "nummer.geschaeftlich"
+	FrageNummerArt        ID = "frage.nummer-art"
+	FrageTag              ID = "frage.tag"
+	FrageMonat            ID = "frage.monat"
+	FrageJahr             ID = "frage.jahr"
+	FrageBeruf            ID = "frage.beruf"
+	FrageTitel            ID = "frage" // the page without a login, /k/<token>
+	FrageHinweis          ID = "frage.hinweis"
+	FrageNummern          ID = "frage.nummern"
+	FrageWeitereNummer    ID = "frage.weitere-nummer"
+	FrageWeitereMail      ID = "frage.weitere-mail"
+	FrageWeitereAdresse   ID = "frage.weitere-adresse"
+	FrageStrasse          ID = "frage.strasse"
+	FragePLZ              ID = "frage.plz"
+	FrageOrt              ID = "frage.ort"
+	FrageLand             ID = "frage.land"
+	FrageLoeschen         ID = "frage.loeschen"
+	FrageSenden           ID = "frage.senden"
+	FrageStimmt           ID = "frage.stimmt"
+	FrageSendet           ID = "frage.sendet"
+	FrageBis              ID = "frage.bis"
+	FrageDanke            ID = "frage.danke"
+	FrageDankeText        ID = "frage.danke.text"
+	FrageUngueltig        ID = "frage.ungueltig" // the one page for every link that is none
+	FrageUngueltigText    ID = "frage.ungueltig.text"
+	FrageZuViele          ID = "frage.zu-viele"
+	FrageZuVieleText      ID = "frage.zu-viele.text"
+	FrageZuGross          ID = "frage.zu-gross"
+	FrageDatum            ID = "frage.datum"
+	FrageNicht            ID = "frage.nicht"
 )
 
 var de = map[ID]string{
@@ -446,4 +540,98 @@ var de = map[ID]string{
 	"dok.garantie.bis":           "Garantie bis %s",
 	"dok.kuendbar":               "kündbar bis %s",
 	"dok.termin":                 "Kündigungstermin %s",
+	"pruefen":                    "Kontakt prüfen lassen",
+	"pruefen.kurz":               "ein Link, mit dem jemand seine Angaben selbst prüft",
+	"pruefen.hinweis":            "Du schickst einem Kontakt einen Link. Dort sieht er nur seine eigenen Angaben – Name, Nummern, E-Mail, Adresse, Geburtstag – und kann sie bestätigen, korrigieren oder ergänzen. Bevor etwas übernommen wird, siehst du jede Änderung.",
+	"pruefen.handy":              "Deine Handy-Kontakte",
+	"pruefen.haus":               "Kontakte des Hauses",
+	"pruefen.leer":               "Hier gibt es noch keine Kontakte.",
+	"pruefen.vorher":             "%s prüfen lassen",
+	"pruefen.was":                "Das sieht %s unter dem Link:",
+	"pruefen.erstellen":          "Link erstellen",
+	"pruefen.erstellen.laeuft":   "Erstellt …",
+	"pruefen.erstellt":           "Link erstellt. Er gilt 14 Tage und nur einmal. Schick ihn selbst, etwa per WhatsApp, SMS oder Mail.",
+	"pruefen.nachricht":          "Die Nachricht mit dem Link",
+	"pruefen.text":               "Hallo %s, ich möchte deine Kontaktdaten in unserem Adressbuch aktuell halten. Magst du kurz prüfen, ob alles stimmt? Der Link gilt 14 Tage und nur einmal: %s",
+	"pruefen.teilen":             "Teilen …",
+	"pruefen.kopieren":           "Kopieren",
+	"pruefen.kopiert":            "Kopiert",
+	"pruefen.nur-jetzt":          "Homes zeigt diesen Link nur jetzt. Geht er verloren, erstelle einfach einen neuen – der alte gilt dann nicht mehr.",
+	"pruefen.weg":                "Diesen Kontakt gibt es nicht mehr.",
+	"pruefen.zurueck":            "Einen anderen Kontakt prüfen lassen",
+	"pruefen.nicht":              "Der Link ließ sich nicht erstellen. Versuch es gleich noch einmal; hilft das nicht, sag dem Admin Bescheid.",
+	"pruefen.nur-admins":         "Kontakte des Hauses lässt nur ein Admin prüfen. Deine eigenen Handy-Kontakte kannst du prüfen lassen.",
+	"antworten":                  "Kontakt-Antworten",
+	"antworten.aufgabe":          "%s prüfen",
+	"antworten.aufgabe.warum":    "Jemand hat seine Kontaktdaten geprüft. Übernimm, was stimmt.",
+	"antworten.leer":             "Keine Antworten offen.",
+	"antworten.bestaetigt":       "alles stimmt",
+	"antworten.zurueck":          "Zu den Kontakt-Antworten",
+	"antwort.weg":                "Diese Antwort gibt es nicht (mehr).",
+	"antwort.von":                "Antwort vom %s · %s",
+	"buch.haus":                  "Kontakt des Hauses",
+	"buch.handy":                 "dein Handy-Kontakt",
+	"antwort.nur-bestaetigt":     "%s hat bestätigt: alles stimmt so.",
+	"antwort.neu":                "neu",
+	"antwort.entfernt":           "entfernt",
+	"antwort.auswahl":            "Ausgewählte übernehmen",
+	"antwort.alle":               "Alle übernehmen",
+	"antwort.laeuft":             "Übernimmt …",
+	"antwort.erledigt":           "Erledigt",
+	"antwort.verwerfen":          "Verwerfen",
+	"antwort.verwirft":           "Verwirft …",
+	"antwort.verwerfen.frage":    "Diese Antwort verwerfen? Nichts davon wird übernommen.",
+	"antwort.verworfen":          "Verworfen: nichts wurde geändert.",
+	"antwort.geschrieben":        "%s ins Adressbuch geschrieben; die Handys bekommen sie beim nächsten Abgleich.",
+	"antwort.zum-handy":          "%s gehen an dein Handy: die Homes-App trägt sie beim nächsten Sichern in den Kontakt ein, sofort unter Daten sichern → Jetzt sichern.",
+	"antwort.uebersprungen":      "%s nicht geschrieben: das Feld war inzwischen anders. Sieh dir den Kontakt an.",
+	"antwort.kontakt-weg":        "Den Kontakt gibt es im Adressbuch nicht mehr; nichts wurde geschrieben.",
+	"antwort.nicht":              "Das Adressbuch hat nicht geantwortet; nichts wurde geschrieben. Versuch es gleich noch einmal.",
+	"antwort.erledigt.gesagt":    "Erledigt.",
+	"stand.uebernommen":          "übernommen",
+	"stand.abgelehnt":            "nicht übernommen",
+	"stand.uebersprungen":        "nicht geschrieben: inzwischen anders, oder der Kontakt fehlt",
+	"stand.angenommen":           "wartet auf dein Handy",
+	"art.name":                   "Name",
+	"art.telefon":                "Telefon",
+	"art.mail":                   "E-Mail",
+	"art.adresse":                "Adresse",
+	"art.geburtstag":             "Geburtstag",
+	"frage":                      "Stimmen deine Kontaktdaten?",
+	"frage.hinweis":              "So stehen deine Angaben in unserem Adressbuch. Ändere oder ergänze, was nicht stimmt, und schick sie ab. Du siehst hier nur deine eigenen Angaben.",
+	"frage.nummern":              "Telefonnummern",
+	"frage.weitere-nummer":       "Weitere Nummer",
+	"frage.weitere-mail":         "Weitere E-Mail",
+	"frage.weitere-adresse":      "Weitere Adresse",
+	"frage.strasse":              "Straße und Hausnummer",
+	"frage.plz":                  "PLZ",
+	"frage.ort":                  "Ort",
+	"frage.land":                 "Land",
+	"frage.geburtstag":           "Tag, Monat, Jahr (TT.MM.JJJJ)",
+	"frage.loeschen":             "Stimmt etwas nicht mehr, lösch es einfach aus dem Feld.",
+	"frage.senden":               "Änderungen senden",
+	"frage.stimmt":               "Alles stimmt so",
+	"frage.sendet":               "Wird gesendet …",
+	"frage.bis":                  "Der Link gilt bis %s und nur einmal.",
+	"frage.danke":                "Danke!",
+	"frage.danke.text":           "Deine Angaben sind angekommen. Bevor sich im Adressbuch etwas ändert, sieht sie sich jemand an. Du kannst die Seite jetzt schließen.",
+	"frage.ungueltig":            "Link ungültig oder abgelaufen",
+	"frage.ungueltig.text":       "Frag bei der Person nach, die dir den Link geschickt hat.",
+	"frage.zu-viele":             "Zu viele Versuche",
+	"frage.zu-viele.text":        "Bitte warte ein paar Minuten und versuch es dann noch einmal.",
+	"frage.zu-gross":             "Das waren zu viele Angaben auf einmal. Lass ein paar leere Felder weg und schick es noch einmal.",
+	"frage.datum":                "Der Geburtstag ist so kein Tag im Kalender: Tag und Monat als Zahl, das Jahr mit vier Ziffern oder leer.",
+	"frage.nicht":                "Das ließ sich gerade nicht speichern. Versuch es in ein paar Minuten noch einmal.",
+	"art.vorname":                "Vorname",
+	"art.nachname":               "Nachname",
+	"art.firma":                  "Firma",
+	"art.position":               "Position",
+	"nummer.mobil":               "mobil",
+	"nummer.privat":              "privat",
+	"nummer.geschaeftlich":       "geschäftlich",
+	"frage.nummer-art":           "Art",
+	"frage.tag":                  "Tag",
+	"frage.monat":                "Monat",
+	"frage.jahr":                 "Jahr (wenn du magst)",
+	"frage.beruf":                "Firma und Position",
 }

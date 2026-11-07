@@ -27,6 +27,7 @@ import (
 	"github.com/mdopp/homes/internal/gesichter"
 	"github.com/mdopp/homes/internal/ha"
 	"github.com/mdopp/homes/internal/judge"
+	"github.com/mdopp/homes/internal/kontaktantwort"
 	"github.com/mdopp/homes/internal/laib"
 	"github.com/mdopp/homes/internal/modul"
 	"github.com/mdopp/homes/internal/napi"
@@ -114,6 +115,12 @@ type StartConfig struct {
 	// Gesichter is Immich for the contacts (owner 2026-11-05): their „Fotos“,
 	// a face for a card without a picture, the suggestions; nil: none of it
 	Gesichter *gesichter.Gesichter
+	// Antworten is Kontakt prüfen lassen (owner 2026-11-07): the links and
+	// the answers waiting for their review; DNS checks an answer's e-mail
+	// domains (net.DefaultResolver). nil: no such pages
+	Antworten  *kontaktantwort.Store
+	DNS        kontaktantwort.Resolver
+	KontaktURL string // the page's own host, https://kontakt.<domain> (HOMES_KONTAKT_URL)
 }
 
 // backendWait is how long a page waits for any one backend: a slow one

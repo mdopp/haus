@@ -27,6 +27,7 @@ import (
 	"github.com/mdopp/homes/internal/favoriten"
 	"github.com/mdopp/homes/internal/ha"
 	"github.com/mdopp/homes/internal/haushalt"
+	"github.com/mdopp/homes/internal/kontaktantwort"
 	"github.com/mdopp/homes/internal/laib"
 	"github.com/mdopp/homes/internal/modul"
 	"github.com/mdopp/homes/internal/musik"
@@ -80,6 +81,7 @@ type Config struct {
 	// Papierkorb: where a phone's delete in the Homes account goes, for
 	// 30 days (haus#174); nil = such a delete answers 503 in words
 	Papierkorb *papierkorb.Korb
+	Antworten  *kontaktantwort.Store // Kontakt prüfen lassen: the phone's accepted corrections (owner 2026-11-07); nil: none
 	// SharedEvery: how often the live stream looks whether the household's
 	// shared contacts and calendars changed (haus#223); 0 = 30 s
 	SharedEvery time.Duration
@@ -324,6 +326,7 @@ func Gruppen(c Config) map[string][]modul.Route {
 	gs.add("notizen", "POST /napi/merken", c.merken) // Share → Homes (haus#120)
 	// the phone's contacts, mirrored into the person's Handy-Kontakte (laib ADR 0029)
 	gs.add("kontakte", "POST /napi/kontakte", (&kontakte{dav: c.Haushalt.Contacts, whoami: c.Whoami, busy: map[string]bool{}}).post)
+	(&korrekturen{store: c.Antworten, whoami: c.Whoami}).routes(gs) // what the person took of their contacts' answers, for the phone
 	// the household's shared contacts and calendars for the phone's Homes account (haus#218)
 	(&gemeinsam{dav: c.Konto, korb: c.Papierkorb, whoami: c.Whoami, hh: c.Haushalt, now: c.Now}).routes(gs)
 	// the phone's positions, passed on to the person's Reitti (owner 2026-11-02)

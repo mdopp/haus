@@ -295,6 +295,39 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
     and hidden persons never; at most 50 a run, one German line in the
     log. The contacts' lines follow the merge. Without `person.merge` the
     step is skipped and the missing-permission line names it.
+  - *Kontakt prüfen lassen* (`/kontakte/pruefen`, owner 2026-11-07,
+    `internal/kontaktantwort`): a person picks one of their own
+    Handy-Kontakte (`?buch=privat`) or, an admin, one of the house's
+    (`?buch=haushalt`, also the button on a contact's page), sees what the
+    link will show, and makes it (POST `buch`, `uid`): 32 random bytes,
+    base64url, `https://kontakt.<domain>/<token>`, shown once with a
+    prepared German sentence, *Teilen …* (the phone's share sheet) and
+    *Kopieren*. Homes keeps only its SHA-256; a new link for the same
+    contact retires the open one. The fields (owner 2026-11-07): first
+    and last name, numbers with their kind (mobil, privat,
+    geschäftlich), e-mail addresses, postal addresses, the birthday
+    (day, month, the year optional), company and position — nothing
+    else. The page without a login (`pages.KontaktServer`, its own
+    listener `HOMES_KONTAKT_LISTEN`, nothing else registered there):
+    `GET /<token>` the form, `POST /<token>` the answer (form, ≤ 32 KB,
+    same-origin only), one answer, 14 days; every link that is none,
+    used or over gets the same 404 *Link ungültig oder abgelaufen*;
+    10 requests per address and then one every 30 s, 120 for all, else
+    429; `no-store`, `no-referrer`, a nonce CSP, no frames. The checks
+    before the review: the number (country code, German mobile,
+    service and landline lengths, E.164's 15 digits), the e-mail's
+    syntax and its domain's MX (else A/AAAA) within 3 s, the birthday (a
+    real day, not ahead, not over 120 years back), a name changed
+    completely, five changes or more. *Kontakt-Antworten*
+    (`/kontakte/antworten`, `…/<id>`, the starter's only; a task on Deine
+    Aufgaben while one is open): each field before → after with its
+    findings, ticked unless flagged; *Ausgewählte übernehmen*, *Alle
+    übernehmen*, *Verwerfen* (POST `aktion`, `nimm=<n>`). A house
+    contact's taken changes are written into its Radicale card over the
+    version read (`caldav.CorrectShared`: only the lines of those fields,
+    a field changed meanwhile left alone and said so); a Handy-Kontakt's
+    wait for the phone (`/napi/kontakte/korrekturen`). Decided answers go
+    after 30 days, unanswered links after their 14.
   - *Dieselbe Person?* (`/kontakte/dieselbe`, the key's owner only, as
     Meine Kontakte; a quiet line on Kontakte and Meine Kontakte while
     there are pairs): pairs of persons whose faces Immich holds close, ten
@@ -961,6 +994,17 @@ is not set, then answers 404 `{"ok":false,"reason":"not_found"}`.
   …"` (each archive as Homes' pod reaches it) and
   `HOMES_ARCHIV_SECRET_<PERSON>` (laib's per-person suffix: upper case,
   `-` as `_`), the instance's `ARCHIV_HOMES_SECRET`.
+- Kontakt prüfen lassen, for the phone (owner 2026-11-07): `GET
+  /napi/kontakte/korrekturen` → `{korrekturen: [{id, uid, name,
+  aenderungen: [{nr, art, vorher, nachher, vorher_art, nachher_art,
+  vorher_adresse, nachher_adresse}]}]}`, the device's person's accepted
+  changes of their own Handy-Kontakte not yet written; `uid` is the
+  lookup key the app sent with `POST /napi/kontakte`; `art` is
+  `vorname|nachname|telefon|mail|adresse|geburtstag|firma|position`, a
+  number's kind `mobil|privat|geschaeftlich`, an address `{strasse, plz,
+  ort, land}`. `POST /napi/kontakte/korrekturen/<id>` `{geschrieben:
+  [nr…]}`: those written, every other one of it not (404 when nothing of
+  it waits). Module `kontakte`.
 - The phone's contacts (laib ADR 0029; optional in the app, behind
   Android's contacts permission): `POST /napi/kontakte`, `text/vcard`,
   all of the phone's contacts as concatenated vCards (≤ 64 MB, else 413),

@@ -990,3 +990,69 @@ for (const scheme of ['dark', 'light']) {
     });
   });
 }
+
+// owner 2026-11-07: Kontakt prüfen lassen — an admin makes the link from a house contact, the
+// contact checks and corrects their own fields on a page without a login (its own host and
+// listener, kontakt.<domain>), the link dies on the answer, and the review shows each field
+// before → after with the checks; only what is ticked is written
+test('Kontakt prüfen lassen: link, the public form, the review', async ({ page, browser }, info) => {
+  await page.setViewportSize({ width: 411, height: 900 });
+  await page.goto('/kontakte/h6');
+  await page.getByRole('link', { name: 'Kontakt prüfen lassen' }).click();
+  await expect(page.getByRole('heading', { name: 'Oma Hilde prüfen lassen' })).toBeVisible();
+  await expect(page.locator('dl.felder')).toContainText('0711 445566');
+  await page.getByRole('button', { name: 'Link erstellen' }).click();
+  await expect(page.getByText('Link erstellt.')).toBeVisible();
+  const text = await page.locator('#pruefen-text').inputValue();
+  expect(text).toContain('Hallo Oma,');
+  const link = text.match(/http:\/\/127\.0\.0\.1:8652\/[A-Za-z0-9_-]{43}/)[0];
+  await page.screenshot({ path: info.outputPath('pruefen-link-411.png'), fullPage: true });
+
+  // the contact, without a login, in a browser of their own
+  const ctx = await browser.newContext({ viewport: { width: 411, height: 900 }, colorScheme: 'light' });
+  const kontakt = await ctx.newPage();
+  kontakt.on('pageerror', (e) => errors.push(String(e)));
+  await kontakt.goto(link);
+  await expect(kontakt.getByRole('heading', { name: 'Stimmen deine Kontaktdaten?' })).toBeVisible();
+  await expect(kontakt.locator('input[name=vorname]')).toHaveValue('Oma');
+  await expect(kontakt.locator('input[name=nachname]')).toHaveValue('Hilde');
+  await expect(kontakt.locator('input[name=tel]').first()).toHaveValue('0711 445566');
+  await expect(kontakt.getByText('Anna Beispiel')).toHaveCount(0);
+  // nothing wider than the phone: no field pushed off the right edge
+  expect(await kontakt.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(411);
+  expect(await kontakt.locator('input[name=tel]').first().evaluate((e) => e.offsetWidth)).toBeGreaterThan(150); // the number readable, not „071“
+  await kontakt.screenshot({ path: info.outputPath('kontakt-formular-411.png'), fullPage: true });
+  await kontakt.locator('input[name=tel]').nth(1).fill('0171 2345678');
+  await kontakt.locator('input[name=mail]').first().fill('hilde@nowhere.example');
+  await kontakt.locator('input[name=adr-strasse]').first().fill('Lindenweg 3');
+  await kontakt.locator('input[name=adr-plz]').first().fill('70173');
+  await kontakt.locator('input[name=adr-ort]').first().fill('Stuttgart');
+  await kontakt.locator('input[name=geb-tag]').fill('8');
+  await kontakt.locator('input[name=geb-monat]').fill('3');
+  await kontakt.locator('input[name=geb-jahr]').fill('1941');
+  await kontakt.getByRole('button', { name: 'Änderungen senden' }).click();
+  await expect(kontakt.getByRole('heading', { name: 'Danke!' })).toBeVisible();
+  await kontakt.screenshot({ path: info.outputPath('kontakt-danke-411.png'), fullPage: true });
+  await kontakt.goto(link);
+  await expect(kontakt.getByRole('heading', { name: 'Link ungültig oder abgelaufen' })).toBeVisible();
+  await ctx.close();
+
+  // the review: before → after, the e-mail flagged and so not ticked
+  await page.goto('/aufgaben');
+  await page.getByRole('link', { name: '1 Kontakt-Antwort prüfen' }).first().click();
+  await expect(page).toHaveURL(/\/kontakte\/antworten$/);
+  await page.getByRole('link', { name: 'Oma Hilde' }).click();
+  const zeilen = page.locator('.aenderung');
+  await expect(zeilen).toHaveCount(4);
+  await expect(zeilen.filter({ hasText: 'hilde@nowhere.example' })).toContainText('gibt es nicht');
+  await expect(zeilen.filter({ hasText: 'hilde@nowhere.example' }).locator('input')).not.toBeChecked();
+  await expect(zeilen.filter({ hasText: '0171 2345678' }).locator('input')).toBeChecked();
+  await page.screenshot({ path: info.outputPath('kontakt-antwort-411.png'), fullPage: true });
+  await page.getByRole('button', { name: 'Ausgewählte übernehmen' }).click();
+  await expect(page.getByText('3 Änderungen ins Adressbuch geschrieben')).toBeVisible();
+  await expect(zeilen.filter({ hasText: 'hilde@nowhere.example' })).toContainText('nicht übernommen');
+  await page.screenshot({ path: info.outputPath('kontakt-antwort-entschieden-411.png'), fullPage: true });
+  await page.goto('/kontakte/h6');
+  await expect(page.locator('body')).toContainText('0171 2345678');
+  await expect(page.locator('body')).not.toContainText('nowhere.example');
+});

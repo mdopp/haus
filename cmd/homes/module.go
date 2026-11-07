@@ -81,7 +81,7 @@ func katalog(s site) []modul.Modul {
 			App: modul.Angebot{Widgets: []string{"tool:task"}}},
 			hh.Calendar != nil, "Auf dieser Box läuft kein Radicale."),
 		bau(modul.Modul{Name: "kontakte", Backend: "radicale", Standard: "carddav",
-			Env: append([]string{"HOMES_RADICALE_ADDRESSBOOK"}, radicale...),
+			Env: append([]string{"HOMES_RADICALE_ADDRESSBOOK", "HOMES_KONTAKT_URL", "HOMES_KONTAKT_LISTEN"}, radicale...),
 			App: modul.Angebot{Widgets: []string{"tool:contacts"}, Sicherung: []string{"kontakte"}}},
 			hh.Contacts != nil, "Auf dieser Box läuft kein Radicale."),
 		bau(modul.Modul{Name: "konto", Backend: "radicale", Env: radicale,
@@ -263,7 +263,7 @@ var schaltbar = map[string]func(*site){
 	// H5, one Radicale account: each module leaves only its own field, the
 	// others keep theirs (Contacts and Konto are their own, not Calendar)
 	"kalender": func(s *site) { s.haushalt(func(h *haushalt.Config) { h.Calendar = nil }) },
-	"kontakte": func(s *site) { s.haushalt(func(h *haushalt.Config) { h.Contacts = nil }) },
+	"kontakte": func(s *site) { s.haushalt(func(h *haushalt.Config) { h.Contacts = nil }); s.kontaktURL = "" }, // and no public page
 	"konto":    func(s *site) { s.napi.Konto = nil },
 	// H6: the house, its energy, the Sprechen field, the counts. With
 	// geraete off Homes speaks no HA: the house paths, the microphone (HA's

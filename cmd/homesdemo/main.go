@@ -45,6 +45,7 @@ import (
 	"github.com/mdopp/homes/internal/ha"
 	"github.com/mdopp/homes/internal/ha/hafake"
 	"github.com/mdopp/homes/internal/jellyfin"
+	"github.com/mdopp/homes/internal/kontaktantwort"
 	"github.com/mdopp/homes/internal/laib"
 	"github.com/mdopp/homes/internal/laib/laibfake"
 	"github.com/mdopp/homes/internal/merken"
@@ -162,6 +163,7 @@ func main() {
 	// each module's setup a task for Anna (owner 2026-11-04): the Homes app, Audiobookshelf, Immich, Jellyfin; none ticked yet
 	cfg.Einrichtung = &einrichten.Quellen{Module: cfg.Module, Haken: einrichten.Open(dir), HomesApp: einrichten.App("Homes", "cloud.dopp.homes", "https://homes.example",
 		"https://github.com/mdopp/homes-android#readme", "schritt.homes", "schritt.homes-iphone"), Adresse: "https://homes.example"}
+	cfg.Antworten = &kontaktantwort.Store{Path: filepath.Join(dir, kontaktantwort.Datei)} // Kontakt prüfen lassen's answers: a task on Deine Aufgaben
 	mux := http.NewServeMux()
 	mux.HandleFunc(pages.EinrichtenPages, pages.Einrichten(cfg))
 	mux.HandleFunc("/start", pages.Start(cfg))

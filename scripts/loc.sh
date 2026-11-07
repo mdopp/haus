@@ -26,7 +26,7 @@ bad=0
 p() { for x in "$@"; do printf 'internal/%s ' "$x"; done; }
 connectors=$(p abs bote caldav discogs ha immich jellyfin judge laib musicbrainz paperless qmd reitti samba werkstatt)
 shared=$(p abruf app assistent cards code128 jsonfile markdown mcpserver modul namen texte)
-household=$(p ansicht devices dokumente einkauf einrichten energie favoriten gesehen gesichter haushalt library merken musik notes papierkorb podcasts schalter takeout usage)
+household=$(p ansicht devices dokumente einkauf einrichten energie favoriten gesehen gesichter haushalt kontaktantwort library merken musik notes papierkorb podcasts schalter takeout usage)
 
 budget() { # budget <name> <cap> <dir…>
   name=$1 cap=$2; shift 2
@@ -56,10 +56,14 @@ budget() { # budget <name> <cap> <dir…>
 # (laib#1085) instead of diag, „Befunde gemessen vor X min“ (seit), the line before diag's first run
 # 2026-11-07, owner approved 2026-11-07: Dieselbe Person – Kontext und Aufgabe (16,574 -> 16,579): each face a
 # link into Immich, a grey line for its places and its company, the questions as one task on Deine Aufgaben
-budget pages 16580 internal/pages     # the family's pages, one per file: 14,684
+# 2026-11-07, owner approved 2026-11-07: Kontakt prüfen lassen (16,579 -> 17,411): the start and the link
+# with its share sheet (kontakt_pruefen.go), the review before → after, and the page without a login on its own listener (kontakt_frage.go)
+budget pages 17412 internal/pages     # the family's pages, one per file: 14,684
 # 2026-11-05, owner 2026-11-05: writable Homes-Konto (5,033 -> 5,121): PUT and DELETE of one shared
 # appointment or card for the phones, the Papierkorb on delete, the feed for a phone that writes back
-budget napi 5121 internal/napi        # the app's widgets' and share sheet's API: 4,793
+# 2026-11-07, owner approved 2026-11-07: Kontakt prüfen lassen (5,114 -> 5,224): the phone's accepted
+# corrections of its own contacts, GET and POST /napi/kontakte/korrekturen (korrekturen.go)
+budget napi 5225 internal/napi        # the app's widgets' and share sheet's API: 4,793
 # 2026-11-04, homes ADR 0001 step H1 (owner: „ganz durchziehen“): the module catalog,
 # cmd/homes/module.go, 1,150 with it; plus 5 %. H3–H6 move the routes out of main.go into it
 # 2026-11-04, step H8 (§10, owner: „Keine Funktion soll versteckt werden“): the routes of the traces
@@ -99,7 +103,9 @@ budget cmd 1448 cmd/homes             # homes' wiring: 1,018 with the demo then
 # the last diag run's time and findings, in place of laib.Diag
 # 2026-11-07, owner approved 2026-11-07: Dieselbe Person – Kontext und Aufgabe (14,579 -> 14,642): immich.Umfeld (POST
 # /api/search/metadata with personIds, exif and people) and immichfake's search over a library
-budget connectors 14643 $connectors   # one client per service, with its fake: 11,327, 12,543 with abs and musicbrainz
+# 2026-11-07, owner approved 2026-11-07: Kontakt prüfen lassen (14,642 -> 15,006): a card's taken fields
+# written line by line over the version read (caldav/korrektur.go), N, ORG, TITLE and the numbers' kinds read
+budget connectors 15007 $connectors   # one client per service, with its fake: 11,327, 12,543 with abs and musicbrainz
 # 2026-11-04, internal/jsonfile (47 lines, 50 of cap) from household's cap to shared's: it
 # replaces nine copies of a save, 62 of their lines in household
 # 2026-11-05, owner 2026-11-05 yes: Immich for the contacts (9,583 -> 9,874):
@@ -118,7 +124,9 @@ budget connectors 14643 $connectors   # one client per service, with its fake: 1
 # a pair or question only with both faces kept as JPEGs and in a photo; gesichter/umfeld.go reads each shown
 # person's places, years and companions at start and daily; Offen and einrichten.Fragen make the open
 # questions one task; Öffnen and the icon per module in /napi/einrichtung
-budget household 11089 $household      # the household's own logic: 10,638, 9,176 without them and the fetcher
+# 2026-11-07, owner approved 2026-11-07: Kontakt prüfen lassen (11,088 -> 12,059): kontaktantwort, the
+# links' hashes and the answers, the comparison field by field and the checks (number, e-mail and its MX, birthday, name)
+budget household 12060 $household      # the household's own logic: 10,638, 9,176 without them and the fetcher
 # 2026-11-04, homes ADR 0001 step H1 (owner: „ganz durchziehen“): internal/modul, what an area
 # says about itself and the list Homes builds from them, 1,472 with it; plus 5 %
 # 2026-11-04, step H8 (§10): the traces and wishes in internal/modul, and internal/texte, the one

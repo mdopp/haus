@@ -71,7 +71,7 @@ func Kontakte(cfg StartConfig) http.HandlerFunc {
 			b.WriteString(keiner + " hidden></p>")
 			kontakteListe(b, zeilen, len(all) >= kontakteBuchstaben)
 		}
-		b.WriteString(meineKontakteLink(r, cfg) + kontakteScript)
+		b.WriteString(meineKontakteLink(r, cfg) + pruefenLink(r, cfg) + kontakteScript)
 		writePage(w, http.StatusOK, b)
 	}
 }
