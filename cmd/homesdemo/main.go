@@ -26,6 +26,8 @@ import (
 	"time"
 
 	"github.com/mdopp/homes/internal/abruf"
+	"github.com/mdopp/homes/internal/bote"
+	"github.com/mdopp/homes/internal/bote/botefake"
 	"github.com/mdopp/homes/internal/devices"
 	"github.com/mdopp/homes/internal/discogs"
 	"github.com/mdopp/homes/internal/namen"
@@ -186,7 +188,6 @@ func main() {
 	mux.HandleFunc("/dokumente", pages.Dokumente(doku))
 	mux.HandleFunc(pages.DokumenteSuchePath, pages.DokumenteSuche(doku))
 	mux.HandleFunc("/willkommen", pages.Willkommen(cfg))
-	mux.HandleFunc("/sprechen", pages.Sprechen(cfg))
 	store, err := devices.Open(dir)
 	if err == nil { // haus#172: pairing and removing a phone, end to end
 		mux.HandleFunc("/box/geraete", pages.Geraete(store, "https://homes.example", cfg))
@@ -220,6 +221,13 @@ func main() {
 	// Immich red, two yellow, a decision waiting; Anna is an admin
 	start := mehr
 	start.LaibURL = "https://laib.example"
+	// the Sprechen field on Start and its page, with a Bote and the microphone (owner 2026-11-07: the chat stays)
+	boteFake := botefake.New("demo")
+	defer boteFake.Close()
+	start.Bote, start.STT = &bote.Client{URL: boteFake.Base(), Key: boteFake.Key}, pages.STT{Provider: "stt.demo", Language: "de"}
+	fake.SetSTT("stt.demo", "Mach das Licht im Flur an")
+	mux.HandleFunc("/sprechen", pages.Sprechen(start))
+	mux.HandleFunc(pages.HoerenPath, pages.Hoeren(start))
 	mux.HandleFunc("/start", pages.Start(start))
 	mux.HandleFunc(pages.StartBoxPath, pages.Start(start))
 	mux.HandleFunc("/mehr", pages.Mehr(mehr))

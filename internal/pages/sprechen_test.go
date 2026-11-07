@@ -41,20 +41,24 @@ func say(t *testing.T, h http.HandlerFunc, user, text string, hdr map[string]str
 	return post(t, h, "/sprechen", url.Values{"nachricht": {text}}, user, hdr)
 }
 
-// haus#12, owner 2026-11-07: Start has Sprechen as a small entry in its
-// head, not a field in the way: a button to /sprechen, where the field is.
-// It names no assistant: its name appears where you talk to it (haus#35).
-// Without the Bote there is no entry and no word about it.
+// haus#12, owner 2026-11-07 („Die Möglichkeit des Chats soll bleiben!“):
+// Start has the Sprechen field, compact — one line and Senden, no label
+// above it — after Braucht dich and before Deine Geräte, posting to Homes
+// itself, a plain form without script (haus#63: with it, the answer has its
+// page). It names no assistant: its name appears where you talk to it
+// (haus#35). Without the Bote there is no field and no word about it.
 func TestStartHasTheSprechenField(t *testing.T) {
 	named(t, "Ada")
 	fake, hc := house(t)
 	fake.Set("light.flur", "on", map[string]any{"friendly_name": "Flurlicht"})
 	_, bc := fakeBote(t)
-	_, body := startPage(t, StartConfig{HA: hc, Bote: bc}, "family")
-	mustContain(t, body, `<a class=sprechen-knopf href=/sprechen aria-label=Sprechen`)
-	before(t, body, "<h1>Homes</h1>", "<a class=sprechen-knopf")
-	before(t, body, "<a class=sprechen-knopf", "</header>")
-	mustNotContain(t, body, "Ada", "Bote", "Hermes", "8642", "class=mikro", "name=nachricht")
+	_, body := startPage(t, StartConfig{HA: hc, Bote: bc, Favorites: favorites(t, `{"anna": ["light.flur"]}`)}, "family")
+	mustContain(t, body, "<form method=post action=/sprechen class=sprechen>", "name=nachricht", "aria-label=Sprechen", "maxlength=1000",
+		"required", "<button class=senden>Senden</button>")
+	before(t, body, "class=datum", "action=/sprechen")
+	before(t, body, "action=/sprechen", "karte-deine-geraete")
+	// the script hands the sentence on to /sprechen; the form works without it
+	mustNotContain(t, body, "Ada", "Bote", "Hermes", "8642", "class=mikro", ">Sprechen</label>")
 
 	_, body = startPage(t, StartConfig{HA: hc}, "family")
 	mustNotContain(t, body, "/sprechen", "Sprechen", "Bote")

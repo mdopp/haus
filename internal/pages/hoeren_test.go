@@ -210,11 +210,12 @@ func TestHoerenAsksHomeAssistantsSpeechToText(t *testing.T) {
 		heard[0].Content != "format=wav; codec=pcm; sample_rate=16000; bit_rate=16; channel=1; language=de" {
 		t.Fatalf("HA heard %+v", heard)
 	}
-	// the microphone, beside the field, on /sprechen (Start has the way there only)
+	// the microphone, beside the field, on Start and on /sprechen
 	_, bc := fakeBote(t)
 	cfg.Bote = bc
+	_, start := startPage(t, cfg, "family")
 	_, body, _ := talkPage(t, Sprechen(cfg), "anna")
-	for _, page := range []string{body} {
+	for _, page := range []string{start, body} {
 		mustContain(t, page, `<button type=button class=mikro aria-label="Sprechen statt tippen" aria-pressed=false hidden>`, "'"+HoerenPath+"'", "getUserMedia")
 		before(t, page, "name=nachricht", "class=mikro")
 		before(t, page, "class=mikro", "class=senden")

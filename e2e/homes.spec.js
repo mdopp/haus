@@ -835,7 +835,7 @@ for (const path of ['/start', '/raeume', '/medien', '/energie', '/notizen', '/me
 
 // owner 2026-11-07 („Rigoros einfach“): Start is at most four blocks, each its state and at most one
 // action — Braucht dich (filled after the page from Laib: the box's red and yellow, a decision waiting),
-// Deine Geräte, Heute (three lines, today and tomorrow, then Kalender), Im Haus (one line, Energie a link)
+// the Sprechen field, Deine Geräte, Heute (three lines, today and tomorrow, then Kalender), Im Haus (one line, Energie a link)
 test('Start is four blocks, state first, one action each', async ({ page }) => {
   await page.setViewportSize({ width: 411, height: 900 });
   await page.goto('/start');
@@ -844,6 +844,14 @@ test('Start is four blocks, state first, one action each', async ({ page }) => {
   await expect(braucht.getByRole('link', { name: '1 Entscheidung wartet' })).toHaveAttribute('href', 'https://laib.example/inbox');
   const blocks = await page.evaluate(() => [...document.querySelectorAll('section.karte h2')].map((h) => h.textContent));
   expect(blocks).toEqual(['Braucht dich', 'Deine Geräte', 'Heute', 'Im Haus']);
+  // the chat stays (owner 2026-11-07): one line to type or speak, right on Start, between Braucht dich and Deine Geräte
+  const feld = page.getByRole('textbox', { name: 'Sprechen' });
+  await expect(feld).toBeVisible();
+  const y = async (sel) => (await page.locator(sel).first().boundingBox()).y;
+  expect(await y('#karte-braucht-dich')).toBeLessThan(await y('form.sprechen'));
+  expect(await y('form.sprechen')).toBeLessThan(await y('#karte-deine-geraete'));
+  const zeile = await page.locator('form.sprechen > div').boundingBox();
+  expect(zeile.height, 'the field is one line').toBeLessThan(60);
   const heute = page.getByRole('region', { name: 'Heute' });
   await expect(heute.locator('li')).toHaveCount(3);
   await expect(heute).toContainText('Müll gelb');

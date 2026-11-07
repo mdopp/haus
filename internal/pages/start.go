@@ -147,14 +147,10 @@ var marke = func() string {
 	return "<header class=marke>" + s + "<div><h1>Homes</h1><p class=claim>Dein Zuhause, klar im Blick.</p></div></header>"
 }()
 
-// sprechenKnopf is the way to Sprechen from Start's head (owner 2026-11-07:
-// a small, unobtrusive entry, not a field in the way).
-const sprechenKnopf = `<a class=sprechen-knopf href=/sprechen aria-label=Sprechen title=Sprechen><svg viewBox="0 0 24 24" width=22 height=22 aria-hidden=true fill=none stroke=currentColor stroke-width=2 stroke-linecap=round stroke-linejoin=round><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.4A8 8 0 1 1 21 12z"/></svg></a>`
-
 // Start is the family's page (haus#12, haus#35; owner 2026-11-07: „Rigoros
 // einfach“, docs/DOMAIN.md Gestaltungsregeln): Homes' mark and the day, then
 // at most four blocks, each its state and at most one action — Braucht dich
-// (only when something is open), Deine Geräte, Heute, Im Haus. A backend not
+// (only when something is open), the Sprechen field, Deine Geräte, Heute, Im Haus. A backend not
 // configured is not mentioned; one not answering is one plain line, its error in the log.
 func Start(cfg StartConfig) http.HandlerFunc {
 	var box *boxStatus
@@ -218,12 +214,11 @@ func Start(cfg StartConfig) http.HandlerFunc {
 
 		b := familyHead(r, cfg, "Homes", "Start")
 		b.WriteString(liveRefresh("alle", 120)) // lamps and players by push; the day and Braucht dich every two minutes
-		head := marke
-		if cfg.Bote != nil {
-			head = strings.Replace(marke, "</header>", sprechenKnopf+"</header>", 1)
-		}
-		b.WriteString(head + "<p class=datum>" + dateWords(now, loc) + "</p>")
+		b.WriteString(marke + "<p class=datum>" + dateWords(now, loc) + "</p>")
 		b.WriteString(brauchtDichSpaeter(r, cfg, kept))
+		if cfg.Bote != nil { // the chat stays (owner 2026-11-07): one line and the microphone, after what needs you
+			b.WriteString(sprechenField(cfg, false))
+		}
 		if pins {
 			b.WriteString(deineGeraete(favs, favErr, states, haErr, reg, now.In(loc).Format("15:04")))
 		}

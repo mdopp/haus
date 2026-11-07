@@ -107,12 +107,12 @@ func TestEachLeafModuleOff(t *testing.T) {
 			{"napi:/napi/defs/tool", `"tool-id":"contacts"`, `!"tool-id":"contacts"`}, {"napi:/napi/portal/contacts", "#200", "#404"},
 			{"napi:POST /napi/kontakte", "#415", "#503"}, {"mcp:", `"kontakte_suchen"`, `!"kontakte_suchen"`}},
 		"konto": {{"napi:/napi/gemeinsam/kontakte", "#200", "#503"}, {"napi:/napi/gemeinsam/kalender", "#200", "#503"}},
-		// H6: the house, its energy (Braucht geraete), the way to Sprechen, the counts
+		// H6: the house, its energy (Braucht geraete), the Sprechen field, the counts
 		"geraete": {{"/start", "Im Haus", "!Im Haus"}, {"/start", `href=/raeume`, `!href=/raeume`}, {"/aktivierungswort", "#200", "#404"},
 			{"napi:/napi/portal/state?entity_id=light.decke", "#200", "#404"}, {"napi:POST /napi/ha/call", "#400", "#404"},
 			{"napi:POST /napi/portal/watch", "#200", "#404"}, {"napi:/napi/portal/favorites", "#200", "#404"}},
 		"energie":  {{"/start", `href=/energie`, `!href=/energie`}, {"/energie", "#200", "#404"}, {"napi:/napi/portal/energy", "#200", "#404"}},
-		"sprechen": {{"/start", "<a class=sprechen-knopf href=/sprechen", "!<a class=sprechen-knopf"}, {"/willkommen", "App „Signal“", "!App „Signal“"}},
+		"sprechen": {{"/start", "action=/sprechen", "!action=/sprechen"}, {"/willkommen", "App „Signal“", "!App „Signal“"}},
 		"nutzung":  {{"/box/nutzung", "box-genutzt", "!box-genutzt"}},
 	}
 	check := func(t *testing.T, s site, p probe, want string) {
