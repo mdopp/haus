@@ -54,7 +54,7 @@ budget() { # budget <name> <cap> <dir…>
 # a contact's picture beside the person Immich gave its face, Ja/Nein/Kein Foto (kontakte_ist.go), on „Dieselbe Person?“
 # 2026-11-07, owner approved 2026-11-07: Befunde in der Box-Übersicht (16,555 -> 16,574): laib befunde
 # (laib#1085) instead of diag, „Befunde gemessen vor X min“ (seit), the line before diag's first run
-# 2026-11-07, PENDING the owner's yes: Dieselbe Person, Kontext und Aufgabe (16,574 -> 16,579): each face a
+# 2026-11-07, owner approved 2026-11-07: Dieselbe Person – Kontext und Aufgabe (16,574 -> 16,579): each face a
 # link into Immich, a grey line for its places and its company, the questions as one task on Deine Aufgaben
 budget pages 16580 internal/pages     # the family's pages, one per file: 14,684
 # 2026-11-05, owner 2026-11-05: writable Homes-Konto (5,033 -> 5,121): PUT and DELETE of one shared
@@ -97,7 +97,7 @@ budget cmd 1448 cmd/homes             # homes' wiring: 1,018 with the demo then
 # immich.Hochladen (archived), Funde (GET /api/faces), Entfernen (DELETE /api/assets), multipart and 204; immichfake's
 # 2026-11-07, owner approved 2026-11-07: Befunde in der Box-Übersicht (14,575 -> 14,579): laib.Befunde,
 # the last diag run's time and findings, in place of laib.Diag
-# 2026-11-07, PENDING the owner's yes: Dieselbe Person, Kontext (14,579 -> 14,642): immich.Umfeld (POST
+# 2026-11-07, owner approved 2026-11-07: Dieselbe Person – Kontext und Aufgabe (14,579 -> 14,642): immich.Umfeld (POST
 # /api/search/metadata with personIds, exif and people) and immichfake's search over a library
 budget connectors 14643 $connectors   # one client per service, with its fake: 11,327, 12,543 with abs and musicbrainz
 # 2026-11-04, internal/jsonfile (47 lines, 50 of cap) from household's cap to shared's: it
@@ -114,7 +114,7 @@ budget connectors 14643 $connectors   # one client per service, with its fake: 1
 # faces in the background, ranks the pairs, keeps „Nein“; gesichter.go keeps the key's permissions for the missing-permission line
 # 2026-11-06, owner approved 2026-11-06: Kontaktfotos: „Ist das …?“ (10,510 -> 10,872):
 # gesichter/kontaktbilder.go uploads the owner's contacts' pictures, follows what Immich made of each, asks, merges only on Ja
-# 2026-11-07, PENDING the owner's yes: Dieselbe Person, leere Bilder, Kontext und Aufgabe (10,872 -> 11,088):
+# 2026-11-07, owner approved 2026-11-07: Dieselbe Person – Kontext und Aufgabe (10,872 -> 11,088):
 # a pair or question only with both faces kept as JPEGs and in a photo; gesichter/umfeld.go reads each shown
 # person's places, years and companions at start and daily; Offen and einrichten.Fragen make the open
 # questions one task; Öffnen and the icon per module in /napi/einrichtung
